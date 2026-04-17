@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 
 type Item = { label: string; href: string };
 
@@ -26,26 +25,24 @@ function Dropdown({
     >
       <button
         type="button"
-        className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition ${
-          active ? "text-foreground" : "text-muted hover:text-foreground"
+        className={`relative inline-flex items-center gap-1.5 pb-2 text-sm font-semibold transition ${
+          active ? "text-slate-900" : "text-slate-700 hover:text-slate-900"
         }`}
       >
         {label}
-        <span className="text-xs">▾</span>
+        <span className="text-[10px] font-normal text-slate-500">▾</span>
+        {active ? (
+          <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[#2563eb]" />
+        ) : null}
       </button>
-      <span
-        className={`absolute left-3 right-3 top-full h-0.5 rounded-full bg-primary ${
-          active ? "opacity-100" : "opacity-0"
-        }`}
-      />
       {open ? (
         <div className="absolute left-0 top-full z-50 pt-2">
-          <div className="min-w-[220px] rounded-2xl border border-border bg-card p-2 shadow-xl">
+          <div className="min-w-[220px] rounded-2xl border border-slate-200/90 bg-white p-2 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.2)]">
             {items.map((it) => (
               <Link
                 key={it.href}
                 href={it.href}
-                className="block rounded-xl px-3 py-2 text-sm font-semibold text-foreground hover:bg-slate-50"
+                className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
               >
                 {it.label}
               </Link>
@@ -61,91 +58,61 @@ export function PublicNavbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const rentActive = useMemo(() => pathname.startsWith("/rent"), [pathname]);
-  const partnerActive = useMemo(
-    () => pathname.startsWith("/partner"),
+  const rentActive = useMemo(
+    () => pathname === "/" || pathname.startsWith("/rent"),
     [pathname],
   );
-
-  const portals: (Item & { prefix: string })[] = [
-    { label: "Manager portal", href: "/manager/dashboard", prefix: "/manager" },
-    { label: "Resident portal", href: "/resident/dashboard", prefix: "/resident" },
-    { label: "Admin portal", href: "/admin/dashboard", prefix: "/admin" },
-  ];
+  const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
 
   const rentItems: Item[] = [
-    { label: "Listings hub", href: "/rent" },
-    { label: "Property listings", href: "/rent/listings" },
-    { label: "Apply", href: "/rent/apply" },
     { label: "Schedule tour", href: "/rent/tours" },
+    { label: "Apply", href: "/rent/apply" },
+    { label: "Property listings", href: "/rent/listings" },
+    { label: "Listings hub", href: "/rent" },
     { label: "FAQ", href: "/rent/faq" },
     { label: "Contact", href: "/rent/contact" },
   ];
 
   const partnerItems: Item[] = [
-    { label: "Partner overview", href: "/partner" },
     { label: "Pricing", href: "/partner/pricing" },
     { label: "Contact", href: "/partner/contact" },
+    { label: "Partner overview", href: "/partner" },
   ];
 
   return (
-    <div className="border-b border-border bg-white/80 backdrop-blur">
+    <div className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
         <Link href="/" className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-sm font-black text-white">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2563eb] text-sm font-black tracking-tight text-white">
             AX
           </span>
-          <span className="leading-tight">
-            <span className="block text-xs font-semibold tracking-wide text-muted">
+          <span className="leading-[1.1]">
+            <span className="block text-[11px] font-bold uppercase tracking-[0.22em] text-slate-900">
               AXIS
             </span>
-            <span className="block text-sm font-semibold text-foreground">
-              Housing
+            <span className="block text-[11px] font-bold uppercase tracking-[0.22em] text-slate-900">
+              SEATTLE
             </span>
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-2 lg:flex">
-          <Link
-            href="/"
-            className={`rounded-full px-3 py-2 text-sm font-semibold ${
-              pathname === "/" ? "text-foreground" : "text-muted hover:text-foreground"
-            }`}
-          >
-            Home
-          </Link>
+        <nav className="hidden items-center gap-10 lg:flex">
           <Dropdown label="Rent with Axis" items={rentItems} active={rentActive} />
-          <Dropdown
-            label="Partner with Axis"
-            items={partnerItems}
-            active={partnerActive}
-          />
-          {portals.map((p) => (
-            <Link
-              key={p.href}
-              href={p.href}
-              className={`rounded-full px-3 py-2 text-sm font-semibold ${
-                pathname.startsWith(p.prefix)
-                  ? "text-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              {p.label}
-            </Link>
-          ))}
+          <Dropdown label="Partner with Axis" items={partnerItems} active={partnerActive} />
         </nav>
 
-        <div className="hidden items-center gap-2 lg:flex">
-          <Link href="/auth/sign-in">
-            <Button type="button" variant="primary">
-              Portal
-            </Button>
+        <div className="hidden lg:block">
+          <Link
+            href="/auth/sign-in"
+            className="inline-flex items-center justify-center rounded-full bg-slate-900 px-7 py-2.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(37,99,235,0.45)] transition hover:bg-slate-800"
+          >
+            Portal
           </Link>
         </div>
 
         <button
           type="button"
-          className="inline-flex rounded-full border border-border px-3 py-2 text-sm font-semibold lg:hidden"
+          className="inline-flex rounded-full border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 lg:hidden"
           onClick={() => setMobileOpen((v) => !v)}
         >
           Menu
@@ -153,55 +120,49 @@ export function PublicNavbar() {
       </div>
 
       {mobileOpen ? (
-        <div className="border-t border-border bg-white px-4 py-4 lg:hidden">
-          <div className="space-y-2">
-            <Link className="block font-semibold" href="/" onClick={() => setMobileOpen(false)}>
+        <div className="border-t border-slate-200 bg-white px-4 py-4 lg:hidden">
+          <div className="space-y-3">
+            <Link className="block font-semibold text-slate-900" href="/" onClick={() => setMobileOpen(false)}>
               Home
             </Link>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Rent with Axis
-            </p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Rent with Axis</p>
             {rentItems.map((it) => (
               <Link
                 key={it.href}
                 href={it.href}
-                className="block py-1 text-sm font-semibold"
+                className="block py-1 text-sm font-semibold text-slate-800"
                 onClick={() => setMobileOpen(false)}
               >
                 {it.label}
               </Link>
             ))}
-            <p className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted">
-              Partner with Axis
-            </p>
+            <p className="pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Partner with Axis</p>
             {partnerItems.map((it) => (
               <Link
                 key={it.href}
                 href={it.href}
-                className="block py-1 text-sm font-semibold"
-                onClick={() => setMobileOpen(false)}
-              >
-                {it.label}
-              </Link>
-            ))}
-            <p className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted">
-              Portals
-            </p>
-            {portals.map((it) => (
-              <Link
-                key={it.href}
-                href={it.href}
-                className="block py-1 text-sm font-semibold"
+                className="block py-1 text-sm font-semibold text-slate-800"
                 onClick={() => setMobileOpen(false)}
               >
                 {it.label}
               </Link>
             ))}
             <Link href="/auth/sign-in" onClick={() => setMobileOpen(false)}>
-              <Button type="button" className="mt-3 w-full" variant="primary">
-                Portal sign in
-              </Button>
+              <span className="mt-3 flex w-full items-center justify-center rounded-full bg-slate-900 py-3 text-sm font-semibold text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]">
+                Portal
+              </span>
             </Link>
+            <div className="border-t border-slate-100 pt-3 text-xs text-slate-500">
+              <Link href="/manager/dashboard" className="mr-3 font-semibold text-[#2563eb]" onClick={() => setMobileOpen(false)}>
+                Manager
+              </Link>
+              <Link href="/resident/dashboard" className="mr-3 font-semibold text-[#2563eb]" onClick={() => setMobileOpen(false)}>
+                Resident
+              </Link>
+              <Link href="/admin/dashboard" className="font-semibold text-[#2563eb]" onClick={() => setMobileOpen(false)}>
+                Admin
+              </Link>
+            </div>
           </div>
         </div>
       ) : null}
