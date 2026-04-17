@@ -1,0 +1,54 @@
+import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
+import type { Crumb } from "@/components/layout/breadcrumbs";
+import type { TabItem } from "@/components/ui/tabs";
+import { findSection, getPortalDefinition } from "@/lib/portals";
+import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
+import type { PortalKind } from "@/lib/portal-types";
+import { notFound, redirect } from "next/navigation";
+
+export async function renderPortalSection(
+  kind: PortalKind,
+  section: string,
+  tabParts?: string[],
+) {
+  const def = getPortalDefinition(kind);
+  const meta = findSection(def, section);
+  if (!meta) notFound();
+
+  if (!meta.tabs.length) {
+    if (tabParts?.length) notFound();
+  } else if (!tabParts?.length) {
+    redirect(`${def.basePath}/${section}/${meta.tabs[0].id}`);
+  }
+
+  const tabId = meta.tabs.length ? (tabParts?.[0] ?? meta.tabs[0].id) : "index";
+  if (meta.tabs.length && !meta.tabs.some((t) => t.id === tabId)) notFound();
+
+  const modelTab = tabId === "index" ? "overview" : tabId;
+  const model = buildPortalWorkspaceModel(kind, section, modelTab);
+
+  const tabs: TabItem[] = meta.tabs.map((t) => ({
+    id: t.id,
+    label: t.label,
+    href: `${def.basePath}/${section}/${t.id}`,
+  }));
+
+  const tabLabel = meta.tabs.find((t) => t.id === tabId)?.label ?? "Overview";
+
+  const breadcrumbs: Crumb[] = [
+    { label: "Home", href: "/" },
+    { label: def.title, href: `${def.basePath}/dashboard` },
+    { label: meta.label, href: meta.tabs.length ? `${def.basePath}/${section}/${meta.tabs[0].id}` : `${def.basePath}/${section}` },
+    ...(meta.tabs.length ? [{ label: tabLabel }] : []),
+  ];
+
+  return (
+    <PortalWorkspaceClient
+      portalLabel={def.title}
+      tabId={meta.tabs.length ? tabId : "index"}
+      tabs={tabs}
+      model={model}
+      breadcrumbs={breadcrumbs}
+    />
+  );
+}

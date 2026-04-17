@@ -162,7 +162,7 @@ export const adminPortal: PortalDefinition = {
     },
     {
       section: "tools",
-      label: "Admin tools",
+      label: "Support / admin tools",
       tabs: [
         { id: "airtable", label: "Airtable sync (placeholder)" },
         { id: "stripe", label: "Stripe (placeholder)" },

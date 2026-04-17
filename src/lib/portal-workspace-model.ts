@@ -24,11 +24,7 @@ export type WorkspaceModel = {
   notes?: string;
 };
 
-function actionsFor(
-  portal: PortalKind,
-  section: string,
-  tabId: string,
-): WorkspaceAction[] {
+function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
   const common: WorkspaceAction[] = [
     {
       label: "Refresh (demo)",
@@ -193,8 +189,6 @@ export function buildPortalWorkspaceModel(
   tabId: string,
 ): WorkspaceModel {
   const eyebrow = `${portal === "manager" ? "Manager" : portal === "resident" ? "Resident" : "Admin"} workspace`;
-  const title = humanize(section);
-  const subtitle = `Viewing “${humanize(tabId)}”. This is seeded mock data for UI development.`;
 
   if (section === "dashboard") {
     return {
@@ -278,7 +272,7 @@ export function buildPortalWorkspaceModel(
           owner: "Experience",
         },
       ],
-      actions: actionsFor(portal, section, tabId),
+      actions: actionsFor(portal, section),
     };
   }
 
@@ -302,7 +296,7 @@ export function buildPortalWorkspaceModel(
         when: r.when,
         unread: r.unread,
       })),
-      actions: actionsFor(portal, section, tabId),
+      actions: actionsFor(portal, section),
     };
   }
 
@@ -319,7 +313,7 @@ export function buildPortalWorkspaceModel(
         { key: "status", label: "Status" },
       ],
       rows: paymentRows as unknown as Record<string, string>[],
-      actions: actionsFor(portal, section, tabId),
+      actions: actionsFor(portal, section),
     };
   }
 
@@ -335,7 +329,7 @@ export function buildPortalWorkspaceModel(
         { key: "score", label: "Score" },
       ],
       rows: applicantRows as unknown as Record<string, string>[],
-      actions: actionsFor(portal, section, tabId),
+      actions: actionsFor(portal, section),
     };
   }
 
@@ -352,7 +346,7 @@ export function buildPortalWorkspaceModel(
         { key: "status", label: "Status" },
       ],
       rows: workOrderRows as unknown as Record<string, string>[],
-      actions: actionsFor(portal, section, tabId),
+      actions: actionsFor(portal, section),
     };
   }
 
@@ -368,7 +362,7 @@ export function buildPortalWorkspaceModel(
         { key: "status", label: "Status" },
       ],
       rows: announcementRows as unknown as Record<string, string>[],
-      actions: actionsFor(portal, section, tabId),
+      actions: actionsFor(portal, section),
     };
   }
 
@@ -384,7 +378,7 @@ export function buildPortalWorkspaceModel(
         { key: "status", label: "Status" },
       ],
       rows: adminPropertyRows as unknown as Record<string, string>[],
-      actions: actionsFor(portal, section, tabId),
+      actions: actionsFor(portal, section),
     };
   }
 
@@ -421,7 +415,7 @@ export function buildPortalWorkspaceModel(
           owner: "Maintenance",
         },
       ],
-      actions: actionsFor(portal, section, tabId),
+      actions: actionsFor(portal, section),
     };
   }
 
@@ -440,7 +434,7 @@ export function buildPortalWorkspaceModel(
         { name: "Move-in checklist.pdf", type: "Move-in", updated: "Mar 30" },
         { name: "HOA rules.pdf", type: "Property", updated: "Mar 12" },
       ],
-      actions: actionsFor(portal, section, tabId),
+      actions: actionsFor(portal, section),
     };
   }
 
@@ -459,7 +453,7 @@ export function buildPortalWorkspaceModel(
       { record: "Sample B", state: "Queued", owner: "Manager" },
       { record: "Sample C", state: "Blocked", owner: "Admin" },
     ],
-    actions: actionsFor(portal, section, tabId),
+    actions: actionsFor(portal, section),
   };
 }
 

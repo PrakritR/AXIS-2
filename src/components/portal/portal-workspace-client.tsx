@@ -14,19 +14,13 @@ import { TabNav, type TabItem } from "@/components/ui/tabs";
 
 export function PortalWorkspaceClient({
   portalLabel,
-  basePath,
-  section,
   tabId,
-  sectionTitle,
   tabs,
   model,
   breadcrumbs,
 }: {
   portalLabel: string;
-  basePath: string;
-  section: string;
   tabId: string;
-  sectionTitle: string;
   tabs: TabItem[];
   model: WorkspaceModel;
   breadcrumbs: Crumb[];
