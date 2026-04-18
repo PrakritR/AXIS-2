@@ -5,16 +5,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { validateAxisGroupId, validateHouseholdCount } from "./apply-validation";
+import { ApplyFieldRow } from "./apply-field-row";
 
 const SIGNER_STEPS = 11;
 
-function ReqAsterisk() {
-  return <span className="font-semibold text-primary"> *</span>;
-}
-
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm font-semibold text-[#0f172a]">{children}</p>;
-}
+const signerLabelClass = "text-sm font-semibold text-[#0f172a] leading-snug";
 
 const pillWrap = "flex flex-wrap gap-2 rounded-full border border-border bg-slate-50 p-1";
 const pillActive = "rounded-full px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground shadow-sm transition-all";
@@ -128,159 +123,132 @@ export function SignerApplyFlow({
             <span className="font-semibold text-[#0f172a]">Group ID</span> they receive.
           </p>
 
-          <div className="mt-8">
-            <FieldLabel>
-              Are you applying as part of a household group?
-              <ReqAsterisk />
-            </FieldLabel>
-            <div className={`mt-3 ${pillWrap}`}>
-              <button
-                type="button"
-                onClick={() => setHouseholdGroup("yes")}
-                className={householdGroup === "yes" ? pillActive : pillIdle}
-              >
-                Yes
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setHouseholdGroup("no");
-                  setFirstApplicant(null);
-                  setHouseholdCount("");
-                  setGroupId("");
-                  setGroupIdError(null);
-                  setHouseholdCountError(null);
-                }}
-                className={householdGroup === "no" ? pillActive : pillIdle}
-              >
-                No
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Use <strong>No</strong> if you are applying alone.
-            </p>
-          </div>
-
-          {householdGroup === "yes" ? (
-            <div className="mt-8 space-y-8">
-              <div>
-                <FieldLabel>
-                  Are you the first person in your group to submit this application?
-                  <ReqAsterisk />
-                </FieldLabel>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFirstApplicant("first");
-                      setGroupId("");
-                      setGroupIdError(null);
-                    }}
-                    className={`rounded-2xl border-2 px-4 py-4 text-left text-sm font-medium leading-snug transition-all ${
-                      firstApplicant === "first"
-                        ? "border-primary bg-[#eef2ff] text-[#0f172a] shadow-sm"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                    }`}
-                  >
-                    Yes — I am first (I will get a Group ID to share)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFirstApplicant("notFirst");
-                      setHouseholdCount("");
-                      setHouseholdCountError(null);
-                    }}
-                    className={`rounded-2xl border-2 px-4 py-4 text-left text-sm font-medium leading-snug transition-all ${
-                      firstApplicant === "notFirst"
-                        ? "border-primary bg-[#eef2ff] text-[#0f172a] shadow-sm"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                    }`}
-                  >
-                    No — someone already applied first (I have a Group ID)
-                  </button>
-                </div>
+          <div className="mt-8 divide-y divide-slate-100 border-t border-slate-100">
+            <ApplyFieldRow
+              label="Are you applying as part of a household group?"
+              hint='Choose "No" if you are applying alone.'
+              labelClassName={signerLabelClass}
+            >
+              <div className={pillWrap}>
+                <button
+                  type="button"
+                  onClick={() => setHouseholdGroup("yes")}
+                  className={householdGroup === "yes" ? pillActive : pillIdle}
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHouseholdGroup("no");
+                    setFirstApplicant(null);
+                    setHouseholdCount("");
+                    setGroupId("");
+                    setGroupIdError(null);
+                    setHouseholdCountError(null);
+                  }}
+                  className={householdGroup === "no" ? pillActive : pillIdle}
+                >
+                  No
+                </button>
               </div>
+            </ApplyFieldRow>
 
-              {firstApplicant === "first" ? (
-                <div>
-                  <FieldLabel>
-                    How many people are in your group (including you)?
-                    <ReqAsterisk />
-                  </FieldLabel>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Everyone who will live together should submit their own application using this Group ID.
-                  </p>
-                  <Input
-                    inputMode="numeric"
-                    value={householdCount}
-                    onChange={(e) => {
-                      setHouseholdCount(e.target.value);
-                      setHouseholdCountError(null);
-                    }}
-                    placeholder="e.g. 3"
-                    className={`mt-2 ${householdCountError ? "border-red-500 ring-2 ring-red-100" : ""}`}
-                  />
-                  {householdCountError ? (
-                    <p className="mt-2 flex items-start gap-1.5 text-sm text-red-600">
-                      <span className="mt-0.5 inline-block h-4 w-4 shrink-0 rounded-full bg-red-100 text-center text-[10px] font-bold leading-4 text-red-700">
-                        !
-                      </span>
-                      {householdCountError}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
+            {householdGroup === "yes" ? (
+              <>
+                <ApplyFieldRow label="Are you the first person in your group to submit this application?" labelClassName={signerLabelClass}>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFirstApplicant("first");
+                        setGroupId("");
+                        setGroupIdError(null);
+                      }}
+                      className={`rounded-2xl border-2 px-4 py-4 text-left text-sm font-medium leading-snug transition-all ${
+                        firstApplicant === "first"
+                          ? "border-primary bg-[#eef2ff] text-[#0f172a] shadow-sm"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                      }`}
+                    >
+                      Yes — I am first (I will get a Group ID to share)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFirstApplicant("notFirst");
+                        setHouseholdCount("");
+                        setHouseholdCountError(null);
+                      }}
+                      className={`rounded-2xl border-2 px-4 py-4 text-left text-sm font-medium leading-snug transition-all ${
+                        firstApplicant === "notFirst"
+                          ? "border-primary bg-[#eef2ff] text-[#0f172a] shadow-sm"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                      }`}
+                    >
+                      No — someone already applied first (I have a Group ID)
+                    </button>
+                  </div>
+                </ApplyFieldRow>
 
-              {firstApplicant === "notFirst" ? (
-                <div>
-                  <FieldLabel>
-                    Group ID from the first applicant
-                    <ReqAsterisk />
-                  </FieldLabel>
-                  <p className="mt-1 text-xs text-slate-500">
-                    The first person to apply sees this after they submit — it starts with AXISGRP-.
-                  </p>
-                  <Input
-                    value={groupId}
-                    onChange={(e) => {
-                      setGroupId(e.target.value);
-                      setGroupIdError(null);
-                    }}
-                    placeholder="AXISGRP-..."
-                    className={`mt-2 ${groupIdError ? "border-red-500 ring-2 ring-red-100" : ""}`}
-                  />
-                  {groupIdError ? (
-                    <p className="mt-2 flex items-start gap-1.5 text-sm text-red-600">
-                      <span className="mt-0.5 inline-block h-4 w-4 shrink-0 rounded-full bg-red-100 text-center text-[10px] font-bold leading-4 text-red-700">
-                        !
-                      </span>
-                      {groupIdError}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+                {firstApplicant === "first" ? (
+                  <ApplyFieldRow
+                    label="How many people are in your group (including you)?"
+                    hint="Everyone who will live together should submit their own application using this Group ID."
+                    labelClassName={signerLabelClass}
+                    error={householdCountError ?? undefined}
+                  >
+                    <Input
+                      inputMode="numeric"
+                      value={householdCount}
+                      onChange={(e) => {
+                        setHouseholdCount(e.target.value);
+                        setHouseholdCountError(null);
+                      }}
+                      placeholder="e.g. 3"
+                      className={householdCountError ? "border-red-500 ring-2 ring-red-100" : ""}
+                    />
+                  </ApplyFieldRow>
+                ) : null}
+
+                {firstApplicant === "notFirst" ? (
+                  <ApplyFieldRow
+                    label="Group ID from the first applicant"
+                    hint="The first person to apply sees this after they submit. It starts with AXISGRP-."
+                    labelClassName={signerLabelClass}
+                    error={groupIdError ?? undefined}
+                  >
+                    <Input
+                      value={groupId}
+                      onChange={(e) => {
+                        setGroupId(e.target.value);
+                        setGroupIdError(null);
+                      }}
+                      placeholder="AXISGRP-..."
+                      className={groupIdError ? "border-red-500 ring-2 ring-red-100" : ""}
+                    />
+                  </ApplyFieldRow>
+                ) : null}
+              </>
+            ) : null}
+          </div>
         </Card>
       ) : null}
 
       {step === 2 ? (
         <Card className="mt-8 p-6 sm:p-8">
           <h2 className="text-lg font-bold tracking-tight text-[#0f172a]">Co-Signer</h2>
-          <div className="mt-6">
-            <FieldLabel>
-              Will someone be co-signing this application with you?
-              <ReqAsterisk />
-            </FieldLabel>
-            <div className={`mt-3 ${pillWrap}`}>
-              <button type="button" onClick={() => setHasCosigner("yes")} className={hasCosigner === "yes" ? pillActive : pillIdle}>
-                Yes
-              </button>
-              <button type="button" onClick={() => setHasCosigner("no")} className={hasCosigner === "no" ? pillActive : pillIdle}>
-                No
-              </button>
-            </div>
+          <div className="mt-6 divide-y divide-slate-100 border-t border-slate-100">
+            <ApplyFieldRow label="Will someone be co-signing this application with you?" labelClassName={signerLabelClass}>
+              <div className={pillWrap}>
+                <button type="button" onClick={() => setHasCosigner("yes")} className={hasCosigner === "yes" ? pillActive : pillIdle}>
+                  Yes
+                </button>
+                <button type="button" onClick={() => setHasCosigner("no")} className={hasCosigner === "no" ? pillActive : pillIdle}>
+                  No
+                </button>
+              </div>
+            </ApplyFieldRow>
           </div>
           <div className="mt-8 rounded-xl border border-[#c7d4fb] bg-[#eef2ff]/70 p-4 text-sm leading-relaxed text-slate-700">
             <p>

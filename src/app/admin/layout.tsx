@@ -1,4 +1,3 @@
-import { ChatFab } from "@/components/layout/chat-fab";
 import { PublicAnnouncement } from "@/components/layout/public-announcement";
 import { PublicNavbar } from "@/components/layout/public-navbar";
 import { AdminPortalTopbar } from "@/components/portal/admin-portal-topbar";
@@ -17,7 +16,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>
         </div>
       </div>
-      <ChatFab />
     </div>
   );
 }

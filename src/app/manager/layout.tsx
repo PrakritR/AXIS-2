@@ -1,4 +1,3 @@
-import { ChatFab } from "@/components/layout/chat-fab";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalTopbar } from "@/components/portal/portal-topbar";
 import { managerPortal } from "@/lib/portals/manager";
@@ -11,7 +10,6 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
         <PortalTopbar definition={managerPortal} />
         <main className="flex-1 px-4 py-8 lg:px-8">{children}</main>
       </div>
-      <ChatFab />
     </div>
   );
 }

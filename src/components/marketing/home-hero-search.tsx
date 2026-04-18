@@ -1,6 +1,7 @@
 "use client";
 
-import { RADIUS_MILE_OPTIONS } from "@/lib/listings-search";
+import { RADIUS_MILE_OPTIONS, parseRadiusParam } from "@/lib/listings-search";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 const BUDGET_MIN = 600;
@@ -18,14 +19,47 @@ const BATHROOM_OPTIONS = [
 const inputCls =
   "[color-scheme:light] w-full rounded-xl border-0 bg-black/[0.04] px-3.5 py-3 text-[14px] text-[#1d1d1f] outline-none transition-all duration-200 placeholder:text-[#6e6e73]/60 focus:bg-white focus:ring-2 focus:ring-[#007aff]/25 hover:bg-black/[0.06]";
 
-export function HomeHeroSearch() {
-  const [moveIn, setMoveIn] = useState("");
-  const [moveOut, setMoveOut] = useState("");
-  const [budget, setBudget] = useState(BUDGET_MIN);
-  const [bathroom, setBathroom] = useState("any");
-  const [budgetTouched, setBudgetTouched] = useState(false);
-  const [zip, setZip] = useState("");
-  const [radius, setRadius] = useState<number>(10);
+export type HomeHeroSearchProps = {
+  variant?: "hero" | "listings";
+  /** Hydrate from `/rent/listings` query string */
+  initialZip?: string;
+  initialRadius?: number;
+  initialMoveIn?: string;
+  initialMoveOut?: string;
+  /** When set and below max slider value, budget cap is active */
+  initialMaxBudget?: number | null;
+  initialBathroom?: string;
+};
+
+function clampBudget(n: number) {
+  return Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, Math.round(n / 10) * 10));
+}
+
+export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
+  const {
+    variant = "hero",
+    initialZip = "",
+    initialRadius = 10,
+    initialMoveIn = "",
+    initialMoveOut = "",
+    initialMaxBudget = null,
+    initialBathroom = "any",
+  } = props;
+
+  const safeRadius = parseRadiusParam(String(initialRadius));
+
+  const budgetFromUrl =
+    initialMaxBudget != null && Number.isFinite(initialMaxBudget) && initialMaxBudget < BUDGET_MAX;
+
+  const [moveIn, setMoveIn] = useState(initialMoveIn);
+  const [moveOut, setMoveOut] = useState(initialMoveOut);
+  const [budget, setBudget] = useState(() =>
+    budgetFromUrl ? clampBudget(initialMaxBudget as number) : BUDGET_MIN,
+  );
+  const [bathroom, setBathroom] = useState(initialBathroom || "any");
+  const [budgetTouched, setBudgetTouched] = useState(budgetFromUrl);
+  const [zip, setZip] = useState(() => initialZip.replace(/\D/g, "").slice(0, 5));
+  const [radius, setRadius] = useState<number>(safeRadius);
 
   const budgetLabel = useMemo(() => {
     if (!budgetTouched || budget >= BUDGET_MAX) return "Any";
@@ -109,7 +143,7 @@ export function HomeHeroSearch() {
 
       {/* Row 2: ZIP + radius */}
       <div className="mt-5 grid grid-cols-1 gap-5 border-t border-black/[0.05] pt-5 sm:grid-cols-2">
-        <FieldBlock label="ZIP code" hint="5-digit Seattle-area ZIP">
+        <FieldBlock label="ZIP code" hint="5-digit US ZIP code">
           <div>
             <input
               type="text" inputMode="numeric" autoComplete="postal-code" maxLength={5}
@@ -148,15 +182,27 @@ export function HomeHeroSearch() {
             className="inline-flex items-center gap-2 rounded-full px-8 py-2.5 text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-[1px] active:scale-[0.98]"
             style={{ background: "linear-gradient(135deg, #007aff, #339cff)", boxShadow: "0 4px 20px rgba(0,122,255,0.35)" }}
           >
-            <SearchIcon /> View listings
+            <SearchIcon /> {variant === "listings" ? "Apply search" : "View listings"}
           </a>
+          <Link
+            href="/rent/listings"
+            className="text-[13px] font-semibold text-[#007aff] underline-offset-4 hover:underline"
+          >
+            View all properties
+          </Link>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-2 text-center">
+        <div className="flex flex-col items-center gap-3 text-center">
           <span className="text-[#6e6e73]/25" aria-hidden><SearchIcon size={26} /></span>
           <p className="text-[13px] text-[#6e6e73]/60">
             Enter a ZIP, move-in date, or adjust budget to search listings
           </p>
+          <Link
+            href="/rent/listings"
+            className="inline-flex items-center justify-center rounded-full border border-[#007aff]/35 bg-[#007aff]/[0.06] px-6 py-2 text-[13px] font-semibold text-[#007aff] transition hover:bg-[#007aff]/[0.1]"
+          >
+            View all properties
+          </Link>
         </div>
       )}
     </div>

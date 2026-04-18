@@ -49,17 +49,16 @@ function CreateAccountContent() {
       <div className="mt-6 rounded-2xl border border-[#e0e4ec] bg-[#f8fafc] p-4 text-sm leading-relaxed text-slate-600">
         {role === "resident" ? (
           <>
-            Use the email and Application ID from your application. You can create your account before paying—if an
-            application fee applies, complete it from the payment prompt after you apply or anytime under{" "}
-            <span className="font-semibold text-[#0f172a]">Payments</span> in the portal.
+            Use your application email and Application ID. Finish your application and pay any application fee when
+            prompted, or pay later under <span className="font-semibold text-[#0f172a]">Payments</span> in the portal.
           </>
         ) : role === "manager" ? (
           <>
-            Create your manager portal account after choosing a plan on{" "}
+            Create your manager portal account after you choose a plan on{" "}
             <Link className="font-semibold text-primary hover:opacity-90" href="/partner/pricing">
               Use our software
             </Link>
-            . Manager ID is optional if you are starting fresh.
+            . Your Manager ID is provided after you create a subscription and pay.
           </>
         ) : (
           <>
@@ -82,9 +81,9 @@ function CreateAccountContent() {
         {role === "manager" ? (
           <div>
             <label className="text-xs font-semibold text-[#334155]" htmlFor="mid">
-              Manager ID (optional)
+              Manager ID
             </label>
-            <Input id="mid" className="mt-1.5" placeholder="MGR-XXXXXXXXXXXXXXXX — leave blank to start fresh" />
+            <Input id="mid" className="mt-1.5" placeholder="From your subscription email; leave blank if not subscribed yet" />
           </div>
         ) : null}
         {role === "manager" ? (

@@ -44,8 +44,8 @@ export function AxisLogoWordmark() {
   return (
     <span className="leading-[1.05]">
       <span className="block text-[15px] font-bold tracking-tight text-[#0f172a]">AXIS</span>
-      <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-        SEATTLE
+      <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        HOUSING
       </span>
     </span>
   );

@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 const links = [
-  { title: "Properties", desc: "Browse mock inventory with realistic cards.", href: "/rent/listings" },
+  { title: "Rental listings", desc: "Browse mock inventory with realistic cards.", href: "/rent/listings" },
   { title: "Apply", desc: "Multi-step application shell (no backend).", href: "/rent/apply" },
   {
-    title: "Schedule tour & contact",
+    title: "Schedule tour",
     desc: "Tours, messages, and availability placeholders.",
     href: "/rent/tours-contact",
   },

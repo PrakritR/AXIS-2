@@ -19,7 +19,7 @@ export default function HomePage() {
           <div className="animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border border-[#007aff]/20 bg-[#007aff]/[0.07] px-4 py-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-[#007aff]" />
             <span className="text-[13px] font-semibold tracking-wide text-[#007aff]">
-              Seattle Housing · Now Leasing
+              Axis Housing · Now Leasing
             </span>
           </div>
 
@@ -40,17 +40,10 @@ export default function HomePage() {
             </span>
           </h1>
 
-          <p
-            className="animate-fade-up mx-auto mt-5 max-w-xl text-[17px] font-light leading-relaxed text-[#6e6e73]"
-            style={{ animationDelay: "120ms" }}
-          >
-            Curated rooms and apartments across Seattle — transparent pricing, easy applications, no surprises.
-          </p>
-
           {/* Search card */}
           <div
-            className="animate-fade-up mx-auto mt-12 max-w-[1060px]"
-            style={{ animationDelay: "180ms" }}
+            className="animate-fade-up mx-auto mt-10 max-w-[1060px] sm:mt-12"
+            style={{ animationDelay: "120ms" }}
           >
             <HomeHeroSearch />
           </div>

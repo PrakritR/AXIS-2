@@ -8,7 +8,7 @@ export function AdminPortalTopbar() {
           <h1 className="truncate text-lg font-bold uppercase tracking-wide text-slate-900 sm:text-xl">
             Welcome prakritramachandran
           </h1>
-          <p className="mt-1 text-xs text-slate-500">Axis Seattle · admin portal</p>
+          <p className="mt-1 text-xs text-slate-500">Axis Housing · admin portal</p>
         </div>
         <p className="shrink-0 text-xs font-medium text-slate-500" aria-live="polite">
           <span className="text-[#3b66f5]">●</span> Syncing…

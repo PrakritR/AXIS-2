@@ -1,16 +1,30 @@
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import Link from "next/link";
 
+const PARTNER_LINKS = [
+  { href: "/partner", label: "Partner program overview" },
+  { href: "/partner/pricing", label: "Software & pricing" },
+  { href: "/partner/contact", label: "Partner inquiries" },
+];
+
+const HOUSING_LINKS = [
+  { href: "/rent", label: "Leasing overview" },
+  { href: "/rent/tours-contact", label: "Schedule a tour" },
+  { href: "/rent/apply", label: "Rental application" },
+  { href: "/rent/listings", label: "Browse rental listings" },
+  { href: "/rent/faq", label: "Renting FAQ" },
+  { href: "/rent/contact", label: "Leasing & resident support" },
+];
+
 export function PublicFooter() {
   return (
     <footer className="border-t border-slate-200/80 bg-white">
       <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 md:grid-cols-4">
-
         {/* Brand */}
         <div className="space-y-4">
           <AxisLogoLink href="/" />
           <p className="text-sm leading-relaxed text-slate-500">
-            Software and visibility for Seattle property owners and operators.
+            Software and visibility for property owners and operators.
           </p>
           <div className="space-y-2">
             <a
@@ -21,42 +35,21 @@ export function PublicFooter() {
               (510) 309-8345
             </a>
             <a
-              href="mailto:info@axis-seattle-housing.com"
+              href="mailto:info@axishousing.com"
               className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-[#3b66f5]"
             >
               <MailIcon />
-              info@axis-seattle-housing.com
+              info@axishousing.com
             </a>
           </div>
         </div>
 
-        {/* Partner */}
+        {/* Partner — primary site links, left of housing */}
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Partner</p>
           <ul className="mt-4 space-y-2.5">
-            {[
-              { href: "/partner", label: "About us" },
-              { href: "/partner/pricing", label: "Use our software" },
-              { href: "/partner/contact", label: "Contact" },
-            ].map(({ href, label }) => (
+            {PARTNER_LINKS.map(({ href, label }) => (
               <li key={href}>
-                <Link href={href} className="text-sm font-medium text-slate-700 hover:text-[#3b66f5]">
-                  {label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Homes */}
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Homes</p>
-          <ul className="mt-4 space-y-2.5">
-            {[
-              { href: "/rent/listings", label: "Rental listings" },
-              { href: "/", label: "Axis marketing site" },
-            ].map(({ href, label }) => (
-              <li key={label}>
                 <Link href={href} className="text-sm font-medium text-slate-700 hover:text-[#3b66f5]">
                   {label}
                 </Link>
@@ -70,10 +63,10 @@ export function PublicFooter() {
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Location</p>
           <div className="mt-4 space-y-1">
             <p className="text-sm text-slate-700">5259 Brooklyn Ave NE</p>
-            <p className="text-sm text-slate-700">Seattle, WA 98105</p>
-            <p className="mt-2 text-sm font-medium text-slate-500">Seattle, WA</p>
+            <p className="text-sm text-slate-700">WA 98105</p>
+            <p className="mt-2 text-sm font-medium text-slate-500">United States</p>
             <a
-              href="https://maps.google.com/?q=5259+Brooklyn+Ave+NE+Seattle+WA+98105"
+              href="https://www.google.com/maps/search/?api=1&query=5259+Brooklyn+Ave+NE%2C+98105"
               target="_blank"
               rel="noreferrer"
               className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[#3b66f5] hover:underline"
@@ -83,12 +76,26 @@ export function PublicFooter() {
             </a>
           </div>
         </div>
+
+        {/* Housing / rent — right column */}
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Housing</p>
+          <ul className="mt-4 space-y-2.5">
+            {HOUSING_LINKS.map(({ href, label }) => (
+              <li key={href}>
+                <Link href={href} className="text-sm font-medium text-slate-700 hover:text-[#3b66f5]">
+                  {label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       <div className="border-t border-slate-100 px-6 py-4">
         <div className="mx-auto flex max-w-6xl items-center justify-between text-xs text-slate-400">
           <span>© 2026 Axis. All rights reserved.</span>
-          <span className="font-medium text-slate-500">Axis &nbsp;·&nbsp; Seattle, WA</span>
+          <span className="font-medium text-slate-500">Axis Housing</span>
         </div>
       </div>
     </footer>

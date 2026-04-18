@@ -31,3 +31,18 @@ export function parseRadiusParam(raw: string | undefined): RadiusMiles {
   if (RADIUS_MILE_OPTIONS.includes(n as RadiusMiles)) return n as RadiusMiles;
   return 10;
 }
+
+/** First dollar amount in a label like "$950 / mo" — demo-only until rent is numeric in the API. */
+export function parseMonthlyRent(rentLabel: string): number | null {
+  const m = rentLabel.replace(/,/g, "").match(/\$(\d+)/);
+  if (!m) return null;
+  const n = Number.parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function propertyWithinMaxBudget(rentLabel: string, maxBudget: number | null): boolean {
+  if (maxBudget === null || !Number.isFinite(maxBudget)) return true;
+  const rent = parseMonthlyRent(rentLabel);
+  if (rent === null) return true;
+  return rent <= maxBudget;
+}

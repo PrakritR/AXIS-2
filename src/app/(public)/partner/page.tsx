@@ -11,7 +11,7 @@ export default function PartnerLandingPage() {
             We manage your property<br className="hidden sm:block" /> so you don&apos;t have to.
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-500">
-            We currently manage <strong className="font-semibold text-slate-700">3 properties in Seattle</strong> and help owners maximize revenue while minimizing effort — from tenant sourcing to monthly reporting.
+            We currently manage <strong className="font-semibold text-slate-700">3 properties</strong> and help owners maximize revenue while minimizing effort — from tenant sourcing to monthly reporting.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
@@ -120,7 +120,7 @@ const FEATURES = [
   },
   {
     title: "Furnishing & pricing optimization",
-    body: "We advise on furnishing and pricing to maximize your monthly rate in the Seattle market.",
+    body: "We advise on furnishing and pricing to maximize your monthly rate in your local market.",
     icon: <HomeIcon />,
   },
   {

@@ -11,11 +11,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Axis Seattle",
-    template: "%s · Axis Seattle",
+    default: "Axis Housing",
+    template: "%s · Axis Housing",
   },
   description:
-    "Axis Seattle — housing search, applications, and portals (UI shell).",
+    "Axis Housing — housing search, applications, and portals (UI shell).",
 };
 
 export default function RootLayout({
