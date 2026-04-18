@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Residential Lease Agreement</title>
+  <style>
+    body { font-family: Georgia, "Times New Roman", serif; max-width: 720px; margin: 40px auto; padding: 0 24px; color: #111; line-height: 1.45; }
+    h1 { text-align: center; font-size: 1.35rem; margin-bottom: 0.25rem; }
+    .sub { text-align: center; font-size: 0.85rem; color: #444; margin-bottom: 2rem; }
+    h2 { font-size: 1rem; margin-top: 1.5rem; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+    p, li { font-size: 0.95rem; }
+    .fill { font-weight: bold; border-bottom: 1px solid #333; padding: 0 2px; }
+    .sig { margin-top: 3rem; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    .sig-block { border-top: 1px solid #333; padding-top: 8px; font-size: 0.85rem; }
+    @media print { body { margin: 0; } }
+  </style>
+</head>
+<body>
+  <h1>Residential Lease Agreement</h1>
+  <p class="sub">Generic example — replace bracketed fields via Axis lease generator.</p>
+
+  <p>This Lease Agreement (“Agreement”) is entered into as of <span class="fill">{{LEASE_EFFECTIVE_DATE}}</span>, by and between:</p>
+  <p><strong>Landlord / Lessor:</strong> <span class="fill">{{LANDLORD_ENTITY}}</span> (“Landlord”), and</p>
+  <p><strong>Tenant / Lessee:</strong> <span class="fill">{{TENANT_FULL_NAME}}</span> (“Tenant”).</p>
+
+  <h2>1. Premises</h2>
+  <p>Landlord leases to Tenant the residential premises located at <span class="fill">{{PROPERTY_FULL_ADDRESS}}</span>, including Unit <span class="fill">{{UNIT_NUMBER}}</span> (the “Premises”), for use as a private residence only.</p>
+
+  <h2>2. Term</h2>
+  <p>The initial term begins on <span class="fill">{{LEASE_START}}</span> and ends on <span class="fill">{{LEASE_END}}</span>, unless sooner terminated in accordance with this Agreement or applicable law.</p>
+
+  <h2>3. Rent &amp; Deposit</h2>
+  <p>Monthly rent shall be <span class="fill">{{MONTHLY_RENT}}</span>, due on the first day of each month. A security deposit of <span class="fill">{{SECURITY_DEPOSIT}}</span> is due upon execution of this Agreement, subject to the terms permitted by law.</p>
+
+  <h2>4. Tenant contact</h2>
+  <p>Email: <span class="fill">{{TENANT_EMAIL}}</span> · Phone: <span class="fill">{{TENANT_PHONE}}</span></p>
+
+  <h2>5. Property management</h2>
+  <p>Notices and maintenance requests may be directed to: <span class="fill">{{MANAGER_CONTACT}}</span>.</p>
+
+  <h2>6. General</h2>
+  <p>Tenant acknowledges receipt of any required disclosures. This example is for demonstration; have qualified counsel review before use.</p>
+  <p><em>Application reference: {{APPLICATION_ID}} · Submitted {{APPLICATION_DATE}}</em></p>
+
+  <div class="sig">
+    <div class="sig-block">Landlord / Authorized agent<br /><br />Date: _______________</div>
+    <div class="sig-block">Tenant<br /><br />Date: _______________</div>
+  </div>
+</body>
+</html>
