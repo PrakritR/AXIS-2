@@ -21,7 +21,7 @@ export function ApplyFieldRow({
 }) {
   return (
     <div
-      className={`grid gap-3 py-4 sm:grid-cols-[minmax(168px,220px)_minmax(0,1fr)] sm:items-start ${className}`}
+      className={`grid gap-3 border-b border-slate-100 py-4 last:border-b-0 sm:border-b-0 sm:py-4 sm:grid-cols-[minmax(168px,220px)_minmax(0,1fr)] sm:items-start ${className}`}
     >
       <div className="sm:pt-2">
         <div className={labelClassName}>

@@ -13,19 +13,19 @@ export default function HomePage() {
         }}
       />
 
-      <div className="relative px-4 pb-28 pt-20 sm:pt-28 md:pt-32">
+      <div className="relative px-4 pb-24 pt-16 sm:pb-28 sm:pt-28 md:pt-32">
         <div className="mx-auto max-w-5xl text-center">
           {/* Eyebrow */}
-          <div className="animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border border-[#007aff]/20 bg-[#007aff]/[0.07] px-4 py-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#007aff]" />
-            <span className="text-[13px] font-semibold tracking-wide text-[#007aff]">
+          <div className="animate-fade-up mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-[#007aff]/20 bg-[#007aff]/[0.07] px-3 py-1.5 sm:mb-6 sm:px-4">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#007aff]" />
+            <span className="text-xs font-semibold tracking-wide text-[#007aff] sm:text-[13px]">
               Axis Housing · Now Leasing
             </span>
           </div>
 
           {/* Headline */}
           <h1
-            className="animate-fade-up mx-auto max-w-3xl text-[3rem] font-semibold leading-[1.08] tracking-[-0.03em] text-[#1d1d1f] sm:text-[3.75rem] md:text-[4.5rem]"
+            className="animate-fade-up mx-auto max-w-3xl text-[2.25rem] font-semibold leading-[1.1] tracking-[-0.03em] text-[#1d1d1f] sm:text-[3.75rem] sm:leading-[1.08] md:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
             Find housing that{" "}

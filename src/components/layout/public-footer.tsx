@@ -29,14 +29,14 @@ export function PublicFooter() {
           <div className="space-y-2">
             <a
               href="tel:+15103098345"
-              className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-[#3b66f5]"
+              className="flex items-center gap-2 text-sm font-medium text-slate-700 transition-colors duration-200 hover:text-[#3b66f5]"
             >
               <PhoneIcon />
               (510) 309-8345
             </a>
             <a
               href="mailto:info@axishousing.com"
-              className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-[#3b66f5]"
+              className="flex items-center gap-2 text-sm font-medium text-slate-700 transition-colors duration-200 hover:text-[#3b66f5]"
             >
               <MailIcon />
               info@axishousing.com
@@ -50,7 +50,10 @@ export function PublicFooter() {
           <ul className="mt-4 space-y-2.5">
             {PARTNER_LINKS.map(({ href, label }) => (
               <li key={href}>
-                <Link href={href} className="text-sm font-medium text-slate-700 hover:text-[#3b66f5]">
+                <Link
+                  href={href}
+                  className="text-sm font-medium text-slate-700 transition-[color,transform] duration-200 hover:text-[#3b66f5] hover:translate-x-0.5"
+                >
                   {label}
                 </Link>
               </li>
@@ -69,7 +72,7 @@ export function PublicFooter() {
               href="https://www.google.com/maps/search/?api=1&query=5259+Brooklyn+Ave+NE%2C+98105"
               target="_blank"
               rel="noreferrer"
-              className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[#3b66f5] hover:underline"
+              className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[#3b66f5] transition-[opacity,transform] duration-200 hover:underline hover:opacity-90"
             >
               <PinIcon />
               View on Google Maps
@@ -83,7 +86,10 @@ export function PublicFooter() {
           <ul className="mt-4 space-y-2.5">
             {HOUSING_LINKS.map(({ href, label }) => (
               <li key={href}>
-                <Link href={href} className="text-sm font-medium text-slate-700 hover:text-[#3b66f5]">
+                <Link
+                  href={href}
+                  className="text-sm font-medium text-slate-700 transition-[color,transform] duration-200 hover:text-[#3b66f5] hover:translate-x-0.5"
+                >
                   {label}
                 </Link>
               </li>
@@ -92,8 +98,8 @@ export function PublicFooter() {
         </div>
       </div>
 
-      <div className="border-t border-slate-100 px-6 py-4">
-        <div className="mx-auto flex max-w-6xl items-center justify-between text-xs text-slate-400">
+      <div className="border-t border-slate-100 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-2 text-center text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <span>© 2026 Axis. All rights reserved.</span>
           <span className="font-medium text-slate-500">Axis Housing</span>
         </div>

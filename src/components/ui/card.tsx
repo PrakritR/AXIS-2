@@ -9,7 +9,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-[20px] border border-black/[0.06] bg-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm ${className}`}
+      className={`rounded-[20px] border border-black/[0.06] bg-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.06)] backdrop-blur-sm transition-[transform,box-shadow,border-color,background-color] duration-300 ease-out hover:-translate-y-0.5 hover:border-black/[0.09] hover:bg-white hover:shadow-[0_16px_48px_-24px_rgba(15,23,42,0.14)] ${className}`}
     >
       {children}
     </div>

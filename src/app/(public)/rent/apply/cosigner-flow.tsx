@@ -1,11 +1,13 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/input";
+import { clearCosignerDraft, loadCosignerDraft, saveCosignerDraft } from "@/lib/rental-application/drafts";
+import { todayISO } from "@/lib/rental-application/state";
 import {
   validateDateRequired,
   validateEmail,
@@ -80,7 +82,7 @@ function emptyCosigner(): CosignerFields {
     criminal: "",
     consentCredit: false,
     signature: "",
-    dateSigned: "",
+    dateSigned: todayISO(),
     notes: "",
   };
 }
@@ -101,6 +103,20 @@ export function CosignerApplyFlow({
   const [step, setStep] = useState(1);
   const [f, setF] = useState<CosignerFields>(emptyCosigner);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [draftReady, setDraftReady] = useState(false);
+
+  useEffect(() => {
+    const draft = loadCosignerDraft<CosignerFields>();
+    if (draft) {
+      setF((current) => ({ ...current, ...draft }));
+    }
+    setDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    saveCosignerDraft(f);
+  }, [draftReady, f]);
 
   const clearError = (key: string) => {
     setFieldErrors((prev) => {
@@ -225,6 +241,9 @@ export function CosignerApplyFlow({
     if (step === 5) {
       if (!validateStep5()) return;
       setFieldErrors({});
+      clearCosignerDraft();
+      setF(emptyCosigner());
+      setStep(1);
       showToast("Co-signer application submitted (demo).");
       return;
     }

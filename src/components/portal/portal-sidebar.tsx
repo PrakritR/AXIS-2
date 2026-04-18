@@ -21,8 +21,13 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
     return parts[1] ?? "dashboard";
   }, [pathname]);
 
-  const useMinShell = definition.kind === "admin" || definition.kind === "resident";
+  const useMinShell =
+    definition.kind === "admin" || definition.kind === "resident" || definition.kind === "manager" || definition.kind === "owner";
   const isResident = definition.kind === "resident";
+  const isManager = definition.kind === "manager";
+  const isOwner = definition.kind === "owner";
+  const hasSignOut =
+    definition.kind === "resident" || definition.kind === "manager" || definition.kind === "owner" || definition.kind === "admin";
 
   const accent =
     definition.accent === "teal"
@@ -53,20 +58,36 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         })}
         <div className="mt-8 space-y-1 border-t border-slate-200/80 pt-4">
           {isResident ? (
-            <>
-              <Link
-                href="/resident/payments/pending"
-                className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
-              >
-                Billing
-              </Link>
-              <Link
-                href="/auth/sign-in"
-                className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
-              >
-                Sign out
-              </Link>
-            </>
+            <Link
+              href="/resident/payments/pending"
+              className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+            >
+              Billing
+            </Link>
+          ) : null}
+          {isManager ? (
+            <Link
+              href="/manager/payments"
+              className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+            >
+              Billing
+            </Link>
+          ) : null}
+          {isOwner ? (
+            <Link
+              href="/owner/payments"
+              className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+            >
+              Billing
+            </Link>
+          ) : null}
+          {hasSignOut ? (
+            <Link
+              href="/auth/sign-in"
+              className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+            >
+              Sign out
+            </Link>
           ) : null}
           <Link
             href="/"
@@ -155,22 +176,40 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                 );
               })}
               {isResident ? (
-                <>
-                  <Link
-                    href="/resident/payments/pending"
-                    onClick={() => setOpen(false)}
-                    className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
-                  >
-                    Billing
-                  </Link>
-                  <Link
-                    href="/auth/sign-in"
-                    onClick={() => setOpen(false)}
-                    className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
-                  >
-                    Sign out
-                  </Link>
-                </>
+                <Link
+                  href="/resident/payments/pending"
+                  onClick={() => setOpen(false)}
+                  className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+                >
+                  Billing
+                </Link>
+              ) : null}
+              {isManager ? (
+                <Link
+                  href="/manager/payments"
+                  onClick={() => setOpen(false)}
+                  className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+                >
+                  Billing
+                </Link>
+              ) : null}
+              {isOwner ? (
+                <Link
+                  href="/owner/payments"
+                  onClick={() => setOpen(false)}
+                  className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+                >
+                  Billing
+                </Link>
+              ) : null}
+              {hasSignOut ? (
+                <Link
+                  href="/auth/sign-in"
+                  onClick={() => setOpen(false)}
+                  className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+                >
+                  Sign out
+                </Link>
               ) : null}
               <Link
                 href="/"

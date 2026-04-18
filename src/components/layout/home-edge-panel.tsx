@@ -10,7 +10,7 @@ export function HomeEdgePanel() {
     <button
       type="button"
       aria-label="Panel"
-      className="fixed right-0 top-1/2 z-40 hidden h-11 w-11 -translate-y-1/2 translate-x-1/2 rounded-full bg-slate-900 text-white shadow-lg lg:flex lg:items-center lg:justify-center"
+      className="fixed right-0 top-1/2 z-40 hidden h-11 w-11 -translate-y-1/2 translate-x-1/2 rounded-full bg-slate-900 text-white shadow-lg transition-[transform,box-shadow,filter] duration-200 ease-out hover:scale-105 hover:shadow-xl hover:brightness-110 active:scale-95 lg:flex lg:items-center lg:justify-center"
       onClick={() => showToast("Coming soon")}
     >
       <span className="text-[10px] leading-none">⚙</span>

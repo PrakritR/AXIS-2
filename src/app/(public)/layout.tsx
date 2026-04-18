@@ -1,6 +1,8 @@
 import { PublicAnnouncement } from "@/components/layout/public-announcement";
 import { PublicFooter } from "@/components/layout/public-footer";
 import { PublicNavbar } from "@/components/layout/public-navbar";
+import { PublicAtmosphere } from "@/components/motion/public-atmosphere";
+import { PublicMainTransition } from "@/components/motion/public-main-transition";
 
 export default function PublicLayout({
   children,
@@ -9,14 +11,17 @@ export default function PublicLayout({
 }) {
   return (
     <div
-      className="flex min-h-screen flex-col"
+      className="relative flex min-h-screen flex-col"
       style={{
-        background: "linear-gradient(180deg, #ffffff 0%, #f5f9ff 40%, #eef4ff 100%)",
+        background: "linear-gradient(180deg, #ffffff 0%, #f5f9ff 38%, #e8f0fc 100%)",
       }}
     >
+      <PublicAtmosphere />
       <PublicAnnouncement />
       <PublicNavbar />
-      <main className="flex-1">{children}</main>
+      <PublicMainTransition>
+        <main className="flex-1">{children}</main>
+      </PublicMainTransition>
       <PublicFooter />
     </div>
   );

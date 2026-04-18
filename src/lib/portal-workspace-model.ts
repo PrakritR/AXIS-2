@@ -35,8 +35,18 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
     },
   ];
 
-  if (portal === "manager") {
-    if (section === "properties")
+  if (portal === "manager" || portal === "owner") {
+    if (section === "properties") {
+      if (portal === "owner") {
+        return [
+          {
+            label: "View linked inventory",
+            kind: "toast",
+            message: "Only properties your manager linked appear here. Approvals and edits go through your manager.",
+          },
+          ...common,
+        ];
+      }
       return [
         { label: "Add property", kind: "toast", message: "Opening add flow…" },
         {
@@ -46,7 +56,18 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         },
         ...common,
       ];
-    if (section === "applicants")
+    }
+    if (section === "applicants" || section === "applications") {
+      if (portal === "owner") {
+        return [
+          {
+            label: "View application",
+            kind: "modal",
+            message: "Owner accounts cannot approve or deny applications. Ask your manager to take action.",
+          },
+          ...common,
+        ];
+      }
       return [
         {
           label: "Approve applicant",
@@ -60,6 +81,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         },
         ...common,
       ];
+    }
     if (section === "payments")
       return [
         {
@@ -70,7 +92,17 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         { label: "Send reminder", kind: "toast", message: "Reminder queued…" },
         ...common,
       ];
-    if (section === "work-orders")
+    if (section === "work-orders") {
+      if (portal === "owner") {
+        return [
+          {
+            label: "Request work order",
+            kind: "toast",
+            message: "Requests route to your property manager for triage (demo).",
+          },
+          ...common,
+        ];
+      }
       return [
         {
           label: "Create work order",
@@ -84,6 +116,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         },
         ...common,
       ];
+    }
     if (section === "announcements")
       return [
         {
@@ -102,6 +135,21 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         },
         ...common,
       ];
+    if (section === "managers" && portal === "owner") {
+      return [
+        {
+          label: "Contact manager",
+          kind: "toast",
+          message: "Demo — verified messaging will appear here.",
+        },
+        {
+          label: "View agreement",
+          kind: "modal",
+          message: "Management agreements will be stored per property.",
+        },
+        ...common,
+      ];
+    }
   }
 
   if (portal === "resident") {
@@ -201,6 +249,19 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           message: "Profile editing is not connected yet.",
         },
       ];
+    if (section === "announcements")
+      return [
+        {
+          label: "Create announcement",
+          kind: "toast",
+          message: "Announcement composer opened (demo).",
+        },
+        {
+          label: "Schedule send",
+          kind: "modal",
+          message: "Scheduled sends will connect to your notification system later.",
+        },
+      ];
     if (section === "tools")
       return [
         {
@@ -241,14 +302,16 @@ export function buildPortalWorkspaceModel(
   section: string,
   tabId: string,
 ): WorkspaceModel {
-  const eyebrow = `${portal === "manager" ? "Manager" : portal === "resident" ? "Resident" : "Admin"} workspace`;
+  const eyebrow = `${portal === "manager" ? "Manager" : portal === "owner" ? "Owner" : portal === "resident" ? "Resident" : "Admin"} workspace`;
 
   if (section === "dashboard") {
     return {
       eyebrow,
       title: "Dashboard",
       subtitle:
-        "Snapshot of operations. Numbers are illustrative until integrations are enabled.",
+        portal === "owner"
+          ? "Snapshot of the properties linked to your owner account. Operational approvals stay with your property managers."
+          : "Snapshot of operations. Numbers are illustrative until integrations are enabled.",
       kpis:
         portal === "resident"
           ? [
@@ -290,12 +353,15 @@ export function buildPortalWorkspaceModel(
                 {
                   label: "Active listings",
                   value: "14",
-                  hint: "Across your portfolio",
+                  hint:
+                    portal === "owner"
+                      ? "Linked properties your manager assigned"
+                      : "Across your portfolio",
                 },
                 {
                   label: "Applicants (new)",
                   value: "5",
-                  hint: "Needs first review",
+                  hint: portal === "owner" ? "Visible for your units (read-only where restricted)" : "Needs first review",
                 },
                 {
                   label: "Late payments",

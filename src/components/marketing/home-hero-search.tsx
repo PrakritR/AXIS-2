@@ -2,11 +2,14 @@
 
 import { RADIUS_MILE_OPTIONS, parseRadiusParam } from "@/lib/listings-search";
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { useMemo, useState } from "react";
 
-const BUDGET_MIN = 600;
-const BUDGET_MAX = 1100;
-const BUDGET_MARKERS = [600, 850, 1100];
+/** Slider min/max (max = “no cap” / Any in UI). Step keeps URLs tidy. */
+const BUDGET_MIN = 500;
+const BUDGET_MAX = 5000;
+const BUDGET_STEP = 50;
+const BUDGET_MARKERS = [500, 1500, 3000, 5000] as const;
 
 const BATHROOM_OPTIONS = [
   { id: "any", label: "Any" },
@@ -17,7 +20,7 @@ const BATHROOM_OPTIONS = [
 ];
 
 const inputCls =
-  "[color-scheme:light] w-full rounded-xl border-0 bg-black/[0.04] px-3.5 py-3 text-[14px] text-[#1d1d1f] outline-none transition-all duration-200 placeholder:text-[#6e6e73]/60 focus:bg-white focus:ring-2 focus:ring-[#007aff]/25 hover:bg-black/[0.06]";
+  "[color-scheme:light] min-h-[44px] w-full rounded-xl border-0 bg-black/[0.04] px-3.5 py-2.5 text-[16px] text-[#1d1d1f] outline-none transition-all duration-200 placeholder:text-[#6e6e73]/60 focus:bg-white focus:ring-2 focus:ring-[#007aff]/25 hover:bg-black/[0.06] sm:py-3 sm:text-[14px]";
 
 export type HomeHeroSearchProps = {
   variant?: "hero" | "listings";
@@ -32,7 +35,8 @@ export type HomeHeroSearchProps = {
 };
 
 function clampBudget(n: number) {
-  return Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, Math.round(n / 10) * 10));
+  const stepped = Math.round(n / BUDGET_STEP) * BUDGET_STEP;
+  return Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, stepped));
 }
 
 export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
@@ -84,7 +88,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
 
   return (
     <div
-      className="mx-auto w-full max-w-[1060px] rounded-[24px] px-6 py-7 sm:px-10 sm:py-9"
+      className="mx-auto w-full max-w-[1060px] rounded-[24px] px-4 py-6 sm:px-10 sm:py-9"
       style={{
         background: "rgba(255,255,255,0.75)",
         backdropFilter: "blur(24px)",
@@ -111,21 +115,28 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
               {budgetLabel}
             </span>
           </div>
-          <div className="mt-4 px-0.5">
-            <div className="relative h-[4px] w-full rounded-full bg-black/[0.08]">
-              <div
-                className="absolute left-0 top-0 h-full rounded-full transition-all duration-75"
-                style={{ width: `${pct}%`, background: "linear-gradient(90deg, #007aff, #339cff)" }}
-              />
-            </div>
+          <div
+            className="budget-slider-wrap mt-4 px-0.5"
+            style={{ "--budget-pct": `${pct}%` } as CSSProperties}
+          >
             <input
               type="range"
-              min={BUDGET_MIN} max={BUDGET_MAX} step={10} value={budget}
-              onChange={(e) => { setBudget(Number(e.target.value)); setBudgetTouched(true); }}
-              className="budget-slider relative -mt-[10px] h-[24px] w-full cursor-pointer appearance-none bg-transparent"
+              min={BUDGET_MIN}
+              max={BUDGET_MAX}
+              step={BUDGET_STEP}
+              value={budget}
+              onChange={(e) => {
+                setBudget(Number(e.target.value));
+                setBudgetTouched(true);
+              }}
+              className="budget-slider relative z-10 h-7 w-full cursor-pointer appearance-none bg-transparent"
             />
-            <div className="mt-1 flex justify-between text-[11px] font-medium text-[#6e6e73]/50">
-              {BUDGET_MARKERS.map((m) => <span key={m}>{m === BUDGET_MAX ? "Any" : `$${m.toLocaleString()}`}</span>)}
+            <div className="mt-1 flex justify-between gap-1 text-[11px] font-medium text-[#6e6e73]/50">
+              {BUDGET_MARKERS.map((m) => (
+                <span key={m} className={m === BUDGET_MAX ? "text-right" : ""}>
+                  {m === BUDGET_MAX ? "Any" : `$${m.toLocaleString()}`}
+                </span>
+              ))}
             </div>
           </div>
         </div>
@@ -179,7 +190,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
           </p>
           <a
             href={listingsHref}
-            className="inline-flex items-center gap-2 rounded-full px-8 py-2.5 text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-[1px] active:scale-[0.98]"
+            className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full px-8 py-3 text-[15px] font-semibold text-white transition-all duration-200 hover:-translate-y-[1px] active:scale-[0.98] sm:min-h-0 sm:py-2.5 sm:text-[14px]"
             style={{ background: "linear-gradient(135deg, #007aff, #339cff)", boxShadow: "0 4px 20px rgba(0,122,255,0.35)" }}
           >
             <SearchIcon /> {variant === "listings" ? "Apply search" : "View listings"}
@@ -199,7 +210,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
           </p>
           <Link
             href="/rent/listings"
-            className="inline-flex items-center justify-center rounded-full border border-[#007aff]/35 bg-[#007aff]/[0.06] px-6 py-2 text-[13px] font-semibold text-[#007aff] transition hover:bg-[#007aff]/[0.1]"
+            className="inline-flex min-h-[48px] w-full max-w-xs items-center justify-center rounded-full border border-[#007aff]/35 bg-[#007aff]/[0.06] px-6 py-3 text-[14px] font-semibold text-[#007aff] transition hover:bg-[#007aff]/[0.1] sm:min-h-0 sm:w-auto sm:py-2 sm:text-[13px]"
           >
             View all properties
           </Link>

@@ -1,10 +1,12 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 import { adminPortal } from "./admin";
 import { managerPortal } from "./manager";
+import { ownerPortal } from "./owner";
 import { residentPortal } from "./resident";
 
 export const portalsByKind: Record<PortalDefinition["kind"], PortalDefinition> = {
   manager: managerPortal,
+  owner: ownerPortal,
   resident: residentPortal,
   admin: adminPortal,
 };

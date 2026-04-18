@@ -6,17 +6,20 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { portalDashboardPath } from "@/components/auth/portal-switcher";
 
 function titleFor(role: AuthRole) {
   if (role === "resident") return "Resident portal";
   if (role === "manager") return "Manager portal";
+  if (role === "owner") return "Owner portal";
   return "Admin portal";
 }
 
 function SignInContent() {
   const { showToast, openModal } = useAppUi();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const roleFromUrl = useMemo(() => parseAuthRole(searchParams.get("role")), [searchParams]);
   const [role, setRole] = useState<AuthRole>(roleFromUrl);
@@ -26,7 +29,8 @@ function SignInContent() {
   }, [roleFromUrl]);
 
   const title = useMemo(() => titleFor(role), [role]);
-  const ctaLabel = role === "admin" ? "Sign in to Admin" : "Sign in";
+  const ctaLabel =
+    role === "admin" ? "Sign in to Admin" : role === "owner" ? "Sign in to Owner portal" : "Sign in";
 
   return (
     <AuthCard>
@@ -67,7 +71,10 @@ function SignInContent() {
       <Button
         type="button"
         className="mt-6 w-full rounded-full py-3 text-base font-semibold"
-        onClick={() => showToast(`Signed in to ${title} (demo)`)}
+        onClick={() => {
+          showToast(`Signed in to ${title} (demo)`);
+          router.push(portalDashboardPath(role));
+        }}
       >
         {ctaLabel}
       </Button>

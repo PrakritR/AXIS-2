@@ -5,6 +5,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import Link from "next/link";
+import { SegmentedTwo } from "@/components/ui/segmented-control";
 
 type Tab = "tour" | "message";
 type TourStep = 1 | 2 | 3;
@@ -76,17 +77,22 @@ export default function ToursContactPage() {
           {tab === "tour" ? "Schedule tour" : "Message Axis"}
         </h1>
 
-        {/* Tab toggle */}
-        <div className="mt-6 flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
-          <TabBtn active={tab === "tour"} onClick={() => setTab("tour")}>Set up tour</TabBtn>
-          <TabBtn active={tab === "message"} onClick={() => setTab("message")}>Send message</TabBtn>
+        <div className="mt-6">
+          <SegmentedTwo
+            value={tab}
+            onChange={(id) => setTab(id)}
+            left={{ id: "tour", label: "Set up tour" }}
+            right={{ id: "message", label: "Send message" }}
+          />
         </div>
 
-        {tab === "tour" ? (
-          <TourFlow onSuccess={() => showToast("Tour booked! (demo)")} />
-        ) : (
-          <MessageFlow onSuccess={() => showToast("Message sent (demo)")} />
-        )}
+        <div key={tab} className="animate-fade-in">
+          {tab === "tour" ? (
+            <TourFlow onSuccess={() => showToast("Tour booked! (demo)")} />
+          ) : (
+            <MessageFlow onSuccess={() => showToast("Message sent (demo)")} />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -696,20 +702,6 @@ function MessageFlow({ onSuccess }: { onSuccess: () => void }) {
 }
 
 /* ── Shared UI primitives ── */
-function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-all duration-150 ${
-        active ? "bg-[#3b66f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>

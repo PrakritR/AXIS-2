@@ -16,13 +16,13 @@ export default function PartnerLandingPage() {
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
               href="/partner/contact?tab=schedule"
-              className="inline-flex items-center justify-center rounded-2xl bg-[#3b66f5] px-8 py-3.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,102,245,0.4)] transition-all duration-200 hover:bg-[#3259e3] active:scale-[0.98]"
+              className="inline-flex items-center justify-center rounded-2xl bg-[#3b66f5] px-8 py-3.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,102,245,0.4)] transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_36px_-8px_rgba(59,102,245,0.55)] hover:brightness-105 active:translate-y-px active:scale-[0.98]"
             >
               Book a consultation
             </Link>
             <Link
               href="/partner/pricing"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-8 py-3.5 text-sm font-semibold text-slate-700 transition-all duration-200 hover:border-slate-300 hover:bg-slate-50"
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-8 py-3.5 text-sm font-semibold text-slate-700 shadow-sm transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:shadow-md active:translate-y-px active:scale-[0.99]"
             >
               Use our software
             </Link>

@@ -1,17 +1,18 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { PortalSwitcher, parseAuthRole, type AuthRole } from "@/components/auth/portal-switcher";
+import { PortalSwitcher, parseAuthRole, portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 
 function titleFor(role: AuthRole) {
   if (role === "resident") return "Resident portal";
   if (role === "manager") return "Manager portal";
+  if (role === "owner") return "Owner portal";
   return "Admin portal";
 }
 
@@ -21,6 +22,7 @@ function Req() {
 
 function CreateAccountContent() {
   const { showToast } = useAppUi();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const roleFromUrl = useMemo(() => parseAuthRole(searchParams.get("role")), [searchParams]);
   const [role, setRole] = useState<AuthRole>(roleFromUrl);
@@ -60,10 +62,16 @@ function CreateAccountContent() {
             </Link>
             . Your Manager ID is provided after you create a subscription and pay.
           </>
+        ) : role === "owner" ? (
+          <>
+            Owner signup is invite-only. Open the link your manager sent from the{" "}
+            <span className="font-semibold text-[#0f172a]">Owners</span> tab, then use the same email they configured for
+            your linked properties. One owner can work with multiple managers across different homes.
+          </>
         ) : (
           <>
-            Admin accounts are invite-only in production. This scaffold lets you click through the admin UI without
-            real permissions.
+            For this demo you can open the admin portal without an invite. Production will use real permissions and
+            provisioning.
           </>
         )}
       </div>
@@ -86,12 +94,20 @@ function CreateAccountContent() {
             <Input id="mid" className="mt-1.5" placeholder="From your subscription email; leave blank if not subscribed yet" />
           </div>
         ) : null}
-        {role === "manager" ? (
+        {role === "manager" || role === "owner" ? (
           <div>
             <label className="text-xs font-semibold text-[#334155]" htmlFor="name">
               Full name
             </label>
             <Input id="name" className="mt-1.5" placeholder="Your full name" />
+          </div>
+        ) : null}
+        {role === "owner" ? (
+          <div>
+            <label className="text-xs font-semibold text-[#334155]" htmlFor="invite">
+              Invite reference (optional)
+            </label>
+            <Input id="invite" className="mt-1.5" placeholder="From your manager link, e.g. slot id" />
           </div>
         ) : null}
         <div>
@@ -113,7 +129,10 @@ function CreateAccountContent() {
       <Button
         type="button"
         className="mt-8 w-full rounded-full py-3 text-base font-semibold"
-        onClick={() => showToast("Account created (demo)")}
+        onClick={() => {
+          showToast("Account created (demo)");
+          router.push(portalDashboardPath(role));
+        }}
       >
         Create account
       </Button>

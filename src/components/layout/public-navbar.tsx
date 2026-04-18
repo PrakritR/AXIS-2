@@ -37,33 +37,58 @@ export function PublicNavbar() {
   };
 
   useEffect(() => {
-    const handler = () => setScrolled(window.scrollY > 8);
+    const handler = () => setScrolled(window.scrollY > 20);
+    handler();
     window.addEventListener("scroll", handler, { passive: true });
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
   const isAdminPortal = pathname.startsWith("/admin");
   const isResidentPortal = pathname.startsWith("/resident");
+  const isManagerPortal = pathname.startsWith("/manager");
+  const isOwnerPortal = pathname.startsWith("/owner");
   const rentActive = useMemo(() => pathname === "/" || pathname.startsWith("/rent"), [pathname]);
   const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
   const activeRentHref = RENT_LINKS.find((l) => pathname.startsWith(l.href))?.href;
   const activePartnerHref = PARTNER_LINKS.find((l) => pathname.startsWith(l.href))?.href;
-  const logoHref = isAdminPortal ? "/admin/dashboard" : isResidentPortal ? "/resident/dashboard" : "/";
-  const portalHref = isAdminPortal ? "/admin/dashboard" : isResidentPortal ? "/resident/dashboard" : "/auth/sign-in";
+  const logoHref = isAdminPortal
+    ? "/admin/dashboard"
+    : isResidentPortal
+      ? "/resident/dashboard"
+      : isManagerPortal
+        ? "/manager/dashboard"
+        : isOwnerPortal
+          ? "/owner/dashboard"
+          : "/";
+  const portalHref = isAdminPortal
+    ? "/admin/dashboard"
+    : isResidentPortal
+      ? "/resident/dashboard"
+      : isManagerPortal
+        ? "/manager/dashboard"
+        : isOwnerPortal
+          ? "/owner/dashboard"
+          : "/auth/sign-in";
 
   return (
     <div
-      className={`sticky top-0 z-40 transition-all duration-300 ${
+      className={`sticky top-0 z-40 border-b pt-[env(safe-area-inset-top,0px)] transition-[background,box-shadow,border-color,backdrop-filter] duration-300 ease-out ${
         scrolled
-          ? "border-b border-black/[0.06] bg-white/80 shadow-[0_1px_20px_rgba(0,0,0,0.06)] backdrop-blur-2xl"
-          : "bg-white/60 backdrop-blur-xl"
+          ? "border-slate-200/80 bg-white/80 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_40px_-20px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/70"
+          : "border-transparent bg-white/95 shadow-none backdrop-blur-none"
       }`}
     >
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3">
-        <AxisLogoLink href={logoHref} />
+      <div
+        className={`mx-auto grid w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 transition-[padding] duration-300 ease-out sm:px-5 lg:grid-cols-[auto_1fr_auto] ${
+          scrolled ? "py-2 sm:py-2.5" : "py-3 sm:py-3.5"
+        }`}
+      >
+        <div className="justify-self-start">
+          <AxisLogoLink href={logoHref} />
+        </div>
 
         <nav
-          className="hidden items-center gap-1 lg:flex"
+          className="hidden items-center justify-center gap-1 justify-self-center lg:flex"
           onMouseLeave={scheduleClose}
         >
           <div
@@ -105,10 +130,10 @@ export function PublicNavbar() {
           </div>
         </nav>
 
-        <div className="hidden items-center gap-3 lg:flex">
+        <div className="flex items-center justify-end justify-self-end gap-2">
           <Link
             href={portalHref}
-            className="inline-flex items-center justify-center rounded-full px-5 py-2 text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98]"
+            className="hidden items-center justify-center rounded-full px-5 py-2 text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] lg:inline-flex"
             style={{
               background: "linear-gradient(135deg, #007aff, #339cff)",
               boxShadow: "0 4px 20px rgba(0,122,255,0.32)",
@@ -120,23 +145,23 @@ export function PublicNavbar() {
               (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(0,122,255,0.32)";
             }}
           >
-            Portal
+            Manager / Owner login
           </Link>
-        </div>
 
-        {/* Mobile menu button */}
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/80 px-4 py-2 text-sm font-medium text-[#1d1d1f] transition hover:bg-black/[0.04] lg:hidden"
-          onClick={() => setMobileOpen((v) => !v)}
-        >
+          {/* Mobile menu button */}
+          <button
+            type="button"
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition hover:bg-slate-50 lg:hidden"
+            onClick={() => setMobileOpen((v) => !v)}
+          >
           {mobileOpen ? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
           ) : (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
           )}
-          Menu
-        </button>
+            Menu
+          </button>
+        </div>
       </div>
 
       {/* Mobile drawer */}
@@ -145,7 +170,7 @@ export function PublicNavbar() {
           mobileOpen ? "max-h-[520px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
-        <div className="border-t border-black/[0.06] bg-white/90 px-5 pb-6 pt-4 backdrop-blur-2xl">
+        <div className="border-t border-slate-100 bg-white px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 sm:px-5">
           <div className="space-y-1">
             <MobileSection label="Rent with Axis">
               <MobileLink href="/" label="Axis Housing home" active={pathname === "/"} onClose={() => setMobileOpen(false)} />
@@ -164,16 +189,25 @@ export function PublicNavbar() {
               <Link
                 href={portalHref}
                 onClick={() => setMobileOpen(false)}
-                className="flex w-full items-center justify-center rounded-full py-3 text-[14px] font-semibold text-white"
+                className="flex min-h-[48px] w-full items-center justify-center rounded-full py-3 text-[14px] font-semibold text-white"
                 style={{ background: "linear-gradient(135deg, #007aff, #339cff)", boxShadow: "0 4px 20px rgba(0,122,255,0.3)" }}
               >
-                Portal
+                Manager / Owner login
               </Link>
             </div>
-            <div className="flex gap-4 border-t border-black/[0.06] pt-3 text-xs">
-              <Link href="/manager/dashboard" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>Manager</Link>
-              <Link href="/resident/dashboard" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>Resident</Link>
-              <Link href="/admin/dashboard" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>Admin</Link>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-black/[0.06] pt-3 text-xs">
+              <Link href="/auth/sign-in?role=manager" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
+                Manager login
+              </Link>
+              <Link href="/auth/sign-in?role=owner" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
+                Owner login
+              </Link>
+              <Link href="/resident/dashboard" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
+                Resident
+              </Link>
+              <Link href="/admin/dashboard" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
+                Admin
+              </Link>
             </div>
           </div>
         </div>
@@ -192,16 +226,15 @@ function RentWithAxisTrigger({
   onToggleChevron: () => void;
 }) {
   return (
-    <div className="relative inline-flex items-stretch overflow-hidden rounded-full border border-black/[0.06] bg-black/[0.02] shadow-sm">
+    <div className="relative inline-flex items-center gap-0.5">
       <Link
         href="/"
-        className={`relative flex items-center px-4 py-2 text-[15px] font-medium outline-none transition-all duration-200 ${
-          active ? "text-[#007aff]" : "text-[#1d1d1f]/80 hover:text-[#1d1d1f]"
-        } ${open ? "bg-black/[0.04]" : "hover:bg-black/[0.04]"}`}
+        className={`relative flex items-center rounded-full px-3 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
+          active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
+        } ${open ? "bg-slate-100/80" : "hover:bg-slate-100/60"}`}
       >
         Rent with Axis
       </Link>
-      <span className="w-px shrink-0 self-stretch bg-black/[0.08]" aria-hidden />
       <button
         type="button"
         aria-expanded={open}
@@ -211,16 +244,16 @@ function RentWithAxisTrigger({
           e.preventDefault();
           onToggleChevron();
         }}
-        className={`relative flex items-center pr-3 pl-2 py-2 outline-none transition-all duration-200 ${
-          active ? "text-[#007aff]" : "text-[#1d1d1f]/80 hover:text-[#1d1d1f]"
-        } ${open ? "bg-black/[0.04]" : "hover:bg-black/[0.04]"}`}
+        className={`relative flex items-center rounded-full p-2 outline-none transition-colors duration-200 ${
+          active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
+        } ${open ? "bg-slate-100/80" : "hover:bg-slate-100/60"}`}
       >
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden className={`shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
           <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
       {active && (
-        <span className="pointer-events-none absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-[#007aff] transition-all duration-300" />
+        <span className="pointer-events-none absolute bottom-0 left-2 right-8 h-[2px] rounded-full bg-[#007aff] transition-all duration-300" />
       )}
     </div>
   );
@@ -244,9 +277,9 @@ function PartnerDropdownTrigger({
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={onToggle}
-        className={`relative flex items-center gap-1.5 rounded-full px-4 py-2 text-[15px] font-medium outline-none transition-all duration-200 ${
-          active ? "text-[#007aff]" : "text-[#1d1d1f]/80 hover:text-[#1d1d1f]"
-        } ${open ? "bg-black/[0.04]" : "hover:bg-black/[0.04]"}`}
+        className={`relative flex items-center gap-1.5 rounded-full px-4 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
+          active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
+        } ${open ? "bg-slate-100/80" : "hover:bg-slate-100/60"}`}
       >
         <span>{label}</span>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden className={`shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
@@ -288,7 +321,7 @@ function DropdownPanel({
               key={href}
               href={href}
               onClick={() => onNavigate()}
-              className={`flex items-center gap-3 px-4 py-2.5 text-[14px] font-medium transition-colors duration-100 ${
+              className={`flex items-center gap-3 px-4 py-2.5 text-[14px] font-medium transition-[transform,background-color,color] duration-200 ease-out active:scale-[0.99] ${
                 isActive
                   ? "bg-[#007aff]/[0.08] text-[#007aff]"
                   : "text-[#1d1d1f]/80 hover:bg-black/[0.04] hover:text-[#1d1d1f]"
@@ -319,7 +352,7 @@ function MobileLink({ href, label, active, onClose }: { href: string; label: str
     <Link
       href={href}
       onClick={onClose}
-      className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[14px] font-medium transition-colors ${
+      className={`flex min-h-[44px] items-center gap-2.5 rounded-xl px-3 py-3 text-[14px] font-medium transition-[background-color,color,transform] duration-200 sm:min-h-0 sm:py-2.5 ${
         active ? "bg-[#007aff]/[0.08] font-semibold text-[#007aff]" : "text-[#1d1d1f]/80 hover:bg-black/[0.04]"
       }`}
     >

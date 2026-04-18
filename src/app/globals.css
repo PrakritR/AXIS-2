@@ -32,6 +32,11 @@
   --font-sans: var(--font-inter);
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -45,12 +50,16 @@ html {
   scroll-behavior: smooth;
 }
 
-/* ── Budget slider (hero search) ── */
+/* ── Budget slider (hero search): fill driven by --budget-pct on .budget-slider-wrap ── */
+.budget-slider-wrap {
+  --budget-pct: 0%;
+}
 .budget-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 18px;
   height: 18px;
+  margin-top: -6px;
   border-radius: 9999px;
   background: #fff;
   border: 2.5px solid #007aff;
@@ -72,9 +81,26 @@ html {
   cursor: pointer;
 }
 .budget-slider::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 6px;
   border-radius: 9999px;
-  background: #e5e5ea;
+  background: linear-gradient(
+    90deg,
+    #007aff 0%,
+    #339cff var(--budget-pct),
+    rgba(0, 0, 0, 0.08) var(--budget-pct),
+    rgba(0, 0, 0, 0.08) 100%
+  );
+}
+.budget-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    #007aff 0%,
+    #339cff var(--budget-pct),
+    rgba(0, 0, 0, 0.08) var(--budget-pct),
+    rgba(0, 0, 0, 0.08) 100%
+  );
 }
 
 /* ── Global micro-interaction base ── */
@@ -92,4 +118,94 @@ html {
 }
 .animate-fade-in {
   animation: fade-in 0.3s ease both;
+}
+
+/* ── Page route entrance (keyed remount in PublicMainTransition) ── */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-page-enter {
+  animation: page-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Scroll reveal ── */
+.reveal-on-view {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.reveal-on-view.reveal-on-view--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Ambient orbs (very slow drift) ── */
+@keyframes motion-orb-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(2%, 1.5%) scale(1.03);
+  }
+}
+@keyframes motion-orb-drift-reverse {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-2.5%, -1%) scale(1.02);
+  }
+}
+.motion-orb-drift {
+  animation: motion-orb-drift 28s ease-in-out infinite;
+}
+.motion-orb-drift-reverse {
+  animation: motion-orb-drift-reverse 32s ease-in-out infinite;
+}
+
+/* ── Premium link (opt-in) ── */
+.link-premium {
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+.link-premium:hover {
+  color: var(--primary);
+  opacity: 0.92;
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-fade-up,
+  .animate-fade-in,
+  .animate-page-enter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .reveal-on-view {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .motion-orb-drift,
+  .motion-orb-drift-reverse {
+    animation: none;
+  }
+  .segmented-pill {
+    transition: none !important;
+  }
 }

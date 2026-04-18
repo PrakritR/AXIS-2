@@ -48,6 +48,7 @@ export const adminPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
+    { section: "announcements", label: "Announcements", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
   ],
 };

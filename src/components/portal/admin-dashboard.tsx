@@ -57,9 +57,9 @@ export function AdminDashboard() {
             className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-[#3b66f5] focus:ring-[#3b66f5]"
           />
           <span>
-            <span className="text-sm font-semibold text-slate-900">Open portals as a specific account</span>
+            <span className="text-sm font-semibold text-slate-900">Enable preview portal launchers</span>
             <span className="mt-1 block text-xs text-slate-500">
-              Show manager and resident shortcuts on the dashboard. Preference is stored only in this browser.
+              Show manager and resident shortcut launchers on this dashboard. Preference is stored only in this browser.
             </span>
           </span>
         </label>
@@ -75,11 +75,11 @@ export function AdminDashboard() {
                   <option>— choose manager —</option>
                 </select>
                 <Button type="button" className="rounded-full bg-[#3b66f5] px-5 shadow-[0_0_18px_rgba(59, 102, 245,0.35)]">
-                  Open
+                  Launch preview
                 </Button>
               </div>
               <p className="mt-2 text-xs text-slate-500">
-                Manager profile sync and developer previews will populate this list.
+                Manager account sync and developer previews will populate this list.
               </p>
             </div>
             <div>
@@ -89,7 +89,7 @@ export function AdminDashboard() {
                   <option>— choose resident —</option>
                 </select>
                 <Button type="button" className="rounded-full bg-[#3b66f5] px-5 shadow-[0_0_18px_rgba(59, 102, 245,0.35)]">
-                  Open
+                  Launch preview
                 </Button>
               </div>
               <p className="mt-2 text-xs text-slate-500">Stub sessions and Airtable-backed screens will wire in here.</p>
@@ -106,16 +106,32 @@ export function AdminDashboard() {
         />
         <StatCard label="Managers · subscribed" value="0" href="/admin/managers" />
         <StatCard label="Leases · admin review" value="0" href="/admin/leases/admin-review" />
-        <StatCard label="Calendar · events" value="0" href="/admin/calendar/week" />
+        <StatCard label="Announcements · scheduled" value="2" href="/admin/announcements" />
       </div>
 
-      <Link
-        href="/admin/inbox/unopened"
-        className="flex items-center justify-between rounded-2xl border border-sky-200/80 bg-white px-5 py-4 shadow-[0_12px_40px_-28px_rgba(59, 102, 245,0.35)] transition hover:border-[#3b66f5]/40"
-      >
-        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Inbox · unopened</span>
-        <span className="text-3xl font-semibold tabular-nums text-slate-900">0</span>
-      </Link>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Link
+          href="/admin/inbox/unopened"
+          className="flex items-center justify-between rounded-2xl border border-sky-200/80 bg-white px-5 py-4 shadow-[0_12px_40px_-28px_rgba(59, 102, 245,0.35)] transition hover:border-[#3b66f5]/40"
+        >
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Inbox · unopened</span>
+            <p className="mt-2 text-sm text-slate-500">Prioritize new manager requests, escalations, and support replies.</p>
+          </div>
+          <span className="text-3xl font-semibold tabular-nums text-slate-900">0</span>
+        </Link>
+
+        <Link
+          href="/admin/announcements"
+          className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white px-5 py-4 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.18)] transition hover:border-slate-300"
+        >
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Announcements</span>
+            <p className="mt-2 text-sm text-slate-500">Publish portfolio-wide updates to managers and residents from one queue.</p>
+          </div>
+          <span className="text-sm font-semibold text-slate-900">Open center →</span>
+        </Link>
+      </div>
     </div>
   );
 }

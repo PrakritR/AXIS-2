@@ -12,7 +12,7 @@ export function digitsOnly(s: string): string {
 /** Full name: at least two words (first + last), each at least 2 letters */
 export function validateFullName(name: string): { ok: true } | { ok: false; message: string } {
   const t = name.trim().replace(/\s+/g, " ");
-  if (!t) return { ok: false, message: "Name is required." };
+  if (!t) return { ok: false, message: "Full name is required." };
   const parts = t.split(" ").filter(Boolean);
   if (parts.length < 2) return { ok: false, message: "Enter first and last name (at least two words)." };
   for (const p of parts) {
@@ -97,6 +97,6 @@ export function validateHouseholdCount(raw: string): { ok: true } | { ok: false;
   if (!Number.isFinite(n) || n < 2) {
     return { ok: false, message: "Enter a whole number of at least 2 (you plus at least one other person)." };
   }
-  if (n > 99) return { ok: false, message: "Enter a realistic group size (under 100)." };
+  if (n > 30) return { ok: false, message: "Enter a group size between 2 and 30." };
   return { ok: true };
 }

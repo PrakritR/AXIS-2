@@ -1,15 +1,24 @@
 "use client";
 
-export type AuthRole = "resident" | "manager" | "admin";
+export type AuthRole = "resident" | "manager" | "owner" | "admin";
+
+/** Default dashboard route after sign-in / create-account (demo — no real auth yet). */
+export function portalDashboardPath(role: AuthRole): string {
+  if (role === "resident") return "/resident/dashboard";
+  if (role === "manager") return "/manager/dashboard";
+  if (role === "owner") return "/owner/dashboard";
+  return "/admin/dashboard";
+}
 
 export function parseAuthRole(value: string | null): AuthRole {
-  if (value === "resident" || value === "manager" || value === "admin") return value;
+  if (value === "resident" || value === "manager" || value === "owner" || value === "admin") return value;
   return "resident";
 }
 
 const roles: { id: AuthRole; label: string }[] = [
   { id: "resident", label: "Resident" },
   { id: "manager", label: "Manager" },
+  { id: "owner", label: "Owner" },
   { id: "admin", label: "Admin" },
 ];
 
@@ -22,7 +31,7 @@ export function PortalSwitcher({
 }) {
   return (
     <div className="rounded-2xl border border-[#e0e4ec] bg-[#f1f5f9] p-1">
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
         {roles.map((r) => {
           const active = r.id === value;
           return (
@@ -72,6 +81,19 @@ function RoleIcon({ role }: { role: AuthRole }) {
           strokeLinejoin="round"
         />
         <path d="M10 12h4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (role === "owner") {
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M12 3l7 4v5c0 5-3.5 9-7 11-3.5-2-7-6-7-11V7l7-4z"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinejoin="round"
+        />
+        <path d="M9 12l2 2 4-5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }

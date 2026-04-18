@@ -1,6 +1,7 @@
 "use client";
 
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { SegmentedTwo } from "@/components/ui/segmented-control";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -38,36 +39,22 @@ function PartnerContactInner() {
         <div className="rounded-3xl border border-slate-200/80 bg-white p-8 shadow-[0_4px_32px_-4px_rgba(15,23,42,0.1)]">
           <h1 className="text-2xl font-bold tracking-tight text-[#0d1f4e]">Connect with Axis Team</h1>
 
-          <div className="mt-5 flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
-            <button
-              type="button"
-              onClick={() => setTab("schedule")}
-              className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-all duration-150 ${
-                tab === "schedule"
-                  ? "bg-[#3b66f5] text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              Schedule meeting
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("message")}
-              className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-all duration-150 ${
-                tab === "message"
-                  ? "bg-[#3b66f5] text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              Send message
-            </button>
+          <div className="mt-5">
+            <SegmentedTwo
+              value={tab}
+              onChange={setTab}
+              left={{ id: "schedule", label: "Schedule meeting" }}
+              right={{ id: "message", label: "Send message" }}
+            />
           </div>
 
-          {tab === "message" ? (
-            <MessageForm onSubmit={() => showToast("Message sent (demo)")} />
-          ) : (
-            <ScheduleForm onSubmit={() => showToast("Meeting booked (demo)")} />
-          )}
+          <div key={tab} className="animate-fade-in">
+            {tab === "message" ? (
+              <MessageForm onSubmit={() => showToast("Message sent (demo)")} />
+            ) : (
+              <ScheduleForm onSubmit={() => showToast("Meeting booked (demo)")} />
+            )}
+          </div>
         </div>
       </div>
     </div>

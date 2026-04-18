@@ -22,7 +22,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+    <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1 hover:border-primary/15 hover:shadow-[0_20px_50px_-28px_rgba(15,23,42,0.18)] active:translate-y-0 active:scale-[0.99]">
       <div className="relative aspect-[16/10] bg-gradient-to-br from-slate-100 to-slate-200">
         <div className="absolute left-4 top-4">
           <Badge tone="info">{property.neighborhood}</Badge>
