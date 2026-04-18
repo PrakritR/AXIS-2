@@ -7,18 +7,20 @@ export type AxisLogoVariant = "default" | "portalHeader" | "adminHeader";
 /** Primary AX mark — matches portal / auth blue (`--primary`), white letters, soft glow. */
 export function AxisLogoMark({
   className = "",
-  variant,
+  variant: _variant,
 }: {
   className?: string;
   variant?: AxisLogoVariant;
 }) {
-  void variant;
   return (
     <div
-      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-[13px] font-black tracking-tight text-primary-foreground shadow-[0_0_22px_rgba(59,102,245,0.42)] ${className}`}
+      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-[#c7d4fb]/60 bg-gradient-to-b from-[#eef2ff] to-[#dce6ff] shadow-sm ${className}`}
       aria-hidden
     >
-      AX
+      <span className="select-none text-[15px] font-black leading-none tracking-tight">
+        <span style={{ color: ink }}>A</span>
+        <span style={{ color: "#3b66f5" }}>X</span>
+      </span>
     </div>
   );
 }

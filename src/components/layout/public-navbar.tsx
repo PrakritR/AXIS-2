@@ -57,11 +57,11 @@ function NavDropdown({
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
-        className={`flex min-h-11 min-w-0 cursor-pointer select-none items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+        className={`relative flex min-h-11 min-w-0 cursor-pointer select-none items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold outline-none transition-colors duration-150 ${
           active
-            ? "bg-primary/[0.09] text-primary ring-1 ring-primary/20"
-            : "text-slate-700 ring-1 ring-transparent hover:bg-slate-50 hover:text-slate-900"
-        } ${open ? "bg-slate-50 ring-slate-200" : ""}`}
+            ? "text-primary"
+            : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+        } ${open ? "bg-slate-50" : ""}`}
       >
         <span className="whitespace-nowrap">{label}</span>
         <svg
@@ -74,6 +74,9 @@ function NavDropdown({
         >
           <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
+        {active && (
+          <span className="absolute bottom-0.5 left-4 right-4 h-0.5 rounded-full bg-primary" />
+        )}
       </button>
 
       {/* pt-2 = invisible hover bridge so pointer can reach menu without leaving the hit tree */}
