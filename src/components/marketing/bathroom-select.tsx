@@ -34,7 +34,7 @@ export function BathroomSelect() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="mt-2 flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-[#2b5ce7] bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-900 shadow-sm outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#2b5ce7]/40"
+        className="mt-2 flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-[#3b66f5] bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-900 shadow-sm outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#3b66f5]/40"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -62,7 +62,7 @@ export function BathroomSelect() {
                   }}
                   className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium transition ${
                     selected
-                      ? "bg-[#2b5ce7] text-white"
+                      ? "bg-[#3b66f5] text-white"
                       : "text-white/95 hover:bg-white/10"
                   }`}
                 >

@@ -14,10 +14,10 @@ function StatCard({
   return (
     <Link
       href={href}
-      className="rounded-2xl border border-sky-200/80 bg-white px-4 py-4 shadow-[0_12px_40px_-28px_rgba(43,92,231,0.4)] transition hover:border-[#2b5ce7]/40"
+      className="rounded-2xl border border-sky-200/80 bg-white px-4 py-4 shadow-[0_12px_40px_-28px_rgba(59, 102, 245,0.4)] transition hover:border-[#3b66f5]/40"
     >
-      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#2b5ce7]">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tabular-nums text-[#2b5ce7]">{value}</p>
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#3b66f5]">{label}</p>
+      <p className="mt-2 text-3xl font-semibold tabular-nums text-[#3b66f5]">{value}</p>
     </Link>
   );
 }
@@ -41,10 +41,10 @@ export function ResidentDashboard() {
 
       <Link
         href="/resident/inbox/unopened"
-        className="flex items-center justify-between rounded-2xl border border-sky-200/80 bg-white px-5 py-4 shadow-[0_12px_40px_-28px_rgba(43,92,231,0.35)] transition hover:border-[#2b5ce7]/40"
+        className="flex items-center justify-between rounded-2xl border border-sky-200/80 bg-white px-5 py-4 shadow-[0_12px_40px_-28px_rgba(59, 102, 245,0.35)] transition hover:border-[#3b66f5]/40"
       >
-        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#2b5ce7]">Inbox</span>
-        <span className="text-sm font-semibold text-[#2b5ce7]">Open messages →</span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#3b66f5]">Inbox</span>
+        <span className="text-sm font-semibold text-[#3b66f5]">Open messages →</span>
       </Link>
     </div>
   );

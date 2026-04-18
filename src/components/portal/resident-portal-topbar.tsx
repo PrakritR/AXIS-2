@@ -11,7 +11,7 @@ export function ResidentPortalTopbar() {
           <p className="mt-1 text-xs text-slate-500">Axis Seattle · resident portal</p>
         </div>
         <p className="shrink-0 text-xs font-medium text-slate-500" aria-live="polite">
-          <span className="text-[#2b5ce7]">●</span> Syncing…
+          <span className="text-[#3b66f5]">●</span> Syncing…
         </p>
       </div>
     </header>

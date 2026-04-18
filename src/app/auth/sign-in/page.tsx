@@ -19,10 +19,11 @@ export default function SignInPage() {
   const [role, setRole] = useState<AuthRole>("resident");
 
   const title = useMemo(() => titleFor(role), [role]);
+  const ctaLabel = role === "admin" ? "Sign in to Admin" : "Sign in";
 
   return (
     <AuthCard>
-      <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
+      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">{title}</h1>
 
       <div className="mt-7">
         <PortalSwitcher value={role} onChange={setRole} />
@@ -30,47 +31,43 @@ export default function SignInPage() {
 
       <div className="mt-8 space-y-4">
         <div>
-          <label className="text-xs font-semibold text-slate-600" htmlFor="email">
+          <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
             Email
           </label>
           <Input id="email" className="mt-1.5" placeholder="you@example.com" autoComplete="email" />
         </div>
         <div>
-          <label className="text-xs font-semibold text-slate-600" htmlFor="pw">
+          <label className="text-xs font-semibold text-[#334155]" htmlFor="pw">
             Password
           </label>
           <Input id="pw" className="mt-1.5" type="password" placeholder="••••••••" autoComplete="current-password" />
         </div>
       </div>
 
-      <Link
-        className="mt-4 inline-block text-sm font-semibold text-[#2b5ce7] hover:text-blue-700"
-        href="/auth/forgot-password"
-      >
-        Forgot password
-      </Link>
-
-      <Button
-        type="button"
-        className="mt-6 w-full rounded-full py-3 text-base font-semibold shadow-[0_10px_28px_-8px_rgba(43,92,231,0.55)]"
-        onClick={() => showToast(`Signed in to ${title} (demo)`)}
-      >
-        Sign in
-      </Button>
-
-      <div className="mt-5 flex justify-center text-sm">
+      <div className="mt-5 flex items-center justify-between gap-3 text-sm">
+        <Link className="font-semibold text-primary hover:opacity-90" href="/auth/forgot-password">
+          Forgot password
+        </Link>
         <button
           type="button"
-          className="font-semibold text-[#2b5ce7] hover:text-blue-700"
+          className="shrink-0 font-semibold text-primary hover:opacity-90"
           onClick={() => openModal({ title: "Message Axis", body: "Messaging is not wired yet." })}
         >
           Message Axis
         </button>
       </div>
 
+      <Button
+        type="button"
+        className="mt-6 w-full rounded-full py-3 text-base font-semibold"
+        onClick={() => showToast(`Signed in to ${title} (demo)`)}
+      >
+        {ctaLabel}
+      </Button>
+
       <p className="mt-8 text-center text-sm text-slate-600">
         New here?{" "}
-        <Link className="font-semibold text-[#2b5ce7] hover:text-blue-700" href="/auth/create-account">
+        <Link className="font-semibold text-primary hover:opacity-90" href="/auth/create-account">
           Create account
         </Link>
       </p>

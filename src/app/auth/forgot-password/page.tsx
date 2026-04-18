@@ -14,7 +14,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <AuthCard>
-      <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900">Reset password</h1>
+      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Reset password</h1>
       <p className="mt-2 text-center text-sm text-slate-600">
         Choose the portal you use most often (demo only).
       </p>
@@ -24,7 +24,7 @@ export default function ForgotPasswordPage() {
       </div>
 
       <div className="mt-8">
-        <label className="text-xs font-semibold text-slate-600" htmlFor="email">
+        <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
           Email
         </label>
         <Input id="email" className="mt-1.5" placeholder="you@example.com" autoComplete="email" />
@@ -32,14 +32,14 @@ export default function ForgotPasswordPage() {
 
       <Button
         type="button"
-        className="mt-8 w-full rounded-full py-3 text-base font-semibold shadow-[0_10px_28px_-8px_rgba(43,92,231,0.55)]"
+        className="mt-8 w-full rounded-full py-3 text-base font-semibold"
         onClick={() => showToast("Reset email sent (demo)")}
       >
         Send reset link
       </Button>
 
       <Link
-        className="mt-8 flex w-full justify-center text-sm font-semibold text-[#2b5ce7] hover:text-blue-700"
+        className="mt-8 flex w-full justify-center text-sm font-semibold text-primary hover:opacity-90"
         href="/auth/sign-in"
       >
         ← Back to sign in

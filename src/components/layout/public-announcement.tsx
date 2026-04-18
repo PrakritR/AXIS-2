@@ -9,7 +9,7 @@ export function PublicAnnouncement() {
         </p>
         <Link
           href="/rent/apply"
-          className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#2b5ce7] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm hover:bg-blue-600"
+          className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#3b66f5] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm hover:bg-blue-600"
         >
           Apply now
         </Link>

@@ -43,7 +43,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               href={href}
               className={`flex items-center rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
                 active
-                  ? "bg-[#2b5ce7] text-white shadow-[0_0_20px_rgba(43,92,231,0.35)]"
+                  ? "bg-primary text-white shadow-[0_0_20px_rgba(59,102,245,0.35)]"
                   : "text-slate-700 hover:bg-white"
               }`}
             >
@@ -70,7 +70,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
           ) : null}
           <Link
             href="/"
-            className="block rounded-2xl px-3 py-2 text-xs font-semibold text-slate-500 underline-offset-4 hover:text-[#2b5ce7] hover:underline"
+            className="block rounded-2xl px-3 py-2 text-xs font-semibold text-slate-500 underline-offset-4 hover:text-primary hover:underline"
           >
             ← Back to site
           </Link>
@@ -145,7 +145,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     className={`block rounded-2xl px-3 py-2 text-sm font-semibold ${
                       useMinShell
                         ? active
-                          ? "bg-[#2b5ce7] text-white"
+                          ? "bg-primary text-white"
                           : "text-slate-800 hover:bg-white"
                         : "text-slate-800 hover:bg-slate-50"
                     }`}

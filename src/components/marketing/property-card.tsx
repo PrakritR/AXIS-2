@@ -33,6 +33,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
             {property.title}
           </h3>
           <p className="mt-1 text-sm text-muted">{property.address}</p>
+          <p className="mt-0.5 text-xs font-medium text-slate-500">ZIP {property.zip}</p>
         </div>
         <div className="mt-auto flex flex-col gap-2">
           <div className="flex items-end justify-between">
