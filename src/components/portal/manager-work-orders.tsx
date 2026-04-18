@@ -1,14 +1,6 @@
-import { DataTable } from "@/components/ui/table";
-import { demoKpis, demoWorkOrderRows } from "@/data/demo-portal";
+import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
+import { demoKpis } from "@/data/demo-portal";
 import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
-
-const columns = [
-  { key: "id", label: "ID" },
-  { key: "unit", label: "Unit" },
-  { key: "title", label: "Title" },
-  { key: "priority", label: "Priority" },
-  { key: "status", label: "Status" },
-] as const;
 
 export function ManagerWorkOrders() {
   return (
@@ -22,7 +14,7 @@ export function ManagerWorkOrders() {
         { value: demoKpis.workOrders.completed, label: "Completed" },
       ]}
     >
-      <DataTable columns={[...columns]} rows={demoWorkOrderRows as unknown as Record<string, string>[]} />
+      <ManagerWorkOrdersPanel />
     </ManagerSectionShell>
   );
 }

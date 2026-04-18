@@ -145,7 +145,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
   }
 
   if (portal === "resident") {
-    if (section === "properties" || section === "applications" || section === "leases" || section === "calendar")
+    if (section === "properties" || section === "applications" || section === "lease" || section === "calendar")
       return [
         {
           label: "Refresh",
@@ -584,10 +584,10 @@ export function buildPortalWorkspaceModel(
     };
   }
 
-  if (portal === "resident" && section === "leases") {
+  if (portal === "resident" && section === "lease") {
     return {
       eyebrow,
-      title: "Leases",
+      title: "Lease",
       subtitle: "",
       kpis: [
         { label: "Manager review", value: demoKpis.leases.managerReview, hint: "" },

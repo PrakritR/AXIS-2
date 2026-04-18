@@ -19,7 +19,7 @@ const residentPortalApproved: PortalDefinition = {
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
-    { section: "leases", label: "Leases", tabs: [] },
+    { section: "lease", label: "Lease", tabs: [] },
     { section: "payments", label: "Payments", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },
     { section: "inbox", label: "Inbox", tabs: [] },

@@ -41,7 +41,7 @@ export function ManagerOwners() {
 
   return (
     <ManagerSectionShell
-      title="Owners"
+      title="Add owner"
       filters={<PortalPropertyFilter />}
       actions={[
         { label: "Save", variant: "primary" },

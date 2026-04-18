@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { TabNav, type TabItem } from "@/components/ui/tabs";
 
 const WORKSPACE_TABS: TabItem[] = [
-  { id: "leases", label: "Leases", href: "/resident/leases" },
+  { id: "lease", label: "Lease", href: "/resident/lease" },
   { id: "payments", label: "Payments", href: "/resident/payments" },
   { id: "work-orders", label: "Work orders", href: "/resident/work-orders" },
   { id: "inbox", label: "Inbox", href: "/resident/inbox" },

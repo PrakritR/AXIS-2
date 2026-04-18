@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { getListingRichContent } from "@/data/listing-rich-content";
@@ -8,8 +8,7 @@ import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
 
-export function RentListingDetailClient({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export function RentListingDetailClient({ id }: { id: string }) {
   const base = mockProperties.find((p) => p.id === id);
   const [extra, setExtra] = useState<MockProperty | null | undefined>(undefined);
 

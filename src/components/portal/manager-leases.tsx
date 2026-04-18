@@ -1,13 +1,6 @@
-import { DataTable } from "@/components/ui/table";
-import { demoKpis, demoLeasePipelineRows } from "@/data/demo-portal";
+import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
+import { demoKpis } from "@/data/demo-portal";
 import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
-
-const columns = [
-  { key: "resident", label: "Resident" },
-  { key: "unit", label: "Unit / home" },
-  { key: "stage", label: "Stage" },
-  { key: "updated", label: "Updated" },
-] as const;
 
 export function ManagerLeases() {
   return (
@@ -22,7 +15,7 @@ export function ManagerLeases() {
         { value: demoKpis.leases.signed, label: "Signed" },
       ]}
     >
-      <DataTable columns={[...columns]} rows={demoLeasePipelineRows as unknown as Record<string, string>[]} />
+      <ManagerLeasesPipelinePanel />
     </ManagerSectionShell>
   );
 }

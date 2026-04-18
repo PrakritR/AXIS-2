@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { demoPropertyCards } from "@/data/demo-portal";
+import { ManagerHousePropertiesPanel } from "@/components/portal/manager-house-properties-panel";
 import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PROPERTY_PIPELINE_EVENT, readPendingManagerProperties, submitManagerPendingProperty } from "@/lib/demo-property-pipeline";
@@ -63,25 +63,7 @@ export function ManagerProperties() {
             approval before they go live on Axis listings.
           </p>
         ) : null}
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {demoPropertyCards.map((p) => (
-            <Card key={p.name} className="border-slate-200/80 p-5 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-wide text-primary">{p.status}</p>
-              <h2 className="mt-2 text-lg font-semibold text-slate-950">{p.name}</h2>
-              <p className="mt-1 text-sm text-slate-500">{p.address}</p>
-              <dl className="mt-4 space-y-2 text-sm text-slate-600">
-                <div className="flex justify-between gap-3">
-                  <dt>Units</dt>
-                  <dd className="font-semibold text-slate-900">{p.units}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt>Occupancy</dt>
-                  <dd className="font-semibold text-slate-900">{p.occupancy}</dd>
-                </div>
-              </dl>
-            </Card>
-          ))}
-        </div>
+        <ManagerHousePropertiesPanel />
       </ManagerSectionShell>
     </>
   );

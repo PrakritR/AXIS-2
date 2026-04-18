@@ -6,6 +6,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isValidAdminRegisterKey } from "@/lib/auth/resolve-portal-role";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -33,11 +34,7 @@ function CreateAccountContent() {
 
   return (
     <AuthCard>
-      <Link className="inline-flex text-sm font-semibold text-primary hover:opacity-90" href="/auth/sign-in">
-        ← Back to sign in
-      </Link>
-
-      <h1 className="mt-5 text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Create account</h1>
+      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Create account</h1>
 
       <div className="mt-7">
         <label className="text-xs font-semibold text-[#334155]" htmlFor="account-type">
@@ -88,10 +85,9 @@ function CreateAccountContent() {
               Admin registration key
               <Req />
             </label>
-            <Input
+            <PasswordInput
               id="admin-key"
               className="mt-1.5"
-              type="password"
               autoComplete="off"
               placeholder="Key from your organization"
               value={adminKey}
@@ -151,7 +147,7 @@ function CreateAccountContent() {
             Create password
             <Req />
           </label>
-          <Input id="pw" className="mt-1.5" type="password" placeholder="Minimum 6 characters" />
+          <PasswordInput id="pw" className="mt-1.5" autoComplete="new-password" placeholder="Minimum 6 characters" />
         </div>
       </div>
 
@@ -173,6 +169,12 @@ function CreateAccountContent() {
       >
         Create account
       </Button>
+
+      <div className="mt-6 flex justify-center">
+        <Link className="text-sm font-semibold text-primary hover:opacity-90" href="/auth/sign-in">
+          ← Back to sign in
+        </Link>
+      </div>
     </AuthCard>
   );
 }

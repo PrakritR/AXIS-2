@@ -13,6 +13,11 @@ import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
 import { OwnerManagers } from "@/components/portal/owner-managers";
 import { OwnerProperties } from "@/components/portal/owner-properties";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
+import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
+import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
+import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
+import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
+import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-orders-panel";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
@@ -70,6 +75,19 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "dashboard") {
     if (tabParts?.length) notFound();
     return <ResidentDashboard applicationApproved={isResidentApplicationApproved()} />;
+  }
+
+  if (kind === "resident" && section === "profile") {
+    if (tabParts?.length) notFound();
+    return <ResidentProfilePanel />;
+  }
+
+  if (kind === "resident" && isResidentApplicationApproved()) {
+    if (tabParts?.length) notFound();
+    if (section === "lease") return <ResidentLeasePanel />;
+    if (section === "payments") return <ResidentPaymentsPanel />;
+    if (section === "work-orders") return <ResidentWorkOrdersPanel />;
+    if (section === "inbox") return <ResidentInboxPanel />;
   }
 
   if (!meta.tabs.length) {

@@ -6,6 +6,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { resolvePortalRoleFromEmail } from "@/lib/auth/resolve-portal-role";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -53,7 +54,7 @@ export default function SignInPage() {
           <label className="text-xs font-semibold text-[#334155]" htmlFor="pw">
             Password
           </label>
-          <Input id="pw" className="mt-1.5" type="password" placeholder="••••••••" autoComplete="current-password" />
+          <PasswordInput id="pw" className="mt-1.5" autoComplete="current-password" />
         </div>
       </div>
 

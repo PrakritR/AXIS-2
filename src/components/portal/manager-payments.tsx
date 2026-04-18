@@ -1,14 +1,6 @@
-import { DataTable } from "@/components/ui/table";
-import { demoKpis, demoPaymentRows } from "@/data/demo-portal";
+import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
+import { demoKpis } from "@/data/demo-portal";
 import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
-
-const columns = [
-  { key: "resident", label: "Resident" },
-  { key: "unit", label: "Unit" },
-  { key: "amount", label: "Amount" },
-  { key: "due", label: "Due" },
-  { key: "status", label: "Status" },
-] as const;
 
 export function ManagerPayments() {
   return (
@@ -25,7 +17,7 @@ export function ManagerPayments() {
         { value: demoKpis.payments.paid, label: "Paid" },
       ]}
     >
-      <DataTable columns={[...columns]} rows={demoPaymentRows as unknown as Record<string, string>[]} />
+      <ManagerPaymentsLedgerPanel />
     </ManagerSectionShell>
   );
 }

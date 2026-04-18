@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { DEMO_RESIDENT_DISPLAY_NAME, DEMO_RESIDENT_UNIT } from "@/data/demo-portal";
+import {
+  DEMO_RESIDENT_DISPLAY_NAME,
+  DEMO_RESIDENT_UNIT,
+  demoResidentChargeRows,
+  demoResidentInboxThreads,
+} from "@/data/demo-portal";
 
 function StatCard({
   label,
@@ -28,17 +33,29 @@ function StatCard({
 }
 
 export function ResidentDashboard({ applicationApproved = false }: { applicationApproved?: boolean }) {
+  const inboxUnread = demoResidentInboxThreads.filter((t) => t.unread).length;
+  const balanceDue = demoResidentChargeRows.find((c) => c.balance !== "$0.00")?.balance ?? "—";
+  const openWorkOrders = 1;
+
   if (applicationApproved) {
     return (
       <div className="mx-auto max-w-6xl space-y-4">
         <p className="rounded-2xl border border-emerald-200/70 bg-emerald-50/90 px-4 py-2.5 text-sm font-medium text-emerald-950">
           Application approved · {DEMO_RESIDENT_DISPLAY_NAME}
         </p>
+        {balanceDue !== "—" ? (
+          <p className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-4 py-2.5 text-sm text-amber-950">
+            You have an outstanding balance of <span className="font-semibold tabular-nums">{balanceDue}</span>.{" "}
+            <Link className="font-semibold text-primary underline-offset-2 hover:underline" href="/resident/payments">
+              Pay in Payments
+            </Link>
+          </p>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Lease">
             <p className="text-sm font-semibold text-slate-900">Active</p>
             <Link
-              href="/resident/leases"
+              href="/resident/lease"
               className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
             >
               Open
@@ -54,7 +71,7 @@ export function ResidentDashboard({ applicationApproved = false }: { application
             </Link>
           </StatCard>
           <StatCard label="Work orders">
-            <p className="text-sm font-semibold text-slate-900">1 open</p>
+            <p className="text-sm font-semibold text-slate-900">{openWorkOrders} open</p>
             <Link
               href="/resident/work-orders"
               className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
@@ -70,7 +87,12 @@ export function ResidentDashboard({ applicationApproved = false }: { application
           href="/resident/inbox"
           className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-sm font-medium shadow-sm transition hover:border-primary/25"
         >
-          <span className="text-slate-800">Inbox</span>
+          <span className="flex items-center gap-2 text-slate-800">
+            Inbox
+            {inboxUnread > 0 ? (
+              <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-white">{inboxUnread}</span>
+            ) : null}
+          </span>
           <span className="text-primary">Open</span>
         </Link>
       </div>
