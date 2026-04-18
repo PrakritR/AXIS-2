@@ -1,5 +1,6 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 import { getServerSessionProfile } from "@/lib/auth/server-profile";
+import { residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 
 const residentPortalUnderReview: PortalDefinition = {
   kind: "resident",
@@ -28,7 +29,11 @@ const residentPortalApproved: PortalDefinition = {
 };
 
 export async function getResidentPortalDefinition(): Promise<PortalDefinition> {
-  const { profile } = await getServerSessionProfile();
-  const approved = profile?.application_approved ?? false;
-  return approved ? residentPortalApproved : residentPortalUnderReview;
+  const { profile, user } = await getServerSessionProfile();
+  const unlocked = residentHasFullPortalAccess({
+    applicationApproved: profile?.application_approved ?? false,
+    role: profile?.role,
+    email: profile?.email ?? user?.email ?? null,
+  });
+  return unlocked ? residentPortalApproved : residentPortalUnderReview;
 }

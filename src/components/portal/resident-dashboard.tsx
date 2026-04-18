@@ -29,9 +29,12 @@ function StatCard({
 
 export function ResidentDashboard({
   applicationApproved = false,
+  showTestAccessNote = false,
   displayName = "Resident",
 }: {
   applicationApproved?: boolean;
+  /** Shown when full portal is unlocked via env allowlist but DB approval is still false. */
+  showTestAccessNote?: boolean;
   displayName?: string;
 }) {
   const inboxUnread = demoResidentInboxThreads.filter((t) => t.unread).length;
@@ -40,10 +43,17 @@ export function ResidentDashboard({
 
   if (applicationApproved) {
     return (
-      <div className="mx-auto max-w-6xl space-y-4">
-        <p className="rounded-2xl border border-emerald-200/70 bg-emerald-50/90 px-4 py-2.5 text-sm font-medium text-emerald-950">
-          Application approved · {displayName}
-        </p>
+      <div className="mx-auto w-full max-w-[1600px] space-y-4">
+        {showTestAccessNote ? (
+          <p className="rounded-2xl border border-sky-200/80 bg-sky-50/90 px-4 py-2.5 text-sm font-medium text-sky-950">
+            Test account: full resident portal is unlocked for this email while application approval is still pending in
+            the database.
+          </p>
+        ) : (
+          <p className="rounded-2xl border border-emerald-200/70 bg-emerald-50/90 px-4 py-2.5 text-sm font-medium text-emerald-950">
+            Application approved · {displayName}
+          </p>
+        )}
         {balanceDue !== "—" ? (
           <p className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-4 py-2.5 text-sm text-amber-950">
             You have an outstanding balance of <span className="font-semibold tabular-nums">{balanceDue}</span>.{" "}
@@ -101,7 +111,7 @@ export function ResidentDashboard({
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="mx-auto w-full max-w-[1600px] space-y-4">
       <p className="rounded-2xl border border-amber-200/70 bg-amber-50/90 px-4 py-2.5 text-sm font-medium text-amber-950">
         Application under review
       </p>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
-import { readAdminInboxUnopened } from "@/lib/demo-admin-inbox";
+import { readPartnerInboxMessages } from "@/lib/demo-admin-partner-inbox";
 import { pendingInquiryCount } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
@@ -26,7 +26,7 @@ export function AdminNotificationBanners() {
   const items = useMemo(() => {
     void tick;
     const leaseAdminReview = adminLeaseKpiCounts()[1];
-    const inbox = readAdminInboxUnopened();
+    const inbox = readPartnerInboxMessages().filter((m) => !m.read).length;
     const inquiries = pendingInquiryCount();
     const out: { id: string; href: string; text: string }[] = [];
     if (leaseAdminReview > 0) {

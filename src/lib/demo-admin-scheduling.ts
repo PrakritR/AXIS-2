@@ -1,6 +1,8 @@
 import { emitAdminUi } from "@/lib/demo-admin-ui";
 
 const AVAIL_KEY = "axis_admin_avail_slots_v1";
+/** Per calendar date (local `YYYY-MM-DD`) + half-hour slot — supports future weeks. */
+const AVAIL_V2_KEY = "axis_admin_avail_slots_v2";
 const INQ_KEY = "axis_admin_partner_inquiries_v1";
 const PLANNED_KEY = "axis_admin_planned_events_v1";
 
@@ -39,6 +41,42 @@ export function slotKey(dayIndex: number, slotIndex: number) {
   return `${dayIndex}-${slotIndex}`;
 }
 
+export function toLocalDateStr(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function dateSlotKey(dateStr: string, slotIndex: number) {
+  return `${dateStr}:${slotIndex}`;
+}
+
+export function startOfWeekMonday(d: Date) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const dow = mondayBasedDayIndex(x);
+  x.setDate(x.getDate() - dow);
+  return x;
+}
+
+function migrateLegacyWeeklyToDateKeys(legacyKeys: string[]): string[] {
+  const mon = startOfWeekMonday(new Date());
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const key of legacyKeys) {
+    const p = parseSlotKey(key);
+    if (!p) continue;
+    const day = new Date(mon);
+    day.setDate(mon.getDate() + p.dayIndex);
+    const k = dateSlotKey(toLocalDateStr(day), p.slotIndex);
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(k);
+    }
+  }
+  return out;
+}
+
 export function parseSlotKey(key: string): { dayIndex: number; slotIndex: number } | null {
   const [a, b] = key.split("-");
   const dayIndex = Number.parseInt(a ?? "", 10);
@@ -58,6 +96,80 @@ export function writeAvailabilitySet(next: Set<string>) {
   writeJson(AVAIL_KEY, [...next]);
 }
 
+/** Date-specific availability (`YYYY-MM-DD:slotIndex`). Migrates legacy weekly v1 into the current week when v2 is unset. */
+export function readAvailabilityDateSet(): Set<string> {
+  if (!isBrowser()) return new Set();
+  const rawV2 = window.localStorage.getItem(AVAIL_V2_KEY);
+  if (rawV2 === null) {
+    const legacy = readJson<string[] | null>(AVAIL_KEY, null);
+    if (Array.isArray(legacy) && legacy.length > 0) {
+      const migrated = migrateLegacyWeeklyToDateKeys(legacy);
+      writeJson(AVAIL_V2_KEY, migrated);
+      return new Set(migrated);
+    }
+    writeJson(AVAIL_V2_KEY, []);
+    return new Set();
+  }
+  try {
+    const arr = JSON.parse(rawV2) as string[];
+    return Array.isArray(arr) ? new Set(arr) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function writeAvailabilityDateSet(next: Set<string>) {
+  writeJson(AVAIL_V2_KEY, [...next]);
+}
+
+export function dateHasAvailability(d: Date, availability: Set<string>) {
+  const ds = toLocalDateStr(d);
+  for (let s = 0; s < SLOTS_PER_DAY; s += 1) {
+    if (availability.has(dateSlotKey(ds, s))) return true;
+  }
+  return false;
+}
+
+export function dateStrFromCalendar(calYear: number, calMonth: number, day: number) {
+  return toLocalDateStr(new Date(calYear, calMonth, day, 12, 0, 0, 0));
+}
+
+export function getOpenSlotIndicesForDateStr(dateStr: string) {
+  const set = readAvailabilityDateSet();
+  const out: number[] = [];
+  for (let i = 0; i < SLOTS_PER_DAY; i += 1) {
+    if (set.has(dateSlotKey(dateStr, i))) out.push(i);
+  }
+  return out;
+}
+
+export function dateHasOpenSlots(dateStr: string) {
+  return getOpenSlotIndicesForDateStr(dateStr).length > 0;
+}
+
+export function formatAvailabilitySlotLabel(slotIndex: number) {
+  const mins = 8 * 60 + slotIndex * 30;
+  const h24 = Math.floor(mins / 60);
+  const m = mins % 60;
+  const d = new Date(2000, 0, 1, h24, m);
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+/** Local start time for a painted half-hour on a calendar date (8:00 + slotIndex×30 min). */
+export function localDateAtSlotStart(dateStr: string, slotIndex: number) {
+  const [y, mo, day] = dateStr.split("-").map(Number);
+  const base = new Date(y!, mo! - 1, day!, 8, 0, 0, 0);
+  base.setMinutes(base.getMinutes() + slotIndex * 30);
+  return base;
+}
+
+export function isCalendarDayBeforeToday(calYear: number, calMonth: number, day: number) {
+  const cell = new Date(calYear, calMonth, day, 0, 0, 0, 0);
+  const t0 = new Date();
+  t0.setHours(0, 0, 0, 0);
+  return cell < t0;
+}
+
 export function mondayBasedDayIndex(d: Date) {
   return (d.getDay() + 6) % 7;
 }
@@ -71,15 +183,15 @@ export function slotIndexForDate(d: Date) {
   return base;
 }
 
-/** True when the start time falls in a painted availability half-hour cell. */
+/** True when the start time falls in a painted availability half-hour cell (date-specific v2). */
 export function isStartInsideAvailability(isoStart: string): boolean {
   const t = new Date(isoStart);
   if (Number.isNaN(t.getTime())) return false;
-  const day = mondayBasedDayIndex(t);
+  const ds = toLocalDateStr(t);
   const slot = slotIndexForDate(t);
   if (slot == null) return false;
-  const set = readAvailabilitySet();
-  return set.has(slotKey(day, slot));
+  const set = readAvailabilityDateSet();
+  return set.has(dateSlotKey(ds, slot));
 }
 
 export type PartnerInquiryStatus = "pending" | "accepted" | "declined";

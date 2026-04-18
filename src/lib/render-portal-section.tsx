@@ -12,6 +12,8 @@ import { AdminOwnersClient } from "@/components/portal/admin-owners-client";
 import { AdminLeasesClient } from "@/components/portal/admin-leases-client";
 import { AdminPropertiesClient } from "@/components/portal/admin-properties-client";
 import { AdminEventsClient } from "@/components/portal/admin-events-client";
+import { AdminProfileClient } from "@/components/portal/admin-profile-client";
+import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
 import { ManagerProperties } from "@/components/portal/manager-properties";
 import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
 import { OwnerManagers } from "@/components/portal/owner-managers";
@@ -26,6 +28,7 @@ import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-clie
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
 import { getServerSessionProfile } from "@/lib/auth/server-profile";
+import { residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
@@ -38,6 +41,14 @@ export async function renderPortalSection(
 ) {
   const def = await getPortalDefinition(kind);
   const residentCtx = kind === "resident" ? await getServerSessionProfile() : null;
+  const residentWorkspaceUnlocked =
+    kind === "resident"
+      ? residentHasFullPortalAccess({
+          applicationApproved: residentCtx?.profile?.application_approved ?? false,
+          role: residentCtx?.profile?.role,
+          email: residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null,
+        })
+      : false;
   const meta = findSection(def, section);
   if (!meta) notFound();
 
@@ -64,6 +75,33 @@ export async function renderPortalSection(
   if (kind === "admin" && section === "leases") {
     if (tabParts?.length) notFound();
     return <AdminLeasesClient />;
+  }
+
+  if (kind === "admin" && section === "profile") {
+    if (tabParts?.length) notFound();
+    const { profile, user } = await getServerSessionProfile();
+    const dash = (s: string | null | undefined) => {
+      const t = (s ?? "").trim();
+      return t.length ? t : "—";
+    };
+    return (
+      <AdminProfileClient
+        fullName={dash(profile?.full_name)}
+        email={dash(profile?.email ?? user?.email)}
+        phone="—"
+        adminId={dash(profile?.id ?? user?.id)}
+      />
+    );
+  }
+
+  if (kind === "admin" && section === "inbox") {
+    if (!meta.tabs.length) notFound();
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+    }
+    const inboxTab = tabParts[0]!;
+    if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+    return <AdminInboxClient tabId={inboxTab} />;
   }
 
   if (kind === "admin" && section === "events") {
@@ -119,9 +157,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident") {
-    const profile = residentCtx?.profile;
-    const approved = profile?.application_approved ?? false;
-    if (approved) {
+    if (residentWorkspaceUnlocked) {
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentLeasePanel />;
       if (section === "payments") return <ResidentPaymentsPanel />;

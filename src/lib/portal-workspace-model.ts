@@ -867,27 +867,6 @@ export function buildPortalWorkspaceModel(
     };
   }
 
-  if (portal === "admin" && section === "profile") {
-    return {
-      eyebrow,
-      title: "Profile",
-      subtitle: "",
-      showToolbar: false,
-      showQuickLinks: false,
-      columns: [
-        { key: "field", label: "Field" },
-        { key: "value", label: "Value" },
-      ],
-      rows: [
-        { field: "Full name", value: "—" },
-        { field: "Email", value: "—" },
-        { field: "Phone", value: "—" },
-        { field: "Admin ID", value: "—" },
-      ],
-      actions: actionsFor(portal, section),
-    };
-  }
-
   if (
     section === "documents" ||
     section === "settings" ||

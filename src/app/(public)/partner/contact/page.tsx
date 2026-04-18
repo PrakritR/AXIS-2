@@ -1,9 +1,9 @@
 "use client";
 
+import { PartnerMeetingScheduler } from "@/components/partner/partner-meeting-scheduler";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
-import { incrementAdminInboxUnopened } from "@/lib/demo-admin-inbox";
-import { appendPartnerInquiry, isStartInsideAvailability } from "@/lib/demo-admin-scheduling";
+import { appendPartnerInboxMessage } from "@/lib/demo-admin-partner-inbox";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -51,16 +51,7 @@ function PartnerContactInner() {
           </div>
 
           <div key={tab} className="animate-fade-in">
-            {tab === "message" ? (
-              <MessageForm
-                onSubmit={() => {
-                  incrementAdminInboxUnopened();
-                  showToast("Message sent. Our team will follow up.");
-                }}
-              />
-            ) : (
-              <ScheduleForm showToast={showToast} />
-            )}
+            {tab === "message" ? <PartnerMessageForm showToast={showToast} /> : <PartnerMeetingScheduler showToast={showToast} />}
           </div>
         </div>
       </div>
@@ -68,25 +59,61 @@ function PartnerContactInner() {
   );
 }
 
-function MessageForm({ onSubmit }: { onSubmit: () => void }) {
+function PartnerMessageForm({ showToast }: { showToast: (m: string) => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [topic, setTopic] = useState("");
+  const [body, setBody] = useState("");
+
+  const submit = () => {
+    const n = name.trim();
+    const em = email.trim();
+    const tp = topic.trim();
+    const msg = body.trim();
+    if (!n || !em) {
+      showToast("Please enter your name and email.");
+      return;
+    }
+    if (!tp) {
+      showToast("Please choose a topic.");
+      return;
+    }
+    if (!msg) {
+      showToast("Please enter a message.");
+      return;
+    }
+    appendPartnerInboxMessage({
+      name: n,
+      email: em,
+      topic: tp,
+      body: msg,
+    });
+    showToast("Message sent. Our team will see it in the admin inbox.");
+    setName("");
+    setEmail("");
+    setTopic("");
+    setBody("");
+  };
+
   return (
     <div className="mt-6 space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name *">
-          <input type="text" placeholder="Jane Smith" className={inputCls} />
+          <input type="text" placeholder="Jane Smith" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label="Email *">
-          <input type="email" placeholder="jane@company.com" className={inputCls} />
+          <input type="email" placeholder="jane@company.com" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
       </div>
 
-      <Field label="Topic">
-        <select className={inputCls}>
+      <Field label="Topic *">
+        <select className={inputCls} value={topic} onChange={(e) => setTopic(e.target.value)}>
           <option value="">Select…</option>
           <option>Use our software</option>
           <option>Onboarding</option>
           <option>Integrations</option>
           <option>Property management</option>
+          <option>Other</option>
         </select>
       </Field>
 
@@ -95,118 +122,8 @@ function MessageForm({ onSubmit }: { onSubmit: () => void }) {
           rows={4}
           placeholder="What can we help you with?"
           className={`${inputCls} resize-none`}
-        />
-      </Field>
-
-      <button
-        type="button"
-        onClick={onSubmit}
-        className="mt-2 w-full rounded-2xl bg-[#0d1f4e] py-3.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#162d6e] active:scale-[0.98]"
-      >
-        Send message
-      </button>
-    </div>
-  );
-}
-
-function combineDateTime(dateStr: string, timeStr: string): Date | null {
-  if (!dateStr || !timeStr) return null;
-  const d = new Date(`${dateStr}T${timeStr}`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function ScheduleForm({ showToast }: { showToast: (m: string) => void }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [notes, setNotes] = useState("");
-  const [dateStr, setDateStr] = useState("");
-  const [timeStr, setTimeStr] = useState("");
-
-  const submit = () => {
-    const n = name.trim();
-    const em = email.trim();
-    if (!n || !em) {
-      showToast("Please enter your name and email.");
-      return;
-    }
-    const start = combineDateTime(dateStr, timeStr);
-    if (!start) {
-      showToast("Please choose a date and start time.");
-      return;
-    }
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
-    if (!isStartInsideAvailability(start.toISOString())) {
-      showToast(
-        "That time is outside published availability. You can still request it — an admin must accept the meeting.",
-      );
-    }
-    appendPartnerInquiry({
-      name: n,
-      email: em,
-      phone: phone.trim(),
-      notes: notes.trim(),
-      proposedStart: start.toISOString(),
-      proposedEnd: end.toISOString(),
-    });
-    showToast("Request sent. You will receive a confirmation once our team accepts the slot.");
-    setNotes("");
-    setPhone("");
-    setDateStr("");
-    setTimeStr("");
-  };
-
-  return (
-    <div className="mt-6 space-y-5">
-      <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Choose a time</p>
-        <p className="text-sm text-slate-600">
-          Pick a slot that matches the availability your Axis contact published in the admin portal. If you are unsure,
-          use the message tab.
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Name *">
-          <input
-            type="text"
-            placeholder="Jane Smith"
-            className={inputCls}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </Field>
-        <Field label="Email *">
-          <input
-            type="email"
-            placeholder="jane@email.com"
-            className={inputCls}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </Field>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Date *">
-          <input type="date" className={inputCls} value={dateStr} onChange={(e) => setDateStr(e.target.value)} />
-        </Field>
-        <Field label="Start time *">
-          <input type="time" className={inputCls} value={timeStr} onChange={(e) => setTimeStr(e.target.value)} />
-        </Field>
-      </div>
-
-      <Field label="Phone">
-        <input type="tel" placeholder="(206) 555-0100" className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} />
-      </Field>
-
-      <Field label="Notes (optional)">
-        <textarea
-          rows={3}
-          placeholder="Anything we should prepare in advance?"
-          className={`${inputCls} resize-none`}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
         />
       </Field>
 
@@ -215,7 +132,7 @@ function ScheduleForm({ showToast }: { showToast: (m: string) => void }) {
         onClick={submit}
         className="mt-2 w-full rounded-2xl bg-[#0d1f4e] py-3.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#162d6e] active:scale-[0.98]"
       >
-        Request meeting
+        Send message
       </button>
     </div>
   );
