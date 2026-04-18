@@ -1,16 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
+  /* Portal / auth reference: cool blue primary, soft page + input fills */
+  --background: #f4f7fb;
   --foreground: #0f172a;
   --muted: #64748b;
-  --border: #e2e8f0;
+  --border: #e0e4ec;
   --card: #ffffff;
-  --primary: #2b5ce7;
+  --primary: #3b66f5;
   --primary-foreground: #ffffff;
-  --accent: #eff6ff;
-  --ring: #93c5fd;
-  --danger: #dc2626;
+  --accent: #eef2ff;
+  --auth-input-bg: #ebf0f8;
+  --ring: rgba(59, 102, 245, 0.35);
+  --danger: #ef4444;
   --announce: #0f172a;
 }
 
@@ -26,6 +28,7 @@
   --color-ring: var(--ring);
   --color-danger: var(--danger);
   --color-announce: var(--announce);
+  --color-auth-input-bg: var(--auth-input-bg);
   --font-sans: var(--font-inter);
 }
 
@@ -42,9 +45,9 @@ body {
   width: 20px;
   height: 20px;
   border-radius: 9999px;
-  background: #2b5ce7;
+  background: var(--primary);
   border: 3px solid #ffffff;
-  box-shadow: 0 2px 10px rgba(43, 92, 231, 0.35);
+  box-shadow: 0 2px 10px rgba(59, 102, 245, 0.35);
   cursor: pointer;
 }
 
@@ -52,9 +55,9 @@ body {
   width: 20px;
   height: 20px;
   border-radius: 9999px;
-  background: #2b5ce7;
+  background: var(--primary);
   border: 3px solid #ffffff;
-  box-shadow: 0 2px 10px rgba(43, 92, 231, 0.35);
+  box-shadow: 0 2px 10px rgba(59, 102, 245, 0.35);
   cursor: pointer;
   border: none;
 }

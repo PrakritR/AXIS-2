@@ -12,6 +12,7 @@ const RENT_LINKS = [
 ];
 
 const PARTNER_LINKS = [
+  { href: "/partner", label: "Property Management" },
   { href: "/partner/pricing", label: "Pricing" },
   { href: "/partner/contact", label: "Contact" },
 ];
