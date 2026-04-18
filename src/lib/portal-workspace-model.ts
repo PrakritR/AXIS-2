@@ -1,6 +1,5 @@
 import type { PortalKind } from "@/lib/portal-types";
 import {
-  adminPropertyRows,
   announcementRows,
   applicantRows,
   inboxPreviewRows,
@@ -22,6 +21,9 @@ export type WorkspaceModel = {
   rows?: Record<string, string>[];
   actions: WorkspaceAction[];
   notes?: string;
+  emptyState?: { title: string; description?: string; actionLabel?: string };
+  showToolbar?: boolean;
+  showQuickLinks?: boolean;
 };
 
 function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
@@ -103,15 +105,27 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
   }
 
   if (portal === "resident") {
+    if (section === "properties" || section === "applications" || section === "leases" || section === "calendar")
+      return [
+        {
+          label: "Refresh",
+          kind: "toast",
+          message: "Demo refresh — no live data yet.",
+        },
+      ];
     if (section === "payments")
       return [
-        { label: "Pay rent", kind: "toast", message: "Payments are demo-only." },
+        { label: "Add payment", kind: "toast", message: "Demo — no charges are processed." },
         {
           label: "Download receipt",
           kind: "modal",
           message: "Receipts will generate from real ledgers later.",
         },
-        ...common,
+        {
+          label: "Refresh",
+          kind: "toast",
+          message: "Refreshed payments (demo).",
+        },
       ];
     if (section === "work-orders")
       return [
@@ -120,16 +134,32 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           kind: "toast",
           message: "Request captured for demo purposes.",
         },
-        ...common,
+        {
+          label: "Refresh",
+          kind: "toast",
+          message: "Refreshed work orders (demo).",
+        },
       ];
     if (section === "inbox")
       return [
         {
-          label: "Compose message",
+          label: "New message",
           kind: "modal",
           message: "Messaging is not wired yet.",
         },
-        ...common,
+        {
+          label: "Refresh",
+          kind: "toast",
+          message: "Refreshed inbox (demo).",
+        },
+      ];
+    if (section === "profile")
+      return [
+        {
+          label: "Edit info",
+          kind: "toast",
+          message: "Profile editing is not connected yet.",
+        },
       ];
   }
 
@@ -137,16 +167,39 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
     if (section === "properties")
       return [
         {
-          label: "Approve property",
+          label: "Refresh",
           kind: "toast",
-          message: "Property approved (demo).",
+          message: "Refreshed property queue (demo).",
+        },
+      ];
+    if (section === "managers" || section === "leases" || section === "calendar")
+      return [
+        {
+          label: "Refresh",
+          kind: "toast",
+          message: "Demo refresh — no live data yet.",
+        },
+      ];
+    if (section === "inbox")
+      return [
+        {
+          label: "New message",
+          kind: "modal",
+          message: "Messaging is not wired yet.",
         },
         {
-          label: "Reject",
-          kind: "modal",
-          message: "Rejection reasons will be tracked in audit logs.",
+          label: "Refresh",
+          kind: "toast",
+          message: "Refreshed inbox (demo).",
         },
-        ...common,
+      ];
+    if (section === "profile")
+      return [
+        {
+          label: "Edit info",
+          kind: "toast",
+          message: "Profile editing is not connected yet.",
+        },
       ];
     if (section === "tools")
       return [
@@ -277,6 +330,36 @@ export function buildPortalWorkspaceModel(
   }
 
   if (section === "inbox") {
+    if (portal === "admin") {
+      return {
+        eyebrow,
+        title: "Inbox",
+        subtitle: "Admin threads will load here when messaging is authenticated.",
+        showToolbar: false,
+        showQuickLinks: false,
+        actions: actionsFor(portal, section),
+        emptyState: {
+          title: "No conversations",
+          description: "Select a conversation from the list to view messages once inbox sync is enabled.",
+        },
+      };
+    }
+
+    if (portal === "resident") {
+      return {
+        eyebrow,
+        title: "Inbox",
+        subtitle: "Messages with your property manager and leasing team.",
+        showToolbar: false,
+        showQuickLinks: false,
+        actions: actionsFor(portal, section),
+        emptyState: {
+          title: "No messages yet",
+          description: "When threads are available, open one from the list to read and reply.",
+        },
+      };
+    }
+
     return {
       eyebrow,
       title: "Inbox",
@@ -301,6 +384,26 @@ export function buildPortalWorkspaceModel(
   }
 
   if (section === "payments") {
+    if (portal === "resident") {
+      return {
+        eyebrow,
+        title: "Payments",
+        subtitle: "Balances and payment history for your lease. Nothing is charged in this demo.",
+        kpis: [
+          { label: "Pending", value: "0", hint: "" },
+          { label: "Overdue", value: "0", hint: "" },
+          { label: "Paid", value: "0", hint: "" },
+        ],
+        showToolbar: false,
+        showQuickLinks: false,
+        actions: actionsFor(portal, section),
+        emptyState: {
+          title: "No payments to show",
+          description: "Upcoming charges and receipts will list here once billing is connected.",
+        },
+      };
+    }
+
     return {
       eyebrow,
       title: "Payments",
@@ -334,6 +437,26 @@ export function buildPortalWorkspaceModel(
   }
 
   if (section === "work-orders") {
+    if (portal === "resident") {
+      return {
+        eyebrow,
+        title: "Work orders",
+        subtitle: "Submit maintenance requests and track progress for your unit.",
+        kpis: [
+          { label: "Open", value: "0", hint: "" },
+          { label: "Scheduled", value: "0", hint: "" },
+          { label: "Completed", value: "0", hint: "" },
+        ],
+        showToolbar: false,
+        showQuickLinks: false,
+        actions: actionsFor(portal, section),
+        emptyState: {
+          title: "No work orders yet",
+          description: "Use submit from the work orders flow when it is connected to open a new request.",
+        },
+      };
+    }
+
     return {
       eyebrow,
       title: "Work orders",
@@ -366,27 +489,239 @@ export function buildPortalWorkspaceModel(
     };
   }
 
-  if (portal === "admin" && section === "properties") {
+  if (portal === "resident" && section === "properties") {
     return {
       eyebrow,
       title: "Properties",
-      subtitle: "Admin view across managers and portfolios.",
-      columns: [
-        { key: "name", label: "Property" },
-        { key: "manager", label: "Manager" },
-        { key: "units", label: "Units" },
-        { key: "status", label: "Status" },
+      subtitle: "Units and communities tied to your resident account.",
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: actionsFor(portal, section),
+      emptyState: {
+        title: "No properties yet",
+        description: "When your application is approved, your assigned home will appear here.",
+      },
+    };
+  }
+
+  if (portal === "resident" && section === "applications") {
+    return {
+      eyebrow,
+      title: "Applications",
+      subtitle: "Screening and approval status for homes you have applied to rent.",
+      kpis: [
+        { label: "Pending", value: "0", hint: "" },
+        { label: "Approved", value: "0", hint: "" },
+        { label: "Rejected", value: "0", hint: "" },
       ],
-      rows: adminPropertyRows as unknown as Record<string, string>[],
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: actionsFor(portal, section),
+      emptyState: {
+        title: "No applications yet",
+        description: "Submitted applications will show here with updates from your leasing team.",
+      },
+    };
+  }
+
+  if (portal === "resident" && section === "leases") {
+    return {
+      eyebrow,
+      title: "Leases",
+      subtitle: "Lease packets, countersignatures, and download links for your household.",
+      kpis: [
+        { label: "Manager review", value: "0", hint: "" },
+        { label: "Admin review", value: "0", hint: "" },
+        { label: "With resident", value: "0", hint: "" },
+        { label: "Signed", value: "0", hint: "" },
+      ],
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: actionsFor(portal, section),
+      emptyState: {
+        title: "No leases yet",
+        description: "Lease documents will appear here as your manager sends them for review and signing.",
+      },
+    };
+  }
+
+  if (portal === "admin" && section === "properties") {
+    const emptyTitle =
+      tabId === "pending-review"
+        ? "No properties awaiting review"
+        : "No properties in this view";
+    return {
+      eyebrow,
+      title: "Properties",
+      subtitle: "Review listings and status changes from managers.",
+      kpis: [
+        { label: "Pending review", value: "0", hint: "" },
+        { label: "Request change", value: "0", hint: "" },
+        { label: "Listed", value: "0", hint: "" },
+        { label: "Unlisted", value: "0", hint: "" },
+        { label: "Rejected", value: "0", hint: "" },
+      ],
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: actionsFor(portal, section),
+      emptyState: {
+        title: emptyTitle,
+        description: "When managers submit properties, they will appear in this queue.",
+      },
+    };
+  }
+
+  if (portal === "admin" && section === "managers") {
+    return {
+      eyebrow,
+      title: "Managers",
+      subtitle: "Subscribed managers across your portfolio.",
+      kpis: [
+        { label: "Current subscribers", value: "0", hint: "" },
+        { label: "Past subscribers", value: "0", hint: "" },
+      ],
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: actionsFor(portal, section),
+      emptyState: {
+        title: "No active managers",
+        description: "When managers subscribe, they will appear in this list.",
+      },
+    };
+  }
+
+  if (portal === "admin" && section === "leases") {
+    return {
+      eyebrow,
+      title: "Leases",
+      subtitle: "Track lease packets through review and signature.",
+      kpis: [
+        { label: "Manager review", value: "0", hint: "" },
+        { label: "Admin review", value: "0", hint: "" },
+        { label: "With resident", value: "0", hint: "" },
+        { label: "Signed", value: "0", hint: "" },
+      ],
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: actionsFor(portal, section),
+      emptyState: {
+        title: "No leases yet",
+        description: "Lease documents will appear here as managers and residents progress through signing.",
+      },
+    };
+  }
+
+  if (portal === "admin" && section === "calendar") {
+    return {
+      eyebrow,
+      title: "Calendar",
+      subtitle: `Scheduling tools. Tab: ${humanize(tabId)}.`,
+      notes:
+        "Admin meeting hours are stored in the internal database. Confirmed meetings will appear on this calendar from Postgres when connected; public Contact Axis can read availability from your API once saved.",
+      kpis: [
+        { label: "Today", value: "0", hint: "Booked" },
+        { label: "This week", value: "0", hint: "" },
+        { label: "This month", value: "0", hint: "" },
+        { label: "Total booked", value: "0", hint: "" },
+      ],
+      showToolbar: false,
+      showQuickLinks: false,
+      columns: [
+        { key: "item", label: "Item" },
+        { key: "window", label: "Window" },
+        { key: "owner", label: "Owner" },
+      ],
+      rows: [
+        {
+          item: "Tour block",
+          window: "Sat · 10:00–2:00",
+          owner: "Leasing",
+        },
+        {
+          item: "Lease countersign",
+          window: "Due Fri",
+          owner: "Admin",
+        },
+        {
+          item: "Vendor follow-up",
+          window: "Due Wed",
+          owner: "Maintenance",
+        },
+      ],
       actions: actionsFor(portal, section),
     };
   }
 
-  if (
-    section === "calendar" ||
-    section === "analytics" ||
-    section === "leasing"
-  ) {
+  if (portal === "resident" && section === "calendar") {
+    return {
+      eyebrow,
+      title: "Calendar",
+      subtitle: `Your schedule and building events. Tab: ${humanize(tabId)}.`,
+      notes:
+        "Community events, move-in milestones, and maintenance windows will populate this calendar when connected.",
+      kpis: [
+        { label: "Today", value: "0", hint: "Events" },
+        { label: "This week", value: "0", hint: "" },
+        { label: "This month", value: "0", hint: "" },
+        { label: "Total", value: "0", hint: "" },
+      ],
+      showToolbar: false,
+      showQuickLinks: false,
+      columns: [
+        { key: "item", label: "Item" },
+        { key: "window", label: "Window" },
+        { key: "owner", label: "Owner" },
+      ],
+      rows: [
+        {
+          item: "Move-in orientation",
+          window: "Sat · 11:00 AM",
+          owner: "Community",
+        },
+        {
+          item: "Rent due reminder",
+          window: "May 1",
+          owner: "Payments",
+        },
+      ],
+      actions: actionsFor(portal, section),
+    };
+  }
+
+  if (section === "leasing") {
+    return {
+      eyebrow,
+      title: "Leasing",
+      subtitle: `Pipeline view. Tab: ${humanize(tabId)}.`,
+      notes:
+        "Leasing boards are intentionally lightweight here; wire real statuses when your backend is ready.",
+      columns: [
+        { key: "item", label: "Item" },
+        { key: "window", label: "Window" },
+        { key: "owner", label: "Owner" },
+      ],
+      rows: [
+        {
+          item: "Tour block",
+          window: "Sat · 10:00–2:00",
+          owner: "Leasing",
+        },
+        {
+          item: "Lease countersign",
+          window: "Due Fri",
+          owner: "Admin",
+        },
+        {
+          item: "Vendor follow-up",
+          window: "Due Wed",
+          owner: "Maintenance",
+        },
+      ],
+      actions: actionsFor(portal, section),
+    };
+  }
+
+  if ((section === "calendar" || section === "analytics") && portal !== "resident") {
     return {
       eyebrow,
       title: humanize(section),
@@ -419,7 +754,53 @@ export function buildPortalWorkspaceModel(
     };
   }
 
-  if (section === "documents" || section === "profile" || section === "settings") {
+  if (portal === "resident" && section === "profile") {
+    return {
+      eyebrow,
+      title: "Profile",
+      subtitle: "Your resident profile (demo placeholders).",
+      showToolbar: false,
+      showQuickLinks: false,
+      columns: [
+        { key: "field", label: "Field" },
+        { key: "value", label: "Value" },
+      ],
+      rows: [
+        { field: "Full name", value: "—" },
+        { field: "Email", value: "—" },
+        { field: "Phone", value: "—" },
+        { field: "Resident ID", value: "—" },
+      ],
+      actions: actionsFor(portal, section),
+    };
+  }
+
+  if (portal === "admin" && section === "profile") {
+    return {
+      eyebrow,
+      title: "Profile",
+      subtitle: "Your admin account details (demo placeholders).",
+      showToolbar: false,
+      showQuickLinks: false,
+      columns: [
+        { key: "field", label: "Field" },
+        { key: "value", label: "Value" },
+      ],
+      rows: [
+        { field: "Full name", value: "—" },
+        { field: "Email", value: "—" },
+        { field: "Phone", value: "—" },
+        { field: "Admin ID", value: "—" },
+      ],
+      actions: actionsFor(portal, section),
+    };
+  }
+
+  if (
+    section === "documents" ||
+    section === "settings" ||
+    (section === "profile" && portal !== "admin" && portal !== "resident")
+  ) {
     return {
       eyebrow,
       title: humanize(section),

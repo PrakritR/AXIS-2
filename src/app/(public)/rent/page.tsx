@@ -3,11 +3,15 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 const links = [
-  { title: "Property listings", desc: "Browse mock inventory with realistic cards.", href: "/rent/listings" },
+  { title: "Properties", desc: "Browse mock inventory with realistic cards.", href: "/rent/listings" },
   { title: "Apply", desc: "Multi-step application shell (no backend).", href: "/rent/apply" },
-  { title: "Schedule tour", desc: "Tabs, stepper, and empty states.", href: "/rent/tours" },
+  {
+    title: "Schedule tour & contact",
+    desc: "Tours, messages, and availability placeholders.",
+    href: "/rent/tours-contact",
+  },
   { title: "FAQ", desc: "Common renter questions.", href: "/rent/faq" },
-  { title: "Contact", desc: "Message Axis (demo modal/toast).", href: "/rent/contact" },
+  { title: "Contact", desc: "Dedicated contact form.", href: "/rent/contact" },
 ];
 
 export default function RentHubPage() {

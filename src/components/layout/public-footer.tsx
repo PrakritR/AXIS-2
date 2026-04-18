@@ -1,3 +1,4 @@
+import { AxisLogoLink } from "@/components/brand/axis-logo";
 import Link from "next/link";
 
 export function PublicFooter() {
@@ -5,19 +6,7 @@ export function PublicFooter() {
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 md:grid-cols-4">
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2563eb] text-sm font-black tracking-tight text-white">
-              AX
-            </span>
-            <span className="leading-[1.1]">
-              <span className="block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900">
-                AXIS
-              </span>
-              <span className="block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900">
-                SEATTLE
-              </span>
-            </span>
-          </div>
+          <AxisLogoLink href="/" />
           <p className="text-sm leading-relaxed text-slate-600">
             Available housing in Seattle with posted pricing and online applications.
           </p>
@@ -26,7 +15,7 @@ export function PublicFooter() {
               <span className="text-slate-500" aria-hidden>
                 ☎
               </span>
-              <a href="tel:+15103098345" className="hover:text-[#2563eb]">
+              <a href="tel:+15103098345" className="hover:text-[#2b5ce7]">
                 (510) 309-8345
               </a>
             </p>
@@ -34,7 +23,7 @@ export function PublicFooter() {
               <span className="text-slate-500" aria-hidden>
                 ✉
               </span>
-              <a href="mailto:info@axis-seattle-housing.com" className="hover:text-[#2563eb]">
+              <a href="mailto:info@axis-seattle-housing.com" className="hover:text-[#2b5ce7]">
                 info@axis-seattle-housing.com
               </a>
             </p>
@@ -44,22 +33,22 @@ export function PublicFooter() {
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Explore</p>
           <ul className="mt-4 space-y-2.5 text-sm font-semibold text-slate-800">
             <li>
-              <Link className="hover:text-[#2563eb]" href="/rent/listings">
+              <Link className="hover:text-[#2b5ce7]" href="/rent/listings">
                 Explore properties
               </Link>
             </li>
             <li>
-              <Link className="hover:text-[#2563eb]" href="/rent/apply">
+              <Link className="hover:text-[#2b5ce7]" href="/rent/apply">
                 Apply housing
               </Link>
             </li>
             <li>
-              <Link className="hover:text-[#2563eb]" href="/rent/contact">
+              <Link className="hover:text-[#2b5ce7]" href="/rent/contact">
                 Contact
               </Link>
             </li>
             <li>
-              <Link className="hover:text-[#2563eb]" href="/partner">
+              <Link className="hover:text-[#2b5ce7]" href="/partner/contact">
                 Partner with Axis
               </Link>
             </li>
@@ -69,22 +58,22 @@ export function PublicFooter() {
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Housing</p>
           <ul className="mt-4 space-y-2.5 text-sm font-semibold text-slate-800">
             <li>
-              <Link className="hover:text-[#2563eb]" href="/rent/listings">
+              <Link className="hover:text-[#2b5ce7]" href="/rent/listings">
                 Available housing
               </Link>
             </li>
             <li>
-              <Link className="hover:text-[#2563eb]" href="/rent/apply">
+              <Link className="hover:text-[#2b5ce7]" href="/rent/apply">
                 Apply
               </Link>
             </li>
             <li>
-              <Link className="hover:text-[#2563eb]" href="/rent/faq">
+              <Link className="hover:text-[#2b5ce7]" href="/rent/faq">
                 Questions
               </Link>
             </li>
             <li>
-              <Link className="hover:text-[#2563eb]" href="/partner/contact">
+              <Link className="hover:text-[#2b5ce7]" href="/partner/contact">
                 Lease questions
               </Link>
             </li>
@@ -99,7 +88,7 @@ export function PublicFooter() {
           </p>
           <p className="mt-1 text-sm font-semibold text-slate-800">Seattle, WA</p>
           <a
-            className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-[#2563eb] hover:underline"
+            className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-[#2b5ce7] hover:underline"
             href="https://maps.google.com/?q=5259+Brooklyn+Ave+NE+Seattle+WA+98105"
             target="_blank"
             rel="noreferrer"
@@ -108,8 +97,9 @@ export function PublicFooter() {
           </a>
         </div>
       </div>
-      <div className="border-t border-slate-100 py-4 text-center text-xs text-slate-500">
-        © {new Date().getFullYear()} Axis Seattle
+      <div className="flex flex-col items-center justify-between gap-2 border-t border-slate-100 px-4 py-4 text-xs text-slate-500 sm:flex-row">
+        <span>© {new Date().getFullYear()} Axis Seattle</span>
+        <span className="font-medium text-slate-600">Axis Seattle, WA</span>
       </div>
     </footer>
   );

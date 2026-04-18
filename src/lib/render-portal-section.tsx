@@ -1,3 +1,5 @@
+import { AdminDashboard } from "@/components/portal/admin-dashboard";
+import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
@@ -14,6 +16,16 @@ export async function renderPortalSection(
   const def = getPortalDefinition(kind);
   const meta = findSection(def, section);
   if (!meta) notFound();
+
+  if (kind === "admin" && section === "dashboard") {
+    if (tabParts?.length) notFound();
+    return <AdminDashboard />;
+  }
+
+  if (kind === "resident" && section === "dashboard") {
+    if (tabParts?.length) notFound();
+    return <ResidentDashboard />;
+  }
 
   if (!meta.tabs.length) {
     if (tabParts?.length) notFound();
@@ -44,6 +56,7 @@ export async function renderPortalSection(
 
   return (
     <PortalWorkspaceClient
+      portalKind={kind}
       portalLabel={def.title}
       tabId={meta.tabs.length ? tabId : "index"}
       tabs={tabs}

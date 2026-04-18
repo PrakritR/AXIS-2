@@ -6,7 +6,7 @@
   --muted: #64748b;
   --border: #e2e8f0;
   --card: #ffffff;
-  --primary: #2563eb;
+  --primary: #2b5ce7;
   --primary-foreground: #ffffff;
   --accent: #eff6ff;
   --ring: #93c5fd;
@@ -26,15 +26,13 @@
   --color-ring: var(--ring);
   --color-danger: var(--danger);
   --color-announce: var(--announce);
-  --font-sans: var(--font-geist-sans);
-  --font-serif: var(--font-instrument);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Home hero budget slider — WebKit thumb */
@@ -44,9 +42,9 @@ body {
   width: 18px;
   height: 18px;
   border-radius: 9999px;
-  background: #2563eb;
+  background: #2b5ce7;
   border: 2px solid #ffffff;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.45);
+  box-shadow: 0 2px 8px rgba(43, 92, 231, 0.45);
   cursor: pointer;
 }
 
@@ -54,8 +52,8 @@ body {
   width: 18px;
   height: 18px;
   border-radius: 9999px;
-  background: #2563eb;
+  background: #2b5ce7;
   border: 2px solid #ffffff;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.45);
+  box-shadow: 0 2px 8px rgba(43, 92, 231, 0.45);
   cursor: pointer;
 }

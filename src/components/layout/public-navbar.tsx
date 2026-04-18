@@ -1,56 +1,48 @@
 "use client";
 
+import { AxisLogoLink } from "@/components/brand/axis-logo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 
-type Item = { label: string; href: string };
-
-function Dropdown({
+function NavPill({
+  href,
   label,
-  items,
   active,
 }: {
+  href: string;
   label: string;
-  items: Item[];
   active: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+    <Link
+      href={href}
+      className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition sm:px-4 sm:text-sm ${
+        active
+          ? "bg-white text-slate-900 shadow-sm ring-2 ring-[#2b5ce7]"
+          : "text-slate-600 hover:bg-white/90 hover:text-slate-900"
+      }`}
     >
-      <button
-        type="button"
-        className={`relative inline-flex items-center gap-1.5 pb-2 text-sm font-semibold transition ${
-          active ? "text-slate-900" : "text-slate-700 hover:text-slate-900"
-        }`}
-      >
-        {label}
-        <span className="text-[10px] font-normal text-slate-500">▾</span>
-        {active ? (
-          <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[#2563eb]" />
-        ) : null}
-      </button>
-      {open ? (
-        <div className="absolute left-0 top-full z-50 pt-2">
-          <div className="min-w-[220px] rounded-2xl border border-slate-200/90 bg-white p-2 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.2)]">
-            {items.map((it) => (
-              <Link
-                key={it.href}
-                href={it.href}
-                className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-              >
-                {it.label}
-              </Link>
-            ))}
-          </div>
-        </div>
+      {label}
+    </Link>
+  );
+}
+
+function SectionLabel({
+  children,
+  active,
+}: {
+  children: string;
+  active: boolean;
+}) {
+  return (
+    <span className="relative inline-flex items-center gap-1 pb-1 text-sm font-semibold text-slate-900">
+      {children}
+      <span className="text-[10px] font-normal text-slate-500">▾</span>
+      {active ? (
+        <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[#2b5ce7]" />
       ) : null}
-    </div>
+    </span>
   );
 }
 
@@ -58,53 +50,61 @@ export function PublicNavbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const isAdminPortal = pathname.startsWith("/admin");
+  const isResidentPortal = pathname.startsWith("/resident");
+  const isAuth = pathname.startsWith("/auth");
+
   const rentActive = useMemo(
     () => pathname === "/" || pathname.startsWith("/rent"),
     [pathname],
   );
   const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
 
-  const rentItems: Item[] = [
-    { label: "Schedule tour", href: "/rent/tours" },
-    { label: "Apply", href: "/rent/apply" },
-    { label: "Property listings", href: "/rent/listings" },
-    { label: "Listings hub", href: "/rent" },
-    { label: "FAQ", href: "/rent/faq" },
-    { label: "Contact", href: "/rent/contact" },
-  ];
+  const tourContactActive =
+    pathname.startsWith("/rent/tours-contact") || pathname === "/rent/tours";
+  const applyActive = pathname.startsWith("/rent/apply");
+  const propertiesActive = pathname.startsWith("/rent/listings");
+  const pricingActive = pathname.startsWith("/partner/pricing");
+  const partnerContactActive = pathname.startsWith("/partner/contact");
 
-  const partnerItems: Item[] = [
-    { label: "Pricing", href: "/partner/pricing" },
-    { label: "Contact", href: "/partner/contact" },
-    { label: "Partner overview", href: "/partner" },
-  ];
+  const logoVariant =
+    isAuth ? "portalHeader" : isAdminPortal || isResidentPortal ? "adminHeader" : "default";
+  const logoHref = isAdminPortal ? "/admin/dashboard" : isResidentPortal ? "/resident/dashboard" : "/";
 
   return (
-    <div className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
-        <Link href="/" className="flex items-center gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2563eb] text-sm font-black tracking-tight text-white">
-            AX
-          </span>
-          <span className="leading-[1.1]">
-            <span className="block text-[11px] font-bold uppercase tracking-[0.22em] text-slate-900">
-              AXIS
-            </span>
-            <span className="block text-[11px] font-bold uppercase tracking-[0.22em] text-slate-900">
-              SEATTLE
-            </span>
-          </span>
-        </Link>
+    <div className="border-b border-slate-200/90 bg-white">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-3 sm:py-4">
+        <AxisLogoLink href={logoHref} variant={logoVariant} />
 
-        <nav className="hidden items-center gap-10 lg:flex">
-          <Dropdown label="Rent with Axis" items={rentItems} active={rentActive} />
-          <Dropdown label="Partner with Axis" items={partnerItems} active={partnerActive} />
+        <nav className="hidden min-w-0 flex-1 flex-col gap-4 px-2 lg:flex lg:flex-row lg:items-center lg:justify-center lg:gap-8 xl:gap-12">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+            <SectionLabel active={rentActive}>Rent with Axis</SectionLabel>
+            <div className="flex flex-wrap items-center justify-center gap-1 rounded-full bg-slate-100/90 p-1 ring-1 ring-slate-200/80">
+              <NavPill
+                href="/rent/tours-contact"
+                label="Schedule tour & contact"
+                active={tourContactActive}
+              />
+              <NavPill href="/rent/apply" label="Apply" active={applyActive} />
+              <NavPill href="/rent/listings" label="Properties" active={propertiesActive} />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+            <SectionLabel active={partnerActive}>Partner with Axis</SectionLabel>
+            <div className="flex flex-wrap items-center justify-center gap-1 rounded-full bg-slate-100/90 p-1 ring-1 ring-slate-200/80">
+              <NavPill href="/partner/pricing" label="Pricing" active={pricingActive} />
+              <NavPill href="/partner/contact" label="Contact" active={partnerContactActive} />
+            </div>
+          </div>
         </nav>
 
         <div className="hidden lg:block">
           <Link
-            href="/auth/sign-in"
-            className="inline-flex items-center justify-center rounded-full bg-slate-900 px-7 py-2.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(37,99,235,0.45)] transition hover:bg-slate-800"
+            href={
+              isAdminPortal ? "/admin/dashboard" : isResidentPortal ? "/resident/dashboard" : "/auth/sign-in"
+            }
+            className="inline-flex items-center justify-center rounded-full bg-[#2b5ce7] px-7 py-2.5 text-sm font-semibold text-white shadow-[0_0_22px_rgba(43,92,231,0.45)] transition hover:bg-blue-600"
           >
             Portal
           </Link>
@@ -112,7 +112,7 @@ export function PublicNavbar() {
 
         <button
           type="button"
-          className="inline-flex rounded-full border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 lg:hidden"
+          className="inline-flex rounded-full border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 md:ml-auto lg:hidden"
           onClick={() => setMobileOpen((v) => !v)}
         >
           Menu
@@ -126,40 +126,44 @@ export function PublicNavbar() {
               Home
             </Link>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Rent with Axis</p>
-            {rentItems.map((it) => (
-              <Link
-                key={it.href}
-                href={it.href}
-                className="block py-1 text-sm font-semibold text-slate-800"
-                onClick={() => setMobileOpen(false)}
-              >
-                {it.label}
-              </Link>
-            ))}
+            <Link
+              className="block py-1 text-sm font-semibold text-slate-800"
+              href="/rent/tours-contact"
+              onClick={() => setMobileOpen(false)}
+            >
+              Schedule tour & contact
+            </Link>
+            <Link className="block py-1 text-sm font-semibold text-slate-800" href="/rent/apply" onClick={() => setMobileOpen(false)}>
+              Apply
+            </Link>
+            <Link className="block py-1 text-sm font-semibold text-slate-800" href="/rent/listings" onClick={() => setMobileOpen(false)}>
+              Properties
+            </Link>
             <p className="pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Partner with Axis</p>
-            {partnerItems.map((it) => (
-              <Link
-                key={it.href}
-                href={it.href}
-                className="block py-1 text-sm font-semibold text-slate-800"
-                onClick={() => setMobileOpen(false)}
-              >
-                {it.label}
-              </Link>
-            ))}
-            <Link href="/auth/sign-in" onClick={() => setMobileOpen(false)}>
-              <span className="mt-3 flex w-full items-center justify-center rounded-full bg-slate-900 py-3 text-sm font-semibold text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]">
+            <Link className="block py-1 text-sm font-semibold text-slate-800" href="/partner/pricing" onClick={() => setMobileOpen(false)}>
+              Pricing
+            </Link>
+            <Link className="block py-1 text-sm font-semibold text-slate-800" href="/partner/contact" onClick={() => setMobileOpen(false)}>
+              Contact
+            </Link>
+            <Link
+              href={
+                isAdminPortal ? "/admin/dashboard" : isResidentPortal ? "/resident/dashboard" : "/auth/sign-in"
+              }
+              onClick={() => setMobileOpen(false)}
+            >
+              <span className="mt-3 flex w-full items-center justify-center rounded-full bg-[#2b5ce7] py-3 text-sm font-semibold text-white shadow-[0_0_20px_rgba(43,92,231,0.4)]">
                 Portal
               </span>
             </Link>
             <div className="border-t border-slate-100 pt-3 text-xs text-slate-500">
-              <Link href="/manager/dashboard" className="mr-3 font-semibold text-[#2563eb]" onClick={() => setMobileOpen(false)}>
+              <Link href="/manager/dashboard" className="mr-3 font-semibold text-[#2b5ce7]" onClick={() => setMobileOpen(false)}>
                 Manager
               </Link>
-              <Link href="/resident/dashboard" className="mr-3 font-semibold text-[#2563eb]" onClick={() => setMobileOpen(false)}>
+              <Link href="/resident/dashboard" className="mr-3 font-semibold text-[#2b5ce7]" onClick={() => setMobileOpen(false)}>
                 Resident
               </Link>
-              <Link href="/admin/dashboard" className="font-semibold text-[#2563eb]" onClick={() => setMobileOpen(false)}>
+              <Link href="/admin/dashboard" className="font-semibold text-[#2b5ce7]" onClick={() => setMobileOpen(false)}>
                 Admin
               </Link>
             </div>

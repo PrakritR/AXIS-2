@@ -1,9 +1,9 @@
 "use client";
 
+import { AuthCard } from "@/components/auth/auth-card";
 import { PortalSwitcher, type AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useState } from "react";
@@ -13,28 +13,37 @@ export default function ForgotPasswordPage() {
   const [role, setRole] = useState<AuthRole>("resident");
 
   return (
-    <Card className="p-8">
-      <h1 className="text-center text-2xl font-semibold">Reset password</h1>
-      <p className="mt-2 text-center text-sm text-muted">Choose the portal you use most often (demo only).</p>
+    <AuthCard>
+      <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900">Reset password</h1>
+      <p className="mt-2 text-center text-sm text-slate-600">
+        Choose the portal you use most often (demo only).
+      </p>
 
-      <div className="mt-6">
+      <div className="mt-7">
         <PortalSwitcher value={role} onChange={setRole} />
       </div>
 
-      <div className="mt-6">
-        <label className="text-xs font-semibold text-muted" htmlFor="email">
+      <div className="mt-8">
+        <label className="text-xs font-semibold text-slate-600" htmlFor="email">
           Email
         </label>
-        <Input id="email" className="mt-2" placeholder="you@example.com" />
+        <Input id="email" className="mt-1.5" placeholder="you@example.com" autoComplete="email" />
       </div>
 
-      <Button type="button" className="mt-6 w-full" onClick={() => showToast("Reset email sent (demo)")}>
+      <Button
+        type="button"
+        className="mt-8 w-full rounded-full py-3 text-base font-semibold shadow-[0_10px_28px_-8px_rgba(43,92,231,0.55)]"
+        onClick={() => showToast("Reset email sent (demo)")}
+      >
         Send reset link
       </Button>
 
-      <Link className="mt-6 inline-flex w-full justify-center text-sm font-semibold text-primary" href="/auth/sign-in">
+      <Link
+        className="mt-8 flex w-full justify-center text-sm font-semibold text-[#2b5ce7] hover:text-blue-700"
+        href="/auth/sign-in"
+      >
         ← Back to sign in
       </Link>
-    </Card>
+    </AuthCard>
   );
 }

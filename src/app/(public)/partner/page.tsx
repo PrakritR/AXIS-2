@@ -7,7 +7,9 @@ export default function PartnerLandingPage() {
     <div>
       <section className="border-b border-border bg-gradient-to-b from-white to-slate-50">
         <div className="mx-auto max-w-6xl px-4 py-16 text-center">
-          <h1 className="font-serif text-4xl font-normal leading-tight sm:text-5xl">Start with Axis.</h1>
+          <h1 className="text-4xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl">
+            Start with Axis.
+          </h1>
           <p className="mx-auto mt-5 max-w-2xl text-base text-muted">
             Partner with Axis starts here: choose a tier, open partner signup, and complete checkout or free-tier setup.
             This page is a marketing shell — integrations are intentionally disabled.
