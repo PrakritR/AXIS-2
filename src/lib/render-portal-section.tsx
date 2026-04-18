@@ -119,7 +119,7 @@ export async function renderPortalSection(
     if (section === "dashboard") return <ManagerDashboard />;
     if (section === "properties") return <ManagerProperties />;
     if (section === "applications") return <ManagerApplications />;
-    if (section === "leases") return <ManagerLeases leaseWorkflowMode="manager" />;
+    if (section === "leases") return <ManagerLeases />;
     if (section === "payments") return <ManagerPayments />;
     if (section === "work-orders") return <ManagerWorkOrders />;
     if (section === "owners") return <ManagerOwners />;
@@ -133,7 +133,7 @@ export async function renderPortalSection(
     if (section === "dashboard") return <ManagerDashboard />;
     if (section === "properties") return <OwnerProperties />;
     if (section === "applications") return <ManagerApplications />;
-    if (section === "leases") return <ManagerLeases leaseWorkflowMode="owner" />;
+    if (section === "leases") return <ManagerLeases />;
     if (section === "payments") return <ManagerPayments />;
     if (section === "work-orders") return <ManagerWorkOrders />;
     if (section === "managers") return <OwnerManagers />;

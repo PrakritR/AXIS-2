@@ -236,7 +236,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
             {filteredRooms.length === 0 ? (
               <p className="mt-4 text-center text-[13px] text-[#6e6e73]">No rooms match these filters.</p>
             ) : (
-              <div className="mt-4 grid w-full gap-4 sm:grid-cols-2">
+              <div className="mt-4 grid w-full gap-6 sm:grid-cols-2">
                 {filteredRooms.map((row) => (
                   <RoomListingCard key={row.key} row={row} />
                 ))}

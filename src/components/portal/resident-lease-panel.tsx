@@ -9,7 +9,6 @@ import {
   demoResidentLeaseHub,
   demoResidentLeaseVersions,
 } from "@/data/demo-portal";
-import { PortalLeaseWorkflowClient } from "@/components/portal/portal-lease-workflow-client";
 import { ManagerSectionShell } from "./manager-section-shell";
 
 type ChecklistRow = { id: string; label: string; done: boolean };
@@ -67,14 +66,6 @@ export function ResidentLeasePanel() {
             </Button>
           </div>
         </Card>
-      </div>
-
-      <div className="mt-10 border-t border-slate-200 pt-8">
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Your lease draft &amp; messages</p>
-        <p className="mt-1 text-sm text-slate-500">Demo: print-ready lease, thread without admin-only notes, and fees your manager posts.</p>
-        <div className="mt-4">
-          <PortalLeaseWorkflowClient mode="resident" />
-        </div>
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">

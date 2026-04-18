@@ -24,7 +24,6 @@ export type ListingFloorCard = {
   roomCount: number;
   remainingNote?: string;
   rooms: ListingRoomRow[];
-  hiddenRoomNames?: string[];
 };
 
 export type ListingBathroomModal = {
@@ -65,14 +64,22 @@ export type ListingSharedRow = {
 };
 
 export type LeaseBasicRow = {
+  id: string;
   icon: string;
   title: string;
+  /** Subtitle under title (same role as room “floor” line). */
+  detail: string;
+  /** Shown in the price column (fee, deposit, “—”, etc.). */
+  price: string;
+  /** Status / category pill text. */
+  status: string;
   body: string;
 };
 
-export type AmenityItem = { icon: string; label: string };
+export type AmenityItem = { id: string; icon: string; label: string };
 
 export type BundleCard = {
+  id: string;
   label: string;
   price: string;
   strikethrough?: string;
@@ -105,8 +112,8 @@ const defaultFloors: ListingFloorCard[] = [
   {
     floorLabel: "First floor",
     fromPrice: "$775/month",
-    roomCount: 1,
-    remainingNote: "1 room remaining at this price",
+    roomCount: 2,
+    remainingNote: "2 rooms on this floor",
     rooms: [
       {
         id: "r1",
@@ -121,8 +128,20 @@ const defaultFloors: ListingFloorCard[] = [
           includedTags: ["Bed", "Desk", "Keypad lock", "Heating", "AC", "Shares bathroom with the second floor as well"],
         }),
       },
+      {
+        id: "r1a",
+        name: "Room 1A (flex lease)",
+        detail: "First floor · flexible lease lengths",
+        price: "$790/month",
+        availability: "Available now",
+        modal: roomModal({
+          setupLine: "Flex lease: 3-month, 9-month, 12-month, or month-to-month (+$25/mo)",
+          tourTitle: "Room 1A tour coming soon.",
+          tourSubtitle: "Walkthrough placeholder — connect Vimeo, YouTube, or Mux when media is ready.",
+          includedTags: ["Bed", "Desk", "Keypad lock", "Heating", "AC", "Flex lease"],
+        }),
+      },
     ],
-    hiddenRoomNames: ["Room 1A (flex lease)"],
   },
   {
     floorLabel: "Second floor",
@@ -153,8 +172,31 @@ const defaultFloors: ListingFloorCard[] = [
           includedTags: ["Bed", "Desk", "Heating", "Shared bath"],
         }),
       },
+      {
+        id: "r4",
+        name: "Room 4",
+        detail: "Second floor",
+        price: "$800/month",
+        availability: "Available now",
+        modal: roomModal({
+          setupLine: "Second floor · shared bath",
+          tourTitle: "Room 4 tour coming soon.",
+          includedTags: ["Bed", "Closet", "Heating", "Shared bath"],
+        }),
+      },
+      {
+        id: "r5",
+        name: "Room 5",
+        detail: "Second floor",
+        price: "$800/month",
+        availability: "Available now",
+        modal: roomModal({
+          setupLine: "Second floor · shared bath",
+          tourTitle: "Room 5 tour coming soon.",
+          includedTags: ["Bed", "Desk", "Heating", "Shared bath"],
+        }),
+      },
     ],
-    hiddenRoomNames: ["Room 4", "Room 5"],
   },
 ];
 
@@ -301,36 +343,81 @@ const defaultShared: ListingSharedRow[] = [
 
 const defaultLease: LeaseBasicRow[] = [
   {
+    id: "lease-terms",
     icon: "📋",
     title: "Lease terms",
+    detail: "3-, 9-, 12-month & month-to-month",
+    price: "—",
+    status: "Required",
     body: "Four lease options available: 3-month, 9-month, and 12-month, plus month-to-month with an extra $25/month charge. Start and end dates are flexible — you choose the window that works for you.",
   },
-  { icon: "📄", title: "Application", body: "Fee: $50 (demo)" },
-  { icon: "🔒", title: "Security deposit", body: "$400" },
-  { icon: "🧾", title: "Move-in fee", body: "$200" },
-  { icon: "✍️", title: "Payment due at signing", body: "$600 (demo totals: deposit + move-in fee portions; confirm with leasing)." },
-  { icon: "📊", title: "Utilities", body: "Flat $95/mo community utilities estimate (mock)." },
+  {
+    id: "lease-application",
+    icon: "📄",
+    title: "Application",
+    detail: "One-time processing",
+    price: "$50",
+    status: "Due with app",
+    body: "Fee: $50 (demo). Non-refundable in this mock copy — confirm policy with leasing.",
+  },
+  {
+    id: "lease-deposit",
+    icon: "🔒",
+    title: "Security deposit",
+    detail: "Refundable per lease",
+    price: "$400",
+    status: "At signing",
+    body: "$400 security deposit (demo). Held per local regulations; release terms in final lease.",
+  },
+  {
+    id: "lease-movein",
+    icon: "🧾",
+    title: "Move-in fee",
+    detail: "Administrative",
+    price: "$200",
+    status: "At signing",
+    body: "$200 move-in fee (demo) — covers orientation and documentation in this placeholder copy.",
+  },
+  {
+    id: "lease-signing",
+    icon: "✍️",
+    title: "Payment due at signing",
+    detail: "Deposit + move-in portions",
+    price: "$600",
+    status: "At signing",
+    body: "$600 (demo totals: deposit + move-in fee portions; confirm with leasing).",
+  },
+  {
+    id: "lease-utilities",
+    icon: "📊",
+    title: "Utilities",
+    detail: "Community estimate",
+    price: "$95/mo",
+    status: "Estimated",
+    body: "Flat $95/mo community utilities estimate (mock). Actual billing may vary by unit.",
+  },
 ];
 
 const defaultAmenities: AmenityItem[] = [
-  { icon: "🚶", label: "Walkable location" },
-  { icon: "🧹", label: "Bi-monthly cleaning (twice a month)" },
-  { icon: "❄️", label: "A/C in living room only" },
-  { icon: "🧊", label: "Refrigerator" },
-  { icon: "🔥", label: "Stove" },
-  { icon: "🧺", label: "In-unit laundry (washer & dryer)" },
-  { icon: "📶", label: "WiFi" },
-  { icon: "🚌", label: "Public transportation" },
-  { icon: "📦", label: "Microwave" },
-  { icon: "🍳", label: "Oven" },
-  { icon: "🪑", label: "Desk" },
-  { icon: "🛏️", label: "Bed" },
-  { icon: "🌡️", label: "Heating" },
-  { icon: "🎛️", label: "AC" },
+  { id: "amen-walk", icon: "🚶", label: "Walkable location" },
+  { id: "amen-clean", icon: "🧹", label: "Bi-monthly cleaning (twice a month)" },
+  { id: "amen-ac-lr", icon: "❄️", label: "A/C in living room only" },
+  { id: "amen-fridge", icon: "🧊", label: "Refrigerator" },
+  { id: "amen-stove", icon: "🔥", label: "Stove" },
+  { id: "amen-laundry", icon: "🧺", label: "In-unit laundry (washer & dryer)" },
+  { id: "amen-wifi", icon: "📶", label: "WiFi" },
+  { id: "amen-transit", icon: "🚌", label: "Public transportation" },
+  { id: "amen-micro", icon: "📦", label: "Microwave" },
+  { id: "amen-oven", icon: "🍳", label: "Oven" },
+  { id: "amen-desk", icon: "🪑", label: "Desk" },
+  { id: "amen-bed", icon: "🛏️", label: "Bed" },
+  { id: "amen-heat", icon: "🌡️", label: "Heating" },
+  { id: "amen-ac", icon: "🎛️", label: "AC" },
 ];
 
 const defaultBundles: BundleCard[] = [
   {
+    id: "bundle-2f",
     label: "Second floor rental",
     strikethrough: "$3,400/mo",
     price: "$3,200/mo",
@@ -338,6 +425,7 @@ const defaultBundles: BundleCard[] = [
     roomsLine: "Room 2 · Room 3 · Room 4 · Room 5",
   },
   {
+    id: "bundle-full",
     label: "Full house",
     strikethrough: "$7,175/mo",
     price: "$7,000/mo",

@@ -152,7 +152,7 @@ export function RentListingsView() {
           </Link>
         </div>
       ) : (
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-10 grid gap-6 sm:gap-7 md:grid-cols-2 xl:grid-cols-3">
           {roomResults.map((row) => (
             <RoomListingCard key={row.key} row={row} />
           ))}

@@ -14,7 +14,6 @@ import {
   type AdminLeaseRow,
 } from "@/lib/demo-admin-leases";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import { PortalLeaseWorkflowClient } from "@/components/portal/portal-lease-workflow-client";
 
 const KPI_LABELS = ["Manager review", "Admin review", "With resident", "Signed"] as const;
 
@@ -387,14 +386,6 @@ export function AdminLeasesClient() {
         onSaved={() => setTick((t) => t + 1)}
         showToast={showToast}
       />
-
-      <div className="mt-10 border-t border-slate-200 pt-8">
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Demo: lease PDF + full thread</p>
-        <p className="mt-1 text-sm text-slate-500">Admin view includes internal notes and all portal roles on the lease thread.</p>
-        <div className="mt-4">
-          <PortalLeaseWorkflowClient mode="admin" />
-        </div>
-      </div>
     </div>
   );
 }

@@ -7,62 +7,20 @@ import { PropertyDetailActions } from "@/components/marketing/property-detail-ac
 import { ListingStickySubnav } from "@/components/marketing/listing-detail-subnav";
 import { ListingLocationBlock } from "@/components/marketing/listing-location-block";
 import {
+  AmenitiesTableInteractive,
   BathroomTableInteractive,
+  BundleTableInteractive,
   InteractiveFloorPlanCard,
+  LeaseBasicsTableInteractive,
   SharedTableInteractive,
 } from "@/components/marketing/listing-detail-tables-client";
 import { listingDemoMapCenter } from "@/lib/listing-map";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import type { MockProperty } from "@/data/types";
-import type {
-  AmenityItem,
-  BundleCard,
-  LeaseBasicRow,
-  ListingRichContent,
-} from "@/data/listing-rich-content";
+import type { ListingRichContent } from "@/data/listing-rich-content";
 
 const sectionScroll =
   "scroll-mt-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+8.75rem))]";
-
-function LeaseBasicsBlock({ rows }: { rows: LeaseBasicRow[] }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Lease basics</h2>
-      <ul className="mt-6 divide-y divide-slate-100">
-        {rows.map((row) => (
-          <li key={row.title} className="flex gap-4 py-5 first:pt-0">
-            <span className="text-2xl" aria-hidden>
-              {row.icon}
-            </span>
-            <div>
-              <p className="font-semibold text-slate-900">{row.title}</p>
-              <p className="mt-1 text-sm leading-relaxed text-slate-600">{row.body}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function AmenitiesBlock({ items }: { items: AmenityItem[] }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Amenities</h2>
-      <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Shared spaces and house features</p>
-      <div className="mt-6 grid grid-cols-1 gap-x-12 sm:grid-cols-2">
-        {items.map((a) => (
-          <div key={a.label} className="flex items-center gap-3 border-b border-slate-100 py-3.5 text-sm text-slate-800">
-            <span className="text-lg text-primary" aria-hidden>
-              {a.icon}
-            </span>
-            <span>{a.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function formatBoldSegments(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -76,30 +34,6 @@ function formatBoldSegments(text: string) {
     }
     return part;
   });
-}
-
-function BundleCards({ cards, body }: { cards: BundleCard[]; body: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Bundles & leasing</h2>
-      <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Grouped packages</p>
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {cards.map((c) => (
-          <div key={c.label} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{c.label}</p>
-            <div className="mt-2 flex flex-wrap items-baseline gap-2">
-              {c.strikethrough ? <span className="text-sm text-slate-400 line-through">{c.strikethrough}</span> : null}
-              <span className="text-2xl font-bold text-slate-900">{c.price}</span>
-              {c.promo ? <span className="text-[11px] font-bold uppercase tracking-wide text-teal-600">{c.promo}</span> : null}
-            </div>
-            <p className="mt-4 text-sm text-slate-600">{c.roomsLine}</p>
-          </div>
-        ))}
-      </div>
-      <p className="mt-8 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Lease lengths</p>
-      <p className="mt-3 text-sm leading-relaxed text-slate-700">{formatBoldSegments(body)}</p>
-    </div>
-  );
 }
 
 const primaryCtaClass =
@@ -151,10 +85,7 @@ function Sidebar({
 }
 
 export function ListingDetailSections({ property, rich }: { property: MockProperty; rich: ListingRichContent }) {
-  const roomCount = rich.floorPlans.reduce(
-    (n, f) => n + f.rooms.length + (f.hiddenRoomNames?.length ?? 0),
-    0,
-  );
+  const roomCount = rich.floorPlans.reduce((n, f) => n + f.rooms.length, 0);
   return (
     <div className="bg-[#f4f7fb]">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:py-10">
@@ -231,15 +162,43 @@ export function ListingDetailSections({ property, rich }: { property: MockProper
             </section>
 
             <section id="lease-basics" className={sectionScroll}>
-              <LeaseBasicsBlock rows={rich.leaseBasics} />
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+                <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Lease basics</h2>
+                <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
+                  Each line is a quick summary. Open <span className="font-semibold text-slate-800">Details</span> for the full explanation and next steps (demo).
+                </p>
+                <div className="mt-5 md:overflow-x-auto">
+                  <LeaseBasicsTableInteractive rows={rich.leaseBasics} listingPropertyId={property.id} />
+                </div>
+              </div>
             </section>
 
             <section id="amenities" className={sectionScroll}>
-              <AmenitiesBlock items={rich.amenities} />
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+                <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Amenities</h2>
+                <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Shared spaces and house features</p>
+                <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
+                  Same layout as rooms. Use <span className="font-semibold text-slate-800">Details</span> for a short amenity note (demo).
+                </p>
+                <div className="mt-5 md:overflow-x-auto">
+                  <AmenitiesTableInteractive rows={rich.amenities} listingPropertyId={property.id} />
+                </div>
+              </div>
             </section>
 
             <section id="bundles" className={sectionScroll}>
-              <BundleCards cards={rich.bundleCards} body={rich.bundlesText} />
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+                <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Bundles & leasing</h2>
+                <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Grouped packages</p>
+                <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
+                  Compare bundles at a glance. Open <span className="font-semibold text-slate-800">Details</span> for scope and pricing notes (demo).
+                </p>
+                <div className="mt-4 md:overflow-x-auto">
+                  <BundleTableInteractive rows={rich.bundleCards} listingPropertyId={property.id} />
+                </div>
+                <p className="mt-8 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Lease lengths</p>
+                <p className="mt-3 text-sm leading-relaxed text-slate-700">{formatBoldSegments(rich.bundlesText)}</p>
+              </div>
             </section>
 
             <section id="location" className={sectionScroll}>

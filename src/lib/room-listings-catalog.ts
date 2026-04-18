@@ -23,11 +23,51 @@ export type RoomListingRow = {
   availabilityLabel: string;
   bathroomHint: string;
   zip: string;
+  /** Bold title line (street / building line) */
+  headlineAddress: string;
+  fullAddress: string;
+  propertyBeds: number;
+  propertyBaths: number;
+  descriptionBlurb: string;
+  listingTags: readonly string[];
+  /** Shown on image overlay, e.g. "$775" or "$750–$875" */
+  priceOverlayLabel: string;
 };
 
 function streetUpperFromProperty(p: MockProperty): string {
   const first = p.address.split(",")[0]?.trim() ?? p.address;
   return first.toUpperCase();
+}
+
+function headlineAddressFromProperty(p: MockProperty): string {
+  return p.address.split(",")[0]?.trim() ?? p.address;
+}
+
+function descriptionBlurb(p: MockProperty, room: ListingRoomRow): string {
+  const detail = room.detail.replace(/\s+/g, " ").trim();
+  const extra = detail.length > 80 ? `${detail.slice(0, 80)}…` : detail;
+  if (p.tagline && extra) return `${p.tagline} ${extra}`;
+  return p.tagline || extra || "Seattle shared housing with common areas and a practical layout.";
+}
+
+function listingTags(p: MockProperty): readonly string[] {
+  return ["Shared Housing", p.neighborhood, "Shared Living"] as const;
+}
+
+function priceOverlayLabelForProperty(p: MockProperty): string {
+  const rich = getListingRichContent(p);
+  const nums: number[] = [];
+  for (const f of rich.floorPlans) {
+    for (const r of f.rooms) {
+      const n = parseMonthlyRent(r.price.replace("/month", "/ mo"));
+      if (n !== null) nums.push(n);
+    }
+  }
+  if (nums.length === 0) return "—";
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  if (min === max) return `$${min.toLocaleString("en-US")}`;
+  return `$${min.toLocaleString("en-US")}–$${max.toLocaleString("en-US")}`;
 }
 
 function formatRoomTitle(floorLabel: string, roomName: string): string {
@@ -112,6 +152,13 @@ export function filterRoomListings(
           availabilityLabel: availabilityLabel(room),
           bathroomHint: bathroomHintFromRoom(room),
           zip: p.zip,
+          headlineAddress: headlineAddressFromProperty(p),
+          fullAddress: p.address,
+          propertyBeds: p.beds,
+          propertyBaths: p.baths,
+          descriptionBlurb: descriptionBlurb(p, room),
+          listingTags: listingTags(p),
+          priceOverlayLabel: priceOverlayLabelForProperty(p),
         });
       }
     }

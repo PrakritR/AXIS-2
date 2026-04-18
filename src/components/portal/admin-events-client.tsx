@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SegmentedThree } from "@/components/ui/segmented-control";
 import { TabNav, type TabItem } from "@/components/ui/tabs";
@@ -170,16 +169,20 @@ function InquiryDetailSheet({
   );
 }
 
+function sameLocalDay(a: Date, b: Date) {
+  return a.toDateString() === b.toDateString();
+}
+
 function MonthGrid({
   anchor,
   availability,
   events,
-  onDayClick,
+  onDayDoubleClick,
 }: {
   anchor: Date;
   availability: Set<string>;
   events: PlannedEvent[];
-  onDayClick?: (d: Date) => void;
+  onDayDoubleClick?: (d: Date) => void;
 }) {
   const year = anchor.getFullYear();
   const month = anchor.getMonth();
@@ -211,7 +214,8 @@ function MonthGrid({
             <button
               key={i}
               type="button"
-              onClick={() => onDayClick?.(d)}
+              title="Double-click for events"
+              onDoubleClick={() => onDayDoubleClick?.(d)}
               className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-sm font-semibold text-slate-800 transition hover:border-primary/30 ${dayCellTone(d, availability, events)}`}
             >
               {d.getDate()}
@@ -237,10 +241,12 @@ function EventsWeekGrid({
   weekMonday,
   availability,
   planned,
+  onDayDoubleClick,
 }: {
   weekMonday: Date;
   availability: Set<string>;
   planned: PlannedEvent[];
+  onDayDoubleClick?: (d: Date) => void;
 }) {
   const days = weekDatesFromMonday(weekMonday);
   return (
@@ -255,21 +261,16 @@ function EventsWeekGrid({
       </div>
       <div className="mt-1 grid min-h-[min(12rem,28vh)] w-full grid-cols-7 gap-1 sm:min-h-[14rem] sm:gap-1.5">
         {days.map((d) => (
-          <div
+          <button
             key={toLocalDateStr(d)}
-            className={`min-h-[10rem] rounded-xl border p-2 text-left text-[11px] leading-snug text-slate-600 sm:min-h-[11rem] sm:p-2.5 ${dayCellTone(d, availability, planned)}`}
+            type="button"
+            onDoubleClick={() => onDayDoubleClick?.(d)}
+            title="Double-click for events"
+            aria-label={`${d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })} — double-click for events`}
+            className={`relative min-h-[10rem] rounded-xl border p-2 text-left text-[11px] leading-snug text-slate-600 transition hover:border-primary/25 sm:min-h-[11rem] sm:p-2.5 ${dayCellTone(d, availability, planned)}`}
           >
-              {planned
-                .filter((e) => {
-                  const t = new Date(e.start);
-                  return t.toDateString() === d.toDateString();
-                })
-                .map((e) => (
-                  <p key={e.id} className="mb-1 font-medium text-slate-900">
-                    {e.title}
-                  </p>
-                ))}
-          </div>
+            <span className="pointer-events-none absolute bottom-2 left-2 text-[10px] font-semibold text-slate-400">{d.getDate()}</span>
+          </button>
         ))}
       </div>
     </div>
@@ -279,20 +280,23 @@ function EventsWeekGrid({
 function DayAgendaView({
   day,
   availability,
-  planned,
+  onDayDoubleClick,
 }: {
   day: Date;
   availability: Set<string>;
-  planned: PlannedEvent[];
+  onDayDoubleClick?: (d: Date) => void;
 }) {
   const ds = toLocalDateStr(day);
-  const dayEvents = planned.filter((e) => new Date(e.start).toDateString() === day.toDateString());
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-4">
+    <div
+      className="rounded-2xl border border-slate-200/90 bg-white p-4"
+      onDoubleClick={() => onDayDoubleClick?.(day)}
+    >
       <p className="text-sm font-semibold text-slate-900">
         {day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
       </p>
+      <p className="mt-1 text-xs text-slate-400">Double-click to view events and meeting requests for this day.</p>
       <div className="mt-4 max-h-[min(28rem,55vh)] space-y-1 overflow-y-auto">
         {Array.from({ length: SLOTS_PER_DAY }).map((_, slotIndex) => {
           const open = availability.has(dateSlotKey(ds, slotIndex));
@@ -309,19 +313,88 @@ function DayAgendaView({
           );
         })}
       </div>
-      {dayEvents.length ? (
-        <div className="mt-4 border-t border-slate-100 pt-4">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Events</p>
-          <ul className="mt-2 space-y-2">
-            {dayEvents.map((e) => (
-              <li key={e.id} className="text-sm font-medium text-slate-800">
-                {e.title} · {formatRangeLabel(e.start, e.end)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </div>
+  );
+}
+
+function EventDaySheet({
+  day,
+  open,
+  onClose,
+  planned,
+  inquiries,
+  onOpenInquiry,
+}: {
+  day: Date | null;
+  open: boolean;
+  onClose: () => void;
+  planned: PlannedEvent[];
+  inquiries: PartnerInquiry[];
+  onOpenInquiry: (row: PartnerInquiry) => void;
+}) {
+  if (!open || !day) return null;
+  const dayEvents = planned.filter((e) => sameLocalDay(new Date(e.start), day));
+  const dayInquiries = inquiries.filter((r) => sameLocalDay(new Date(r.proposedStart), day));
+
+  return (
+    <>
+      <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/25 backdrop-blur-[1px]" onClick={onClose} />
+      <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">This day</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">
+              {day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </p>
+          </div>
+          <Button type="button" variant="ghost" className="shrink-0 rounded-full" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Planned events</p>
+            {dayEvents.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">No events on this day.</p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {dayEvents.map((e) => (
+                  <li key={e.id} className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2 text-sm text-slate-800">
+                    <span className="font-semibold text-slate-900">{e.title}</span>
+                    <span className="text-slate-500"> · {formatRangeLabel(e.start, e.end)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Partner inquiries</p>
+            {dayInquiries.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">No meeting requests on this day.</p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {dayInquiries.map((row) => (
+                  <li key={row.id} className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-3 text-sm">
+                    <div>
+                      <p className="font-semibold text-slate-900">{row.name}</p>
+                      <p className="text-xs text-slate-500">{row.email}</p>
+                      <p className="mt-1 text-xs text-slate-600">{formatRangeLabel(row.proposedStart, row.proposedEnd)}</p>
+                    </div>
+                    {row.status === "pending" ? (
+                      <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => onOpenInquiry(row)}>
+                        Review
+                      </Button>
+                    ) : (
+                      <p className="text-xs capitalize text-slate-500">Status: {row.status}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }
 
@@ -513,6 +586,7 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
   const { showToast } = useAppUi();
   const [tick, setTick] = useState(0);
   const [detail, setDetail] = useState<PartnerInquiry | null>(null);
+  const [eventSheetDay, setEventSheetDay] = useState<Date | null>(null);
   const [monthAnchor] = useState(() => new Date());
   const [calMode, setCalMode] = useState<CalendarMode>("week");
   const [calAnchor, setCalAnchor] = useState(() => {
@@ -533,14 +607,13 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
     };
   }, [bump]);
 
-  const { availability, inquiries, planned, kpis, pendingRows } = useMemo(() => {
+  const { availability, inquiries, planned, kpis } = useMemo(() => {
     const inq = readPartnerInquiries();
     return {
       availability: readAvailabilityDateSet(),
       inquiries: inq,
       planned: readPlannedEvents(),
       kpis: eventKpis(monthAnchor),
-      pendingRows: inq.filter((r) => r.status === "pending"),
     };
   }, [tick, monthAnchor]);
 
@@ -564,6 +637,29 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
     setCalAnchor(t);
   };
 
+  const openDaySheet = (d: Date) => {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+    setEventSheetDay(x);
+  };
+
+  const goTodayCalendar = () => {
+    calToday();
+    setCalMode("day");
+  };
+
+  const goThisWeekCalendar = () => {
+    calToday();
+    setCalMode("week");
+  };
+
+  const goThisMonthCalendar = () => {
+    const t = new Date();
+    t.setDate(1);
+    t.setHours(12, 0, 0, 0);
+    setCalAnchor(t);
+    setCalMode("month");
+  };
+
   return (
     <ManagerSectionShell title="Events" actions={shellActions}>
       <div className="space-y-5">
@@ -574,99 +670,48 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
         ) : (
           <>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {(
-                [
-                  ["Today", kpis.today],
-                  ["This week", kpis.week],
-                  ["This month", kpis.month],
-                  ["Total booked", kpis.total],
-                ] as const
-              ).map(([label, value], i) => (
-                <div
-                  key={label}
-                  className={`rounded-2xl border px-4 py-3 ${
-                    i === 2 ? "border-primary/25 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]" : "border-slate-100 bg-slate-50/60"
-                  }`}
-                >
-                  <p className="text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
-                  <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <Link
-                href="#events-calendar"
-                className="text-sm font-semibold text-primary underline-offset-2 hover:underline"
+              <button
+                type="button"
+                onClick={goTodayCalendar}
+                className={`rounded-2xl border px-4 py-3 text-left transition hover:border-primary/30 hover:bg-white ${
+                  calMode === "day" ? "border-primary/25 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]" : "border-slate-100 bg-slate-50/60"
+                }`}
               >
-                Jump to calendar
-              </Link>
-              <p className="text-xs text-slate-500">Planned events and inquiries are above the calendar.</p>
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Planned events</p>
-              {planned.length === 0 ? (
-                <p className="mt-2 text-sm text-slate-500">Nothing scheduled yet. Accepted partner meetings appear here.</p>
-              ) : (
-                <ul className="mt-2 space-y-2 text-sm text-slate-700">
-                  {planned.map((e) => (
-                    <li key={e.id} className="rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2">
-                      <span className="font-semibold text-slate-900">{e.title}</span>
-                      <span className="text-slate-500"> · {formatRangeLabel(e.start, e.end)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Partner inquiries</p>
-              <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
-                {pendingRows.length === 0 ? (
-                  <div className="px-4 py-12 text-center text-sm text-slate-500">No pending meeting requests.</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[640px] border-collapse text-left">
-                      <thead>
-                        <tr className="border-b border-slate-200/90 bg-white">
-                          <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Partner</th>
-                          <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Email</th>
-                          <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Proposed window</th>
-                          <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pendingRows.map((row) => (
-                          <tr key={row.id} className="border-b border-slate-100 last:border-0">
-                            <td className="px-5 py-4 font-semibold text-slate-900">{row.name}</td>
-                            <td className="px-5 py-4 text-slate-600">{row.email}</td>
-                            <td className="px-5 py-4 text-sm text-slate-600">{formatRangeLabel(row.proposedStart, row.proposedEnd)}</td>
-                            <td className="px-5 py-4 text-right">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
-                                onClick={() => setDetail(row)}
-                              >
-                                Details
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.today}</p>
+                <p className="mt-0.5 text-xs font-medium text-slate-500">Today · day view</p>
+              </button>
+              <button
+                type="button"
+                onClick={goThisWeekCalendar}
+                className={`rounded-2xl border px-4 py-3 text-left transition hover:border-primary/30 hover:bg-white ${
+                  calMode === "week" ? "border-primary/25 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]" : "border-slate-100 bg-slate-50/60"
+                }`}
+              >
+                <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.week}</p>
+                <p className="mt-0.5 text-xs font-medium text-slate-500">This week · week view</p>
+              </button>
+              <button
+                type="button"
+                onClick={goThisMonthCalendar}
+                className={`rounded-2xl border px-4 py-3 text-left transition hover:border-primary/30 hover:bg-white ${
+                  calMode === "month" ? "border-primary/25 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]" : "border-slate-100 bg-slate-50/60"
+                }`}
+              >
+                <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.month}</p>
+                <p className="mt-0.5 text-xs font-medium text-slate-500">This month · month view</p>
+              </button>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
+                <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.total}</p>
+                <p className="mt-0.5 text-xs font-medium text-slate-500">Total booked</p>
               </div>
             </div>
 
-            <section id="events-calendar" className="scroll-mt-28 space-y-4 pt-4">
-              <div className="flex flex-col gap-3 border-t border-slate-200/80 pt-6 sm:flex-row sm:items-end sm:justify-between">
+            <section id="events-calendar" className="scroll-mt-28 space-y-4 pt-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Calendar</p>
-                  <h2 className="mt-1 text-lg font-semibold text-slate-900">Availability and events</h2>
-                  <p className="mt-1 text-sm text-slate-600">Switch day, week, or month. Use arrows to move in time.</p>
+                  <h2 className="mt-1 text-lg font-semibold text-slate-900">Availability</h2>
+                  <p className="mt-1 text-sm text-slate-600">Double-click a day to see events and meeting requests.</p>
                 </div>
                 <SegmentedThree
                   value={calMode}
@@ -693,11 +738,16 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
               </div>
 
               {calMode === "day" ? (
-                <DayAgendaView day={calAnchor} availability={availability} planned={planned} />
+                <DayAgendaView day={calAnchor} availability={availability} onDayDoubleClick={openDaySheet} />
               ) : null}
 
               {calMode === "week" ? (
-                <EventsWeekGrid weekMonday={weekMondayForGrid} availability={availability} planned={planned} />
+                <EventsWeekGrid
+                  weekMonday={weekMondayForGrid}
+                  availability={availability}
+                  planned={planned}
+                  onDayDoubleClick={openDaySheet}
+                />
               ) : null}
 
               {calMode === "month" ? (
@@ -705,17 +755,25 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
                   anchor={monthDisplayAnchor}
                   availability={availability}
                   events={planned}
-                  onDayClick={(d) => {
-                    setCalMode("day");
-                    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
-                    setCalAnchor(x);
-                  }}
+                  onDayDoubleClick={openDaySheet}
                 />
               ) : null}
             </section>
           </>
         )}
       </div>
+
+      <EventDaySheet
+        day={eventSheetDay}
+        open={Boolean(eventSheetDay)}
+        onClose={() => setEventSheetDay(null)}
+        planned={planned}
+        inquiries={inquiries}
+        onOpenInquiry={(row) => {
+          setEventSheetDay(null);
+          setDetail(row);
+        }}
+      />
 
       <InquiryDetailSheet
         open={Boolean(detail)}
