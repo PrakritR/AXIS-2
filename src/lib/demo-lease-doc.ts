@@ -11,7 +11,6 @@ function fullAddress(h: HouseUnit) {
   return `${h.street}${line2}, ${h.city}, ${h.state} ${h.zip}`;
 }
 
-/** Build token map from application + linked house (house may be null — still returns safe strings). */
 export function leaseTokenMap(app: RentalApplication, house: HouseUnit | null): Record<string, string> {
   const h = house;
   return {
@@ -37,7 +36,6 @@ export function fillLeaseTemplate(templateHtml: string, app: RentalApplication, 
   return templateHtml.replace(PLACEHOLDER, (_, key: string) => map[key] ?? `{{${key}}}`);
 }
 
-/** Fetch from Next.js `public/assets/lease-example.html` → `/assets/lease-example.html`. */
 export async function fetchLeaseTemplate(): Promise<string> {
   try {
     const res = await fetch("/assets/lease-example.html", { cache: "no-store" });

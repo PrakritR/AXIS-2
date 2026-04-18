@@ -1,6 +1,8 @@
 import { emitAdminUi } from "@/lib/demo-admin-ui";
 
 const STORAGE_KEY = "axis_admin_inbox_messages_v2";
+/** Pre–v2 partner-only inbox (migrated once into STORAGE_KEY). */
+const LEGACY_PARTNER_KEY = "axis_admin_partner_inbox_threads_v1";
 
 export type InboxSenderRole = "partner" | "manager" | "resident" | "owner" | "admin";
 
@@ -29,11 +31,40 @@ function isBrowser() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
+function migrateLegacyRow(m: Record<string, unknown>): InboxMessage {
+  return {
+    id: typeof m.id === "string" ? m.id : crypto.randomUUID(),
+    name: String(m.name ?? ""),
+    email: String(m.email ?? ""),
+    topic: String(m.topic ?? ""),
+    body: String(m.body ?? ""),
+    createdAt: typeof m.createdAt === "string" ? m.createdAt : new Date().toISOString(),
+    read: Boolean(m.read),
+    folder: "inbox",
+    senderRole: "partner",
+    thread: [],
+  };
+}
+
 function readAll(): InboxMessage[] {
   if (!isBrowser()) return [];
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw === null) {
+      const legacyRaw = window.localStorage.getItem(LEGACY_PARTNER_KEY);
+      if (legacyRaw) {
+        try {
+          const legacy = JSON.parse(legacyRaw) as unknown;
+          if (Array.isArray(legacy)) {
+            const migrated = legacy.map((row) => migrateLegacyRow(row as Record<string, unknown>));
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+            emitAdminUi();
+            return migrated;
+          }
+        } catch {
+          /* fall through to seed */
+        }
+      }
       const s = seedInbox();
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
       return s;
@@ -102,12 +133,7 @@ export function appendInboxMessage(msg: Omit<InboxMessage, "id" | "createdAt" | 
 }
 
 /** Partner / public site contact form */
-export function appendPartnerInboxMessage(payload: {
-  name: string;
-  email: string;
-  topic: string;
-  body: string;
-}): InboxMessage {
+export function appendPartnerInboxMessage(payload: { name: string; email: string; topic: string; body: string }): InboxMessage {
   return appendInboxMessage({
     name: payload.name,
     email: payload.email,
@@ -184,7 +210,7 @@ export function readPartnerInboxMessages(): InboxMessage[] {
   return readInboxMessages();
 }
 
-/** @deprecated */
+/** @deprecated use markInboxMessageRead */
 export function markPartnerInboxMessageRead(id: string): boolean {
   return markInboxMessageRead(id);
 }

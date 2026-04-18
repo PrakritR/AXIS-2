@@ -73,11 +73,6 @@ export function readLeaseThreadMessages(applicationId: string): LeaseThreadMessa
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
-/**
- * Residents must not see admin-authored notes.
- * Admin sees the full thread (admin ↔ manager, admin ↔ resident, etc.).
- * Manager and owner see every message on the application thread.
- */
 export function listLeaseThreadMessagesForViewer(applicationId: string, viewer: LeaseThreadAuthor): LeaseThreadMessage[] {
   const rows = readLeaseThreadMessages(applicationId);
   if (viewer === "resident") return rows.filter((m) => m.authorRole !== "admin");
@@ -104,7 +99,6 @@ export function appendLeaseThreadMessage(
   return row;
 }
 
-/** Only the original author (same portal role) may edit their message body. */
 export function editLeaseThreadMessage(
   messageId: string,
   editorRole: LeaseThreadAuthor,
