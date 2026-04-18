@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RoomListingCard } from "@/components/marketing/room-listing-card";
 import { mockProperties } from "@/data/mock-properties";
@@ -9,17 +10,39 @@ import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-
 import { parseRadiusParam, parseUSZip } from "@/lib/listings-search";
 import { filterRoomListings } from "@/lib/room-listings-catalog";
 
-export type ListingsSearchProps = {
-  zipRaw: string;
-  radiusMiles: number;
-  moveIn: string;
-  moveOut: string;
-  maxBudgetNum: number | null;
-  bathroom: string;
-};
+function firstString(v: string | string[] | undefined): string | undefined {
+  if (v === undefined) return undefined;
+  return Array.isArray(v) ? v[0] : v;
+}
 
-export function RentListingsView(props: ListingsSearchProps) {
+export function parseListingsSearchFromParams(
+  sp: Record<string, string | string[] | undefined>,
+  firstStringFn: (v: string | string[] | undefined) => string | undefined,
+) {
+  const zipRaw = firstStringFn(sp.zip) ?? "";
+  const centerZip = parseUSZip(zipRaw);
+  const radiusMiles = parseRadiusParam(firstStringFn(sp.radius));
+  const moveIn = firstStringFn(sp.moveIn) ?? "";
+  const moveOut = firstStringFn(sp.moveOut) ?? "";
+  const maxBudgetRaw = firstStringFn(sp.maxBudget);
+  const maxBudgetNum =
+    maxBudgetRaw != null && maxBudgetRaw !== "" && Number.isFinite(Number(maxBudgetRaw)) ? Number(maxBudgetRaw) : null;
+  const bathroom = firstStringFn(sp.bathroom) ?? "any";
+  return { zipRaw, centerZip, radiusMiles, moveIn, moveOut, maxBudgetNum, bathroom };
+}
+
+/** Public rent listings — client-only URL parsing so the route never depends on server `searchParams` shape. */
+export function RentListingsView() {
+  const searchParams = useSearchParams();
   const [extras, setExtras] = useState<MockProperty[]>([]);
+
+  const props = useMemo(() => {
+    const sp: Record<string, string | undefined> = {};
+    searchParams.forEach((value, key) => {
+      sp[key] = value;
+    });
+    return parseListingsSearchFromParams(sp, firstString);
+  }, [searchParams]);
 
   const refreshExtras = useCallback(() => {
     setExtras(readExtraListings());
@@ -137,20 +160,4 @@ export function RentListingsView(props: ListingsSearchProps) {
       )}
     </div>
   );
-}
-
-export function parseListingsSearchFromParams(
-  sp: Record<string, string | string[] | undefined>,
-  firstString: (v: string | string[] | undefined) => string | undefined,
-) {
-  const zipRaw = firstString(sp.zip) ?? "";
-  const centerZip = parseUSZip(zipRaw);
-  const radiusMiles = parseRadiusParam(firstString(sp.radius));
-  const moveIn = firstString(sp.moveIn) ?? "";
-  const moveOut = firstString(sp.moveOut) ?? "";
-  const maxBudgetRaw = firstString(sp.maxBudget);
-  const maxBudgetNum =
-    maxBudgetRaw != null && maxBudgetRaw !== "" && Number.isFinite(Number(maxBudgetRaw)) ? Number(maxBudgetRaw) : null;
-  const bathroom = firstString(sp.bathroom) ?? "any";
-  return { zipRaw, centerZip, radiusMiles, moveIn, moveOut, maxBudgetNum, bathroom };
 }

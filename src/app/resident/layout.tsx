@@ -2,12 +2,13 @@ import { PublicNavbar } from "@/components/layout/public-navbar";
 import { ResidentPortalPillNav } from "@/components/portal/resident-portal-pill-nav";
 import { ResidentPortalTopbar } from "@/components/portal/resident-portal-topbar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
+import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
-import { isResidentApplicationApproved } from "@/lib/portals/resident-state";
 
-export default function ResidentLayout({ children }: { children: React.ReactNode }) {
-  const residentPortal = getResidentPortalDefinition();
-  const applicationApproved = isResidentApplicationApproved();
+export default async function ResidentLayout({ children }: { children: React.ReactNode }) {
+  const residentPortal = await getResidentPortalDefinition();
+  const { profile } = await getServerSessionProfile();
+  const applicationApproved = profile?.application_approved ?? false;
 
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100/80 via-white to-slate-50/90">

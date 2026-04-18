@@ -10,8 +10,8 @@ const portalsByKind: Record<Exclude<PortalKind, "resident">, PortalDefinition> =
   admin: adminPortal,
 };
 
-export function getPortalDefinition(kind: PortalKind): PortalDefinition {
-  if (kind === "resident") return getResidentPortalDefinition();
+export async function getPortalDefinition(kind: PortalKind): Promise<PortalDefinition> {
+  if (kind === "resident") return await getResidentPortalDefinition();
   return portalsByKind[kind];
 }
 

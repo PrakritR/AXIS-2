@@ -102,6 +102,7 @@ export default function PartnerPricingPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
 
   const selected = useMemo(() => tierById(selectedTierId), [selectedTierId]);
   const price = billing === "monthly" ? selected.monthly : selected.annual;
@@ -303,15 +304,44 @@ export default function PartnerPricingPage() {
             </p>
             <button
               type="button"
-              onClick={() =>
-                showToast(
-                  `Continue with ${selected.label}: ${billing} checkout (demo). Next: create your manager account.`,
-                )
-              }
-              className="inline-flex shrink-0 items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all duration-150 hover:brightness-105 active:scale-[0.98]"
+              disabled={checkoutBusy}
+              onClick={() => {
+                void (async () => {
+                  if (!email.trim() || !fullName.trim()) {
+                    showToast("Enter your full name and email before checkout.");
+                    return;
+                  }
+                  setCheckoutBusy(true);
+                  try {
+                    const res = await fetch("/api/stripe/checkout", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        tierId: selectedTierId,
+                        billing,
+                        email: email.trim(),
+                        fullName: fullName.trim(),
+                        phone: phone.trim(),
+                        promo: code.trim(),
+                      }),
+                    });
+                    const payload = (await res.json()) as { url?: string; error?: string };
+                    if (!res.ok || !payload.url) {
+                      showToast(payload.error ?? "Could not start checkout. Configure Stripe env vars.");
+                      return;
+                    }
+                    window.location.href = payload.url;
+                  } catch {
+                    showToast("Network error starting checkout.");
+                  } finally {
+                    setCheckoutBusy(false);
+                  }
+                })();
+              }}
+              className="inline-flex shrink-0 items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all duration-150 hover:brightness-105 active:scale-[0.98] disabled:opacity-60"
               style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
             >
-              Continue with {selected.label}
+              {checkoutBusy ? "Redirecting…" : `Continue with ${selected.label}`}
             </button>
           </div>
 

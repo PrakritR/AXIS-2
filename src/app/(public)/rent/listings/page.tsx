@@ -1,25 +1,19 @@
-import { RentListingsView, parseListingsSearchFromParams } from "@/components/marketing/rent-listings-view";
+import { Suspense } from "react";
+import { RentListingsView } from "@/components/marketing/rent-listings-view";
 
-type PageProps = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
-
-function firstString(v: string | string[] | undefined): string | undefined {
-  if (v === undefined) return undefined;
-  return Array.isArray(v) ? v[0] : v;
+function ListingsFallback() {
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-12 text-center text-sm text-slate-600" aria-live="polite">
+      Loading listings…
+    </div>
+  );
 }
 
-export default async function ListingsPage({ searchParams }: PageProps) {
-  const sp = await searchParams;
-  const parsed = parseListingsSearchFromParams(sp, firstString);
+/** Client URL parsing + Suspense avoids server `searchParams` / RSC edge cases that can 500 the page. */
+export default function ListingsPage() {
   return (
-    <RentListingsView
-      zipRaw={parsed.zipRaw}
-      radiusMiles={parsed.radiusMiles}
-      moveIn={parsed.moveIn}
-      moveOut={parsed.moveOut}
-      maxBudgetNum={parsed.maxBudgetNum}
-      bathroom={parsed.bathroom}
-    />
+    <Suspense fallback={<ListingsFallback />}>
+      <RentListingsView />
+    </Suspense>
   );
 }

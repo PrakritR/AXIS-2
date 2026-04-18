@@ -1,5 +1,5 @@
 import type { PortalDefinition } from "@/lib/portal-types";
-import { isResidentApplicationApproved } from "./resident-state";
+import { getServerSessionProfile } from "@/lib/auth/server-profile";
 
 const residentPortalUnderReview: PortalDefinition = {
   kind: "resident",
@@ -27,6 +27,8 @@ const residentPortalApproved: PortalDefinition = {
   ],
 };
 
-export function getResidentPortalDefinition(): PortalDefinition {
-  return isResidentApplicationApproved() ? residentPortalApproved : residentPortalUnderReview;
+export async function getResidentPortalDefinition(): Promise<PortalDefinition> {
+  const { profile } = await getServerSessionProfile();
+  const approved = profile?.application_approved ?? false;
+  return approved ? residentPortalApproved : residentPortalUnderReview;
 }

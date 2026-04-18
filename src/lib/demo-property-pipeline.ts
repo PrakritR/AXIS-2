@@ -76,17 +76,22 @@ export function submitManagerPendingProperty(input: ManagerPropertyDraftInput): 
   return id;
 }
 
-/** Promotes a manager submission to a public listing (demo: localStorage only). */
-export function approvePendingManagerProperty(pendingId: string): MockProperty | null {
-  const pending = readPendingManagerProperties();
-  const idx = pending.findIndex((p) => p.id === pendingId);
-  if (idx === -1) return null;
-  const row = pending[idx]!;
-  const nextPending = [...pending.slice(0, idx), ...pending.slice(idx + 1)];
-  writeJson(PENDING_KEY, nextPending);
+export type ListingDraftFields = Pick<
+  ManagerPendingPropertyRow,
+  | "buildingName"
+  | "unitLabel"
+  | "address"
+  | "zip"
+  | "neighborhood"
+  | "beds"
+  | "baths"
+  | "monthlyRent"
+  | "petFriendly"
+  | "tagline"
+>;
 
-  const listingId = `mgr-${slugPart(row.buildingName)}-${slugPart(row.unitLabel)}-${pendingId.slice(-6)}`;
-  const prop: MockProperty = {
+export function buildMockPropertyFromDraft(row: ListingDraftFields, listingId: string): MockProperty {
+  return {
     id: listingId,
     title: `${row.buildingName} · ${row.unitLabel}`,
     tagline: row.tagline.trim() || "Manager-submitted listing",
@@ -104,9 +109,40 @@ export function approvePendingManagerProperty(pendingId: string): MockProperty |
     mapLat: 47.61405,
     mapLng: -122.31542,
   };
+}
 
+export function appendExtraListing(prop: MockProperty) {
   const extras = readExtraListings();
   extras.push(prop);
   writeJson(EXTRAS_KEY, extras);
+}
+
+/** Removes a pending row without publishing. Returns the row or null. */
+export function takePendingManagerProperty(pendingId: string): ManagerPendingPropertyRow | null {
+  const pending = readPendingManagerProperties();
+  const idx = pending.findIndex((p) => p.id === pendingId);
+  if (idx === -1) return null;
+  const row = pending[idx]!;
+  writeJson(PENDING_KEY, [...pending.slice(0, idx), ...pending.slice(idx + 1)]);
+  return row;
+}
+
+export function removeExtraListing(listingId: string): MockProperty | null {
+  const extras = readExtraListings();
+  const idx = extras.findIndex((p) => p.id === listingId);
+  if (idx === -1) return null;
+  const row = extras[idx]!;
+  writeJson(EXTRAS_KEY, [...extras.slice(0, idx), ...extras.slice(idx + 1)]);
+  return row;
+}
+
+/** Promotes a manager submission to a public listing (demo: localStorage only). */
+export function approvePendingManagerProperty(pendingId: string): MockProperty | null {
+  const row = takePendingManagerProperty(pendingId);
+  if (!row) return null;
+
+  const listingId = `mgr-${slugPart(row.buildingName)}-${slugPart(row.unitLabel)}-${pendingId.slice(-6)}`;
+  const prop = buildMockPropertyFromDraft(row, listingId);
+  appendExtraListing(prop);
   return prop;
 }

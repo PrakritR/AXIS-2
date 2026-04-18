@@ -7,6 +7,9 @@ import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerOwners } from "@/components/portal/manager-owners";
 import { ManagerPayments } from "@/components/portal/manager-payments";
 import { ManagerProfile } from "@/components/portal/manager-profile";
+import { AdminManagersClient } from "@/components/portal/admin-managers-client";
+import { AdminOwnersClient } from "@/components/portal/admin-owners-client";
+import { AdminLeasesClient } from "@/components/portal/admin-leases-client";
 import { AdminPropertiesClient } from "@/components/portal/admin-properties-client";
 import { ManagerProperties } from "@/components/portal/manager-properties";
 import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
@@ -21,8 +24,8 @@ import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-order
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
+import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { findSection, getPortalDefinition } from "@/lib/portals";
-import { isResidentApplicationApproved } from "@/lib/portals/resident-state";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
@@ -32,7 +35,8 @@ export async function renderPortalSection(
   section: string,
   tabParts?: string[],
 ) {
-  const def = getPortalDefinition(kind);
+  const def = await getPortalDefinition(kind);
+  const residentCtx = kind === "resident" ? await getServerSessionProfile() : null;
   const meta = findSection(def, section);
   if (!meta) notFound();
 
@@ -44,6 +48,21 @@ export async function renderPortalSection(
   if (kind === "admin" && section === "properties") {
     if (tabParts?.length) notFound();
     return <AdminPropertiesClient />;
+  }
+
+  if (kind === "admin" && section === "managers") {
+    if (tabParts?.length) notFound();
+    return <AdminManagersClient />;
+  }
+
+  if (kind === "admin" && section === "owners") {
+    if (tabParts?.length) notFound();
+    return <AdminOwnersClient />;
+  }
+
+  if (kind === "admin" && section === "leases") {
+    if (tabParts?.length) notFound();
+    return <AdminLeasesClient />;
   }
 
   if (kind === "manager") {
@@ -74,7 +93,13 @@ export async function renderPortalSection(
 
   if (kind === "resident" && section === "dashboard") {
     if (tabParts?.length) notFound();
-    return <ResidentDashboard applicationApproved={isResidentApplicationApproved()} />;
+    const profile = residentCtx?.profile;
+    return (
+      <ResidentDashboard
+        applicationApproved={profile?.application_approved ?? false}
+        displayName={profile?.full_name ?? profile?.email ?? "Resident"}
+      />
+    );
   }
 
   if (kind === "resident" && section === "profile") {
@@ -82,12 +107,16 @@ export async function renderPortalSection(
     return <ResidentProfilePanel />;
   }
 
-  if (kind === "resident" && isResidentApplicationApproved()) {
-    if (tabParts?.length) notFound();
-    if (section === "lease") return <ResidentLeasePanel />;
-    if (section === "payments") return <ResidentPaymentsPanel />;
-    if (section === "work-orders") return <ResidentWorkOrdersPanel />;
-    if (section === "inbox") return <ResidentInboxPanel />;
+  if (kind === "resident") {
+    const profile = residentCtx?.profile;
+    const approved = profile?.application_approved ?? false;
+    if (approved) {
+      if (tabParts?.length) notFound();
+      if (section === "lease") return <ResidentLeasePanel />;
+      if (section === "payments") return <ResidentPaymentsPanel />;
+      if (section === "work-orders") return <ResidentWorkOrdersPanel />;
+      if (section === "inbox") return <ResidentInboxPanel />;
+    }
   }
 
   if (!meta.tabs.length) {

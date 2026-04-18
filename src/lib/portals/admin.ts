@@ -9,18 +9,9 @@ export const adminPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
-    { section: "applications", label: "Applications", tabs: [] },
     { section: "managers", label: "Managers", tabs: [] },
-    {
-      section: "leases",
-      label: "Leases",
-      tabs: [
-        { id: "manager-review", label: "Manager review" },
-        { id: "admin-review", label: "Admin review" },
-        { id: "with-resident", label: "With resident" },
-        { id: "signed", label: "Signed" },
-      ],
-    },
+    { section: "owners", label: "Owners", tabs: [] },
+    { section: "leases", label: "Leases", tabs: [] },
     {
       section: "calendar",
       label: "Calendar",
@@ -29,8 +20,6 @@ export const adminPortal: PortalDefinition = {
         { id: "availability", label: "Availability" },
       ],
     },
-    { section: "payments", label: "Payments", tabs: [] },
-    { section: "work-orders", label: "Work orders", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",

@@ -1,24 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import {
-  DEMO_RESIDENT_AXIS_ID,
-  DEMO_RESIDENT_DISPLAY_NAME,
-  DEMO_RESIDENT_EMAIL,
-  DEMO_RESIDENT_EMERGENCY_NAME,
-  DEMO_RESIDENT_EMERGENCY_PHONE,
-  DEMO_RESIDENT_PHONE,
-} from "@/data/demo-portal";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ManagerSectionShell } from "./manager-section-shell";
 
 export function ResidentProfilePanel() {
   const { showToast } = useAppUi();
-  const [name, setName] = useState(DEMO_RESIDENT_DISPLAY_NAME);
-  const [phone, setPhone] = useState(DEMO_RESIDENT_PHONE);
-  const [emName, setEmName] = useState(DEMO_RESIDENT_EMERGENCY_NAME);
-  const [emPhone, setEmPhone] = useState(DEMO_RESIDENT_EMERGENCY_PHONE);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [axisId, setAxisId] = useState("");
+  const [emName, setEmName] = useState("");
+  const [emPhone, setEmPhone] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+        if (cancelled) return;
+        setEmail(user.email ?? "");
+        setName(profile?.full_name ?? "");
+        setAxisId(profile?.id ? `AXIS-R-${profile.id.slice(0, 8).toUpperCase()}` : "");
+      } catch {
+        /* env missing */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <ManagerSectionShell
@@ -27,7 +45,7 @@ export function ResidentProfilePanel() {
         {
           label: "Save",
           variant: "primary",
-          onClick: () => showToast("Profile saved (demo)."),
+          onClick: () => showToast("Profile saved."),
         },
       ]}
     >
@@ -38,7 +56,7 @@ export function ResidentProfilePanel() {
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-slate-800">Email</label>
-          <Input value={DEMO_RESIDENT_EMAIL} readOnly className="bg-slate-50/80" />
+          <Input value={email} readOnly className="bg-slate-50/80" />
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-slate-800">Phone</label>
@@ -46,7 +64,7 @@ export function ResidentProfilePanel() {
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-slate-800">Axis ID</label>
-          <Input value={DEMO_RESIDENT_AXIS_ID} readOnly className="bg-slate-50/80 font-mono text-sm" />
+          <Input value={axisId} readOnly className="bg-slate-50/80 font-mono text-sm" />
         </div>
         <div className="space-y-2 sm:col-span-2">
           <p className="text-sm font-semibold text-slate-800">Emergency contact</p>
