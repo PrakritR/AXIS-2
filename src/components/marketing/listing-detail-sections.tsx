@@ -190,43 +190,41 @@ export function ListingDetailSections({ property, rich }: { property: MockProper
           </div>
         </div>
 
-        <div className="mt-8">
+        <div className="relative z-0 mt-6">
           <ListingStickySubnav />
         </div>
 
-        <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_minmax(280px,320px)]">
+        <div className="relative z-0 mt-10 grid gap-10 lg:grid-cols-[1fr_minmax(280px,320px)]">
           <div className="order-2 space-y-14 lg:order-1">
             <section id="floor-plans" className={sectionScroll}>
-              <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-                <h2 className="text-2xl font-bold tracking-tight text-slate-900">Floor plans</h2>
-                <p className="text-sm font-medium text-slate-500">{roomCount} rooms listed (demo)</p>
+              <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Floor plans</h2>
+                <p className="text-xs font-medium text-slate-500 sm:text-sm">{roomCount} rooms listed (demo)</p>
               </div>
-              <div className="space-y-6">
+              <div className="space-y-5">
                 {rich.floorPlans.map((f) => (
                   <InteractiveFloorPlanCard key={f.floorLabel} floor={f} listingPropertyId={property.id} />
                 ))}
               </div>
 
-              <div className="mt-10 rounded-2xl border border-slate-200/80 bg-white/60 p-5 shadow-sm sm:p-6">
-                <h3 className="text-lg font-bold tracking-tight text-slate-900">Bathrooms</h3>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                  Fixtures are summarized under <span className="font-semibold text-slate-800">Includes</span>. Open{" "}
-                  <span className="font-semibold text-slate-800">Details</span> for photos and setup notes.
+              <div className="mt-8 rounded-2xl border border-slate-200/80 bg-white/60 p-4 shadow-sm sm:mt-10 sm:p-5">
+                <h3 className="text-base font-bold tracking-tight text-slate-900 sm:text-lg">Bathrooms</h3>
+                <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
+                  Fixtures are summarized under <span className="font-semibold text-slate-800">Info</span>. Open the{" "}
+                  <span className="font-semibold text-slate-800">Details</span> button for photos and setup notes.
                 </p>
-                <div className="mt-6 md:overflow-x-auto">
+                <div className="mt-4 md:overflow-x-auto sm:mt-5">
                   <BathroomTableInteractive rows={rich.bathrooms} listingPropertyId={property.id} />
                 </div>
               </div>
-            </section>
 
-            <section id="listing-shared" className={sectionScroll}>
-              <div className="rounded-2xl border border-slate-200/80 bg-white/60 p-5 shadow-sm sm:p-6">
-                <h2 className="text-xl font-bold tracking-tight text-slate-900">Shared spaces</h2>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                  Laundry, kitchen, living areas, and more. Open <span className="font-semibold text-slate-800">Details</span>{" "}
-                  for a tour video placeholder and photo strip (demo).
+              <div id="listing-shared" className={`${sectionScroll} mt-8 rounded-2xl border border-slate-200/80 bg-white/60 p-4 shadow-sm sm:mt-10 sm:p-5`}>
+                <h3 className="text-base font-bold tracking-tight text-slate-900 sm:text-lg">Shared spaces</h3>
+                <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
+                  Laundry, kitchen, living areas, and more. Highlights are under <span className="font-semibold text-slate-800">Info</span>. Open the{" "}
+                  <span className="font-semibold text-slate-800">Details</span> button for a tour video placeholder and photo strip (demo).
                 </p>
-                <div className="mt-6 md:overflow-x-auto">
+                <div className="mt-4 md:overflow-x-auto sm:mt-5">
                   <SharedTableInteractive rows={rich.sharedSpaces} listingPropertyId={property.id} />
                 </div>
               </div>

@@ -17,7 +17,14 @@ export function AdminOwnersClient() {
     };
   }, []);
 
-  const { current, past } = useMemo(() => adminOwnerCounts(), [tick]);
+  const { current, past, total } = useMemo(() => adminOwnerCounts(), [tick]);
+
+  const statusText =
+    total === 0
+      ? "No owner records on file."
+      : current === 0
+        ? "No active owners"
+        : `${current} active owner${current === 1 ? "" : "s"}`;
 
   return (
     <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
@@ -32,6 +39,19 @@ export function AdminOwnersClient() {
           <p className="text-2xl font-bold tabular-nums text-slate-900">{past}</p>
           <p className="mt-1 text-xs font-medium text-slate-500">Past owners</p>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <label htmlFor="admin-owner-no-active" className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          No active owners
+        </label>
+        <output
+          id="admin-owner-no-active"
+          className="mt-2 block rounded-2xl border border-slate-200/90 bg-slate-50/50 px-4 py-3 text-sm font-medium text-slate-700"
+          aria-live="polite"
+        >
+          {statusText}
+        </output>
       </div>
     </div>
   );

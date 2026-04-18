@@ -6,7 +6,6 @@ const NAVBAR_ID = "axis-public-navbar";
 
 const nav = [
   { id: "floor-plans", label: "Floor plans" },
-  { id: "listing-shared", label: "Shared spaces" },
   { id: "lease-basics", label: "Lease basics" },
   { id: "amenities", label: "Amenities" },
   { id: "bundles", label: "Bundles & leasing" },
@@ -85,15 +84,15 @@ export function ListingStickySubnav() {
   return (
     <nav
       ref={rootRef}
-      className={`sticky z-[39] -mx-4 border-b px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:-mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 ${
+      className={`sticky z-40 -mx-4 border-b px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:-mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 ${
         pageScrolled
-          ? "border-slate-200/80 bg-white/80 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_40px_-20px_rgba(15,23,42,0.08)] supports-[backdrop-filter]:bg-white/70"
-          : "border-slate-200/90 bg-[#f4f7fb]/92"
+          ? "border-slate-200/80 bg-white/90 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_40px_-20px_rgba(15,23,42,0.1)] supports-[backdrop-filter]:bg-white/80"
+          : "border-slate-200/90 bg-[#f4f7fb]/95"
       }`}
       style={{ top: `${stickyTopPx}px` }}
       aria-label="Listing sections"
     >
-      <ul className="-mx-1 flex flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[13px] font-semibold [-webkit-overflow-scrolling:touch] sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0">
+      <ul className="-mx-1 flex flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]">
         {nav.map((item) => {
           const active = activeId === item.id;
           return (

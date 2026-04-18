@@ -64,7 +64,7 @@ export function PublicNavbar() {
   return (
     <div
       id="axis-public-navbar"
-      className={`sticky top-0 z-40 border-b pt-[env(safe-area-inset-top,0px)] transition-[background,box-shadow,border-color,backdrop-filter] duration-300 ease-out ${
+      className={`sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)] transition-[background,box-shadow,border-color,backdrop-filter] duration-300 ease-out ${
         scrolled
           ? "border-slate-200/80 bg-white/80 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_40px_-20px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/70"
           : "border-transparent bg-white/95 shadow-none backdrop-blur-none"

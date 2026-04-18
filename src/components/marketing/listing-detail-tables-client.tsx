@@ -15,11 +15,11 @@ function AvailabilityPill({ text }: { text: string }) {
   const green = text.toLowerCase().includes("available");
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-xs ${
         green ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80" : "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80"
       }`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${green ? "bg-emerald-500" : "bg-slate-400"}`} />
+      <span className={`h-1 w-1 shrink-0 rounded-full sm:h-1.5 sm:w-1.5 ${green ? "bg-emerald-500" : "bg-slate-400"}`} />
       {text}
     </span>
   );
@@ -38,7 +38,7 @@ function DetailsButton({ onClick, className = "" }: { onClick: () => void; class
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-[40px] shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-800 transition hover:border-primary hover:text-primary sm:min-h-0 ${className}`}
+      className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-800 transition hover:border-primary hover:text-primary sm:min-h-0 ${className}`}
     >
       Details
     </button>
@@ -199,7 +199,7 @@ function ListingDetailModal({
               <p className="mt-2 text-sm font-medium leading-snug text-slate-800">{state.row.modal.setupCard}</p>
             </div>
             <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Includes</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Info</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {state.row.modal.includedTags.map((t) => (
                   <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
@@ -284,35 +284,35 @@ export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: 
 
   return (
     <>
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3 sm:pb-4">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{floor.floorLabel}</p>
-            <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{floor.fromPrice}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{floor.floorLabel}</p>
+            <p className="mt-0.5 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{floor.fromPrice}</p>
             {floor.remainingNote ? (
-              <p className="mt-2 flex items-center gap-2 text-sm text-amber-800">
-                <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden />
+              <p className="mt-1.5 flex items-center gap-2 text-xs text-amber-800 sm:text-sm">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden />
                 {floor.remainingNote}
               </p>
             ) : null}
           </div>
           <div className="text-right">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Rooms</p>
-            <p className="text-2xl font-bold text-slate-900">{floor.roomCount}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Rooms</p>
+            <p className="text-xl font-bold text-slate-900 sm:text-2xl">{floor.roomCount}</p>
           </div>
         </div>
-        <div className="mt-4 md:overflow-x-auto">
+        <div className="mt-3 md:overflow-x-auto sm:mt-4">
           <RoomTableWithModals rooms={floor.rooms} onOpen={(r) => setModal({ kind: "room", room: r, floorLabel: floor.floorLabel })} />
         </div>
         {floor.hiddenRoomNames && floor.hiddenRoomNames.length > 0 ? (
-          <details className="group mt-2 border-t border-slate-100 pt-3">
-            <summary className="cursor-pointer list-none text-sm font-semibold text-primary marker:content-none [&::-webkit-details-marker]:hidden">
+          <details className="group mt-2 border-t border-slate-100 pt-2 sm:pt-3">
+            <summary className="cursor-pointer list-none text-xs font-semibold text-primary marker:content-none [&::-webkit-details-marker]:hidden sm:text-sm">
               <span className="group-open:hidden">
                 Show {floor.hiddenRoomNames.length} more room{floor.hiddenRoomNames.length > 1 ? "s" : ""} ↓
               </span>
               <span className="hidden group-open:inline">Hide extra rooms ↑</span>
             </summary>
-            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+            <ul className="mt-2 space-y-1.5 text-xs text-slate-600 sm:mt-3 sm:text-sm">
               {floor.hiddenRoomNames.map((n) => (
                 <li key={n} className="rounded-xl bg-slate-50 px-3 py-2">
                   {n}
@@ -330,37 +330,37 @@ export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: 
 function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpen: (r: ListingRoomRow) => void }) {
   return (
     <>
-      <div className="space-y-3 md:hidden">
+      <div className="space-y-2.5 md:hidden">
         {rooms.map((r) => (
-          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
-            <p className="font-semibold text-slate-900">{r.name}</p>
-            <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold text-slate-900">{r.price}</p>
+          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
+            <p className="text-sm font-semibold text-slate-900">{r.name}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
               <AvailabilityPill text={r.availability} />
             </div>
-            <DetailsButton className="mt-3 w-full" onClick={() => onOpen(r)} />
+            <DetailsButton className="mt-2.5 w-full" onClick={() => onOpen(r)} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-3 border-b border-slate-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Room</span>
             <span>Price</span>
             <span>Availability</span>
-            <span className="w-[88px] text-right sm:text-left" />
+            <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
           </div>
           {rooms.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-3 border-b border-slate-100 py-4 last:border-0"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div>
-                <p className="font-semibold text-slate-900">{r.name}</p>
-                <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
+                <p className="text-sm font-semibold text-slate-900">{r.name}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
               </div>
-              <p className="text-sm font-semibold text-slate-900">{r.price}</p>
+              <p className="text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
               <AvailabilityPill text={r.availability} />
               <DetailsButton onClick={() => onOpen(r)} />
             </div>
@@ -376,36 +376,36 @@ export function BathroomTableInteractive({ rows, listingPropertyId }: { rows: Li
 
   return (
     <>
-      <div className="space-y-3 md:hidden">
+      <div className="space-y-2.5 md:hidden">
         {rows.map((r) => (
-          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
-            <p className="font-semibold text-slate-900">{r.name}</p>
-            <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
-            <p className="mt-3 text-sm text-slate-800">
-              <span className="font-semibold text-slate-500">Includes: </span>
+          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
+            <p className="text-sm font-semibold text-slate-900">{r.name}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
+            <p className="mt-2 text-xs text-slate-800 sm:text-sm">
+              <span className="font-semibold text-slate-500">Info: </span>
               {formatBathroomIncludes(r)}
             </p>
-            <DetailsButton className="mt-3 w-full" onClick={() => setModal({ kind: "bathroom", row: r })} />
+            <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "bathroom", row: r })} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[520px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] gap-3 border-b border-slate-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Bathroom</span>
-            <span>Includes</span>
-            <span className="w-[88px]" />
+            <span>Info</span>
+            <span className="w-[80px] sm:w-[88px]" />
           </div>
           {rows.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] items-center gap-3 border-b border-slate-100 py-4 last:border-0"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div>
-                <p className="font-semibold text-slate-900">{r.name}</p>
-                <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
+                <p className="text-sm font-semibold text-slate-900">{r.name}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
               </div>
-              <p className="text-sm font-medium text-slate-800">{formatBathroomIncludes(r)}</p>
+              <p className="text-xs font-medium text-slate-800 sm:text-sm">{formatBathroomIncludes(r)}</p>
               <DetailsButton onClick={() => setModal({ kind: "bathroom", row: r })} />
             </div>
           ))}
@@ -421,33 +421,33 @@ export function SharedTableInteractive({ rows, listingPropertyId }: { rows: List
 
   return (
     <>
-      <div className="space-y-3 md:hidden">
+      <div className="space-y-2.5 md:hidden">
         {rows.map((r) => (
-          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
-            <p className="font-semibold text-slate-900">{r.name}</p>
-            <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
-            <p className="mt-2 text-sm text-slate-700">{r.useNote}</p>
-            <DetailsButton className="mt-3 w-full" onClick={() => setModal({ kind: "shared", row: r })} />
+          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
+            <p className="text-sm font-semibold text-slate-900">{r.name}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
+            <p className="mt-1.5 text-xs text-slate-700 sm:text-sm">{r.useNote}</p>
+            <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "shared", row: r })} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[520px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_auto] gap-3 border-b border-slate-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Space</span>
-            <span>Details</span>
-            <span className="w-[88px]" />
+            <span>Info</span>
+            <span className="w-[80px] sm:w-[88px]" />
           </div>
           {rows.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_auto] items-center gap-3 border-b border-slate-100 py-4 last:border-0"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div>
-                <p className="font-semibold text-slate-900">{r.name}</p>
-                <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
+                <p className="text-sm font-semibold text-slate-900">{r.name}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
               </div>
-              <p className="text-sm text-slate-700">{r.useNote}</p>
+              <p className="text-xs text-slate-700 sm:text-sm">{r.useNote}</p>
               <DetailsButton onClick={() => setModal({ kind: "shared", row: r })} />
             </div>
           ))}

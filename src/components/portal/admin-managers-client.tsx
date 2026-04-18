@@ -4,13 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import {
-  adminManagerCounts,
-  filterManagers,
-  readAdminManagers,
-  setManagerStatus,
-  type AdminManagerRow,
-} from "@/lib/demo-admin-managers";
+import { adminManagerCounts, readAdminManagers, setManagerStatus, type AdminManagerRow } from "@/lib/demo-admin-managers";
 
 function GridIcon({ className }: { className?: string }) {
   return (
@@ -125,8 +119,6 @@ function ManagerDetailSheet({
 
 export function AdminManagersClient() {
   const { showToast } = useAppUi();
-  const [search, setSearch] = useState("");
-  const [propertyFilter, setPropertyFilter] = useState("all");
   const [tick, setTick] = useState(0);
   const [detailRow, setDetailRow] = useState<AdminManagerRow | null>(null);
 
@@ -146,11 +138,7 @@ export function AdminManagersClient() {
   }, []);
 
   const { current, past } = useMemo(() => adminManagerCounts(), [tick]);
-  const allRows = useMemo(() => readAdminManagers(), [tick]);
-  const rows = useMemo(
-    () => filterManagers(allRows, search, propertyFilter),
-    [allRows, search, propertyFilter],
-  );
+  const rows = useMemo(() => readAdminManagers(), [tick]);
 
   return (
     <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
@@ -172,41 +160,13 @@ export function AdminManagersClient() {
         </div>
       </div>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
-        <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:min-w-[14rem]">
-          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Select property</span>
-          <label className="sr-only" htmlFor="admin-managers-property">
-            Select property
-          </label>
-          <select
-            id="admin-managers-property"
-            className="w-full rounded-full border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30"
-            value={propertyFilter}
-            onChange={(e) => setPropertyFilter(e.target.value)}
-          >
-            <option value="all">All properties (grouped)</option>
-          </select>
-        </div>
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search..."
-          className="w-full min-w-[10rem] max-w-xs rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-auto"
-        />
-      </div>
-
       <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
         {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-400 shadow-sm">
               <GridIcon className="h-7 w-7" />
             </div>
-            <p className="mt-4 text-sm font-medium text-slate-500">
-              {allRows.length === 0
-                ? "No active managers"
-                : "No managers match your filters."}
-            </p>
+            <p className="mt-4 text-sm font-medium text-slate-500">No active managers</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

@@ -224,7 +224,6 @@ export function AdminLeasesClient() {
   const [activeBucket, setActiveBucket] = useState<AdminLeaseBucketIndex>(0);
   const [propertyFilter, setPropertyFilter] = useState("all");
   const [managerFilter, setManagerFilter] = useState("all");
-  const [search, setSearch] = useState("");
   const [tick, setTick] = useState(0);
   const [detailRow, setDetailRow] = useState<AdminLeaseRow | null>(null);
 
@@ -249,8 +248,8 @@ export function AdminLeasesClient() {
   const managerOptions = useMemo(() => uniqueManagerNames(allRows), [allRows]);
 
   const rows = useMemo(
-    () => filterAdminLeases(allRows, activeBucket, propertyFilter, managerFilter, search),
-    [allRows, activeBucket, propertyFilter, managerFilter, search],
+    () => filterAdminLeases(allRows, activeBucket, propertyFilter, managerFilter, ""),
+    [allRows, activeBucket, propertyFilter, managerFilter],
   );
 
   useEffect(() => {
@@ -263,47 +262,34 @@ export function AdminLeasesClient() {
     <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Leases</h1>
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end lg:justify-end">
-          <div className="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto sm:min-w-[12rem]">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Select property</span>
-            <select
-              aria-label="Select property"
-              className="w-full rounded-full border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30"
-              value={propertyFilter}
-              onChange={(e) => setPropertyFilter(e.target.value)}
-            >
-              <option value="all">All properties (grouped)</option>
-              {propertyOptions.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </select>
-          </div>
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search..."
-            className="w-full min-w-[8rem] rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-xs sm:flex-1"
-          />
-          <div className="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto sm:min-w-[10rem]">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Managers</span>
-            <select
-              aria-label="All managers"
-              className="w-full rounded-full border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30"
-              value={managerFilter}
-              onChange={(e) => setManagerFilter(e.target.value)}
-            >
-              <option value="all">All managers</option>
-              {managerOptions.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-          <Button type="button" variant="outline" className="shrink-0 rounded-full sm:self-end" onClick={refresh}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3">
+          <select
+            aria-label="Managers"
+            className="w-full min-w-[10rem] rounded-full border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-auto sm:max-w-[min(100%,14rem)]"
+            value={managerFilter}
+            onChange={(e) => setManagerFilter(e.target.value)}
+          >
+            <option value="all">All managers</option>
+            {managerOptions.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Properties"
+            className="w-full min-w-[10rem] rounded-full border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-auto sm:max-w-[min(100%,14rem)]"
+            value={propertyFilter}
+            onChange={(e) => setPropertyFilter(e.target.value)}
+          >
+            <option value="all">All properties</option>
+            {propertyOptions.map((g) => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
+          </select>
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
             Refresh
           </Button>
         </div>
@@ -338,7 +324,9 @@ export function AdminLeasesClient() {
               <DocIcon className="h-7 w-7" />
             </div>
             <p className="mt-4 text-sm font-medium text-slate-500">
-              {allRows.length === 0 ? "No leases yet" : "No leases match your filters."}
+              {allRows.length === 0
+                ? "No leases yet"
+                : "No leases in this bucket for the selected property and manager."}
             </p>
           </div>
         ) : (

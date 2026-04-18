@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import {
   PROPERTY_PIPELINE_EVENT,
   approvePendingManagerProperty,
@@ -103,6 +105,216 @@ function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: 
     default:
       return { label: "Rejected", variant: "rose" };
   }
+}
+
+const LISTING_PHOTO_IDS = [
+  "1522708323590-d24dbb6b0267",
+  "1560448204-e02f11c3d0e2",
+  "1502672260266-1c1ef2d93688",
+] as const;
+
+function listingPhotoSrc(photoId: string) {
+  return `https://images.unsplash.com/photo-${photoId}?w=800&q=80&auto=format&fit=crop`;
+}
+
+function ChevronIcon({ dir }: { dir: "left" | "right" }) {
+  return (
+    <svg className="h-4 w-4 text-slate-600" viewBox="0 0 24 24" fill="none" aria-hidden>
+      {dir === "left" ? (
+        <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+    </svg>
+  );
+}
+
+function ApplyDocIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M14 2H8a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8l-6-6Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path d="M14 2v6h6M12 18v-6M9 15h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function AdminPropertyListingCard({
+  row,
+  statusLabel,
+  statusVariant,
+  onOpenDetails,
+}: {
+  row: AdminPropertyRow;
+  statusLabel: string;
+  statusVariant: "green" | "amber" | "slate" | "rose";
+  onOpenDetails: () => void;
+}) {
+  const [slide, setSlide] = useState(0);
+  const slideCount = LISTING_PHOTO_IDS.length;
+  const sharedHousing =
+    /\bshared\b/i.test(row.tagline) || row.beds >= 5 || /\bco-?living\b/i.test(row.tagline);
+  const title = `${row.buildingName} · ${row.unitLabel}`;
+  const fullAddress = `${row.address}${row.zip ? `, ${row.zip}` : ""}`;
+  const desc =
+    row.tagline.trim().length > 0
+      ? row.tagline.length > 140
+        ? `${row.tagline.slice(0, 140)}…`
+        : row.tagline
+      : `${row.neighborhood} housing with flexible lease options. Pet policy: ${row.petFriendly ? "pet-friendly." : "no pets."}`;
+  const rentLow = Math.max(400, row.monthlyRent - 75);
+  const rentHigh = row.monthlyRent + 75;
+  const listingHref = row.listingId ? `/rent/listings/${row.listingId}` : null;
+  const applyHref = row.listingId ? buildRentalApplyHref({ propertyId: row.listingId }) : null;
+
+  const tags = [
+    sharedHousing ? "Shared housing" : null,
+    row.neighborhood,
+    "Seattle",
+    row.petFriendly ? "Pet-friendly" : null,
+  ].filter(Boolean) as string[];
+
+  const go = (d: number) => setSlide((s) => (s + d + slideCount) % slideCount);
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_12px_40px_-28px_rgba(15,23,42,0.12)] transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-[0_20px_50px_-28px_rgba(15,23,42,0.16)]">
+      <div className="relative aspect-[16/10] overflow-hidden rounded-t-2xl bg-gradient-to-br from-slate-200 to-slate-400">
+        <img
+          src={listingPhotoSrc(LISTING_PHOTO_IDS[slide]!)}
+          alt={title}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+        <div className="absolute left-3 top-3">
+          <span className="inline-block rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-900 shadow-sm">
+            {sharedHousing ? "Shared housing" : row.neighborhood}
+          </span>
+        </div>
+        <button
+          type="button"
+          aria-label="Previous photo"
+          className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:bg-white"
+          onClick={() => go(-1)}
+        >
+          <ChevronIcon dir="left" />
+        </button>
+        <button
+          type="button"
+          aria-label="Next photo"
+          className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:bg-white"
+          onClick={() => go(1)}
+        >
+          <ChevronIcon dir="right" />
+        </button>
+        <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+          {LISTING_PHOTO_IDS.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={`Photo ${i + 1}`}
+              className={`h-1.5 w-1.5 rounded-full transition ${i === slide ? "bg-white" : "bg-white/40"}`}
+              onClick={() => setSlide(i)}
+            />
+          ))}
+        </div>
+        <div className="absolute bottom-3 right-3 text-right text-white drop-shadow-sm">
+          <span className="text-[11px] font-medium opacity-90">from </span>
+          <span className="text-lg font-bold">
+            ${rentLow}–${rentHigh}
+          </span>
+          <span className="text-[11px] font-semibold">/mo</span>
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusPill label={statusLabel} variant={statusVariant} />
+        </div>
+        <div>
+          <h3 className="text-lg font-bold tracking-tight text-slate-900">{title}</h3>
+          <p className="mt-1 text-sm text-slate-500">{fullAddress}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-700">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-slate-400" aria-hidden>
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M4 12h16v8H4v-8Zm2-4h12v4H6V8Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+              <span className="font-medium">{row.beds} bedrooms</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-slate-400" aria-hidden>
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M6 4h12v16H6V4Zm3 4h6M9 14h6"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              <span className="font-medium">{row.baths} bathrooms</span>
+            </span>
+          </div>
+          <p className="mt-3 text-sm leading-relaxed text-slate-600">{desc}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {tags.map((t) => (
+            <span
+              key={t}
+              className="rounded-full border border-sky-100 bg-sky-50/90 px-2.5 py-1 text-xs font-semibold text-sky-900"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+        <div className="mt-auto flex flex-col gap-2 pt-1">
+          {listingHref ? (
+            <Link href={listingHref} className="inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-[14px] font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:brightness-[1.05]" style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}>
+              View listing
+              <ArrowRightIcon className="h-4 w-4" />
+            </Link>
+          ) : (
+            <Button type="button" className="w-full gap-2 rounded-xl py-3 text-[14px]" onClick={onOpenDetails}>
+              View listing
+              <ArrowRightIcon className="h-4 w-4" />
+            </Button>
+          )}
+          {applyHref ? (
+            <Link
+              href={applyHref}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+            >
+              <ApplyDocIcon className="h-4 w-4 shrink-0" />
+              Apply
+            </Link>
+          ) : (
+            <Button type="button" variant="outline" className="w-full gap-2 rounded-xl py-2.5 text-[14px]" onClick={onOpenDetails}>
+              <ApplyDocIcon className="h-4 w-4 shrink-0" />
+              Apply
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function PropertyDetailSheet({
@@ -366,53 +578,16 @@ export function AdminPropertiesClient() {
             <p className="mt-4 max-w-sm text-sm font-medium text-slate-500">{EMPTY_COPY[activeKpi]}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-slate-200/90 bg-white">
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Property
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Rent
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Status
-                  </th>
-                  <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    {" "}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.adminRefId + (row.listingId ?? "")} className="border-b border-slate-100 last:border-0">
-                    <td className="px-5 py-4 align-middle">
-                      <p className="font-semibold text-slate-900">
-                        {row.buildingName} · {row.unitLabel}
-                      </p>
-                      <p className="mt-0.5 text-sm text-slate-500">{row.address}</p>
-                    </td>
-                    <td className="px-5 py-4 align-middle">
-                      <p className="font-semibold text-slate-900">${row.monthlyRent}/month</p>
-                    </td>
-                    <td className="px-5 py-4 align-middle">
-                      <StatusPill label={status.label} variant={status.variant} />
-                    </td>
-                    <td className="px-5 py-4 text-right align-middle">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
-                        onClick={() => setDetailRow(row)}
-                      >
-                        Details
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid gap-6 bg-slate-50/20 p-4 sm:grid-cols-2 sm:p-6 xl:grid-cols-3">
+            {rows.map((row) => (
+              <AdminPropertyListingCard
+                key={row.adminRefId + (row.listingId ?? "")}
+                row={row}
+                statusLabel={status.label}
+                statusVariant={status.variant}
+                onOpenDetails={() => setDetailRow(row)}
+              />
+            ))}
           </div>
         )}
       </div>
