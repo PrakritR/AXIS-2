@@ -1,12 +1,13 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { PortalSwitcher, type AuthRole } from "@/components/auth/portal-switcher";
+import { PortalSwitcher, parseAuthRole, type AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 function titleFor(role: AuthRole) {
   if (role === "resident") return "Resident portal";
@@ -14,9 +15,15 @@ function titleFor(role: AuthRole) {
   return "Admin portal";
 }
 
-export default function SignInPage() {
+function SignInContent() {
   const { showToast, openModal } = useAppUi();
-  const [role, setRole] = useState<AuthRole>("resident");
+  const searchParams = useSearchParams();
+  const roleFromUrl = useMemo(() => parseAuthRole(searchParams.get("role")), [searchParams]);
+  const [role, setRole] = useState<AuthRole>(roleFromUrl);
+
+  useEffect(() => {
+    setRole(roleFromUrl);
+  }, [roleFromUrl]);
 
   const title = useMemo(() => titleFor(role), [role]);
   const ctaLabel = role === "admin" ? "Sign in to Admin" : "Sign in";
@@ -67,10 +74,29 @@ export default function SignInPage() {
 
       <p className="mt-8 text-center text-sm text-slate-600">
         New here?{" "}
-        <Link className="font-semibold text-primary hover:opacity-90" href="/auth/create-account">
+        <Link
+          className="font-semibold text-primary hover:opacity-90"
+          href={`/auth/create-account?role=${encodeURIComponent(role)}`}
+        >
           Create account
         </Link>
       </p>
     </AuthCard>
+  );
+}
+
+function SignInFallback() {
+  return (
+    <AuthCard>
+      <p className="text-center text-sm text-slate-600">Loading…</p>
+    </AuthCard>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={<SignInFallback />}>
+      <SignInContent />
+    </Suspense>
   );
 }

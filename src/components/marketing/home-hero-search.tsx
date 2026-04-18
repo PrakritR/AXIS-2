@@ -15,6 +15,9 @@ const BATHROOM_OPTIONS = [
   { id: "4-share", label: "4-share" },
 ];
 
+const inputCls =
+  "[color-scheme:light] w-full rounded-xl border-0 bg-black/[0.04] px-3.5 py-3 text-[14px] text-[#1d1d1f] outline-none transition-all duration-200 placeholder:text-[#6e6e73]/60 focus:bg-white focus:ring-2 focus:ring-[#007aff]/25 hover:bg-black/[0.06]";
+
 export function HomeHeroSearch() {
   const [moveIn, setMoveIn] = useState("");
   const [moveOut, setMoveOut] = useState("");
@@ -31,9 +34,7 @@ export function HomeHeroSearch() {
 
   const zipDigits = zip.replace(/\D/g, "").slice(0, 5);
   const zipValid = zipDigits.length === 5;
-
   const hasInteraction = zipValid || moveIn !== "" || budgetTouched;
-
   const pct = ((budget - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
   const listingsHref = useMemo(() => {
@@ -48,168 +49,113 @@ export function HomeHeroSearch() {
   }, [zipValid, zipDigits, radius, moveIn, moveOut, budget, budgetTouched, bathroom]);
 
   return (
-    <div className="mx-auto w-full max-w-[1060px] rounded-3xl bg-white px-7 py-8 shadow-[0_8px_48px_-8px_rgba(13,31,78,0.13)] ring-1 ring-slate-200/60 sm:px-10 sm:py-10">
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Move-in date */}
+    <div
+      className="mx-auto w-full max-w-[1060px] rounded-[24px] px-6 py-7 sm:px-10 sm:py-9"
+      style={{
+        background: "rgba(255,255,255,0.75)",
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
+        border: "1px solid rgba(0,0,0,0.06)",
+        boxShadow: "0 8px 40px rgba(0,0,0,0.07), 0 1px 0 rgba(255,255,255,0.9) inset",
+      }}
+    >
+      {/* Row 1: main filters */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <FieldBlock label="Move-in date">
-          <div className="relative mt-2.5">
-            <input
-              type="date"
-              value={moveIn}
-              onChange={(e) => setMoveIn(e.target.value)}
-              className="[color-scheme:light] w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-3.5 pr-3 text-sm text-slate-800 outline-none transition-all duration-150 focus:border-[#3b66f5] focus:bg-white focus:ring-3 focus:ring-[#3b66f5]/15 hover:border-slate-300"
-            />
-          </div>
+          <input type="date" value={moveIn} onChange={(e) => setMoveIn(e.target.value)} className={inputCls} />
         </FieldBlock>
 
-        {/* Move-out date */}
         <FieldBlock label="Move-out date" optional>
-          <div className="relative mt-2.5">
-            <input
-              type="date"
-              value={moveOut}
-              onChange={(e) => setMoveOut(e.target.value)}
-              className="[color-scheme:light] w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-3.5 pr-3 text-sm text-slate-800 outline-none transition-all duration-150 focus:border-[#3b66f5] focus:bg-white focus:ring-3 focus:ring-[#3b66f5]/15 hover:border-slate-300"
-            />
-          </div>
+          <input type="date" value={moveOut} onChange={(e) => setMoveOut(e.target.value)} className={inputCls} />
         </FieldBlock>
 
         {/* Budget slider */}
         <div>
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-500">
-              Max budget / month
-            </label>
-            <span
-              className={`text-sm font-semibold transition-colors duration-150 ${
-                budgetTouched && budget < BUDGET_MAX ? "text-[#3b66f5]" : "text-slate-400"
-              }`}
-            >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6e6e73]">Max budget / mo</span>
+            <span className={`text-[13px] font-semibold transition-colors duration-200 ${budgetTouched && budget < BUDGET_MAX ? "text-[#007aff]" : "text-[#6e6e73]/60"}`}>
               {budgetLabel}
             </span>
           </div>
-          <div className="mt-3.5 px-0.5">
-            <div className="relative">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-[#3b66f5] transition-all duration-75"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <input
-                type="range"
-                min={BUDGET_MIN}
-                max={BUDGET_MAX}
-                step={10}
-                value={budget}
-                onChange={(e) => {
-                  setBudget(Number(e.target.value));
-                  setBudgetTouched(true);
-                }}
-                className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-[#3b66f5] [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_1px_4px_rgba(59, 102, 245,0.35)] [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:duration-100 [&::-webkit-slider-thumb]:hover:scale-110 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[#3b66f5] [&::-moz-range-thumb]:bg-white"
+          <div className="mt-4 px-0.5">
+            <div className="relative h-[4px] w-full rounded-full bg-black/[0.08]">
+              <div
+                className="absolute left-0 top-0 h-full rounded-full transition-all duration-75"
+                style={{ width: `${pct}%`, background: "linear-gradient(90deg, #007aff, #339cff)" }}
               />
             </div>
-            <div className="mt-2 flex justify-between text-[11px] font-medium text-slate-400">
-              {BUDGET_MARKERS.map((m) => (
-                <span key={m}>{m === BUDGET_MAX ? "Any" : `$${m.toLocaleString()}`}</span>
-              ))}
+            <input
+              type="range"
+              min={BUDGET_MIN} max={BUDGET_MAX} step={10} value={budget}
+              onChange={(e) => { setBudget(Number(e.target.value)); setBudgetTouched(true); }}
+              className="budget-slider relative -mt-[10px] h-[24px] w-full cursor-pointer appearance-none bg-transparent"
+            />
+            <div className="mt-1 flex justify-between text-[11px] font-medium text-[#6e6e73]/50">
+              {BUDGET_MARKERS.map((m) => <span key={m}>{m === BUDGET_MAX ? "Any" : `$${m.toLocaleString()}`}</span>)}
             </div>
           </div>
         </div>
 
-        {/* Bathroom type */}
-        <div>
-          <label className="text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-500">
-            Bathroom type
-          </label>
-          <div className="relative mt-2.5">
-            <select
-              value={bathroom}
-              onChange={(e) => setBathroom(e.target.value)}
-              className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-3 pl-3.5 pr-8 text-sm text-slate-800 outline-none transition-all duration-150 focus:border-[#3b66f5] focus:bg-white focus:ring-3 focus:ring-[#3b66f5]/15 hover:border-slate-300"
-            >
-              {BATHROOM_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
+        {/* Bathroom */}
+        <FieldBlock label="Bathroom type">
+          <div className="relative">
+            <select value={bathroom} onChange={(e) => setBathroom(e.target.value)} className={`${inputCls} appearance-none pr-8`}>
+              {BATHROOM_OPTIONS.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
             </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
-              <ChevronIcon />
-            </span>
+            <ChevronIcon />
           </div>
-        </div>
+        </FieldBlock>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 border-t border-slate-100 pt-6 sm:grid-cols-2">
+      {/* Row 2: ZIP + radius */}
+      <div className="mt-5 grid grid-cols-1 gap-5 border-t border-black/[0.05] pt-5 sm:grid-cols-2">
         <FieldBlock label="ZIP code" hint="5-digit Seattle-area ZIP">
-          <div className="relative mt-2.5">
+          <div>
             <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="postal-code"
-              maxLength={5}
-              placeholder="98105"
-              value={zipDigits}
+              type="text" inputMode="numeric" autoComplete="postal-code" maxLength={5}
+              placeholder="98105" value={zipDigits}
               onChange={(e) => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-3.5 pr-3 text-sm text-slate-800 outline-none transition-all duration-150 focus:border-[#3b66f5] focus:bg-white focus:ring-3 focus:ring-[#3b66f5]/15 hover:border-slate-300"
+              className={inputCls}
             />
-            {zip.length > 0 && !zipValid ? (
-              <p className="mt-1.5 text-xs text-amber-700">Enter all 5 digits to search by area.</p>
-            ) : null}
+            {zip.length > 0 && !zipValid && (
+              <p className="mt-1.5 text-[11px] text-amber-600">Enter all 5 digits to search by area.</p>
+            )}
           </div>
         </FieldBlock>
 
         <FieldBlock label="Radius" hint="Search distance from ZIP">
-          <div className="relative mt-2.5">
-            <select
-              value={radius}
-              onChange={(e) => setRadius(Number(e.target.value))}
-              className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-3 pl-3.5 pr-8 text-sm text-slate-800 outline-none transition-all duration-150 focus:border-[#3b66f5] focus:bg-white focus:ring-3 focus:ring-[#3b66f5]/15 hover:border-slate-300"
-            >
-              {RADIUS_MILE_OPTIONS.map((m) => (
-                <option key={m} value={m}>
-                  {m} miles
-                </option>
-              ))}
+          <div className="relative">
+            <select value={radius} onChange={(e) => setRadius(Number(e.target.value))} className={`${inputCls} appearance-none pr-8`}>
+              {RADIUS_MILE_OPTIONS.map((m) => <option key={m} value={m}>{m} miles</option>)}
             </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
-              <ChevronIcon />
-            </span>
+            <ChevronIcon />
           </div>
         </FieldBlock>
       </div>
 
-      <div className="my-7 border-t border-slate-100" />
+      <div className="my-6 h-px w-full bg-black/[0.05]" />
 
       {hasInteraction ? (
-        <div className="flex flex-col items-center gap-4 text-center">
-          <p className="text-sm font-medium text-slate-500">
-            {zipValid ? (
-              <>
-                Showing listings within <span className="font-semibold text-slate-700">{radius} mi</span> of{" "}
-                <span className="font-semibold text-slate-700">{zipDigits}</span>
-                {moveIn || budgetTouched ? " · plus your other filters" : ""}
-              </>
-            ) : (
-              <>Showing listings matching your filters</>
-            )}
+        <div className="flex flex-col items-center gap-3 text-center">
+          <p className="text-[13px] text-[#6e6e73]">
+            {zipValid
+              ? <>Listings within <strong className="font-semibold text-[#1d1d1f]">{radius} mi</strong> of <strong className="font-semibold text-[#1d1d1f]">{zipDigits}</strong>{moveIn || budgetTouched ? " · plus your filters" : ""}</>
+              : "Showing listings matching your filters"
+            }
           </p>
           <a
             href={listingsHref}
-            className="inline-flex items-center gap-2 rounded-full bg-[#3b66f5] px-8 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(59, 102, 245,0.35)] transition-all duration-200 hover:bg-[#3259e3] hover:shadow-[0_0_28px_rgba(59, 102, 245,0.45)] active:scale-[0.98]"
+            className="inline-flex items-center gap-2 rounded-full px-8 py-2.5 text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-[1px] active:scale-[0.98]"
+            style={{ background: "linear-gradient(135deg, #007aff, #339cff)", boxShadow: "0 4px 20px rgba(0,122,255,0.35)" }}
           >
-            <SearchIcon />
-            View listings
+            <SearchIcon /> View listings
           </a>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-3 text-center">
-          <span className="text-slate-300" aria-hidden>
-            <SearchIcon size={28} />
-          </span>
-          <p className="text-sm text-slate-400">
-            Enter a ZIP and radius, a move-in date, or adjust budget to search listings
+        <div className="flex flex-col items-center gap-2 text-center">
+          <span className="text-[#6e6e73]/25" aria-hidden><SearchIcon size={26} /></span>
+          <p className="text-[13px] text-[#6e6e73]/60">
+            Enter a ZIP, move-in date, or adjust budget to search listings
           </p>
         </div>
       )}
@@ -217,28 +163,14 @@ export function HomeHeroSearch() {
   );
 }
 
-function FieldBlock({
-  label,
-  optional,
-  hint,
-  children,
-}: {
-  label: string;
-  optional?: boolean;
-  hint?: string;
-  children: React.ReactNode;
-}) {
+function FieldBlock({ label, optional, hint, children }: { label: string; optional?: boolean; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-500">
-        {label}
-        {optional && (
-          <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-400">
-            (optional)
-          </span>
-        )}
-      </label>
-      {hint ? <p className="mt-0.5 text-[11px] font-medium normal-case tracking-normal text-slate-400">{hint}</p> : null}
+      <div className="mb-2 flex items-baseline gap-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6e6e73]">{label}</span>
+        {optional && <span className="text-[11px] font-normal text-[#6e6e73]/50">(optional)</span>}
+      </div>
+      {hint && <p className="mb-1.5 text-[11px] text-[#6e6e73]/50">{hint}</p>}
       {children}
     </div>
   );
@@ -246,22 +178,18 @@ function FieldBlock({
 
 function ChevronIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#6e6e73]/60" aria-hidden>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
   );
 }
 
-function SearchIcon({ size = 18 }: { size?: number }) {
+function SearchIcon({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path
-        d="M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

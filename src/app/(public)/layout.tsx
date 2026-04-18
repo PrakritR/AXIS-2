@@ -9,7 +9,12 @@ export default function PublicLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col bg-[#edf1f8]">
+    <div
+      className="flex min-h-screen flex-col"
+      style={{
+        background: "linear-gradient(180deg, #ffffff 0%, #f5f9ff 40%, #eef4ff 100%)",
+      }}
+    >
       <PublicAnnouncement />
       <PublicNavbar />
       <main className="flex-1">{children}</main>

@@ -11,6 +11,10 @@ export type MockProperty = {
   rentLabel: string;
   available: string;
   petFriendly: boolean;
+  /** Same id for all units in one building (tours, grouping) */
+  buildingId: string;
+  buildingName: string;
+  unitLabel: string;
 };
 
 export type MockRow = Record<string, string>;

@@ -1,12 +1,13 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { PortalSwitcher, type AuthRole } from "@/components/auth/portal-switcher";
+import { PortalSwitcher, parseAuthRole, type AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 function titleFor(role: AuthRole) {
   if (role === "resident") return "Resident portal";
@@ -18,9 +19,16 @@ function Req() {
   return <span className="text-danger"> *</span>;
 }
 
-export default function CreateAccountPage() {
+function CreateAccountContent() {
   const { showToast } = useAppUi();
-  const [role, setRole] = useState<AuthRole>("resident");
+  const searchParams = useSearchParams();
+  const roleFromUrl = useMemo(() => parseAuthRole(searchParams.get("role")), [searchParams]);
+  const [role, setRole] = useState<AuthRole>(roleFromUrl);
+
+  useEffect(() => {
+    setRole(roleFromUrl);
+  }, [roleFromUrl]);
+
   const title = useMemo(() => titleFor(role), [role]);
 
   return (
@@ -31,7 +39,10 @@ export default function CreateAccountPage() {
         <PortalSwitcher value={role} onChange={setRole} />
       </div>
 
-      <Link className="mt-5 inline-flex text-sm font-semibold text-primary hover:opacity-90" href="/auth/sign-in">
+      <Link
+        className="mt-5 inline-flex text-sm font-semibold text-primary hover:opacity-90"
+        href={`/auth/sign-in?role=${encodeURIComponent(role)}`}
+      >
         ← Back to sign in
       </Link>
 
@@ -46,7 +57,7 @@ export default function CreateAccountPage() {
           <>
             Create your manager portal account after choosing a plan on{" "}
             <Link className="font-semibold text-primary hover:opacity-90" href="/partner/pricing">
-              Pricing
+              Use our software
             </Link>
             . Manager ID is optional if you are starting fresh.
           </>
@@ -108,5 +119,21 @@ export default function CreateAccountPage() {
         Create account
       </Button>
     </AuthCard>
+  );
+}
+
+function CreateAccountFallback() {
+  return (
+    <AuthCard>
+      <p className="text-center text-sm text-slate-600">Loading…</p>
+    </AuthCard>
+  );
+}
+
+export default function CreateAccountPage() {
+  return (
+    <Suspense fallback={<CreateAccountFallback />}>
+      <CreateAccountContent />
+    </Suspense>
   );
 }

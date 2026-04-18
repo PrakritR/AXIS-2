@@ -7,27 +7,24 @@ export default function PartnerLandingPage() {
       {/* ── Hero ── */}
       <section className="relative overflow-hidden bg-gradient-to-b from-[#eef2ff] via-[#f3f6ff] to-white pb-24 pt-20 sm:pt-28">
         <div className="mx-auto max-w-4xl px-6 text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#c7d4fb] bg-[#eef2ff] px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-[#3b66f5]">
-            Property Management · Seattle
-          </span>
-          <h1 className="mt-6 text-[2.6rem] font-bold leading-[1.1] tracking-tight text-[#0d1f4e] sm:text-5xl md:text-[3.25rem]">
+          <h1 className="text-[2.6rem] font-bold leading-[1.1] tracking-tight text-[#0d1f4e] sm:text-5xl md:text-[3.25rem]">
             We manage your property<br className="hidden sm:block" /> so you don&apos;t have to.
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-500">
             We currently manage <strong className="font-semibold text-slate-700">3 properties in Seattle</strong> and help owners maximize revenue while minimizing effort — from tenant sourcing to monthly reporting.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <a
-              href="#consultation"
+            <Link
+              href="/partner/contact?tab=schedule"
               className="inline-flex items-center justify-center rounded-2xl bg-[#3b66f5] px-8 py-3.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,102,245,0.4)] transition-all duration-200 hover:bg-[#3259e3] active:scale-[0.98]"
             >
               Book a consultation
-            </a>
+            </Link>
             <Link
               href="/partner/pricing"
               className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-8 py-3.5 text-sm font-semibold text-slate-700 transition-all duration-200 hover:border-slate-300 hover:bg-slate-50"
             >
-              View pricing
+              Use our software
             </Link>
           </div>
         </div>
@@ -90,20 +87,14 @@ export default function PartnerLandingPage() {
             Interested in working with us?
           </h2>
           <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-blue-100">
-            Schedule a consultation to discuss pricing and how we can help.
+            Schedule a consultation to discuss full-service management and how we can help.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
-              href="/partner/contact"
+              href="/partner/contact?tab=schedule"
               className="inline-flex items-center justify-center rounded-2xl bg-white px-9 py-3.5 text-sm font-semibold text-[#3b66f5] shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-200 hover:bg-slate-50 active:scale-[0.98]"
             >
               Book Consultation
-            </Link>
-            <Link
-              href="/partner/pricing"
-              className="inline-flex items-center justify-center rounded-2xl border border-white/30 bg-white/10 px-9 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition-all duration-200 hover:bg-white/20"
-            >
-              See pricing
             </Link>
           </div>
           <p className="mt-8 text-sm text-blue-200">

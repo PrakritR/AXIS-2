@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
@@ -35,6 +35,36 @@ const DAYS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 // Fake "available" days (just some days for demo)
 const AVAILABLE_DAYS = new Set([3,7,8,10,14,15,17,21,22,24,28]);
 
+type BuildingGroup = {
+  buildingId: string;
+  buildingName: string;
+  address: string;
+  neighborhood: string;
+  units: MockProperty[];
+};
+
+function groupByBuilding(properties: MockProperty[]): BuildingGroup[] {
+  const map = new Map<string, BuildingGroup>();
+  for (const p of properties) {
+    const cur = map.get(p.buildingId);
+    if (cur) cur.units.push(p);
+    else {
+      map.set(p.buildingId, {
+        buildingId: p.buildingId,
+        buildingName: p.buildingName,
+        address: p.address,
+        neighborhood: p.neighborhood,
+        units: [p],
+      });
+    }
+  }
+  const list = [...map.values()].sort((a, b) => a.buildingName.localeCompare(b.buildingName));
+  for (const g of list) {
+    g.units.sort((a, b) => a.unitLabel.localeCompare(b.unitLabel, undefined, { numeric: true }));
+  }
+  return list;
+}
+
 export default function ToursContactPage() {
   const { showToast } = useAppUi();
   const [tab, setTab] = useState<Tab>("tour");
@@ -67,11 +97,15 @@ export default function ToursContactPage() {
 ──────────────────────────────────────────────────────────── */
 function TourFlow({ onSuccess }: { onSuccess: () => void }) {
   const [step, setStep] = useState<TourStep>(1);
+  const [step1Phase, setStep1Phase] = useState<"property" | "room">("property");
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<MockProperty | null>(null);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
+
+  const buildings = useMemo(() => groupByBuilding(mockProperties), []);
 
   const canContinue1 = selectedProperty !== null;
   const canContinue2 = selectedDay !== null && selectedTime !== null;
@@ -92,7 +126,16 @@ function TourFlow({ onSuccess }: { onSuccess: () => void }) {
             <button
               type="button"
               onClick={() => {
-                if (s.n === 1) setStep(1);
+                if (s.n === 1) {
+                  setStep(1);
+                  if (selectedProperty) {
+                    setStep1Phase("room");
+                    setSelectedBuildingId(selectedProperty.buildingId);
+                  } else {
+                    setStep1Phase("property");
+                    setSelectedBuildingId(null);
+                  }
+                }
                 if (s.n === 2 && canContinue1) setStep(2);
                 if (s.n === 3 && canContinue1 && canContinue2) setStep(3);
               }}
@@ -120,9 +163,24 @@ function TourFlow({ onSuccess }: { onSuccess: () => void }) {
       <div className="mt-6">
         {step === 1 && (
           <Step1
-            properties={mockProperties}
-            selected={selectedProperty}
-            onSelect={setSelectedProperty}
+            buildings={buildings}
+            phase={step1Phase}
+            selectedBuildingId={selectedBuildingId}
+            selectedProperty={selectedProperty}
+            onSelectBuilding={(id) => {
+              setSelectedBuildingId(id);
+              setSelectedProperty(null);
+              setStep1Phase("room");
+            }}
+            onBackToProperties={() => {
+              setSelectedBuildingId(null);
+              setSelectedProperty(null);
+              setStep1Phase("property");
+            }}
+            onSelectRoom={(p) => {
+              setSelectedProperty(p);
+              setSelectedBuildingId(p.buildingId);
+            }}
           />
         )}
         {step === 2 && (
@@ -160,7 +218,20 @@ function TourFlow({ onSuccess }: { onSuccess: () => void }) {
         {step > 1 && (
           <button
             type="button"
-            onClick={() => setStep((s) => (s - 1) as TourStep)}
+            onClick={() => {
+              if (step === 2) {
+                setStep(1);
+                if (selectedProperty) {
+                  setStep1Phase("room");
+                  setSelectedBuildingId(selectedProperty.buildingId);
+                } else {
+                  setStep1Phase("property");
+                  setSelectedBuildingId(null);
+                }
+                return;
+              }
+              setStep((s) => (s - 1) as TourStep);
+            }}
             className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
           >
             Back
@@ -182,24 +253,83 @@ function TourFlow({ onSuccess }: { onSuccess: () => void }) {
 }
 
 function Step1({
-  properties,
-  selected,
-  onSelect,
+  buildings,
+  phase,
+  selectedBuildingId,
+  selectedProperty,
+  onSelectBuilding,
+  onBackToProperties,
+  onSelectRoom,
 }: {
-  properties: MockProperty[];
-  selected: MockProperty | null;
-  onSelect: (p: MockProperty) => void;
+  buildings: BuildingGroup[];
+  phase: "property" | "room";
+  selectedBuildingId: string | null;
+  selectedProperty: MockProperty | null;
+  onSelectBuilding: (buildingId: string) => void;
+  onBackToProperties: () => void;
+  onSelectRoom: (p: MockProperty) => void;
 }) {
+  if (phase === "property") {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-slate-500">Choose a property to tour. You&apos;ll pick a specific room next.</p>
+        {buildings.map((b) => {
+          const count = b.units.length;
+          return (
+            <button
+              key={b.buildingId}
+              type="button"
+              onClick={() => onSelectBuilding(b.buildingId)}
+              className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all duration-150 hover:border-slate-300 hover:bg-slate-50"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{b.buildingName}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{b.address}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Chip>{b.neighborhood}</Chip>
+                    <Chip>
+                      {count} {count === 1 ? "room" : "rooms"} available
+                    </Chip>
+                  </div>
+                </div>
+                <span className="mt-0.5 shrink-0 text-slate-400" aria-hidden>
+                  <ChevronRightIcon />
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const building = buildings.find((x) => x.buildingId === selectedBuildingId);
+  if (!building) {
+    return <p className="text-sm text-slate-500">Select a property to see available rooms.</p>;
+  }
+
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-500">Choose a property and room to tour.</p>
-      {properties.map((p) => {
-        const isSelected = selected?.id === p.id;
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-slate-500">
+          Choose a room at <span className="font-semibold text-slate-800">{building.buildingName}</span>.
+        </p>
+        <button
+          type="button"
+          onClick={onBackToProperties}
+          className="text-sm font-semibold text-[#3b66f5] hover:underline"
+        >
+          ← All properties
+        </button>
+      </div>
+      {building.units.map((p) => {
+        const isSelected = selectedProperty?.id === p.id;
         return (
           <button
             key={p.id}
             type="button"
-            onClick={() => onSelect(p)}
+            onClick={() => onSelectRoom(p)}
             className={`w-full rounded-2xl border p-4 text-left transition-all duration-150 ${
               isSelected
                 ? "border-[#3b66f5] bg-[#eef2ff] ring-2 ring-[#3b66f5]/20"
@@ -208,7 +338,9 @@ function Step1({
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-slate-900">{p.title}</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  {p.buildingName} · {p.unitLabel}
+                </p>
                 <p className="mt-0.5 text-xs text-slate-500">{p.address}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Chip>{p.neighborhood}</Chip>
@@ -216,10 +348,16 @@ function Step1({
                   <Chip>Available {p.available}</Chip>
                 </div>
               </div>
-              <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                isSelected ? "border-[#3b66f5] bg-[#3b66f5]" : "border-slate-300 bg-white"
-              }`}>
-                {isSelected && <span className="text-white"><CheckSmIcon /></span>}
+              <div
+                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                  isSelected ? "border-[#3b66f5] bg-[#3b66f5]" : "border-slate-300 bg-white"
+                }`}
+              >
+                {isSelected && (
+                  <span className="text-white">
+                    <CheckSmIcon />
+                  </span>
+                )}
               </div>
             </div>
           </button>
@@ -362,7 +500,28 @@ function Step3({
    MESSAGE FLOW
 ──────────────────────────────────────────────────────────── */
 function MessageFlow({ onSuccess }: { onSuccess: () => void }) {
+  const { showToast } = useAppUi();
+  const buildings = useMemo(() => groupByBuilding(mockProperties), []);
+  const [topic, setTopic] = useState("");
+  const [otherTopicDetail, setOtherTopicDetail] = useState("");
+  const [msgPhase, setMsgPhase] = useState<"building" | "room">("building");
+  const [msgBuildingId, setMsgBuildingId] = useState<string | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<MockProperty | null>(null);
+
+  const msgBuilding = msgBuildingId ? buildings.find((b) => b.buildingId === msgBuildingId) : undefined;
+  const isOther = topic === "Other";
+
+  const handleSend = () => {
+    if (!topic) {
+      showToast("Please select a topic.");
+      return;
+    }
+    if (isOther && !otherTopicDetail.trim()) {
+      showToast("Please describe your topic.");
+      return;
+    }
+    onSuccess();
+  };
 
   return (
     <div className="mt-4 space-y-3">
@@ -378,47 +537,129 @@ function MessageFlow({ onSuccess }: { onSuccess: () => void }) {
         </p>
         <p className="mt-4 text-xs font-semibold text-slate-600">What do you need help with? *</p>
         <div className="relative mt-2">
-          <select className={`${inputCls} appearance-none pr-8`}>
+          <select
+            value={topic}
+            onChange={(e) => {
+              const v = e.target.value;
+              setTopic(v);
+              if (v !== "Other") setOtherTopicDetail("");
+            }}
+            className={`${inputCls} appearance-none pr-8`}
+          >
             <option value="">Select a topic</option>
-            {TOPICS.map((t) => <option key={t}>{t}</option>)}
+            {TOPICS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
           </select>
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
             <ChevronDownIcon />
           </span>
         </div>
+        {isOther ? (
+          <div className="mt-4">
+            <Field label="Describe your topic *">
+              <input
+                type="text"
+                value={otherTopicDetail}
+                onChange={(e) => setOtherTopicDetail(e.target.value)}
+                placeholder="Type what you need help with"
+                className={inputCls}
+              />
+            </Field>
+          </div>
+        ) : null}
       </div>
 
       {/* Property context */}
       <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <h2 className="text-base font-bold text-slate-900">Property context</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Optional. With many homes on file, search and pick from the list instead of scrolling long pages.
-        </p>
-        <div className="mt-4 space-y-2">
-          {mockProperties.map((p) => {
-            const isSelected = selectedProperty?.id === p.id;
-            return (
+
+        {msgPhase === "building" ? (
+          <div className="mt-4 space-y-2">
+            {buildings.map((b) => {
+              const count = b.units.length;
+              return (
+                <button
+                  key={b.buildingId}
+                  type="button"
+                  onClick={() => {
+                    setMsgBuildingId(b.buildingId);
+                    setSelectedProperty(null);
+                    setMsgPhase("room");
+                  }}
+                  className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-left text-sm text-slate-700 transition-all hover:border-slate-200 hover:bg-white"
+                >
+                  <span>
+                    <span className="font-semibold text-slate-900">{b.buildingName}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">{b.address}</span>
+                    <span className="mt-1.5 inline-block text-[11px] font-medium text-slate-500">
+                      {b.neighborhood} · {count} {count === 1 ? "room" : "rooms"}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-slate-400" aria-hidden>
+                    <ChevronRightIcon />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-[#e0e4ec] bg-[#f8fafc] p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-800">
+                {msgBuilding ? `Rooms at ${msgBuilding.buildingName}` : "Choose a room"}
+              </p>
               <button
-                key={p.id}
                 type="button"
-                onClick={() => setSelectedProperty(isSelected ? null : p)}
-                className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                  isSelected
-                    ? "border-[#3b66f5] bg-[#eef2ff] text-[#3b66f5]"
-                    : "border-slate-100 bg-slate-50 text-slate-700 hover:border-slate-200"
-                }`}
+                onClick={() => {
+                  setMsgPhase("building");
+                  setMsgBuildingId(null);
+                  setSelectedProperty(null);
+                }}
+                className="text-sm font-semibold text-[#3b66f5] hover:underline"
               >
-                <span className="font-semibold">{p.title}</span>
-                <span className="ml-2 text-xs opacity-70">{p.neighborhood} · {p.rentLabel}</span>
+                ← All properties
               </button>
-            );
-          })}
-        </div>
-        {selectedProperty && (
-          <p className="mt-3 text-xs text-[#3b66f5]">
-            Context set to: <strong>{selectedProperty.title}</strong>
-          </p>
+            </div>
+            {msgBuilding ? (
+              <div className="mt-3 space-y-2">
+                {msgBuilding.units.map((p) => {
+                  const isSelected = selectedProperty?.id === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedProperty(isSelected ? null : p);
+                        setMsgBuildingId(p.buildingId);
+                      }}
+                      className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                        isSelected
+                          ? "border-[#3b66f5] bg-white text-[#3b66f5] ring-2 ring-[#3b66f5]/15"
+                          : "border-slate-200/80 bg-white text-slate-700 hover:border-slate-300"
+                      }`}
+                    >
+                      <span className="font-semibold">
+                        {p.buildingName} · {p.unitLabel}
+                      </span>
+                      <span className="ml-2 text-xs opacity-80">
+                        {p.neighborhood} · {p.rentLabel}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         )}
+
+        {selectedProperty ? (
+          <p className="mt-3 text-xs text-[#3b66f5]">
+            Context: <strong>{selectedProperty.title}</strong>
+          </p>
+        ) : null}
       </div>
 
       {/* Contact & message */}
@@ -445,7 +686,7 @@ function MessageFlow({ onSuccess }: { onSuccess: () => void }) {
 
       <button
         type="button"
-        onClick={onSuccess}
+        onClick={handleSend}
         className="w-full rounded-2xl bg-[#3b66f5] py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(59,102,245,0.3)] transition-all hover:bg-[#3259e3] active:scale-[0.98]"
       >
         Send message

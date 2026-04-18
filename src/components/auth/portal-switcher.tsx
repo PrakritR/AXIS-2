@@ -2,6 +2,11 @@
 
 export type AuthRole = "resident" | "manager" | "admin";
 
+export function parseAuthRole(value: string | null): AuthRole {
+  if (value === "resident" || value === "manager" || value === "admin") return value;
+  return "resident";
+}
+
 const roles: { id: AuthRole; label: string }[] = [
   { id: "resident", label: "Resident" },
   { id: "manager", label: "Manager" },

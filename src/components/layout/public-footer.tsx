@@ -36,7 +36,7 @@ export function PublicFooter() {
           <ul className="mt-4 space-y-2.5">
             {[
               { href: "/partner", label: "About us" },
-              { href: "/partner/pricing", label: "Pricing" },
+              { href: "/partner/pricing", label: "Use our software" },
               { href: "/partner/contact", label: "Contact" },
             ].map(({ href, label }) => (
               <li key={href}>

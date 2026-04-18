@@ -3,14 +3,55 @@ import { HomeHeroSearch } from "@/components/marketing/home-hero-search";
 
 export default function HomePage() {
   return (
-    <div className="relative min-h-0 flex-1 bg-gradient-to-b from-[#eef2ff] via-[#f3f6ff] to-[#f8fafc]">
-      <div className="relative overflow-hidden pb-24 pt-14 sm:pt-20 md:pt-24">
-        <div className="mx-auto max-w-5xl px-4 text-center">
-          <h1 className="text-[2.6rem] font-bold leading-[1.1] tracking-tight text-[#0d1f4e] sm:text-5xl md:text-[3.25rem]">
-            Find housing that works for you
+    <div className="relative min-h-0 flex-1 overflow-hidden">
+      {/* Radial glow behind hero */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 50% at 50% 0%, rgba(0,122,255,0.09) 0%, transparent 70%)",
+        }}
+      />
+
+      <div className="relative px-4 pb-28 pt-20 sm:pt-28 md:pt-32">
+        <div className="mx-auto max-w-5xl text-center">
+          {/* Eyebrow */}
+          <div className="animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border border-[#007aff]/20 bg-[#007aff]/[0.07] px-4 py-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#007aff]" />
+            <span className="text-[13px] font-semibold tracking-wide text-[#007aff]">
+              Seattle Housing · Now Leasing
+            </span>
+          </div>
+
+          {/* Headline */}
+          <h1
+            className="animate-fade-up mx-auto max-w-3xl text-[3rem] font-semibold leading-[1.08] tracking-[-0.03em] text-[#1d1d1f] sm:text-[3.75rem] md:text-[4.5rem]"
+            style={{ animationDelay: "60ms" }}
+          >
+            Find housing that{" "}
+            <span
+              style={{
+                background: "linear-gradient(135deg, #007aff 0%, #339cff 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              works for you
+            </span>
           </h1>
 
-          <div className="mx-auto mt-10 max-w-[1060px] sm:mt-14">
+          <p
+            className="animate-fade-up mx-auto mt-5 max-w-xl text-[17px] font-light leading-relaxed text-[#6e6e73]"
+            style={{ animationDelay: "120ms" }}
+          >
+            Curated rooms and apartments across Seattle — transparent pricing, easy applications, no surprises.
+          </p>
+
+          {/* Search card */}
+          <div
+            className="animate-fade-up mx-auto mt-12 max-w-[1060px]"
+            style={{ animationDelay: "180ms" }}
+          >
             <HomeHeroSearch />
           </div>
         </div>
