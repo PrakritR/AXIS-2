@@ -74,3 +74,29 @@ export function validateDateRequired(value: string, label: string): { ok: true }
   if (Number.isNaN(d.getTime())) return { ok: false, message: `${label} must be a valid date.` };
   return { ok: true };
 }
+
+/** Primary applicant group id shared with household (signer flow) */
+export function validateAxisGroupId(id: string): { ok: true } | { ok: false; message: string } {
+  const t = id.trim();
+  if (!t) {
+    return { ok: false, message: "Paste the Group ID the first applicant received after submitting." };
+  }
+  if (!/^AXISGRP-/i.test(t)) {
+    return { ok: false, message: "Group ID must start with AXISGRP-." };
+  }
+  if (t.length < 12) {
+    return { ok: false, message: "Paste the Group ID the first applicant received after submitting." };
+  }
+  return { ok: true };
+}
+
+export function validateHouseholdCount(raw: string): { ok: true } | { ok: false; message: string } {
+  const t = raw.trim();
+  if (!t) return { ok: false, message: "How many people are in your group is required." };
+  const n = parseInt(t, 10);
+  if (!Number.isFinite(n) || n < 2) {
+    return { ok: false, message: "Enter a whole number of at least 2 (you plus at least one other person)." };
+  }
+  if (n > 99) return { ok: false, message: "Enter a realistic group size (under 100)." };
+  return { ok: true };
+}

@@ -130,48 +130,111 @@ export function CosignerApplyFlow({
   };
 
   const validateStep2 = (): boolean => {
-    const checks: Array<{ ok: boolean; message: string }> = [];
     const n = validateFullName(f.fullName);
-    checks.push(n.ok ? { ok: true, message: "" } : { ok: false, message: n.message });
+    if (!n.ok) {
+      showToast(n.message);
+      return false;
+    }
     const e = validateEmail(f.email);
-    checks.push(e.ok ? { ok: true, message: "" } : { ok: false, message: e.message });
+    if (!e.ok) {
+      showToast(e.message);
+      return false;
+    }
     const ph = validatePhone10(f.phone);
-    checks.push(ph.ok ? { ok: true, message: "" } : { ok: false, message: ph.message });
-    checks.push(validateDateRequired(f.dob, "Date of birth").ok ? { ok: true, message: "" } : { ok: false, message: "Date of birth is required." });
-    checks.push(validateRequired(f.dlNumber, "Driver's license / ID number").ok ? { ok: true, message: "" } : { ok: false, message: "Driver's license or ID number is required." });
+    if (!ph.ok) {
+      showToast(ph.message);
+      return false;
+    }
+    const dob = validateDateRequired(f.dob, "Date of birth");
+    if (!dob.ok) {
+      showToast(dob.message);
+      return false;
+    }
+    const dl = validateRequired(f.dlNumber, "Driver's license / ID number");
+    if (!dl.ok) {
+      showToast(dl.message);
+      return false;
+    }
     const ssn = validateSsn(f.ssn);
-    checks.push(ssn.ok ? { ok: true, message: "" } : { ok: false, message: ssn.message });
-    checks.push(validateRequired(f.address, "Current address").ok ? { ok: true, message: "" } : { ok: false, message: "Current address is required." });
-    checks.push(validateRequired(f.city, "City").ok ? { ok: true, message: "" } : { ok: false, message: "City is required." });
+    if (!ssn.ok) {
+      showToast(ssn.message);
+      return false;
+    }
+    const ad = validateRequired(f.address, "Current address");
+    if (!ad.ok) {
+      showToast(ad.message);
+      return false;
+    }
+    const ci = validateRequired(f.city, "City");
+    if (!ci.ok) {
+      showToast(ci.message);
+      return false;
+    }
     const st = validateStateAbbrev(f.state);
-    checks.push(st.ok ? { ok: true, message: "" } : { ok: false, message: st.message });
+    if (!st.ok) {
+      showToast(st.message);
+      return false;
+    }
     const z = validateZip(f.zip);
-    checks.push(z.ok ? { ok: true, message: "" } : { ok: false, message: z.message });
-    return run(checks);
+    if (!z.ok) {
+      showToast(z.message);
+      return false;
+    }
+    return true;
   };
 
   const validateStep3 = (): boolean => {
     if (f.notEmployed) {
       const o = validateMoney(f.otherIncome, "Other / non-employment income");
-      return run([o.ok ? { ok: true, message: "" } : { ok: false, message: o.message }]);
+      if (!o.ok) {
+        showToast(o.message);
+        return false;
+      }
+      return true;
     }
-    const checks: Array<{ ok: boolean; message: string }> = [];
-    checks.push(validateRequired(f.employerName, "Employer name").ok ? { ok: true, message: "" } : { ok: false, message: "Employer name is required." });
-    checks.push(validateRequired(f.employerAddress, "Employer address").ok ? { ok: true, message: "" } : { ok: false, message: "Employer address is required." });
-    checks.push(validateRequired(f.supervisorName, "Supervisor name").ok ? { ok: true, message: "" } : { ok: false, message: "Supervisor name is required." });
-    checks.push(validateRequired(f.jobTitle, "Job title").ok ? { ok: true, message: "" } : { ok: false, message: "Job title is required." });
-    checks.push(validateMoney(f.monthlyIncome, "Monthly income").ok ? { ok: true, message: "" } : { ok: false, message: "Monthly income is required and must be a number." });
-    checks.push(validateMoney(f.annualIncome, "Annual income").ok ? { ok: true, message: "" } : { ok: false, message: "Annual income is required and must be a number." });
-    checks.push(
-      validateDateRequired(f.employmentStart, "Employment start date").ok
-        ? { ok: true, message: "" }
-        : { ok: false, message: "Employment start date is required." },
-    );
+    const en = validateRequired(f.employerName, "Employer name");
+    if (!en.ok) {
+      showToast(en.message);
+      return false;
+    }
+    const ea = validateRequired(f.employerAddress, "Employer address");
+    if (!ea.ok) {
+      showToast(ea.message);
+      return false;
+    }
+    const sn = validateRequired(f.supervisorName, "Supervisor name");
+    if (!sn.ok) {
+      showToast(sn.message);
+      return false;
+    }
+    const jt = validateRequired(f.jobTitle, "Job title");
+    if (!jt.ok) {
+      showToast(jt.message);
+      return false;
+    }
+    const mi = validateMoney(f.monthlyIncome, "Monthly income");
+    if (!mi.ok) {
+      showToast(mi.message);
+      return false;
+    }
+    const ai = validateMoney(f.annualIncome, "Annual income");
+    if (!ai.ok) {
+      showToast(ai.message);
+      return false;
+    }
+    const es = validateDateRequired(f.employmentStart, "Employment start date");
+    if (!es.ok) {
+      showToast(es.message);
+      return false;
+    }
     if (f.supervisorPhone.trim()) {
       const sp = validatePhone10(f.supervisorPhone);
-      checks.push(sp.ok ? { ok: true, message: "" } : { ok: false, message: sp.message });
+      if (!sp.ok) {
+        showToast(sp.message);
+        return false;
+      }
     }
-    return run(checks);
+    return true;
   };
 
   const validateStep4 = (): boolean => {
@@ -191,13 +254,14 @@ export function CosignerApplyFlow({
   };
 
   const validateStep5 = (): boolean => {
-    if (!f.signature.trim()) {
-      showToast("Co-signer signature is required.");
+    const sig = validateFullName(f.signature);
+    if (!sig.ok) {
+      showToast(sig.message === "Name is required." ? "Co-signer signature is required." : sig.message);
       return false;
     }
     const d = validateDateRequired(f.dateSigned, "Date signed");
     if (!d.ok) {
-      showToast("Date signed is required.");
+      showToast(d.message);
       return false;
     }
     return true;
@@ -247,18 +311,18 @@ export function CosignerApplyFlow({
               subtitle="Provide the signer’s application ID, their full name, or both."
             />
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
-              <Field label="Signer Application ID" hint="Recommended if you have their Application ID.">
+              <Field label="Signer Application ID" optional hint="Recommended if you have their Application ID.">
                 <Input
                   value={f.signerAppId}
-                  onChange={(e) => applyField(setF, "signerAppId", e.target.value)}
+                  onChange={(e) => patchField(setF, "signerAppId", e.target.value)}
                   placeholder="APP-recXXXXXXXXXXXXXXXXX"
                   className={inputClass}
                 />
               </Field>
-              <Field label="Signer Full Name" hint="Use this when you do not have the Application ID.">
+              <Field label="Signer Full Name" optional hint="Use this when you do not have the Application ID.">
                 <Input
                   value={f.signerFullName}
-                  onChange={(e) => applyField(setF, "signerFullName", e.target.value)}
+                  onChange={(e) => patchField(setF, "signerFullName", e.target.value)}
                   placeholder="First Last"
                   className={inputClass}
                 />
@@ -271,35 +335,35 @@ export function CosignerApplyFlow({
           <>
             <CardHeader title="Co-Signer Information" subtitle="All fields marked with * are required." />
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field label="Full name *" hint="First and last name required.">
-                <Input value={f.fullName} onChange={(e) => applyField(setF, "fullName", e.target.value)} className={inputClass} />
+              <Field label="Full name" hint="First and last name required.">
+                <Input value={f.fullName} onChange={(e) => patchField(setF, "fullName", e.target.value)} className={inputClass} />
               </Field>
-              <Field label="Email *">
-                <Input type="email" value={f.email} onChange={(e) => applyField(setF, "email", e.target.value)} className={inputClass} />
+              <Field label="Email">
+                <Input type="email" value={f.email} onChange={(e) => patchField(setF, "email", e.target.value)} className={inputClass} />
               </Field>
-              <Field label="Phone number *" hint="10 digits">
-                <Input type="tel" value={f.phone} onChange={(e) => applyField(setF, "phone", e.target.value)} placeholder="(206) 555-0100" className={inputClass} />
+              <Field label="Phone number" hint="10 digits">
+                <Input type="tel" value={f.phone} onChange={(e) => patchField(setF, "phone", e.target.value)} placeholder="(206) 555-0100" className={inputClass} />
               </Field>
-              <Field label="Date of birth *">
-                <Input type="date" value={f.dob} onChange={(e) => applyField(setF, "dob", e.target.value)} className={inputClass} />
+              <Field label="Date of birth">
+                <Input type="date" value={f.dob} onChange={(e) => patchField(setF, "dob", e.target.value)} className={inputClass} />
               </Field>
-              <Field label="Driver's License / ID # *" hint="Enter your license or ID number.">
-                <Input value={f.dlNumber} onChange={(e) => applyField(setF, "dlNumber", e.target.value)} placeholder="License or ID number" className={inputClass} />
+              <Field label="Driver's License / ID #" hint="Enter your license or ID number.">
+                <Input value={f.dlNumber} onChange={(e) => patchField(setF, "dlNumber", e.target.value)} placeholder="License or ID number" className={inputClass} />
               </Field>
-              <Field label="Social Security # *" hint="9 digits — ###-##-####">
-                <Input value={f.ssn} onChange={(e) => applyField(setF, "ssn", e.target.value)} placeholder="123-45-6789" className={inputClass} />
+              <Field label="Social Security #" hint="9 digits — ###-##-####">
+                <Input value={f.ssn} onChange={(e) => patchField(setF, "ssn", e.target.value)} placeholder="123-45-6789" className={inputClass} />
               </Field>
-              <Field label="Current address *" className="sm:col-span-2">
-                <Input value={f.address} onChange={(e) => applyField(setF, "address", e.target.value)} placeholder="123 Main St" className={inputClass} />
+              <Field label="Current address" className="sm:col-span-2">
+                <Input value={f.address} onChange={(e) => patchField(setF, "address", e.target.value)} placeholder="123 Main St" className={inputClass} />
               </Field>
-              <Field label="City *">
-                <Input value={f.city} onChange={(e) => applyField(setF, "city", e.target.value)} placeholder="Seattle" className={inputClass} />
+              <Field label="City">
+                <Input value={f.city} onChange={(e) => patchField(setF, "city", e.target.value)} placeholder="Seattle" className={inputClass} />
               </Field>
-              <Field label="State *" hint="Two letters, e.g. WA, CA">
-                <Input value={f.state} onChange={(e) => applyField(setF, "state", e.target.value.toUpperCase())} placeholder="WA" maxLength={2} className={inputClass} />
+              <Field label="State" hint="Two letters, e.g. WA, CA">
+                <Input value={f.state} onChange={(e) => patchField(setF, "state", e.target.value.toUpperCase())} placeholder="WA" maxLength={2} className={inputClass} />
               </Field>
-              <Field label="ZIP *">
-                <Input value={f.zip} onChange={(e) => applyField(setF, "zip", e.target.value)} placeholder="98105" className={inputClass} />
+              <Field label="ZIP">
+                <Input value={f.zip} onChange={(e) => patchField(setF, "zip", e.target.value)} placeholder="98105" className={inputClass} />
               </Field>
             </div>
           </>
@@ -312,7 +376,7 @@ export function CosignerApplyFlow({
               <input
                 type="checkbox"
                 checked={f.notEmployed}
-                onChange={(e) => applyField(setF, "notEmployed", e.target.checked)}
+                onChange={(e) => patchField(setF, "notEmployed", e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-primary"
               />
               I am not currently employed
@@ -321,39 +385,39 @@ export function CosignerApplyFlow({
             {f.notEmployed ? (
               <div className="mt-6">
                 <Field label="Other / Non-Employment Income ($)" hint="e.g. rental income, investments, child support, disability">
-                  <Input value={f.otherIncome} onChange={(e) => applyField(setF, "otherIncome", e.target.value)} placeholder="0" className={inputClass} />
+                  <Input value={f.otherIncome} onChange={(e) => patchField(setF, "otherIncome", e.target.value)} placeholder="0" className={inputClass} />
                 </Field>
               </div>
             ) : (
               <div className="mt-6 space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Employer name *">
-                    <Input value={f.employerName} onChange={(e) => applyField(setF, "employerName", e.target.value)} className={inputClass} />
+                  <Field label="Employer name">
+                    <Input value={f.employerName} onChange={(e) => patchField(setF, "employerName", e.target.value)} className={inputClass} />
                   </Field>
-                  <Field label="Employer address *">
-                    <Input value={f.employerAddress} onChange={(e) => applyField(setF, "employerAddress", e.target.value)} className={inputClass} />
+                  <Field label="Employer address">
+                    <Input value={f.employerAddress} onChange={(e) => patchField(setF, "employerAddress", e.target.value)} className={inputClass} />
                   </Field>
-                  <Field label="Supervisor name *">
-                    <Input value={f.supervisorName} onChange={(e) => applyField(setF, "supervisorName", e.target.value)} className={inputClass} />
+                  <Field label="Supervisor name">
+                    <Input value={f.supervisorName} onChange={(e) => patchField(setF, "supervisorName", e.target.value)} className={inputClass} />
                   </Field>
-                  <Field label="Supervisor phone">
-                    <Input value={f.supervisorPhone} onChange={(e) => applyField(setF, "supervisorPhone", e.target.value)} placeholder="(206) 555-0100" className={inputClass} />
+                  <Field label="Supervisor phone" optional>
+                    <Input value={f.supervisorPhone} onChange={(e) => patchField(setF, "supervisorPhone", e.target.value)} placeholder="(206) 555-0100" className={inputClass} />
                   </Field>
-                  <Field label="Job title *">
-                    <Input value={f.jobTitle} onChange={(e) => applyField(setF, "jobTitle", e.target.value)} className={inputClass} />
+                  <Field label="Job title">
+                    <Input value={f.jobTitle} onChange={(e) => patchField(setF, "jobTitle", e.target.value)} className={inputClass} />
                   </Field>
-                  <Field label="Monthly income ($) *">
-                    <Input value={f.monthlyIncome} onChange={(e) => applyField(setF, "monthlyIncome", e.target.value)} placeholder="0" className={inputClass} />
+                  <Field label="Monthly income ($)">
+                    <Input value={f.monthlyIncome} onChange={(e) => patchField(setF, "monthlyIncome", e.target.value)} placeholder="0" className={inputClass} />
                   </Field>
-                  <Field label="Annual income ($) *">
-                    <Input value={f.annualIncome} onChange={(e) => applyField(setF, "annualIncome", e.target.value)} placeholder="0" className={inputClass} />
+                  <Field label="Annual income ($)">
+                    <Input value={f.annualIncome} onChange={(e) => patchField(setF, "annualIncome", e.target.value)} placeholder="0" className={inputClass} />
                   </Field>
-                  <Field label="Employment start date *">
-                    <Input type="date" value={f.employmentStart} onChange={(e) => applyField(setF, "employmentStart", e.target.value)} className={inputClass} />
+                  <Field label="Employment start date">
+                    <Input type="date" value={f.employmentStart} onChange={(e) => patchField(setF, "employmentStart", e.target.value)} className={inputClass} />
                   </Field>
                 </div>
-                <Field label="Other / Non-Employment Income ($)" hint="Optional — e.g. rental income, investments">
-                  <Input value={f.otherIncome} onChange={(e) => applyField(setF, "otherIncome", e.target.value)} placeholder="0" className={inputClass} />
+                <Field label="Other / Non-Employment Income ($)" optional hint="Optional — e.g. rental income, investments">
+                  <Input value={f.otherIncome} onChange={(e) => patchField(setF, "otherIncome", e.target.value)} placeholder="0" className={inputClass} />
                 </Field>
               </div>
             )}
@@ -364,10 +428,10 @@ export function CosignerApplyFlow({
           <>
             <CardHeader title="Financial Background / Legal" />
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field label="Bankruptcy history *">
+              <Field label="Bankruptcy history">
                 <select
                   value={f.bankruptcy}
-                  onChange={(e) => applyField(setF, "bankruptcy", e.target.value)}
+                  onChange={(e) => patchField(setF, "bankruptcy", e.target.value)}
                   className={`${inputClass} w-full rounded-2xl border border-[#e0e4ec] bg-auth-input-bg px-3 py-2.5 text-sm outline-none focus:border-primary`}
                 >
                   <option value="">Select…</option>
@@ -376,10 +440,10 @@ export function CosignerApplyFlow({
                   <option value="current">Current / active</option>
                 </select>
               </Field>
-              <Field label="Criminal convictions *">
+              <Field label="Criminal convictions">
                 <select
                   value={f.criminal}
-                  onChange={(e) => applyField(setF, "criminal", e.target.value)}
+                  onChange={(e) => patchField(setF, "criminal", e.target.value)}
                   className={`${inputClass} w-full rounded-2xl border border-[#e0e4ec] bg-auth-input-bg px-3 py-2.5 text-sm outline-none focus:border-primary`}
                 >
                   <option value="">Select…</option>
@@ -389,12 +453,15 @@ export function CosignerApplyFlow({
               </Field>
             </div>
             <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-              <p className="text-sm font-semibold text-slate-800">Consent for Credit and Background Check *</p>
+              <p className="text-sm font-semibold text-slate-800">
+                Consent for Credit and Background Check
+                <span className="font-semibold text-primary"> *</span>
+              </p>
               <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={f.consentCredit}
-                  onChange={(e) => applyField(setF, "consentCredit", e.target.checked)}
+                  onChange={(e) => patchField(setF, "consentCredit", e.target.checked)}
                   className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
                 />
                 I consent to a credit and background check.
@@ -406,14 +473,14 @@ export function CosignerApplyFlow({
         {step === 5 ? (
           <>
             <CardHeader title="Signature" />
-            <Field label="Co-Signer Signature *">
-              <Input value={f.signature} onChange={(e) => applyField(setF, "signature", e.target.value)} placeholder="Type your full legal name" className={inputClass} />
+            <Field label="Co-Signer Signature">
+              <Input value={f.signature} onChange={(e) => patchField(setF, "signature", e.target.value)} placeholder="Type your full legal name" className={inputClass} />
             </Field>
-            <Field label="Date signed *">
-              <Input type="date" value={f.dateSigned} onChange={(e) => applyField(setF, "dateSigned", e.target.value)} className={inputClass} />
+            <Field label="Date signed">
+              <Input type="date" value={f.dateSigned} onChange={(e) => patchField(setF, "dateSigned", e.target.value)} className={inputClass} />
             </Field>
-            <Field label="Additional notes" className="mt-4">
-              <Textarea value={f.notes} onChange={(e) => applyField(setF, "notes", e.target.value)} placeholder="Optional context for our team" className={inputClass} />
+            <Field label="Additional notes" optional className="mt-4">
+              <Textarea value={f.notes} onChange={(e) => patchField(setF, "notes", e.target.value)} placeholder="Optional context for our team" className={inputClass} />
             </Field>
           </>
         ) : null}
@@ -436,17 +503,20 @@ function Field({
   hint,
   children,
   className = "",
+  optional = false,
 }: {
   label: string;
   hint?: string;
   children: React.ReactNode;
   className?: string;
+  /** When false, shows a blue asterisk like the signer application mockups */
+  optional?: boolean;
 }) {
   return (
     <div className={className}>
-      <p className="text-xs font-semibold text-slate-600">
+      <p className="text-xs font-semibold text-slate-800">
         {label}
-        {label.includes("*") ? null : null}
+        {!optional ? <span className="font-semibold text-primary"> *</span> : null}
       </p>
       {hint ? <p className="mt-0.5 text-[11px] text-slate-400">{hint}</p> : null}
       {children}
