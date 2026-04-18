@@ -65,8 +65,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   const [tick, setTick] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [toName, setToName] = useState("");
-  const [toEmail, setToEmail] = useState("");
+  const [composeRecipient, setComposeRecipient] = useState<"admin" | "manager">("admin");
   const [composeTopic, setComposeTopic] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
@@ -99,16 +98,14 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   };
 
   const sendCompose = () => {
-    if (!toEmail.trim() || !composeTopic.trim() || !composeBody.trim()) return;
+    if (!composeTopic.trim() || !composeBody.trim()) return;
     composeAdminSentMessage({
-      toEmail: toEmail.trim(),
-      toName: toName.trim() || toEmail.trim(),
+      recipient: composeRecipient,
       topic: composeTopic.trim(),
       body: composeBody.trim(),
     });
     setComposeOpen(false);
-    setToName("");
-    setToEmail("");
+    setComposeRecipient("admin");
     setComposeTopic("");
     setComposeBody("");
     showToast("Message saved to Sent.");
@@ -282,18 +279,18 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
             <p className="mt-1 text-xs text-slate-500">Saves to Sent (demo localStorage).</p>
             <div className="mt-4 space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-600">To name</label>
-                <input value={toName} onChange={(e) => setToName(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Recipient" />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600">To email</label>
-                <input
-                  value={toEmail}
-                  onChange={(e) => setToEmail(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="name@example.com"
-                  type="email"
-                />
+                <label className="text-xs font-semibold text-slate-600" htmlFor="compose-to">
+                  To
+                </label>
+                <select
+                  id="compose-to"
+                  value={composeRecipient}
+                  onChange={(e) => setComposeRecipient(e.target.value as "admin" | "manager")}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/25"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                </select>
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-600">Topic</label>
@@ -312,7 +309,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                 type="button"
                 className="rounded-full text-white disabled:opacity-50"
                 style={{ background: "linear-gradient(135deg, #007aff, #339cff)" }}
-                disabled={!toEmail.trim() || !composeTopic.trim() || !composeBody.trim()}
+                disabled={!composeTopic.trim() || !composeBody.trim()}
                 onClick={sendCompose}
               >
                 Send

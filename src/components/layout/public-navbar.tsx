@@ -17,6 +17,13 @@ const PARTNER_LINKS = [
   { href: "/partner/contact", label: "Partner inquiries" },
 ];
 
+/** Resolve which nav link is active using the longest matching href so `/partner` does not shadow `/partner/pricing`. */
+function activeHrefForPath(pathname: string, links: { href: string }[]): string | undefined {
+  const matches = links.filter((l) => pathname === l.href || pathname.startsWith(`${l.href}/`));
+  if (matches.length === 0) return undefined;
+  return matches.sort((a, b) => b.href.length - a.href.length)[0].href;
+}
+
 type MenuKey = "rent" | "partner";
 
 export function PublicNavbar() {
@@ -49,8 +56,8 @@ export function PublicNavbar() {
   const isOwnerPortal = pathname.startsWith("/owner");
   const rentActive = useMemo(() => pathname === "/" || pathname.startsWith("/rent"), [pathname]);
   const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
-  const activeRentHref = RENT_LINKS.find((l) => pathname.startsWith(l.href))?.href;
-  const activePartnerHref = PARTNER_LINKS.find((l) => pathname.startsWith(l.href))?.href;
+  const activeRentHref = useMemo(() => activeHrefForPath(pathname, RENT_LINKS), [pathname]);
+  const activePartnerHref = useMemo(() => activeHrefForPath(pathname, PARTNER_LINKS), [pathname]);
   const portalHref = isAdminPortal
     ? "/admin/dashboard"
     : isResidentPortal
@@ -167,13 +174,13 @@ export function PublicNavbar() {
             <MobileSection label="Rent with Axis">
               <MobileLink href="/" label="Axis Housing home" active={pathname === "/"} onClose={() => setMobileOpen(false)} />
               {RENT_LINKS.map(({ href, label }) => (
-                <MobileLink key={href} href={href} label={label} active={pathname.startsWith(href)} onClose={() => setMobileOpen(false)} />
+                <MobileLink key={href} href={href} label={label} active={activeRentHref === href} onClose={() => setMobileOpen(false)} />
               ))}
             </MobileSection>
             <div className="pt-1">
               <MobileSection label="Partner with Axis">
                 {PARTNER_LINKS.map(({ href, label }) => (
-                  <MobileLink key={href} href={href} label={label} active={pathname.startsWith(href)} onClose={() => setMobileOpen(false)} />
+                  <MobileLink key={href} href={href} label={label} active={activePartnerHref === href} onClose={() => setMobileOpen(false)} />
                 ))}
               </MobileSection>
             </div>

@@ -32,7 +32,7 @@ export function SegmentedThree<T extends string>({
   const opts = [first, second, third];
   return (
     <div
-      className={`grid grid-cols-3 gap-1 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm backdrop-blur-sm ${className}`}
+      className={`grid grid-cols-3 gap-1 rounded-2xl border border-slate-200/90 bg-slate-50 p-1 shadow-sm ${className}`}
     >
       {opts.map((opt) => {
         const active = value === opt.id;
@@ -41,9 +41,9 @@ export function SegmentedThree<T extends string>({
             key={opt.id}
             type="button"
             onClick={() => onChange(opt.id)}
-            className={`rounded-xl py-2.5 text-sm font-semibold transition-all duration-200 ${
+            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors duration-150 ease-out ${
               active
-                ? "bg-gradient-to-br from-[#007aff] to-[#339cff] text-white shadow-[0_4px_14px_-4px_rgba(0,122,255,0.45)]"
+                ? "bg-gradient-to-br from-[#007aff] to-[#339cff] text-white"
                 : "text-slate-500 hover:bg-white/60 hover:text-slate-800"
             }`}
           >

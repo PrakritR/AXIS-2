@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SegmentedThree } from "@/components/ui/segmented-control";
 import { TabNav, type TabItem } from "@/components/ui/tabs";
@@ -173,7 +173,7 @@ function sameLocalDay(a: Date, b: Date) {
   return a.toDateString() === b.toDateString();
 }
 
-function MonthGrid({
+const MonthGrid = memo(function MonthGrid({
   anchor,
   availability,
   events,
@@ -216,7 +216,7 @@ function MonthGrid({
               type="button"
               title="Double-click for events"
               onDoubleClick={() => onDayDoubleClick?.(d)}
-              className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-sm font-semibold text-slate-800 transition hover:border-primary/30 ${dayCellTone(d, availability, events)}`}
+              className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-sm font-semibold text-slate-800 transition-colors duration-150 hover:border-primary/30 ${dayCellTone(d, availability, events)}`}
             >
               {d.getDate()}
             </button>
@@ -235,9 +235,9 @@ function MonthGrid({
       </div>
     </div>
   );
-}
+});
 
-function EventsWeekGrid({
+const EventsWeekGrid = memo(function EventsWeekGrid({
   weekMonday,
   availability,
   planned,
@@ -267,7 +267,7 @@ function EventsWeekGrid({
             onDoubleClick={() => onDayDoubleClick?.(d)}
             title="Double-click for events"
             aria-label={`${d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })} — double-click for events`}
-            className={`relative min-h-[10rem] rounded-xl border p-2 text-left text-[11px] leading-snug text-slate-600 transition hover:border-primary/25 sm:min-h-[11rem] sm:p-2.5 ${dayCellTone(d, availability, planned)}`}
+            className={`relative min-h-[10rem] rounded-xl border p-2 text-left text-[11px] leading-snug text-slate-600 transition-colors duration-150 hover:border-primary/25 sm:min-h-[11rem] sm:p-2.5 ${dayCellTone(d, availability, planned)}`}
           >
             <span className="pointer-events-none absolute bottom-2 left-2 text-[10px] font-semibold text-slate-400">{d.getDate()}</span>
           </button>
@@ -275,9 +275,9 @@ function EventsWeekGrid({
       </div>
     </div>
   );
-}
+});
 
-function DayAgendaView({
+const DayAgendaView = memo(function DayAgendaView({
   day,
   availability,
   onDayDoubleClick,
@@ -315,7 +315,7 @@ function DayAgendaView({
       </div>
     </div>
   );
-}
+});
 
 function EventDaySheet({
   day,
@@ -458,10 +458,6 @@ function AvailabilityEditor() {
 
   return (
     <div className="w-full min-w-0 space-y-4">
-      <p className="text-sm text-slate-600">
-        Availability is saved per calendar week. Choose a future week to block time off or open partner-call windows.
-        Partners only match slots that fall inside a painted half-hour on the specific date they book.
-      </p>
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Editing week</p>
@@ -617,48 +613,50 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
     };
   }, [tick, monthAnchor]);
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     bump();
     showToast("Refreshed.");
-  };
+  }, [bump, showToast]);
 
-  const shellActions = [
-    { label: "Refresh", variant: "outline" as const, onClick: refresh },
-  ];
+  const shellActions = useMemo(() => [{ label: "Refresh", variant: "outline" as const, onClick: refresh }], [refresh]);
 
   const weekMondayForGrid = useMemo(() => startOfWeekMonday(calAnchor), [calAnchor]);
   const monthDisplayAnchor = useMemo(() => new Date(calAnchor.getFullYear(), calAnchor.getMonth(), 1), [calAnchor]);
 
-  const calPrev = () => setCalAnchor((a) => shiftCalendarAnchor(a, calMode, -1));
-  const calNext = () => setCalAnchor((a) => shiftCalendarAnchor(a, calMode, 1));
-  const calToday = () => {
+  const calPrev = useCallback(() => setCalAnchor((a) => shiftCalendarAnchor(a, calMode, -1)), [calMode]);
+  const calNext = useCallback(() => setCalAnchor((a) => shiftCalendarAnchor(a, calMode, 1)), [calMode]);
+  const calToday = useCallback(() => {
     const t = new Date();
     t.setHours(12, 0, 0, 0);
     setCalAnchor(t);
-  };
+  }, []);
 
-  const openDaySheet = (d: Date) => {
+  const openDaySheet = useCallback((d: Date) => {
     const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
     setEventSheetDay(x);
-  };
+  }, []);
 
-  const goTodayCalendar = () => {
+  const handleCalModeChange = useCallback((id: string) => {
+    setCalMode(id as CalendarMode);
+  }, []);
+
+  const goTodayCalendar = useCallback(() => {
     calToday();
     setCalMode("day");
-  };
+  }, [calToday]);
 
-  const goThisWeekCalendar = () => {
+  const goThisWeekCalendar = useCallback(() => {
     calToday();
     setCalMode("week");
-  };
+  }, [calToday]);
 
-  const goThisMonthCalendar = () => {
+  const goThisMonthCalendar = useCallback(() => {
     const t = new Date();
     t.setDate(1);
     t.setHours(12, 0, 0, 0);
     setCalAnchor(t);
     setCalMode("month");
-  };
+  }, []);
 
   return (
     <ManagerSectionShell title="Events" actions={shellActions}>
@@ -673,8 +671,8 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
               <button
                 type="button"
                 onClick={goTodayCalendar}
-                className={`rounded-2xl border px-4 py-3 text-left transition hover:border-primary/30 hover:bg-white ${
-                  calMode === "day" ? "border-primary/25 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]" : "border-slate-100 bg-slate-50/60"
+                className={`rounded-2xl border px-4 py-3 text-left transition-[border-color,background-color] duration-150 ease-out hover:border-primary/30 hover:bg-white ${
+                  calMode === "day" ? "border-primary/30 bg-white ring-1 ring-primary/15" : "border-slate-100 bg-slate-50/60"
                 }`}
               >
                 <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.today}</p>
@@ -683,8 +681,8 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
               <button
                 type="button"
                 onClick={goThisWeekCalendar}
-                className={`rounded-2xl border px-4 py-3 text-left transition hover:border-primary/30 hover:bg-white ${
-                  calMode === "week" ? "border-primary/25 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]" : "border-slate-100 bg-slate-50/60"
+                className={`rounded-2xl border px-4 py-3 text-left transition-[border-color,background-color] duration-150 ease-out hover:border-primary/30 hover:bg-white ${
+                  calMode === "week" ? "border-primary/30 bg-white ring-1 ring-primary/15" : "border-slate-100 bg-slate-50/60"
                 }`}
               >
                 <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.week}</p>
@@ -693,8 +691,8 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
               <button
                 type="button"
                 onClick={goThisMonthCalendar}
-                className={`rounded-2xl border px-4 py-3 text-left transition hover:border-primary/30 hover:bg-white ${
-                  calMode === "month" ? "border-primary/25 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]" : "border-slate-100 bg-slate-50/60"
+                className={`rounded-2xl border px-4 py-3 text-left transition-[border-color,background-color] duration-150 ease-out hover:border-primary/30 hover:bg-white ${
+                  calMode === "month" ? "border-primary/30 bg-white ring-1 ring-primary/15" : "border-slate-100 bg-slate-50/60"
                 }`}
               >
                 <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.month}</p>
@@ -715,7 +713,7 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
                 </div>
                 <SegmentedThree
                   value={calMode}
-                  onChange={(id) => setCalMode(id as CalendarMode)}
+                  onChange={handleCalModeChange}
                   first={{ id: "day", label: "Day" }}
                   second={{ id: "week", label: "Week" }}
                   third={{ id: "month", label: "Month" }}

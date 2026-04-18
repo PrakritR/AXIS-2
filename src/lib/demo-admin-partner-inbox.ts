@@ -192,11 +192,18 @@ export function moveInboxMessageToTrash(id: string): boolean {
   return true;
 }
 
+/** Demo routing labels for admin compose “To” — appears under Sent. */
+const COMPOSE_RECIPIENT_DEMO: Record<"admin" | "manager", { name: string; email: string }> = {
+  admin: { name: "Axis Admin", email: "admin@axis.demo" },
+  manager: { name: "Property manager", email: "manager@axis.demo" },
+};
+
 /** Admin “New message” — appears under Sent. */
-export function composeAdminSentMessage(payload: { toEmail: string; toName: string; topic: string; body: string }): InboxMessage {
+export function composeAdminSentMessage(payload: { recipient: "admin" | "manager"; topic: string; body: string }): InboxMessage {
+  const { name, email } = COMPOSE_RECIPIENT_DEMO[payload.recipient];
   return appendInboxMessage({
-    name: payload.toName,
-    email: payload.toEmail,
+    name,
+    email,
     topic: payload.topic,
     body: payload.body,
     folder: "sent",
