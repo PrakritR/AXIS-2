@@ -14,12 +14,6 @@ function titleFor(role: AuthRole) {
   return "Admin portal";
 }
 
-function homeFor(role: AuthRole) {
-  if (role === "resident") return "/resident/dashboard";
-  if (role === "manager") return "/manager/dashboard";
-  return "/admin/dashboard";
-}
-
 export default function SignInPage() {
   const { showToast, openModal } = useAppUi();
   const [role, setRole] = useState<AuthRole>("resident");
@@ -64,7 +58,7 @@ export default function SignInPage() {
         Sign in
       </Button>
 
-      <div className="mt-5 flex items-center justify-between gap-3 text-sm">
+      <div className="mt-5 flex justify-center text-sm">
         <button
           type="button"
           className="font-semibold text-[#2b5ce7] hover:text-blue-700"
@@ -72,9 +66,6 @@ export default function SignInPage() {
         >
           Message Axis
         </button>
-        <Link className="shrink-0 font-semibold text-[#2b5ce7] hover:text-blue-700" href={homeFor(role)}>
-          Enter portal UI →
-        </Link>
       </div>
 
       <p className="mt-8 text-center text-sm text-slate-600">

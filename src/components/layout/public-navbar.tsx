@@ -3,46 +3,97 @@
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
-function NavPill({
-  href,
+const RENT_LINKS = [
+  { href: "/rent/tours-contact", label: "Schedule tour & contact" },
+  { href: "/rent/apply", label: "Apply" },
+  { href: "/rent/listings", label: "Properties" },
+];
+
+const PARTNER_LINKS = [
+  { href: "/partner/pricing", label: "Pricing" },
+  { href: "/partner/contact", label: "Contact" },
+];
+
+function NavDropdown({
   label,
+  links,
   active,
+  activeHref,
 }: {
-  href: string;
   label: string;
+  links: { href: string; label: string }[];
   active: boolean;
+  activeHref?: string;
 }) {
-  return (
-    <Link
-      href={href}
-      className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition sm:px-4 sm:text-sm ${
-        active
-          ? "bg-white text-slate-900 shadow-sm ring-2 ring-[#2b5ce7]"
-          : "text-slate-600 hover:bg-white/90 hover:text-slate-900"
-      }`}
-    >
-      {label}
-    </Link>
-  );
-}
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-function SectionLabel({
-  children,
-  active,
-}: {
-  children: string;
-  active: boolean;
-}) {
+  const enter = () => {
+    if (timer.current) clearTimeout(timer.current);
+    setOpen(true);
+  };
+  const leave = () => {
+    timer.current = setTimeout(() => setOpen(false), 120);
+  };
+
   return (
-    <span className="relative inline-flex items-center gap-1 pb-1 text-sm font-semibold text-slate-900">
-      {children}
-      <span className="text-[10px] font-normal text-slate-500">▾</span>
-      {active ? (
-        <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[#2b5ce7]" />
-      ) : null}
-    </span>
+    <div className="relative" onMouseEnter={enter} onMouseLeave={leave}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`group relative flex items-center gap-1 rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+          active
+            ? "text-[#2b5ce7]"
+            : "text-slate-700 hover:text-slate-900"
+        }`}
+      >
+        {label}
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          className={`mt-0.5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        >
+          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {active && (
+          <span className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full bg-[#2b5ce7]" />
+        )}
+      </button>
+
+      <div
+        className={`absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 transition-all duration-200 ${
+          open ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none -translate-y-1 opacity-0"
+        }`}
+      >
+        <div className="min-w-[200px] overflow-hidden rounded-2xl border border-slate-200/80 bg-white py-1.5 shadow-[0_8px_32px_-4px_rgba(15,23,42,0.15)]">
+          {links.map(({ href, label: linkLabel }) => {
+            const isActive = activeHref === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors duration-100 ${
+                  isActive
+                    ? "bg-[#eef2ff] text-[#2b5ce7]"
+                    : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                {isActive && (
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#2b5ce7]" />
+                )}
+                {!isActive && <span className="h-1.5 w-1.5 shrink-0" />}
+                {linkLabel}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -52,7 +103,6 @@ export function PublicNavbar() {
 
   const isAdminPortal = pathname.startsWith("/admin");
   const isResidentPortal = pathname.startsWith("/resident");
-  const isAuth = pathname.startsWith("/auth");
 
   const rentActive = useMemo(
     () => pathname === "/" || pathname.startsWith("/rent"),
@@ -60,51 +110,36 @@ export function PublicNavbar() {
   );
   const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
 
-  const tourContactActive =
-    pathname.startsWith("/rent/tours-contact") || pathname === "/rent/tours";
-  const applyActive = pathname.startsWith("/rent/apply");
-  const propertiesActive = pathname.startsWith("/rent/listings");
-  const pricingActive = pathname.startsWith("/partner/pricing");
-  const partnerContactActive = pathname.startsWith("/partner/contact");
+  const activeRentHref = RENT_LINKS.find((l) => pathname.startsWith(l.href))?.href;
+  const activePartnerHref = PARTNER_LINKS.find((l) => pathname.startsWith(l.href))?.href;
 
-  const logoVariant =
-    isAuth ? "portalHeader" : isAdminPortal || isResidentPortal ? "adminHeader" : "default";
   const logoHref = isAdminPortal ? "/admin/dashboard" : isResidentPortal ? "/resident/dashboard" : "/";
+  const portalHref = isAdminPortal ? "/admin/dashboard" : isResidentPortal ? "/resident/dashboard" : "/auth/sign-in";
 
   return (
-    <div className="border-b border-slate-200/90 bg-white">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-3 sm:py-4">
-        <AxisLogoLink href={logoHref} variant={logoVariant} />
+    <div className="border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:py-3.5">
+        <AxisLogoLink href={logoHref} />
 
-        <nav className="hidden min-w-0 flex-1 flex-col gap-4 px-2 lg:flex lg:flex-row lg:items-center lg:justify-center lg:gap-8 xl:gap-12">
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-            <SectionLabel active={rentActive}>Rent with Axis</SectionLabel>
-            <div className="flex flex-wrap items-center justify-center gap-1 rounded-full bg-slate-100/90 p-1 ring-1 ring-slate-200/80">
-              <NavPill
-                href="/rent/tours-contact"
-                label="Schedule tour & contact"
-                active={tourContactActive}
-              />
-              <NavPill href="/rent/apply" label="Apply" active={applyActive} />
-              <NavPill href="/rent/listings" label="Properties" active={propertiesActive} />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-            <SectionLabel active={partnerActive}>Partner with Axis</SectionLabel>
-            <div className="flex flex-wrap items-center justify-center gap-1 rounded-full bg-slate-100/90 p-1 ring-1 ring-slate-200/80">
-              <NavPill href="/partner/pricing" label="Pricing" active={pricingActive} />
-              <NavPill href="/partner/contact" label="Contact" active={partnerContactActive} />
-            </div>
-          </div>
+        <nav className="hidden items-center gap-1 lg:flex">
+          <NavDropdown
+            label="Rent with Axis"
+            links={RENT_LINKS}
+            active={rentActive}
+            activeHref={activeRentHref}
+          />
+          <NavDropdown
+            label="Partner with Axis"
+            links={PARTNER_LINKS}
+            active={partnerActive}
+            activeHref={activePartnerHref}
+          />
         </nav>
 
-        <div className="hidden lg:block">
+        <div className="hidden items-center gap-3 lg:flex">
           <Link
-            href={
-              isAdminPortal ? "/admin/dashboard" : isResidentPortal ? "/resident/dashboard" : "/auth/sign-in"
-            }
-            className="inline-flex items-center justify-center rounded-full bg-[#2b5ce7] px-7 py-2.5 text-sm font-semibold text-white shadow-[0_0_22px_rgba(43,92,231,0.45)] transition hover:bg-blue-600"
+            href={portalHref}
+            className="inline-flex items-center justify-center rounded-full bg-[#2b5ce7] px-6 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(43,92,231,0.4)] transition-all duration-150 hover:bg-[#2451d4] hover:shadow-[0_0_28px_rgba(43,92,231,0.5)]"
           >
             Portal
           </Link>
@@ -112,64 +147,108 @@ export function PublicNavbar() {
 
         <button
           type="button"
-          className="inline-flex rounded-full border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 md:ml-auto lg:hidden"
+          className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 lg:hidden"
           onClick={() => setMobileOpen((v) => !v)}
         >
+          {mobileOpen ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          )}
           Menu
         </button>
       </div>
 
-      {mobileOpen ? (
-        <div className="border-t border-slate-200 bg-white px-4 py-4 lg:hidden">
-          <div className="space-y-3">
-            <Link className="block font-semibold text-slate-900" href="/" onClick={() => setMobileOpen(false)}>
-              Home
-            </Link>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Rent with Axis</p>
-            <Link
-              className="block py-1 text-sm font-semibold text-slate-800"
-              href="/rent/tours-contact"
-              onClick={() => setMobileOpen(false)}
-            >
-              Schedule tour & contact
-            </Link>
-            <Link className="block py-1 text-sm font-semibold text-slate-800" href="/rent/apply" onClick={() => setMobileOpen(false)}>
-              Apply
-            </Link>
-            <Link className="block py-1 text-sm font-semibold text-slate-800" href="/rent/listings" onClick={() => setMobileOpen(false)}>
-              Properties
-            </Link>
-            <p className="pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Partner with Axis</p>
-            <Link className="block py-1 text-sm font-semibold text-slate-800" href="/partner/pricing" onClick={() => setMobileOpen(false)}>
-              Pricing
-            </Link>
-            <Link className="block py-1 text-sm font-semibold text-slate-800" href="/partner/contact" onClick={() => setMobileOpen(false)}>
-              Contact
-            </Link>
-            <Link
-              href={
-                isAdminPortal ? "/admin/dashboard" : isResidentPortal ? "/resident/dashboard" : "/auth/sign-in"
-              }
-              onClick={() => setMobileOpen(false)}
-            >
-              <span className="mt-3 flex w-full items-center justify-center rounded-full bg-[#2b5ce7] py-3 text-sm font-semibold text-white shadow-[0_0_20px_rgba(43,92,231,0.4)]">
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-in-out lg:hidden ${
+          mobileOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+        }`}
+      >
+        <div className="border-t border-slate-100 bg-white px-4 pb-5 pt-4">
+          <div className="space-y-1">
+            <MobileSection label="Rent with Axis">
+              {RENT_LINKS.map(({ href, label }) => (
+                <MobileLink
+                  key={href}
+                  href={href}
+                  label={label}
+                  active={pathname.startsWith(href)}
+                  onClose={() => setMobileOpen(false)}
+                />
+              ))}
+            </MobileSection>
+
+            <div className="pt-1">
+              <MobileSection label="Partner with Axis">
+                {PARTNER_LINKS.map(({ href, label }) => (
+                  <MobileLink
+                    key={href}
+                    href={href}
+                    label={label}
+                    active={pathname.startsWith(href)}
+                    onClose={() => setMobileOpen(false)}
+                  />
+                ))}
+              </MobileSection>
+            </div>
+
+            <div className="pt-3">
+              <Link
+                href={portalHref}
+                onClick={() => setMobileOpen(false)}
+                className="flex w-full items-center justify-center rounded-2xl bg-[#2b5ce7] py-3 text-sm font-semibold text-white shadow-[0_0_18px_rgba(43,92,231,0.35)]"
+              >
                 Portal
-              </span>
-            </Link>
-            <div className="border-t border-slate-100 pt-3 text-xs text-slate-500">
-              <Link href="/manager/dashboard" className="mr-3 font-semibold text-[#2b5ce7]" onClick={() => setMobileOpen(false)}>
-                Manager
               </Link>
-              <Link href="/resident/dashboard" className="mr-3 font-semibold text-[#2b5ce7]" onClick={() => setMobileOpen(false)}>
-                Resident
-              </Link>
-              <Link href="/admin/dashboard" className="font-semibold text-[#2b5ce7]" onClick={() => setMobileOpen(false)}>
-                Admin
-              </Link>
+            </div>
+
+            <div className="flex gap-4 border-t border-slate-100 pt-3 text-xs">
+              <Link href="/manager/dashboard" className="font-semibold text-[#2b5ce7]" onClick={() => setMobileOpen(false)}>Manager</Link>
+              <Link href="/resident/dashboard" className="font-semibold text-[#2b5ce7]" onClick={() => setMobileOpen(false)}>Resident</Link>
+              <Link href="/admin/dashboard" className="font-semibold text-[#2b5ce7]" onClick={() => setMobileOpen(false)}>Admin</Link>
             </div>
           </div>
         </div>
-      ) : null}
+      </div>
     </div>
+  );
+}
+
+function MobileSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="px-1 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
+      <div className="space-y-0.5">{children}</div>
+    </div>
+  );
+}
+
+function MobileLink({
+  href,
+  label,
+  active,
+  onClose,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClose}
+      className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+        active ? "bg-[#eef2ff] font-semibold text-[#2b5ce7]" : "text-slate-700 hover:bg-slate-50"
+      }`}
+    >
+      {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#2b5ce7]" />}
+      {!active && <span className="h-1.5 w-1.5 shrink-0" />}
+      {label}
+    </Link>
   );
 }

@@ -35,25 +35,32 @@ body {
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Home hero budget slider — WebKit thumb */
+/* Home hero budget slider */
 .home-budget-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 9999px;
   background: #2b5ce7;
-  border: 2px solid #ffffff;
-  box-shadow: 0 2px 8px rgba(43, 92, 231, 0.45);
+  border: 3px solid #ffffff;
+  box-shadow: 0 2px 10px rgba(43, 92, 231, 0.35);
   cursor: pointer;
 }
 
 .home-budget-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 9999px;
   background: #2b5ce7;
-  border: 2px solid #ffffff;
-  box-shadow: 0 2px 8px rgba(43, 92, 231, 0.45);
+  border: 3px solid #ffffff;
+  box-shadow: 0 2px 10px rgba(43, 92, 231, 0.35);
   cursor: pointer;
+  border: none;
+}
+
+.home-budget-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: #e2e8f0;
 }
