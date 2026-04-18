@@ -429,7 +429,6 @@ function Step2({
             );
           })}
         </div>
-        <p className="mt-3 text-xs text-slate-400">Highlighted dates have available slots.</p>
       </div>
 
       {/* Time slots */}

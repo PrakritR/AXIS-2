@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   ListingBathroomRow,
   ListingFloorCard,
   ListingRoomRow,
   ListingSharedRow,
 } from "@/data/listing-rich-content";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 
 function AvailabilityPill({ text }: { text: string }) {
   const green = text.toLowerCase().includes("available");
@@ -23,12 +25,12 @@ function AvailabilityPill({ text }: { text: string }) {
   );
 }
 
-function FeatureCheck({ on }: { on: boolean }) {
-  return on ? (
-    <span className="text-sm font-semibold text-emerald-600">Yes</span>
-  ) : (
-    <span className="text-sm text-slate-300">—</span>
-  );
+function formatBathroomIncludes(r: ListingBathroomRow): string {
+  const parts: string[] = [];
+  if (r.shower) parts.push("Shower");
+  if (r.toilet) parts.push("Toilet");
+  if (r.bathtub) parts.push("Bathtub");
+  return parts.length ? parts.join(", ") : "—";
 }
 
 function DetailsButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
@@ -80,16 +82,39 @@ type ModalState =
   | { kind: "shared"; row: ListingSharedRow }
   | null;
 
-function ListingDetailModal({ state, onClose }: { state: ModalState; onClose: () => void }) {
+function ListingDetailModal({
+  state,
+  onClose,
+  listingPropertyId,
+}: {
+  state: ModalState;
+  onClose: () => void;
+  listingPropertyId: string;
+}) {
   const stop = useCallback((e: React.MouseEvent) => e.stopPropagation(), []);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!state) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [state]);
 
   if (!state) return null;
+  if (!mounted || typeof document === "undefined") return null;
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center p-3 sm:items-center sm:p-6" role="dialog" aria-modal>
+  const panel = (
+    <div className="fixed inset-0 z-[240] flex items-end justify-center p-3 sm:items-center sm:p-6" role="dialog" aria-modal>
       <button type="button" className="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]" onClick={onClose} aria-label="Close dialog" />
       <div
-        className="relative z-10 max-h-[min(92vh,760px)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white shadow-2xl sm:max-w-2xl"
+        className="relative z-10 max-h-[min(92vh,820px)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white shadow-2xl sm:max-w-2xl"
         onClick={stop}
       >
         <button
@@ -103,20 +128,23 @@ function ListingDetailModal({ state, onClose }: { state: ModalState; onClose: ()
 
         {state.kind === "room" ? (
           <div className="p-6 pb-8 sm:p-8">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.floorLabel}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.floorLabel.toUpperCase()}</p>
             <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.room.name}</h2>
             <p className="mt-2 text-sm text-slate-600">{state.room.detail}</p>
-            <div className="mt-4 flex justify-end">
-              <AvailabilityPill text={state.room.availability} />
-            </div>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Monthly rent</p>
                 <p className="mt-2 text-lg font-bold text-slate-900">{state.room.price}</p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Bathroom setup</p>
                 <p className="mt-2 text-sm font-medium leading-snug text-slate-800">{state.room.modal.setupLine}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Status</p>
+                <div className="mt-2">
+                  <AvailabilityPill text={state.room.availability} />
+                </div>
               </div>
             </div>
             <div className="mt-6">
@@ -126,19 +154,28 @@ function ListingDetailModal({ state, onClose }: { state: ModalState; onClose: ()
                 subtitle={state.room.modal.tourSubtitle}
               />
             </div>
-            <div className="mt-6">
+            <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>
               <p className="mt-1 text-sm text-slate-600">This room includes the following features:</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {state.room.modal.includedTags.map((t) => (
-                  <span key={t} className="rounded-full border border-sky-200/90 bg-sky-50/80 px-3 py-1 text-xs font-medium text-slate-800">
+                  <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
                     {t}
                   </span>
                 ))}
               </div>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href="/rent/apply" className="flex-1">
+              <Link
+                href={buildRentalApplyHref({
+                  propertyId: listingPropertyId,
+                  listingRoomId: state.room.id,
+                  listingRoomName: state.room.name,
+                  floorLabel: state.floorLabel,
+                  roomPrice: state.room.price,
+                })}
+                className="flex-1"
+              >
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
                   Apply for this room
                 </span>
@@ -157,20 +194,15 @@ function ListingDetailModal({ state, onClose }: { state: ModalState; onClose: ()
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.row.modal.eyebrow}</p>
             <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.row.name}</h2>
             <p className="mt-2 text-sm text-slate-600">{state.row.detail}</p>
-            <div className="mt-4 flex justify-end">
-              <AvailabilityPill text={state.row.availability} />
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Setup</p>
+              <p className="mt-2 text-sm font-medium leading-snug text-slate-800">{state.row.modal.setupCard}</p>
             </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Setup</p>
-                <p className="mt-2 text-sm font-medium leading-snug text-slate-800">{state.row.modal.setupCard}</p>
-              </div>
-            </div>
-            <div className="mt-6">
+            <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Includes</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {state.row.modal.includedTags.map((t) => (
-                  <span key={t} className="rounded-full border border-sky-200/90 bg-sky-50/80 px-3 py-1 text-xs font-medium text-slate-800">
+                  <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
                     {t}
                   </span>
                 ))}
@@ -188,7 +220,7 @@ function ListingDetailModal({ state, onClose }: { state: ModalState; onClose: ()
                   Ask about this bathroom
                 </span>
               </Link>
-              <Link href="/rent/apply" className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
                   Apply
                 </span>
@@ -203,9 +235,6 @@ function ListingDetailModal({ state, onClose }: { state: ModalState; onClose: ()
             <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.row.name}</h2>
             <p className="mt-2 text-sm text-slate-600">{state.row.detail}</p>
             <p className="mt-1 text-sm text-slate-500">{state.row.useNote}</p>
-            <div className="mt-4 flex justify-end">
-              <AvailabilityPill text={state.row.availability} />
-            </div>
             <div className="mt-6">
               <ModalVideoBlock
                 eyebrow={state.row.modal.tourEyebrow}
@@ -213,11 +242,11 @@ function ListingDetailModal({ state, onClose }: { state: ModalState; onClose: ()
                 subtitle={state.row.modal.tourSubtitle}
               />
             </div>
-            <div className="mt-6">
+            <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {state.row.modal.includedTags.map((t) => (
-                  <span key={t} className="rounded-full border border-sky-200/90 bg-sky-50/80 px-3 py-1 text-xs font-medium text-slate-800">
+                  <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
                     {t}
                   </span>
                 ))}
@@ -230,7 +259,7 @@ function ListingDetailModal({ state, onClose }: { state: ModalState; onClose: ()
               </div>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href="/rent/apply" className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
                   Apply
                 </span>
@@ -246,9 +275,11 @@ function ListingDetailModal({ state, onClose }: { state: ModalState; onClose: ()
       </div>
     </div>
   );
+
+  return createPortal(panel, document.body);
 }
 
-export function InteractiveFloorPlanCard({ floor }: { floor: ListingFloorCard }) {
+export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: ListingFloorCard; listingPropertyId: string }) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
@@ -291,7 +322,7 @@ export function InteractiveFloorPlanCard({ floor }: { floor: ListingFloorCard })
           </details>
         ) : null}
       </div>
-      <ListingDetailModal state={modal} onClose={() => setModal(null)} />
+      <ListingDetailModal state={modal} onClose={() => setModal(null)} listingPropertyId={listingPropertyId} />
     </>
   );
 }
@@ -340,7 +371,7 @@ function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpe
   );
 }
 
-export function BathroomTableInteractive({ rows }: { rows: ListingBathroomRow[] }) {
+export function BathroomTableInteractive({ rows, listingPropertyId }: { rows: ListingBathroomRow[]; listingPropertyId: string }) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
@@ -350,67 +381,42 @@ export function BathroomTableInteractive({ rows }: { rows: ListingBathroomRow[] 
           <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
             <p className="font-semibold text-slate-900">{r.name}</p>
             <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-              <div>
-                <p className="font-semibold text-slate-500">Shower</p>
-                <FeatureCheck on={r.shower} />
-              </div>
-              <div>
-                <p className="font-semibold text-slate-500">Toilet</p>
-                <FeatureCheck on={r.toilet} />
-              </div>
-              <div>
-                <p className="font-semibold text-slate-500">Tub</p>
-                <FeatureCheck on={r.bathtub} />
-              </div>
-            </div>
-            <div className="mt-3">
-              <AvailabilityPill text={r.availability} />
-            </div>
+            <p className="mt-3 text-sm text-slate-800">
+              <span className="font-semibold text-slate-500">Includes: </span>
+              {formatBathroomIncludes(r)}
+            </p>
             <DetailsButton className="mt-3 w-full" onClick={() => setModal({ kind: "bathroom", row: r })} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
-        <div className="min-w-[720px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,0.65fr)_minmax(0,0.65fr)_minmax(0,0.65fr)_minmax(0,1fr)_auto] gap-3 border-b border-slate-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div className="min-w-[520px] lg:min-w-0">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] gap-3 border-b border-slate-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             <span>Bathroom</span>
-            <span className="text-center">Shower</span>
-            <span className="text-center">Toilet</span>
-            <span className="text-center">Bathtub</span>
-            <span>Availability</span>
+            <span>Includes</span>
             <span className="w-[88px]" />
           </div>
           {rows.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,0.65fr)_minmax(0,0.65fr)_minmax(0,0.65fr)_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 py-4 last:border-0"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] items-center gap-3 border-b border-slate-100 py-4 last:border-0"
             >
               <div>
                 <p className="font-semibold text-slate-900">{r.name}</p>
                 <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
               </div>
-              <div className="flex justify-center">
-                <FeatureCheck on={r.shower} />
-              </div>
-              <div className="flex justify-center">
-                <FeatureCheck on={r.toilet} />
-              </div>
-              <div className="flex justify-center">
-                <FeatureCheck on={r.bathtub} />
-              </div>
-              <AvailabilityPill text={r.availability} />
+              <p className="text-sm font-medium text-slate-800">{formatBathroomIncludes(r)}</p>
               <DetailsButton onClick={() => setModal({ kind: "bathroom", row: r })} />
             </div>
           ))}
         </div>
       </div>
-      <ListingDetailModal state={modal} onClose={() => setModal(null)} />
+      <ListingDetailModal state={modal} onClose={() => setModal(null)} listingPropertyId={listingPropertyId} />
     </>
   );
 }
 
-export function SharedTableInteractive({ rows }: { rows: ListingSharedRow[] }) {
+export function SharedTableInteractive({ rows, listingPropertyId }: { rows: ListingSharedRow[]; listingPropertyId: string }) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
@@ -421,38 +427,33 @@ export function SharedTableInteractive({ rows }: { rows: ListingSharedRow[] }) {
             <p className="font-semibold text-slate-900">{r.name}</p>
             <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
             <p className="mt-2 text-sm text-slate-700">{r.useNote}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <AvailabilityPill text={r.availability} />
-            </div>
             <DetailsButton className="mt-3 w-full" onClick={() => setModal({ kind: "shared", row: r })} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
-        <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1.1fr)_auto] gap-3 border-b border-slate-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div className="min-w-[520px] lg:min-w-0">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_auto] gap-3 border-b border-slate-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             <span>Space</span>
             <span>Details</span>
-            <span>Availability</span>
             <span className="w-[88px]" />
           </div>
           {rows.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1.1fr)_auto] items-center gap-3 border-b border-slate-100 py-4 last:border-0"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_auto] items-center gap-3 border-b border-slate-100 py-4 last:border-0"
             >
               <div>
                 <p className="font-semibold text-slate-900">{r.name}</p>
                 <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
               </div>
               <p className="text-sm text-slate-700">{r.useNote}</p>
-              <AvailabilityPill text={r.availability} />
               <DetailsButton onClick={() => setModal({ kind: "shared", row: r })} />
             </div>
           ))}
         </div>
       </div>
-      <ListingDetailModal state={modal} onClose={() => setModal(null)} />
+      <ListingDetailModal state={modal} onClose={() => setModal(null)} listingPropertyId={listingPropertyId} />
     </>
   );
 }

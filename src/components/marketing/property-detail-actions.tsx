@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import Link from "next/link";
 
-export function PropertyDetailActions({ propertyId: _propertyId }: { propertyId: string }) {
+export function PropertyDetailActions({ propertyId }: { propertyId: string }) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
       <Link href="/rent/listings">
@@ -14,7 +15,7 @@ export function PropertyDetailActions({ propertyId: _propertyId }: { propertyId:
           Schedule tour
         </Button>
       </Link>
-      <Link href="/rent/apply">
+      <Link href={buildRentalApplyHref({ propertyId })}>
         <Button type="button" className="w-full sm:w-auto">
           Apply
         </Button>

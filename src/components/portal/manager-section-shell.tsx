@@ -1,47 +1,122 @@
-import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+"use client";
 
-export function ManagerSectionShell({
-  eyebrow,
-  title,
-  subtitle,
-  actions,
-  children,
+import type { ReactNode } from "react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useAppUi } from "@/components/providers/app-ui-provider";
+
+export type ShellAction = {
+  label: string;
+  variant?: "primary" | "outline";
+  onClick?: () => void;
+};
+
+const selectClass =
+  "h-10 rounded-full border border-slate-200/90 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25";
+
+/** Shared property filter row for portal headers. */
+export function PortalPropertyFilter({
+  applications,
+  residents,
 }: {
-  eyebrow?: string;
-  title: string;
-  subtitle: string;
-  actions?: { label: string; variant?: "primary" | "secondary" | "outline"; onClick?: () => void }[];
-  children: ReactNode;
+  applications?: boolean;
+  residents?: boolean;
 }) {
   return (
-    <div className="space-y-6">
-      <div className="rounded-[28px] border border-primary/15 bg-[radial-gradient(circle_at_top_left,_rgba(0,122,255,0.16),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.96))] px-6 py-6 shadow-[0_24px_70px_-38px_rgba(0,122,255,0.18)] sm:px-8">
-        {eyebrow ? (
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary/75">{eyebrow}</p>
-        ) : null}
-        <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <h1 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950 sm:text-4xl">{title}</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-[15px]">{subtitle}</p>
-          </div>
+    <div className="flex flex-wrap items-center gap-2">
+      <select className={selectClass} aria-label="Properties">
+        <option>All your properties</option>
+      </select>
+      {residents ? (
+        <select className={selectClass} aria-label="Residents">
+          <option>All residents</option>
+        </select>
+      ) : null}
+      {applications ? (
+        <select className={selectClass} aria-label="Applications">
+          <option>All applications</option>
+        </select>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Minimal portal workspace shell (admin-style): title row, optional filters,
+ * pill actions, optional KPI strip, then body.
+ */
+export function ManagerSectionShell({
+  title,
+  filters,
+  actions,
+  kpis,
+  activeKpiIndex: activeKpiIndexProp = 0,
+  children,
+}: {
+  title: string;
+  filters?: ReactNode;
+  actions?: ShellAction[];
+  kpis?: { value: string; label: string }[];
+  activeKpiIndex?: number;
+  children: ReactNode;
+}) {
+  const { showToast } = useAppUi();
+  const [activeKpi, setActiveKpi] = useState(activeKpiIndexProp);
+
+  return (
+    <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          {filters ? <div className="flex flex-wrap items-center gap-2">{filters}</div> : null}
           {actions?.length ? (
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              {actions.map((action) => (
+            <div className="flex flex-wrap items-center gap-2">
+              {actions.map((a) => (
                 <Button
-                  key={action.label}
+                  key={a.label}
                   type="button"
-                  variant={action.variant ?? "outline"}
-                  onClick={action.onClick}
+                  variant={a.variant ?? "outline"}
+                  onClick={
+                    a.onClick ??
+                    (() => {
+                      showToast(
+                        /refresh/i.test(a.label) ? "Refreshed (demo)." : `${a.label} (demo)`,
+                      );
+                    })
+                  }
                 >
-                  {action.label}
+                  {a.label}
                 </Button>
               ))}
             </div>
           ) : null}
         </div>
       </div>
-      {children}
+
+      {kpis?.length ? (
+        <div className="mt-5 flex flex-wrap gap-2">
+          {kpis.map((k, i) => {
+            const active = i === activeKpi;
+            return (
+              <button
+                key={k.label}
+                type="button"
+                onClick={() => setActiveKpi(i)}
+                className={`min-w-[7.5rem] rounded-2xl border px-4 py-3 text-left transition ${
+                  active
+                    ? "border-slate-200/90 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.18)]"
+                    : "border-transparent bg-slate-50/80 hover:border-slate-200/60 hover:bg-slate-50"
+                }`}
+              >
+                <p className="text-xl font-bold tabular-nums text-slate-900">{k.value}</p>
+                <p className="mt-0.5 text-xs font-medium text-slate-500">{k.label}</p>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="mt-6">{children}</div>
     </div>
   );
 }

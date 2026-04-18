@@ -1,6 +1,6 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 
-/** Admin shell aligned with marketing chrome: slim nav, no announcements. */
+/** Admin portal navigation (minimal shell; no announcement banner). */
 export const adminPortal: PortalDefinition = {
   kind: "admin",
   basePath: "/admin",
@@ -9,6 +9,7 @@ export const adminPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
+    { section: "applications", label: "Applications", tabs: [] },
     { section: "managers", label: "Managers", tabs: [] },
     {
       section: "leases",
@@ -28,6 +29,8 @@ export const adminPortal: PortalDefinition = {
         { id: "availability", label: "Availability" },
       ],
     },
+    { section: "payments", label: "Payments", tabs: [] },
+    { section: "work-orders", label: "Work orders", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",
@@ -38,7 +41,6 @@ export const adminPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
-    { section: "announcements", label: "Announcements", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
   ],
 };

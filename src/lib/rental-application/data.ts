@@ -1,5 +1,6 @@
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
+import { readExtraListings } from "@/lib/demo-property-pipeline";
 
 export const LEASE_TERM_OPTIONS = ["3-Month", "9-Month", "12-Month", "Month-to-Month", "Custom"] as const;
 
@@ -14,7 +15,7 @@ export function getPropertySelectOptions(): { value: string; label: string }[] {
 }
 
 export function getPropertyById(id: string): MockProperty | undefined {
-  return mockProperties.find((p) => p.id === id);
+  return mockProperties.find((p) => p.id === id) ?? readExtraListings().find((p) => p.id === id);
 }
 
 /** Rooms in the same building as the selected listing (for 1st/2nd/3rd choice). */

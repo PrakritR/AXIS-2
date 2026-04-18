@@ -1,9 +1,14 @@
 "use client";
 
+import { RoomListingCard } from "@/components/marketing/room-listing-card";
+import { mockProperties } from "@/data/mock-properties";
+import type { MockProperty } from "@/data/types";
+import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
 import { RADIUS_MILE_OPTIONS, parseRadiusParam } from "@/lib/listings-search";
+import { filterRoomListings } from "@/lib/room-listings-catalog";
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /** Slider min/max (max = “no cap” / Any in UI). Step keeps URLs tidy. */
 const BUDGET_MIN = 500;
@@ -64,6 +69,17 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   const [budgetTouched, setBudgetTouched] = useState(budgetFromUrl);
   const [zip, setZip] = useState(() => initialZip.replace(/\D/g, "").slice(0, 5));
   const [radius, setRadius] = useState<number>(safeRadius);
+  const [extras, setExtras] = useState<MockProperty[]>([]);
+
+  useEffect(() => {
+    const sync = () => setExtras(readExtraListings());
+    sync();
+    const on = () => sync();
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
+    return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+  }, []);
+
+  const combinedProperties = useMemo(() => [...mockProperties, ...extras], [extras]);
 
   const budgetLabel = useMemo(() => {
     if (!budgetTouched || budget >= BUDGET_MAX) return "Any";
@@ -74,6 +90,17 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   const zipValid = zipDigits.length === 5;
   const hasInteraction = zipValid || moveIn !== "" || budgetTouched;
   const pct = ((budget - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
+
+  const filteredRooms = useMemo(
+    () =>
+      filterRoomListings(combinedProperties, {
+        zipRaw: zipDigits,
+        radiusMiles: radius,
+        maxBudgetNum: budgetTouched && budget < BUDGET_MAX ? budget : null,
+        bathroom,
+      }),
+    [combinedProperties, zipDigits, radius, budget, budgetTouched, bathroom],
+  );
 
   const listingsHref = useMemo(() => {
     const q = new URLSearchParams();
@@ -181,7 +208,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
       <div className="my-6 h-px w-full bg-black/[0.05]" />
 
       {hasInteraction ? (
-        <div className="flex flex-col items-center gap-3 text-center">
+        <div className="flex w-full flex-col items-center gap-3 text-center">
           <p className="text-[13px] text-[#6e6e73]">
             {zipValid
               ? <>Listings within <strong className="font-semibold text-[#1d1d1f]">{radius} mi</strong> of <strong className="font-semibold text-[#1d1d1f]">{zipDigits}</strong>{moveIn || budgetTouched ? " · plus your filters" : ""}</>
@@ -201,6 +228,21 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
           >
             View all properties
           </Link>
+
+          <div className="mt-6 w-full border-t border-black/[0.06] pt-6 text-left">
+            <p className="text-center text-sm font-semibold text-[#1d1d1f]">
+              {filteredRooms.length} match{filteredRooms.length === 1 ? "" : "es"} found
+            </p>
+            {filteredRooms.length === 0 ? (
+              <p className="mt-4 text-center text-[13px] text-[#6e6e73]">No rooms match these filters.</p>
+            ) : (
+              <div className="mt-4 grid w-full gap-4 sm:grid-cols-2">
+                {filteredRooms.map((row) => (
+                  <RoomListingCard key={row.key} row={row} />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div className="flex flex-col items-center gap-3 text-center">

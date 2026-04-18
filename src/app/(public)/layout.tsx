@@ -1,4 +1,3 @@
-import { PublicAnnouncement } from "@/components/layout/public-announcement";
 import { PublicFooter } from "@/components/layout/public-footer";
 import { PublicNavbar } from "@/components/layout/public-navbar";
 import { PublicAtmosphere } from "@/components/motion/public-atmosphere";
@@ -17,7 +16,6 @@ export default function PublicLayout({
       }}
     >
       <PublicAtmosphere />
-      <PublicAnnouncement />
       <PublicNavbar />
       <PublicMainTransition>
         <main className="flex-1">{children}</main>

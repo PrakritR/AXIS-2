@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ManagerSectionShell } from "./manager-section-shell";
+import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
 
 const weekDays = [
   { id: "mon", label: "Mon", date: "Apr 21" },
@@ -54,12 +54,11 @@ export function ManagerCalendar() {
 
   return (
     <ManagerSectionShell
-      eyebrow="Scheduling"
       title="Calendar"
-      subtitle="Use the week view to understand your operating load, then drag across the availability editor to open or close meeting windows."
+      filters={<PortalPropertyFilter />}
       actions={[
-        { label: "Share availability" },
-        { label: "Sync calendar", variant: "outline" },
+        { label: "Share", variant: "primary" },
+        { label: "Refresh", variant: "outline" },
       ]}
     >
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.95fr]">

@@ -99,14 +99,10 @@ export function AdminDashboard() {
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Properties · pending review"
-          value="0"
-          href="/admin/properties"
-        />
-        <StatCard label="Managers · subscribed" value="0" href="/admin/managers" />
-        <StatCard label="Leases · admin review" value="0" href="/admin/leases/admin-review" />
-        <StatCard label="Announcements · scheduled" value="2" href="/admin/announcements" />
+        <StatCard label="Properties" value="5" href="/admin/properties" />
+        <StatCard label="Managers" value="4" href="/admin/managers" />
+        <StatCard label="Leases · in review" value="2" href="/admin/leases/admin-review" />
+        <StatCard label="Payments · pending" value="2" href="/admin/payments" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -115,21 +111,21 @@ export function AdminDashboard() {
           className="flex items-center justify-between rounded-2xl border border-primary/15 bg-white px-5 py-4 shadow-[0_12px_40px_-28px_rgba(0,122,255,0.2)] transition hover:border-primary/35"
         >
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Inbox · unopened</span>
-            <p className="mt-2 text-sm text-slate-500">Prioritize new manager requests, escalations, and support replies.</p>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Inbox</span>
+            <p className="mt-2 text-sm text-slate-500">Unopened</p>
           </div>
           <span className="text-3xl font-semibold tabular-nums text-slate-900">0</span>
         </Link>
 
         <Link
-          href="/admin/announcements"
+          href="/admin/applications"
           className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white px-5 py-4 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.18)] transition hover:border-slate-300"
         >
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Announcements</span>
-            <p className="mt-2 text-sm text-slate-500">Publish portfolio-wide updates to managers and residents from one queue.</p>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Applications</span>
+            <p className="mt-2 text-sm text-slate-500">0 pending</p>
           </div>
-          <span className="text-sm font-semibold text-slate-900">Open center →</span>
+          <span className="text-sm font-semibold text-slate-900">Open →</span>
         </Link>
       </div>
     </div>

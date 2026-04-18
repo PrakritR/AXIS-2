@@ -10,13 +10,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 
-function titleFor(role: AuthRole) {
-  if (role === "resident") return "Resident portal";
-  if (role === "manager") return "Manager portal";
-  if (role === "owner") return "Owner portal";
-  return "Admin portal";
-}
-
 function Req() {
   return <span className="text-danger"> *</span>;
 }
@@ -38,12 +31,13 @@ function CreateAccountContent() {
     setOwnerInviteRef(searchParams.get("slot") ?? "");
   }, [searchParams]);
 
-  const portalTitle = useMemo(() => titleFor(role), [role]);
-
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Create account</h1>
-      <p className="mt-2 text-center text-sm text-slate-600">Choose your portal type, then complete the fields below.</p>
+      <Link className="inline-flex text-sm font-semibold text-primary hover:opacity-90" href="/auth/sign-in">
+        ← Back to sign in
+      </Link>
+
+      <h1 className="mt-5 text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Create account</h1>
 
       <div className="mt-7">
         <label className="text-xs font-semibold text-[#334155]" htmlFor="account-type">
@@ -60,12 +54,7 @@ function CreateAccountContent() {
           <option value="owner">Owner</option>
           <option value="admin">Admin</option>
         </Select>
-        <p className="mt-2 text-center text-xs font-medium text-slate-500">Account for: {portalTitle}</p>
       </div>
-
-      <Link className="mt-5 inline-flex text-sm font-semibold text-primary hover:opacity-90" href="/auth/sign-in">
-        ← Back to sign in
-      </Link>
 
       <div className="mt-6 rounded-2xl border border-[#e0e4ec] bg-[#f8fafc] p-4 text-sm leading-relaxed text-slate-600">
         {role === "resident" ? (
@@ -88,11 +77,7 @@ function CreateAccountContent() {
             your linked properties. One owner can work with multiple managers across different homes.
           </>
         ) : (
-          <>
-            Admin accounts require the registration key issued by your organization. After sign-in, use an email whose
-            local part is <span className="font-mono text-xs font-semibold text-slate-800">admin</span> or ends with{" "}
-            <span className="font-mono text-xs font-semibold text-slate-800">+admin</span> before @.
-          </>
+          <>Admin accounts require authorization from the Axis team.</>
         )}
       </div>
 
@@ -112,10 +97,6 @@ function CreateAccountContent() {
               value={adminKey}
               onChange={(e) => setAdminKey(e.target.value)}
             />
-            <p className="mt-1.5 text-xs text-slate-500">
-              Demo default: <span className="font-mono font-medium text-slate-700">axis-demo-admin</span> unless{" "}
-              <span className="font-mono">NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY</span> is set.
-            </p>
           </div>
         ) : null}
         {role === "resident" ? (

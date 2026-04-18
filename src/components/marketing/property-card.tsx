@@ -2,9 +2,11 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { MockProperty } from "@/data/types";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 
 export function PropertyCard({ property }: { property: MockProperty }) {
   const listingPath = `/rent/listings/${property.id}`;
+  const applyHref = buildRentalApplyHref({ propertyId: property.id });
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1 hover:border-primary/15 hover:shadow-[0_20px_50px_-28px_rgba(15,23,42,0.18)] active:translate-y-0 active:scale-[0.99]">
@@ -48,7 +50,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
                 Schedule tour
               </Button>
             </Link>
-            <Link href="/rent/apply" className="contents">
+            <Link href={applyHref} className="contents">
               <Button type="button" className="w-full text-[13px] sm:text-sm">
                 Apply
               </Button>

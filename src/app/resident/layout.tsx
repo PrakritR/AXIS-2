@@ -1,4 +1,3 @@
-import { PublicAnnouncement } from "@/components/layout/public-announcement";
 import { PublicNavbar } from "@/components/layout/public-navbar";
 import { ResidentPortalPillNav } from "@/components/portal/resident-portal-pill-nav";
 import { ResidentPortalTopbar } from "@/components/portal/resident-portal-topbar";
@@ -11,8 +10,7 @@ export default function ResidentLayout({ children }: { children: React.ReactNode
   const applicationApproved = isResidentApplicationApproved();
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-50 via-white to-slate-50/80">
-      <PublicAnnouncement />
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100/80 via-white to-slate-50/90">
       <PublicNavbar />
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <PortalSidebar definition={residentPortal} />

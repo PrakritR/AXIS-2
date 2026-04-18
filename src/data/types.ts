@@ -15,6 +15,9 @@ export type MockProperty = {
   buildingId: string;
   buildingName: string;
   unitLabel: string;
+  /** Optional map center for listing detail (demo). WGS84 */
+  mapLat?: number;
+  mapLng?: number;
 };
 
 export type MockRow = Record<string, string>;

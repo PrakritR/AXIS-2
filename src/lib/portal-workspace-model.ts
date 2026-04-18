@@ -1,11 +1,12 @@
 import type { PortalKind } from "@/lib/portal-types";
 import {
-  announcementRows,
-  applicantRows,
-  inboxPreviewRows,
-  paymentRows,
-  workOrderRows,
-} from "@/data/mock-tables";
+  demoKpis,
+  demoLeasePipelineRows,
+  demoManagerSubscriberRows,
+  demoResidentLeaseRows,
+  demoResidentPropertyRows,
+} from "@/data/demo-portal";
+import { adminPropertyRows, applicantRows, inboxPreviewRows, paymentRows, workOrderRows } from "@/data/mock-tables";
 export type WorkspaceAction = {
   label: string;
   kind: "toast" | "modal";
@@ -29,9 +30,9 @@ export type WorkspaceModel = {
 function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
   const common: WorkspaceAction[] = [
     {
-      label: "Refresh (demo)",
+      label: "Refresh",
       kind: "toast",
-      message: "Demo refresh — no live data yet.",
+      message: "Refreshed (demo).",
     },
   ];
 
@@ -117,15 +118,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         ...common,
       ];
     }
-    if (section === "announcements")
-      return [
-        {
-          label: "Post announcement",
-          kind: "toast",
-          message: "Announcement posted to demo feed.",
-        },
-        ...common,
-      ];
     if (section === "documents")
       return [
         {
@@ -220,12 +212,19 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           message: "Refreshed property queue (demo).",
         },
       ];
-    if (section === "managers" || section === "leases" || section === "calendar")
+    if (
+      section === "managers" ||
+      section === "leases" ||
+      section === "calendar" ||
+      section === "applications" ||
+      section === "payments" ||
+      section === "work-orders"
+    )
       return [
         {
           label: "Refresh",
           kind: "toast",
-          message: "Demo refresh — no live data yet.",
+          message: "Refreshed (demo).",
         },
       ];
     if (section === "inbox")
@@ -247,19 +246,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           label: "Edit info",
           kind: "toast",
           message: "Profile editing is not connected yet.",
-        },
-      ];
-    if (section === "announcements")
-      return [
-        {
-          label: "Create announcement",
-          kind: "toast",
-          message: "Announcement composer opened (demo).",
-        },
-        {
-          label: "Schedule send",
-          kind: "modal",
-          message: "Scheduled sends will connect to your notification system later.",
         },
       ];
     if (section === "tools")
@@ -310,8 +296,10 @@ export function buildPortalWorkspaceModel(
       title: "Dashboard",
       subtitle:
         portal === "owner"
-          ? "Snapshot of the properties linked to your owner account. Operational approvals stay with your property managers."
-          : "Snapshot of operations. Numbers are illustrative until integrations are enabled.",
+          ? ""
+          : portal === "admin" || portal === "resident"
+            ? ""
+            : "Snapshot of operations. Numbers are illustrative until integrations are enabled.",
       kpis:
         portal === "resident"
           ? [
@@ -400,14 +388,18 @@ export function buildPortalWorkspaceModel(
       return {
         eyebrow,
         title: "Inbox",
-        subtitle: "Admin threads will load here when messaging is authenticated.",
+        subtitle: "",
         showToolbar: false,
         showQuickLinks: false,
         actions: actionsFor(portal, section),
-        emptyState: {
-          title: "No conversations",
-          description: "Select a conversation from the list to view messages once inbox sync is enabled.",
-        },
+        columns: [
+          { key: "from", label: "From" },
+          { key: "subject", label: "Subject" },
+          { key: "preview", label: "Preview" },
+          { key: "when", label: "When" },
+          { key: "unread", label: "Unread" },
+        ],
+        rows: inboxPreviewRows as unknown as Record<string, string>[],
       };
     }
 
@@ -415,14 +407,18 @@ export function buildPortalWorkspaceModel(
       return {
         eyebrow,
         title: "Inbox",
-        subtitle: "Messages with your property manager and leasing team.",
+        subtitle: "",
         showToolbar: false,
         showQuickLinks: false,
         actions: actionsFor(portal, section),
-        emptyState: {
-          title: "No messages yet",
-          description: "When threads are available, open one from the list to read and reply.",
-        },
+        columns: [
+          { key: "from", label: "From" },
+          { key: "subject", label: "Subject" },
+          { key: "preview", label: "Preview" },
+          { key: "when", label: "When" },
+          { key: "unread", label: "Unread" },
+        ],
+        rows: inboxPreviewRows as unknown as Record<string, string>[],
       };
     }
 
@@ -454,19 +450,23 @@ export function buildPortalWorkspaceModel(
       return {
         eyebrow,
         title: "Payments",
-        subtitle: "Balances and payment history for your lease. Nothing is charged in this demo.",
+        subtitle: "",
         kpis: [
-          { label: "Pending", value: "0", hint: "" },
-          { label: "Overdue", value: "0", hint: "" },
-          { label: "Paid", value: "0", hint: "" },
+          { label: "Pending", value: demoKpis.payments.pending, hint: "" },
+          { label: "Overdue", value: demoKpis.payments.overdue, hint: "" },
+          { label: "Paid", value: demoKpis.payments.paid, hint: "" },
         ],
         showToolbar: false,
         showQuickLinks: false,
         actions: actionsFor(portal, section),
-        emptyState: {
-          title: "No payments to show",
-          description: "Upcoming charges and receipts will list here once billing is connected.",
-        },
+        columns: [
+          { key: "resident", label: "Resident" },
+          { key: "unit", label: "Unit" },
+          { key: "amount", label: "Amount" },
+          { key: "due", label: "Due" },
+          { key: "status", label: "Status" },
+        ],
+        rows: paymentRows as unknown as Record<string, string>[],
       };
     }
 
@@ -507,19 +507,23 @@ export function buildPortalWorkspaceModel(
       return {
         eyebrow,
         title: "Work orders",
-        subtitle: "Submit maintenance requests and track progress for your unit.",
+        subtitle: "",
         kpis: [
-          { label: "Open", value: "0", hint: "" },
-          { label: "Scheduled", value: "0", hint: "" },
-          { label: "Completed", value: "0", hint: "" },
+          { label: "Open", value: demoKpis.workOrders.open, hint: "" },
+          { label: "Scheduled", value: demoKpis.workOrders.scheduled, hint: "" },
+          { label: "Completed", value: demoKpis.workOrders.completed, hint: "" },
         ],
         showToolbar: false,
         showQuickLinks: false,
         actions: actionsFor(portal, section),
-        emptyState: {
-          title: "No work orders yet",
-          description: "Use submit from the work orders flow when it is connected to open a new request.",
-        },
+        columns: [
+          { key: "id", label: "ID" },
+          { key: "unit", label: "Unit" },
+          { key: "title", label: "Title" },
+          { key: "priority", label: "Priority" },
+          { key: "status", label: "Status" },
+        ],
+        rows: workOrderRows as unknown as Record<string, string>[],
       };
     }
 
@@ -539,34 +543,21 @@ export function buildPortalWorkspaceModel(
     };
   }
 
-  if (section === "announcements") {
-    return {
-      eyebrow,
-      title: "Announcements",
-      subtitle: "Broadcast center with scheduled sends (mock).",
-      columns: [
-        { key: "title", label: "Title" },
-        { key: "audience", label: "Audience" },
-        { key: "posted", label: "Posted" },
-        { key: "status", label: "Status" },
-      ],
-      rows: announcementRows as unknown as Record<string, string>[],
-      actions: actionsFor(portal, section),
-    };
-  }
-
   if (portal === "resident" && section === "properties") {
     return {
       eyebrow,
       title: "Properties",
-      subtitle: "Units and communities tied to your resident account.",
+      subtitle: "",
       showToolbar: false,
       showQuickLinks: false,
       actions: actionsFor(portal, section),
-      emptyState: {
-        title: "No properties yet",
-        description: "When your application is approved, your assigned home will appear here.",
-      },
+      columns: [
+        { key: "building", label: "Building" },
+        { key: "unit", label: "Unit" },
+        { key: "manager", label: "Manager" },
+        { key: "since", label: "Since" },
+      ],
+      rows: demoResidentPropertyRows as unknown as Record<string, string>[],
     };
   }
 
@@ -574,19 +565,22 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Applications",
-      subtitle: "Screening and approval status for homes you have applied to rent.",
+      subtitle: "",
       kpis: [
-        { label: "Pending", value: "0", hint: "" },
-        { label: "Approved", value: "0", hint: "" },
-        { label: "Rejected", value: "0", hint: "" },
+        { label: "Pending", value: demoKpis.applications.pending, hint: "" },
+        { label: "Approved", value: demoKpis.applications.approved, hint: "" },
+        { label: "Rejected", value: demoKpis.applications.rejected, hint: "" },
       ],
       showToolbar: false,
       showQuickLinks: false,
       actions: actionsFor(portal, section),
-      emptyState: {
-        title: "No applications yet",
-        description: "Submitted applications will show here with updates from your leasing team.",
-      },
+      columns: [
+        { key: "name", label: "Applicant" },
+        { key: "property", label: "Property" },
+        { key: "stage", label: "Stage" },
+        { key: "score", label: "Score" },
+      ],
+      rows: applicantRows as unknown as Record<string, string>[],
     };
   }
 
@@ -594,20 +588,22 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Leases",
-      subtitle: "Lease packets, countersignatures, and download links for your household.",
+      subtitle: "",
       kpis: [
-        { label: "Manager review", value: "0", hint: "" },
-        { label: "Admin review", value: "0", hint: "" },
-        { label: "With resident", value: "0", hint: "" },
-        { label: "Signed", value: "0", hint: "" },
+        { label: "Manager review", value: demoKpis.leases.managerReview, hint: "" },
+        { label: "Admin review", value: demoKpis.leases.adminReview, hint: "" },
+        { label: "With resident", value: demoKpis.leases.withResident, hint: "" },
+        { label: "Signed", value: demoKpis.leases.signed, hint: "" },
       ],
       showToolbar: false,
       showQuickLinks: false,
       actions: actionsFor(portal, section),
-      emptyState: {
-        title: "No leases yet",
-        description: "Lease documents will appear here as your manager sends them for review and signing.",
-      },
+      columns: [
+        { key: "document", label: "Document" },
+        { key: "status", label: "Status" },
+        { key: "updated", label: "Updated" },
+      ],
+      rows: demoResidentLeaseRows as unknown as Record<string, string>[],
     };
   }
 
@@ -619,10 +615,13 @@ export function buildPortalWorkspaceModel(
       showToolbar: false,
       showQuickLinks: false,
       actions: actionsFor(portal, section),
-      emptyState: {
-        title: "No properties yet",
-        description: "When managers submit properties, they will appear in this queue.",
-      },
+      columns: [
+        { key: "name", label: "Property" },
+        { key: "manager", label: "Manager" },
+        { key: "units", label: "Units" },
+        { key: "status", label: "Status" },
+      ],
+      rows: adminPropertyRows as unknown as Record<string, string>[],
     };
   }
 
@@ -630,18 +629,22 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Managers",
-      subtitle: "Subscribed managers across your portfolio.",
+      subtitle: "",
       kpis: [
-        { label: "Current subscribers", value: "0", hint: "" },
-        { label: "Past subscribers", value: "0", hint: "" },
+        { label: "Current subscribers", value: demoKpis.managers.current, hint: "" },
+        { label: "Past subscribers", value: demoKpis.managers.past, hint: "" },
       ],
       showToolbar: false,
       showQuickLinks: false,
       actions: actionsFor(portal, section),
-      emptyState: {
-        title: "No active managers",
-        description: "When managers subscribe, they will appear in this list.",
-      },
+      columns: [
+        { key: "name", label: "Manager" },
+        { key: "org", label: "Organization" },
+        { key: "portfolio", label: "Portfolio" },
+        { key: "status", label: "Status" },
+        { key: "since", label: "Since" },
+      ],
+      rows: demoManagerSubscriberRows as unknown as Record<string, string>[],
     };
   }
 
@@ -649,20 +652,97 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Leases",
-      subtitle: "Track lease packets through review and signature.",
+      subtitle: "",
       kpis: [
-        { label: "Manager review", value: "0", hint: "" },
-        { label: "Admin review", value: "0", hint: "" },
-        { label: "With resident", value: "0", hint: "" },
-        { label: "Signed", value: "0", hint: "" },
+        { label: "Manager review", value: demoKpis.leases.managerReview, hint: "" },
+        { label: "Admin review", value: demoKpis.leases.adminReview, hint: "" },
+        { label: "With resident", value: demoKpis.leases.withResident, hint: "" },
+        { label: "Signed", value: demoKpis.leases.signed, hint: "" },
       ],
       showToolbar: false,
       showQuickLinks: false,
       actions: actionsFor(portal, section),
-      emptyState: {
-        title: "No leases yet",
-        description: "Lease documents will appear here as managers and residents progress through signing.",
-      },
+      columns: [
+        { key: "resident", label: "Resident" },
+        { key: "unit", label: "Unit / home" },
+        { key: "stage", label: "Stage" },
+        { key: "updated", label: "Updated" },
+      ],
+      rows: demoLeasePipelineRows as unknown as Record<string, string>[],
+    };
+  }
+
+  if (portal === "admin" && section === "applications") {
+    return {
+      eyebrow,
+      title: "Applications",
+      subtitle: "",
+      kpis: [
+        { label: "Pending", value: demoKpis.applications.pending, hint: "" },
+        { label: "Approved", value: demoKpis.applications.approved, hint: "" },
+        { label: "Rejected", value: demoKpis.applications.rejected, hint: "" },
+      ],
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: actionsFor(portal, section),
+      columns: [
+        { key: "name", label: "Applicant" },
+        { key: "property", label: "Property" },
+        { key: "stage", label: "Stage" },
+        { key: "score", label: "Score" },
+      ],
+      rows: applicantRows as unknown as Record<string, string>[],
+    };
+  }
+
+  if (portal === "admin" && section === "payments") {
+    return {
+      eyebrow,
+      title: "Payments",
+      subtitle: "",
+      kpis: [
+        { label: "Pending", value: demoKpis.payments.pending, hint: "" },
+        { label: "Overdue", value: demoKpis.payments.overdue, hint: "" },
+        { label: "Paid", value: demoKpis.payments.paid, hint: "" },
+      ],
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: [
+        { label: "Add payment", kind: "toast", message: "Demo — no charges are processed." },
+        ...actionsFor(portal, section),
+      ],
+      columns: [
+        { key: "resident", label: "Resident" },
+        { key: "unit", label: "Unit" },
+        { key: "amount", label: "Amount" },
+        { key: "due", label: "Due" },
+        { key: "status", label: "Status" },
+      ],
+      rows: paymentRows as unknown as Record<string, string>[],
+    };
+  }
+
+  if (portal === "admin" && section === "work-orders") {
+    return {
+      eyebrow,
+      title: "Work orders",
+      subtitle: "",
+      kpis: [
+        { label: "Open", value: demoKpis.workOrders.open, hint: "" },
+        { label: "Scheduled", value: demoKpis.workOrders.scheduled, hint: "" },
+        { label: "Completed", value: demoKpis.workOrders.completed, hint: "" },
+      ],
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: actionsFor(portal, section),
+      columns: [
+        { key: "id", label: "ID" },
+        { key: "unit", label: "Unit" },
+        { key: "title", label: "Title" },
+        { key: "priority", label: "Priority" },
+        { key: "status", label: "Status" },
+      ],
+      rows: workOrderRows as unknown as Record<string, string>[],
     };
   }
 
@@ -670,14 +750,12 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Calendar",
-      subtitle: `Scheduling tools. Tab: ${humanize(tabId)}.`,
-      notes:
-        "Admin meeting hours are stored in the internal database. Confirmed meetings will appear on this calendar from Postgres when connected; public Contact Axis can read availability from your API once saved.",
+      subtitle: "",
       kpis: [
-        { label: "Today", value: "0", hint: "Booked" },
-        { label: "This week", value: "0", hint: "" },
-        { label: "This month", value: "0", hint: "" },
-        { label: "Total booked", value: "0", hint: "" },
+        { label: "Today", value: demoKpis.calendar.today, hint: "Booked" },
+        { label: "This week", value: demoKpis.calendar.week, hint: "" },
+        { label: "This month", value: demoKpis.calendar.month, hint: "" },
+        { label: "Total booked", value: demoKpis.calendar.total, hint: "" },
       ],
       showToolbar: false,
       showQuickLinks: false,
@@ -711,14 +789,12 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Calendar",
-      subtitle: `Your schedule and building events. Tab: ${humanize(tabId)}.`,
-      notes:
-        "Community events, move-in milestones, and maintenance windows will populate this calendar when connected.",
+      subtitle: "",
       kpis: [
-        { label: "Today", value: "0", hint: "Events" },
-        { label: "This week", value: "0", hint: "" },
-        { label: "This month", value: "0", hint: "" },
-        { label: "Total", value: "0", hint: "" },
+        { label: "Today", value: demoKpis.residentCalendar.today, hint: "Events" },
+        { label: "This week", value: demoKpis.residentCalendar.week, hint: "" },
+        { label: "This month", value: demoKpis.residentCalendar.month, hint: "" },
+        { label: "Total", value: demoKpis.residentCalendar.total, hint: "" },
       ],
       showToolbar: false,
       showQuickLinks: false,
@@ -813,7 +889,7 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Profile",
-      subtitle: "Your resident profile (demo placeholders).",
+      subtitle: "",
       showToolbar: false,
       showQuickLinks: false,
       columns: [
@@ -834,7 +910,7 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Profile",
-      subtitle: "Your admin account details (demo placeholders).",
+      subtitle: "",
       showToolbar: false,
       showQuickLinks: false,
       columns: [

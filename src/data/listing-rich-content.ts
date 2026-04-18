@@ -306,8 +306,9 @@ const defaultLease: LeaseBasicRow[] = [
     body: "Four lease options available: 3-month, 9-month, and 12-month, plus month-to-month with an extra $25/month charge. Start and end dates are flexible — you choose the window that works for you.",
   },
   { icon: "📄", title: "Application", body: "Fee: $50 (demo)" },
-  { icon: "💵", title: "Move-in charges", body: "First month rent + $500 deposit" },
-  { icon: "🔒", title: "Security deposit", body: "$500" },
+  { icon: "🔒", title: "Security deposit", body: "$400" },
+  { icon: "🧾", title: "Move-in fee", body: "$200" },
+  { icon: "✍️", title: "Payment due at signing", body: "$600 (demo totals: deposit + move-in fee portions; confirm with leasing)." },
   { icon: "📊", title: "Utilities", body: "Flat $95/mo community utilities estimate (mock)." },
 ];
 

@@ -1,13 +1,18 @@
+"use client";
+
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PropertyDetailActions } from "@/components/marketing/property-detail-actions";
 import { ListingStickySubnav } from "@/components/marketing/listing-detail-subnav";
+import { ListingLocationBlock } from "@/components/marketing/listing-location-block";
 import {
   BathroomTableInteractive,
   InteractiveFloorPlanCard,
   SharedTableInteractive,
 } from "@/components/marketing/listing-detail-tables-client";
+import { listingDemoMapCenter } from "@/lib/listing-map";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import type { MockProperty } from "@/data/types";
 import type {
   AmenityItem,
@@ -17,7 +22,7 @@ import type {
 } from "@/data/listing-rich-content";
 
 const sectionScroll =
-  "scroll-mt-[calc(env(safe-area-inset-top,0px)+7.5rem)] sm:scroll-mt-[calc(env(safe-area-inset-top,0px)+7rem)]";
+  "scroll-mt-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+8.75rem))]";
 
 function LeaseBasicsBlock({ rows }: { rows: LeaseBasicRow[] }) {
   return (
@@ -124,7 +129,7 @@ function Sidebar({
           Check availability
         </Link>
         <Link
-          href="/rent/apply"
+          href={buildRentalApplyHref({ propertyId: property.id })}
           className="mt-3 flex min-h-[48px] w-full items-center justify-center rounded-full border border-black/[0.1] bg-white/80 py-3 text-sm font-semibold text-[#1d1d1f] outline-none transition hover:bg-black/[0.04]"
         >
           Apply online
@@ -198,21 +203,18 @@ export function ListingDetailSections({ property, rich }: { property: MockProper
               </div>
               <div className="space-y-6">
                 {rich.floorPlans.map((f) => (
-                  <InteractiveFloorPlanCard key={f.floorLabel} floor={f} />
+                  <InteractiveFloorPlanCard key={f.floorLabel} floor={f} listingPropertyId={property.id} />
                 ))}
               </div>
-            </section>
 
-            <section id="listing-bathrooms" className={sectionScroll}>
-              <div className="rounded-2xl border border-slate-200/80 bg-white/60 p-5 shadow-sm sm:p-6">
-                <h2 className="text-xl font-bold tracking-tight text-slate-900">Bathrooms</h2>
+              <div className="mt-10 rounded-2xl border border-slate-200/80 bg-white/60 p-5 shadow-sm sm:p-6">
+                <h3 className="text-lg font-bold tracking-tight text-slate-900">Bathrooms</h3>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                  All shared and en-suite baths in one table. Shower, toilet, and tub are listed explicitly; open{" "}
-                  <span className="font-semibold text-slate-800">Details</span> for photos and setup notes (no separate
-                  walkthrough video on this page).
+                  Fixtures are summarized under <span className="font-semibold text-slate-800">Includes</span>. Open{" "}
+                  <span className="font-semibold text-slate-800">Details</span> for photos and setup notes.
                 </p>
                 <div className="mt-6 md:overflow-x-auto">
-                  <BathroomTableInteractive rows={rich.bathrooms} />
+                  <BathroomTableInteractive rows={rich.bathrooms} listingPropertyId={property.id} />
                 </div>
               </div>
             </section>
@@ -221,12 +223,11 @@ export function ListingDetailSections({ property, rich }: { property: MockProper
               <div className="rounded-2xl border border-slate-200/80 bg-white/60 p-5 shadow-sm sm:p-6">
                 <h2 className="text-xl font-bold tracking-tight text-slate-900">Shared spaces</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                  Laundry, kitchen, living areas, and more — same table pattern as rooms. Use{" "}
-                  <span className="font-semibold text-slate-800">Details</span> to preview a tour video and photo strip
-                  (demo placeholders).
+                  Laundry, kitchen, living areas, and more. Open <span className="font-semibold text-slate-800">Details</span>{" "}
+                  for a tour video placeholder and photo strip (demo).
                 </p>
                 <div className="mt-6 md:overflow-x-auto">
-                  <SharedTableInteractive rows={rich.sharedSpaces} />
+                  <SharedTableInteractive rows={rich.sharedSpaces} listingPropertyId={property.id} />
                 </div>
               </div>
             </section>
@@ -244,14 +245,7 @@ export function ListingDetailSections({ property, rich }: { property: MockProper
             </section>
 
             <section id="location" className={sectionScroll}>
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Location</h2>
-                <div className="mt-4 aspect-[16/9] overflow-hidden rounded-2xl border border-dashed border-slate-200 bg-slate-100">
-                  <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                    Map embed (Mapbox / Google) — {property.address}
-                  </div>
-                </div>
-              </div>
+              <ListingLocationBlock {...listingDemoMapCenter(property)} address={property.address} />
             </section>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

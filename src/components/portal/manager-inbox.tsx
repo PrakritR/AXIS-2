@@ -4,13 +4,13 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ManagerSectionShell } from "./manager-section-shell";
+import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
 
 const categories = [
-  { id: "priority", label: "Priority", count: 4 },
-  { id: "applications", label: "Applications", count: 8 },
-  { id: "residents", label: "Residents", count: 12 },
-  { id: "vendors", label: "Vendors", count: 3 },
+  { id: "priority", label: "Priority", count: 2 },
+  { id: "applications", label: "Applications", count: 3 },
+  { id: "residents", label: "Residents", count: 6 },
+  { id: "vendors", label: "Vendors", count: 4 },
 ];
 
 const threads = [
@@ -75,13 +75,9 @@ export function ManagerInbox() {
 
   return (
     <ManagerSectionShell
-      eyebrow="Communications"
       title="Inbox"
-      subtitle="A manager-focused messaging workspace with category triage on the left and the active thread open on the right."
-      actions={[
-        { label: "Compose" },
-        { label: "Bulk triage", variant: "outline" },
-      ]}
+      filters={<PortalPropertyFilter />}
+      actions={[{ label: "Refresh", variant: "outline" }]}
     >
       <Card className="overflow-hidden p-0">
         <div className="grid min-h-[720px] lg:grid-cols-[320px_minmax(0,1fr)]">

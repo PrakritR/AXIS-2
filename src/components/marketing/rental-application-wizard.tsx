@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
-import { getPropertySelectOptions } from "@/lib/rental-application/data";
+import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
+import { getPropertyById, getPropertySelectOptions, getRoomOptionsForProperty } from "@/lib/rental-application/data";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
@@ -28,13 +30,50 @@ const STEP_META = [
 ] as const;
 
 export function RentalApplicationWizard({ showToast }: { showToast: (msg: string) => void }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-3xl px-4 py-16 text-center text-slate-600">Loading application…</div>
+      }
+    >
+      <RentalApplicationWizardInner showToast={showToast} />
+    </Suspense>
+  );
+}
+
+function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) => void }) {
+  const searchParams = useSearchParams();
   const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<RentalWizardFormState>(createInitialRentalWizardState);
   const [errors, setErrors] = useState<RentalWizardErrors>({});
   const [draftReady, setDraftReady] = useState(false);
+  const [extrasTick, setExtrasTick] = useState(0);
 
-  const propertyOptions = useMemo(() => getPropertySelectOptions(), []);
+  const listingPrefillKey = useMemo(() => {
+    return [
+      searchParams.get("propertyId") ?? "",
+      searchParams.get("roomName") ?? "",
+      searchParams.get("floor") ?? "",
+      searchParams.get("roomPrice") ?? "",
+      searchParams.get("listingRoomId") ?? "",
+    ].join("|");
+  }, [searchParams]);
+
+  useEffect(() => {
+    const on = () => setExtrasTick((n) => n + 1);
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
+    return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+  }, []);
+
+  const propertyOptions = useMemo(() => {
+    const base = getPropertySelectOptions();
+    const seen = new Set(base.map((b) => b.value));
+    const extra = readExtraListings()
+      .filter((p) => !seen.has(p.id))
+      .map((p) => ({ value: p.id, label: p.title }));
+    return [...base, ...extra];
+  }, [extrasTick]);
 
   useEffect(() => {
     const draft = loadRentalWizardDraft();
@@ -48,6 +87,47 @@ export function RentalApplicationWizard({ showToast }: { showToast: (msg: string
     if (!draftReady) return;
     saveRentalWizardDraft(form);
   }, [draftReady, form]);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    const pid = searchParams.get("propertyId")?.trim();
+    if (!pid) return;
+    const prop = getPropertyById(pid);
+    if (!prop) return;
+
+    const roomName = searchParams.get("roomName");
+    const floor = searchParams.get("floor") ?? "";
+    const roomPrice = searchParams.get("roomPrice") ?? "";
+    const listingRoomId = searchParams.get("listingRoomId") ?? "";
+
+    setForm((prev) => {
+      const opts = getRoomOptionsForProperty(pid).filter((o) => o.value);
+      const room1 = opts.some((o) => o.value === pid) ? pid : opts[0]?.value ?? "";
+
+      let notes = prev.additionalNotes;
+      if (roomName || floor || roomPrice) {
+        const roomPart = [floor, roomName].filter(Boolean).join(" · ");
+        const line = `[Listing preference${listingRoomId ? ` · ref ${listingRoomId}` : ""}: ${[roomPart, roomPrice].filter(Boolean).join(" — ")}]`;
+        if (!notes.includes(line)) {
+          notes = notes.trim() ? `${line}\n\n${notes}` : line;
+        }
+      } else {
+        const line = `[Application started from: ${prop.title}]`;
+        if (!notes.includes(line)) {
+          notes = notes.trim() ? `${line}\n\n${notes}` : line;
+        }
+      }
+
+      return {
+        ...prev,
+        propertyId: pid,
+        roomChoice1: room1 || prev.roomChoice1,
+        roomChoice2: "",
+        roomChoice3: "",
+        additionalNotes: notes,
+      };
+    });
+  }, [draftReady, listingPrefillKey]);
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
     setForm((f) => ({ ...f, ...p }));
@@ -165,7 +245,9 @@ export function RentalApplicationWizard({ showToast }: { showToast: (msg: string
           style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
         >
           <div className="border-b border-slate-100 pb-6">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Step {step} of {RENTAL_WIZARD_STEP_COUNT}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+              Step {step} of {RENTAL_WIZARD_STEP_COUNT}
+            </p>
             <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{meta.title}</p>
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
               <div

@@ -46,8 +46,8 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                 href={href}
                 className={`flex items-center rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
                   active
-                    ? "bg-white text-primary shadow-sm ring-1 ring-slate-200/80 ring-inset"
-                    : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+                    ? "bg-primary text-white shadow-[0_2px_14px_-2px_rgba(0,122,255,0.45)]"
+                    : "text-slate-700 hover:bg-white/70 hover:text-slate-900"
                 }`}
               >
                 {s.label}
@@ -129,7 +129,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     className={`block rounded-xl px-3 py-2 text-sm font-medium ${
                       useMinShell
                         ? active
-                          ? "bg-white text-primary shadow-sm ring-1 ring-slate-200/80 ring-inset"
+                          ? "bg-primary text-white shadow-[0_2px_14px_-2px_rgba(0,122,255,0.45)]"
                           : "text-slate-700 hover:bg-white/80"
                         : "text-slate-800 hover:bg-slate-50"
                     }`}

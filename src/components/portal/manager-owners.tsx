@@ -5,7 +5,8 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/input";
-import { ManagerSectionShell } from "./manager-section-shell";
+import { demoOwnerAccounts } from "@/data/demo-portal";
+import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
 
 const MOCK_HOUSES = [
   { id: "pioneer", label: "Pioneer Heights · 1201 E Union" },
@@ -40,14 +41,26 @@ export function ManagerOwners() {
 
   return (
     <ManagerSectionShell
-      eyebrow="Access"
       title="Owners"
-      subtitle="Invite owners to the owner portal and link specific houses to each account. Owners only sign up through links you send from here."
+      filters={<PortalPropertyFilter />}
       actions={[
-        { label: "Save layout (demo)", variant: "primary" },
-        { label: "Export mapping", variant: "outline" },
+        { label: "Save", variant: "primary" },
+        { label: "Refresh", variant: "outline" },
       ]}
     >
+      <Card className="mb-4 border border-dashed border-slate-200/90 bg-slate-50/60 p-4">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Demo linked owners</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {demoOwnerAccounts.map((o) => (
+            <span
+              key={o.name}
+              className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200/90"
+            >
+              {o.name}
+            </span>
+          ))}
+        </div>
+      </Card>
       <Card className="p-5 sm:p-6">
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
           <input

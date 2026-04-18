@@ -7,6 +7,7 @@ import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerOwners } from "@/components/portal/manager-owners";
 import { ManagerPayments } from "@/components/portal/manager-payments";
 import { ManagerProfile } from "@/components/portal/manager-profile";
+import { AdminPropertiesClient } from "@/components/portal/admin-properties-client";
 import { ManagerProperties } from "@/components/portal/manager-properties";
 import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
 import { OwnerManagers } from "@/components/portal/owner-managers";
@@ -33,6 +34,11 @@ export async function renderPortalSection(
   if (kind === "admin" && section === "dashboard") {
     if (tabParts?.length) notFound();
     return <AdminDashboard />;
+  }
+
+  if (kind === "admin" && section === "properties") {
+    if (tabParts?.length) notFound();
+    return <AdminPropertiesClient />;
   }
 
   if (kind === "manager") {

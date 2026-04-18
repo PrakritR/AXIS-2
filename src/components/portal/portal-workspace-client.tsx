@@ -1,18 +1,38 @@
 "use client";
 
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
-import { ManagerSectionShell } from "@/components/portal/manager-section-shell";
+import { ManagerSectionShell, PortalPropertyFilter, type ShellAction } from "@/components/portal/manager-section-shell";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/table";
 import { EmptyState, Toolbar } from "@/components/ui/empty-state";
-import type { WorkspaceModel } from "@/lib/portal-workspace-model";
+import type { WorkspaceAction, WorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/input";
 import { TabNav, type TabItem } from "@/components/ui/tabs";
+
+function toShellActions(
+  actions: WorkspaceAction[],
+  openModal: (p: { title: string; body: string }) => void,
+  showToast: (m: string) => void,
+): ShellAction[] {
+  let primaryPlaced = false;
+  return actions.map((a) => {
+    const label = a.label.replace(/\s*\(demo\)\s*$/i, "").trim();
+    const isRefresh = /^refresh/i.test(label);
+    const variant: "primary" | "outline" = isRefresh || primaryPlaced ? "outline" : "primary";
+    if (!isRefresh && variant === "primary") primaryPlaced = true;
+    return {
+      label,
+      variant,
+      onClick: () =>
+        a.kind === "modal" ? openModal({ title: label, body: a.message }) : showToast(a.message),
+    };
+  });
+}
 
 export function PortalWorkspaceClient({
   portalKind,
@@ -30,34 +50,47 @@ export function PortalWorkspaceClient({
   breadcrumbs: Crumb[];
 }) {
   const { showToast, openModal } = useAppUi();
-  const isMarketingPortalShell = portalKind === "admin" || portalKind === "resident";
-  const useResidentManagerShell = portalKind === "resident";
+  const isCompactPortalShell = portalKind === "admin" || portalKind === "resident";
+  const useSectionShell = portalKind === "admin" || portalKind === "resident";
   const showToolbar = model.showToolbar !== false;
   const showQuickLinks = model.showQuickLinks !== false;
 
-  const kpiGridClass =
-    model.kpis?.length === 5
-      ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
-      : model.kpis?.length === 4
-        ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-        : model.kpis?.length === 2
-          ? "grid gap-3 md:grid-cols-2"
-          : "grid gap-4 md:grid-cols-3";
-
   const hasTable = Boolean(model.columns && model.rows?.length);
 
-  const shellActions = model.actions.map((a) => ({
-    label: a.label,
-    variant: "outline" as const,
-    onClick: () =>
-      a.kind === "modal" ? openModal({ title: a.label, body: a.message }) : showToast(a.message),
-  }));
+  const shellActions = toShellActions(model.actions, openModal, showToast);
+
+  const legacyKpiGrid =
+    !useSectionShell && model.kpis?.length ? (
+      <div
+        className={
+          model.kpis.length === 5
+            ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
+            : model.kpis.length === 4
+              ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+              : model.kpis.length === 2
+                ? "grid gap-3 md:grid-cols-2"
+                : "grid gap-4 md:grid-cols-3"
+        }
+      >
+        {model.kpis.map((k) => (
+          <Card key={k.label} className="border-slate-200/80 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{k.label}</p>
+            <p className="mt-2 text-3xl font-semibold text-foreground">{k.value}</p>
+            {k.hint ? <p className="mt-2 text-sm text-muted">{k.hint}</p> : null}
+          </Card>
+        ))}
+      </div>
+    ) : null;
 
   const workspaceBody = (
     <>
       {tabs.length ? (
-        <TabNav items={tabs} activeId={tabId} />
+        <div className={isCompactPortalShell ? "mb-1" : ""}>
+          <TabNav items={tabs} activeId={tabId} />
+        </div>
       ) : null}
+
+      {legacyKpiGrid}
 
       {showToolbar ? (
         <Toolbar>
@@ -80,25 +113,11 @@ export function PortalWorkspaceClient({
         </Toolbar>
       ) : null}
 
-      {model.kpis?.length ? (
-        <div className={kpiGridClass}>
-          {model.kpis.map((k) => (
-            <Card key={k.label} className="border-slate-200/80 bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{k.label}</p>
-              <p className="mt-2 text-3xl font-semibold text-foreground">{k.value}</p>
-              {k.hint ? <p className="mt-2 text-sm text-muted">{k.hint}</p> : null}
-            </Card>
-          ))}
-        </div>
+      {!isCompactPortalShell && model.notes ? (
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-950">{model.notes}</div>
       ) : null}
 
-      {model.notes ? (
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-950">
-          {model.notes}
-        </div>
-      ) : null}
-
-      {!isMarketingPortalShell ? (
+      {!isCompactPortalShell ? (
         <div className="flex flex-wrap gap-2">
           {model.actions.map((a) => (
             <Button
@@ -106,9 +125,7 @@ export function PortalWorkspaceClient({
               type="button"
               variant={a.kind === "modal" ? "secondary" : "primary"}
               onClick={() =>
-                a.kind === "modal"
-                  ? openModal({ title: a.label, body: a.message })
-                  : showToast(a.message)
+                a.kind === "modal" ? openModal({ title: a.label, body: a.message }) : showToast(a.message)
               }
             >
               {a.label}
@@ -121,6 +138,7 @@ export function PortalWorkspaceClient({
         <DataTable columns={model.columns!} rows={model.rows!} />
       ) : model.emptyState ? (
         <EmptyState
+          variant={isCompactPortalShell ? "panel" : "default"}
           title={model.emptyState.title}
           description={model.emptyState.description ?? ""}
           actionLabel={model.emptyState.actionLabel}
@@ -132,10 +150,13 @@ export function PortalWorkspaceClient({
         />
       ) : (
         <EmptyState
+          variant={isCompactPortalShell ? "panel" : "default"}
           title="Nothing to show yet"
-          description="This tab is wired for navigation. Add your query + UI states when backend work begins."
-          actionLabel="Show sample toast"
-          onAction={() => showToast("Thanks — this is a demo empty state.")}
+          description={
+            isCompactPortalShell ? "" : "This tab is wired for navigation. Add your query + UI states when backend work begins."
+          }
+          actionLabel={isCompactPortalShell ? undefined : "Show sample toast"}
+          onAction={isCompactPortalShell ? undefined : () => showToast("Thanks — this is a demo empty state.")}
         />
       )}
 
@@ -162,15 +183,28 @@ export function PortalWorkspaceClient({
     </>
   );
 
-  if (useResidentManagerShell) {
+  const headerFilters =
+    portalKind === "admin" ? (
+      <PortalPropertyFilter residents={model.title === "Payments"} applications={model.title === "Work orders"} />
+    ) : portalKind === "resident" ? (
+      <PortalPropertyFilter residents={model.title === "Payments"} />
+    ) : null;
+
+  if (useSectionShell) {
+    const kpisForShell =
+      model.kpis?.map((k) => ({
+        value: k.value,
+        label: k.label,
+      })) ?? undefined;
+
     return (
       <ManagerSectionShell
-        eyebrow={model.eyebrow}
         title={model.title}
-        subtitle={model.subtitle}
+        filters={headerFilters ?? undefined}
         actions={shellActions}
+        kpis={kpisForShell}
       >
-        <div className="space-y-6">{workspaceBody}</div>
+        <div className="space-y-5">{workspaceBody}</div>
       </ManagerSectionShell>
     );
   }
@@ -178,41 +212,14 @@ export function PortalWorkspaceClient({
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3">
-        {!isMarketingPortalShell ? <Breadcrumbs items={breadcrumbs} /> : null}
+        <Breadcrumbs items={breadcrumbs} />
         <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            {!isMarketingPortalShell ? (
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{model.eyebrow}</p>
-            ) : null}
-            <h1
-              className={`font-semibold tracking-tight text-foreground ${isMarketingPortalShell ? "text-3xl" : "mt-1 text-2xl"}`}
-            >
-              {model.title}
-            </h1>
-            {model.subtitle.trim() ? (
-              <p className="mt-2 max-w-prose text-sm text-muted">{model.subtitle}</p>
-            ) : null}
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{model.eyebrow}</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{model.title}</h1>
+            {model.subtitle.trim() ? <p className="mt-2 max-w-prose text-sm text-muted">{model.subtitle}</p> : null}
           </div>
-          {isMarketingPortalShell ? (
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              {model.actions.map((a) => (
-                <Button
-                  key={a.label}
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    a.kind === "modal"
-                      ? openModal({ title: a.label, body: a.message })
-                      : showToast(a.message)
-                  }
-                >
-                  {a.label}
-                </Button>
-              ))}
-            </div>
-          ) : (
-            <Badge tone="info">{portalLabel}</Badge>
-          )}
+          <Badge tone="info">{portalLabel}</Badge>
         </div>
       </div>
 
