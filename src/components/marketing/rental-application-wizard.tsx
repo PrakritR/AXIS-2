@@ -26,7 +26,8 @@ const STEP_META = [
   { n: 8, title: "References" },
   { n: 9, title: "Additional Details" },
   { n: 10, title: "Consent and Signature" },
-  { n: 11, title: "Review and Submit" },
+  { n: 11, title: "Review" },
+  { n: 12, title: "Application fee" },
 ] as const;
 
 export function RentalApplicationWizard({ showToast }: { showToast: (msg: string) => void }) {
@@ -175,14 +176,27 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   }, [form, showToast]);
 
   const handleContinue = () => {
-    if (step === 11) {
+    if (step === 12) {
       if (!validateAllPrior()) return;
+      const e12 = validateRentalWizardStep(12, form);
+      setErrors(e12);
+      if (countValidationErrors(e12) > 0) {
+        showToast("Confirm the application fee to submit.");
+        return;
+      }
       clearRentalWizardDraft();
       const nextInitial = createInitialRentalWizardState();
       setForm(nextInitial);
       setStep(1);
       setErrors({});
-      showToast("Application submitted successfully. You will receive a confirmation email when processing is connected (demo).");
+      showToast("Application submitted. Fee step recorded (demo — connect Stripe for real payment).");
+      return;
+    }
+    if (step === 11) {
+      if (!validateAllPrior()) return;
+      setStep(12);
+      setErrors({});
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
     const e = validateRentalWizardStep(step, form);
@@ -198,6 +212,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
   const handleBack = () => {
     if (step <= 1) return;
+    if (step === 12) {
+      setStep(11);
+      setErrors({});
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setStep((s) => s - 1);
     setErrors({});
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -280,7 +300,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               Back
             </Button>
             <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={handleContinue}>
-              {step === 11 ? "Submit application" : "Continue"}
+              {step === 12 ? "Submit application" : "Continue"}
             </Button>
           </div>
         </div>

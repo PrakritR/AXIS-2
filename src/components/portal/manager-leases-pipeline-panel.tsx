@@ -62,14 +62,29 @@ export function ManagerLeasesPipelinePanel() {
                         <p className="text-sm text-slate-700">{row.notes}</p>
                         <p className="mt-2 text-xs text-slate-500">PDF version: {row.pdfVersion}</p>
                         <div className="mt-4 flex flex-wrap gap-2">
-                          <Button type="button" className="rounded-full text-xs" onClick={() => showToast("Lease PDF generated (demo).")}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full !border-0 !bg-sky-600 px-4 text-xs !text-white hover:!bg-sky-700"
+                            onClick={() => showToast("Lease PDF generated (demo).")}
+                          >
                             Generate PDF
                           </Button>
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => showToast("Marked signed (demo).")}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full !border-0 !bg-emerald-600 px-4 text-xs !text-white hover:!bg-emerald-700"
+                            onClick={() => showToast("Marked signed (demo).")}
+                          >
                             Mark signed
                           </Button>
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => showToast("Edit request sent (demo).")}>
-                            Request edits from resident
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full border-amber-300 px-4 text-xs text-amber-950 hover:bg-amber-50"
+                            onClick={() => showToast("Edit request sent (demo).")}
+                          >
+                            Request edits
                           </Button>
                         </div>
                       </td>

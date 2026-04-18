@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RoomListingCard } from "@/components/marketing/room-listing-card";
+import { PropertyCard } from "@/components/marketing/property-card";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
 import { parseRadiusParam, parseUSZip } from "@/lib/listings-search";
-import { filterRoomListings } from "@/lib/room-listings-catalog";
+import { filterPropertiesForCatalog } from "@/lib/property-listings-catalog";
 
 function firstString(v: string | string[] | undefined): string | undefined {
   if (v === undefined) return undefined;
@@ -31,7 +31,7 @@ export function parseListingsSearchFromParams(
   return { zipRaw, centerZip, radiusMiles, moveIn, moveOut, maxBudgetNum, bathroom };
 }
 
-/** Public rent listings — client-only URL parsing so the route never depends on server `searchParams` shape. */
+/** Public rent listings — properties (not individual rooms). */
 export function RentListingsView() {
   const searchParams = useSearchParams();
   const [extras, setExtras] = useState<MockProperty[]>([]);
@@ -62,11 +62,16 @@ export function RentListingsView() {
   const combined = useMemo(() => [...mockProperties, ...extras], [extras]);
 
   const centerZip = parseUSZip(props.zipRaw);
-  const hasSearch = centerZip !== null || props.maxBudgetNum !== null;
+  const hasSearch =
+    centerZip !== null ||
+    props.maxBudgetNum !== null ||
+    (props.bathroom && props.bathroom !== "any") ||
+    Boolean(props.moveIn) ||
+    Boolean(props.moveOut);
 
-  const roomResults = useMemo(
+  const propertyResults = useMemo(
     () =>
-      filterRoomListings(combined, {
+      filterPropertiesForCatalog(combined, {
         zipRaw: props.zipRaw,
         radiusMiles: props.radiusMiles,
         maxBudgetNum: props.maxBudgetNum,
@@ -77,8 +82,11 @@ export function RentListingsView() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Rooms</p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Available rooms</h1>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Listings</p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Available properties</h1>
+      <p className="mt-1 text-sm text-slate-600">
+        Each card is a building or unit on Axis. Open a listing to pick a room. Admin-approved manager submissions appear here automatically (demo).
+      </p>
 
       {hasSearch ? (
         <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
@@ -118,11 +126,11 @@ export function RentListingsView() {
                 Bath: {props.bathroom}
               </>
             ) : null}
-            {roomResults.length > 0 ? (
+            {propertyResults.length > 0 ? (
               <>
                 <span className="text-slate-500"> · </span>
                 <span className="font-semibold text-slate-900">
-                  {roomResults.length} match{roomResults.length === 1 ? "" : "es"}
+                  {propertyResults.length} propert{propertyResults.length === 1 ? "y" : "ies"}
                 </span>
               </>
             ) : null}
@@ -133,21 +141,26 @@ export function RentListingsView() {
         </div>
       ) : null}
 
-      {roomResults.length === 0 ? (
+      {!hasSearch ? (
+        <p className="mt-4 text-sm font-medium text-slate-700">
+          {propertyResults.length} propert{propertyResults.length === 1 ? "y" : "ies"} on Axis (demo inventory + admin-approved)
+        </p>
+      ) : null}
+
+      {propertyResults.length === 0 ? (
         <div className="mt-12 rounded-3xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-14 text-center">
-          <p className="text-base font-semibold text-slate-800">No rooms match these filters</p>
+          <p className="text-base font-semibold text-slate-800">No properties match these filters</p>
           <p className="mt-2 text-sm text-slate-600">
-            Try a larger radius, a nearby ZIP, a higher max rent, or set bathroom to Any (demo uses simple ZIP
-            proximity and per-room rent).
+            Try a larger radius, a nearby ZIP, a higher max rent, or set bathroom to Any (filters apply to rooms inside each listing).
           </p>
           <Link href="/rent/listings" className="mt-6 inline-flex text-sm font-semibold text-primary hover:opacity-90">
-            View all listings
+            View all properties
           </Link>
         </div>
       ) : (
-        <div className="mt-10 grid gap-6 sm:gap-7 md:grid-cols-2 xl:grid-cols-3">
-          {roomResults.map((row) => (
-            <RoomListingCard key={row.key} row={row} />
+        <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {propertyResults.map((p) => (
+            <PropertyCard key={p.id} property={p} />
           ))}
         </div>
       )}

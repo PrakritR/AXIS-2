@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
@@ -56,7 +57,7 @@ function HouseIcon({ className }: { className?: string }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
@@ -568,9 +569,9 @@ export function AdminPropertiesClient() {
       <PortalContentWell>
         {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-400 shadow-sm">
-              <HouseIcon className="h-7 w-7" />
-            </div>
+            <AxisHeaderMarkTile>
+              <HouseIcon className="h-[26px] w-[26px]" />
+            </AxisHeaderMarkTile>
             <p className="mt-4 max-w-sm text-sm font-medium text-slate-500">{EMPTY_COPY[activeKpi]}</p>
           </div>
         ) : (

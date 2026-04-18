@@ -1,24 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import {
-  PORTAL_PAGE_TITLE,
-  PORTAL_SECTION_SURFACE,
-  PortalContentWell,
-  PortalKpiTabStrip,
-} from "@/components/portal/portal-metrics";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import { adminOwnerCounts, readAdminOwners, type AdminOwnerRow } from "@/lib/demo-admin-owners";
+import { adminOwnerCounts, readAdminOwners } from "@/lib/demo-admin-owners";
 
-function GridIcon({ className }: { className?: string }) {
+function OwnersEmptyIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="13" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="13" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 10v10h14V10" />
+      <path d="M10 20v-6h4v6" />
     </svg>
   );
 }
@@ -26,7 +29,6 @@ function GridIcon({ className }: { className?: string }) {
 export function AdminOwnersClient() {
   const { showToast } = useAppUi();
   const [tick, setTick] = useState(0);
-  const [tabIndex, setTabIndex] = useState(0);
 
   const refresh = useCallback(() => {
     setTick((t) => t + 1);
@@ -44,38 +46,35 @@ export function AdminOwnersClient() {
   }, []);
 
   const { current, past } = useMemo(() => adminOwnerCounts(), [tick]);
-  const kpiItems = useMemo(
-    () => [
-      { value: String(current), label: "Current" },
-      { value: String(past), label: "Past" },
-    ],
-    [current, past],
-  );
-  const filteredRows = useMemo(() => {
-    const want: AdminOwnerRow["status"] = tabIndex === 0 ? "current" : "past";
-    return readAdminOwners().filter((r) => r.status === want);
-  }, [tick, tabIndex]);
+  const currentRows = useMemo(() => readAdminOwners().filter((r) => r.status === "current"), [tick]);
 
   return (
-    <div className={PORTAL_SECTION_SURFACE}>
+    <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className={PORTAL_PAGE_TITLE}>Owners</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Owners</h1>
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
           Refresh
         </Button>
       </div>
 
-      <PortalKpiTabStrip items={kpiItems} activeIndex={tabIndex} onSelect={setTabIndex} textAlign="left" />
+      <div className="mt-5 flex flex-wrap items-end gap-6">
+        <div className="min-w-[10rem] rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]">
+          <p className="text-2xl font-bold tabular-nums text-slate-900">{current}</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">Current owners</p>
+        </div>
+        <div className="min-w-[10rem] rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]">
+          <p className="text-2xl font-bold tabular-nums text-slate-900">{past}</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">Past owners</p>
+        </div>
+      </div>
 
-      <PortalContentWell>
-        {filteredRows.length === 0 ? (
+      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
+        {currentRows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-400 shadow-sm">
-              <GridIcon className="h-7 w-7" />
-            </div>
-            <p className="mt-4 text-sm font-medium text-slate-500">
-              {tabIndex === 0 ? "No current owners" : "No past owners"}
-            </p>
+            <AxisHeaderMarkTile>
+              <OwnersEmptyIcon className="h-[26px] w-[26px]" />
+            </AxisHeaderMarkTile>
+            <p className="mt-4 text-sm font-medium text-slate-500">No active owners</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -88,7 +87,7 @@ export function AdminOwnersClient() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => (
+                {currentRows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-5 py-4 align-middle">
                       <p className="font-semibold text-slate-900">{row.name}</p>
@@ -97,17 +96,10 @@ export function AdminOwnersClient() {
                       <p className="text-sm text-slate-600">{row.email}</p>
                     </td>
                     <td className="px-5 py-4 align-middle">
-                      {row.status === "current" ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
-                          Active
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />
-                          Past
-                        </span>
-                      )}
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+                        Active
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -115,7 +107,7 @@ export function AdminOwnersClient() {
             </table>
           </div>
         )}
-      </PortalContentWell>
+      </div>
     </div>
   );
 }

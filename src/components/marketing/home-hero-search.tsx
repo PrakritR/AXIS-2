@@ -1,11 +1,11 @@
 "use client";
 
-import { RoomListingCard } from "@/components/marketing/room-listing-card";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
 import { RADIUS_MILE_OPTIONS, parseRadiusParam } from "@/lib/listings-search";
-import { filterRoomListings } from "@/lib/room-listings-catalog";
+import { PropertyCard } from "@/components/marketing/property-card";
+import { filterPropertiesForCatalog } from "@/lib/property-listings-catalog";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -91,9 +91,9 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   const hasInteraction = zipValid || moveIn !== "" || budgetTouched;
   const pct = ((budget - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
-  const filteredRooms = useMemo(
+  const filteredProperties = useMemo(
     () =>
-      filterRoomListings(combinedProperties, {
+      filterPropertiesForCatalog(combinedProperties, {
         zipRaw: zipDigits,
         radiusMiles: radius,
         maxBudgetNum: budgetTouched && budget < BUDGET_MAX ? budget : null,
@@ -211,8 +211,8 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         <div className="flex w-full flex-col items-center gap-3 text-center">
           <p className="text-[13px] text-[#6e6e73]">
             {zipValid
-              ? <>Rooms within <strong className="font-semibold text-[#1d1d1f]">{radius} mi</strong> of <strong className="font-semibold text-[#1d1d1f]">{zipDigits}</strong>{moveIn || budgetTouched ? " · plus your filters" : ""}</>
-              : "Showing rooms matching your filters"
+              ? <>Listings within <strong className="font-semibold text-[#1d1d1f]">{radius} mi</strong> of <strong className="font-semibold text-[#1d1d1f]">{zipDigits}</strong>{moveIn || budgetTouched ? " · plus your filters" : ""}</>
+              : "Showing listings matching your filters"
             }
           </p>
           <a
@@ -220,25 +220,25 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
             className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full px-8 py-3 text-[15px] font-semibold text-white transition-all duration-200 hover:-translate-y-[1px] active:scale-[0.98] sm:min-h-0 sm:py-2.5 sm:text-[14px]"
             style={{ background: "linear-gradient(135deg, #007aff, #339cff)", boxShadow: "0 4px 20px rgba(0,122,255,0.35)" }}
           >
-            <SearchIcon /> {variant === "listings" ? "Apply search" : "Browse rooms"}
+            <SearchIcon /> {variant === "listings" ? "Apply search" : "View listings"}
           </a>
           <Link
             href="/rent/listings"
             className="text-[13px] font-semibold text-[#007aff] underline-offset-4 hover:underline"
           >
-            View all rooms
+            View all properties
           </Link>
 
           <div className="mt-6 w-full border-t border-black/[0.06] pt-6 text-left">
             <p className="text-center text-sm font-semibold text-[#1d1d1f]">
-              {filteredRooms.length} match{filteredRooms.length === 1 ? "" : "es"} found
+              {filteredProperties.length} propert{filteredProperties.length === 1 ? "y" : "ies"} match
             </p>
-            {filteredRooms.length === 0 ? (
-              <p className="mt-4 text-center text-[13px] text-[#6e6e73]">No rooms match these filters.</p>
+            {filteredProperties.length === 0 ? (
+              <p className="mt-4 text-center text-[13px] text-[#6e6e73]">No properties match these filters.</p>
             ) : (
-              <div className="mt-4 grid w-full gap-6 sm:grid-cols-2">
-                {filteredRooms.map((row) => (
-                  <RoomListingCard key={row.key} row={row} />
+              <div className="mt-4 grid w-full gap-4 sm:grid-cols-2">
+                {filteredProperties.map((p) => (
+                  <PropertyCard key={p.id} property={p} />
                 ))}
               </div>
             )}
@@ -248,13 +248,13 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         <div className="flex flex-col items-center gap-3 text-center">
           <span className="text-[#6e6e73]/25" aria-hidden><SearchIcon size={26} /></span>
           <p className="text-[13px] text-[#6e6e73]/60">
-            Enter a ZIP, move-in date, or adjust budget to search rooms
+            Enter a ZIP, move-in date, or adjust budget to search listings
           </p>
           <Link
             href="/rent/listings"
             className="inline-flex min-h-[48px] w-full max-w-xs items-center justify-center rounded-full border border-[#007aff]/35 bg-[#007aff]/[0.06] px-6 py-3 text-[14px] font-semibold text-[#007aff] transition hover:bg-[#007aff]/[0.1] sm:min-h-0 sm:w-auto sm:py-2 sm:text-[13px]"
           >
-            View all rooms
+            View all properties
           </Link>
         </div>
       )}

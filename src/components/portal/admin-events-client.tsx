@@ -1,21 +1,18 @@
 "use client";
 
-import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { SegmentedThree } from "@/components/ui/segmented-control";
+import { Textarea } from "@/components/ui/input";
 import { TabNav, type TabItem } from "@/components/ui/tabs";
 import { ManagerSectionShell } from "@/components/portal/manager-section-shell";
-import {
-  PORTAL_KPI_CHIP_ACTIVE,
-  PORTAL_KPI_CHIP_INACTIVE,
-  PORTAL_KPI_CHIP_STATIC,
-} from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   acceptPartnerInquiry,
   dateHasAvailability,
   dateSlotKey,
   declinePartnerInquiry,
+  deletePlannedEvent,
   eventKpis,
   formatRangeLabel,
   mondayBasedDayIndex,
@@ -39,6 +36,24 @@ const tabs: TabItem[] = [
 ];
 
 type CalendarMode = "day" | "week" | "month";
+
+function startOfLocalDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+
+function calendarDaysBetween(a: Date, b: Date) {
+  const ua = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const ub = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((ua - ub) / 86400000);
+}
+
+/** Farther from today → coarser zoom (day → week → month). */
+function calendarModeFromAnchor(anchor: Date): CalendarMode {
+  const diff = Math.abs(calendarDaysBetween(startOfLocalDay(anchor), startOfLocalDay(new Date())));
+  if (diff <= 3) return "day";
+  if (diff <= 28) return "week";
+  return "month";
+}
 
 function slotLabel(slotIndex: number) {
   const mins = 8 * 60 + slotIndex * 30;
@@ -87,24 +102,24 @@ function formatWeekRangeLabel(weekMonday: Date) {
   return `${a.toLocaleDateString(undefined, y ? optsY : opts)} – ${b.toLocaleDateString(undefined, optsY)}`;
 }
 
-function InquiryDetailSheet({
-  open,
-  onClose,
+function PartnerInquiryDetailPanel({
   row,
+  instructionsDraft,
+  onInstructionsChange,
+  onClose,
   onChanged,
   showToast,
 }: {
-  open: boolean;
+  row: PartnerInquiry;
+  instructionsDraft: string;
+  onInstructionsChange: (v: string) => void;
   onClose: () => void;
-  row: PartnerInquiry | null;
   onChanged: () => void;
   showToast: (m: string) => void;
 }) {
-  if (!open || !row) return null;
-
   const onAccept = () => {
-    if (acceptPartnerInquiry(row.id)) {
-      showToast("Meeting accepted and added to your calendar.");
+    if (acceptPartnerInquiry(row.id, { instructions: instructionsDraft })) {
+      showToast("Scheduled — partner emailed (demo: sessionStorage axis_demo_outbound_mail_v1).");
       onChanged();
       onClose();
     } else showToast("Could not accept this request.");
@@ -119,75 +134,82 @@ function InquiryDetailSheet({
   };
 
   return (
-    <>
-      <button
-        type="button"
-        aria-label="Close details"
-        className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-[1px]"
-        onClick={onClose}
-      />
-      <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Partner inquiry</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900">{row.name}</p>
-            <p className="text-sm text-slate-500">{row.email}</p>
-          </div>
-          <Button type="button" variant="ghost" className="shrink-0 rounded-full" onClick={onClose}>
-            Close
-          </Button>
+    <div className="border-t border-slate-200/90 bg-slate-50/50 px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Partner</p>
+          <p className="mt-0.5 text-base font-semibold text-slate-900">{row.name}</p>
+          <p className="text-sm text-slate-600">{row.email}</p>
         </div>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 text-sm text-slate-700">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Proposed time</p>
-            <p className="mt-1 font-medium text-slate-900">{formatRangeLabel(row.proposedStart, row.proposedEnd)}</p>
-          </div>
-          {row.phone ? (
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Phone</p>
-              <p className="mt-1">{row.phone}</p>
-            </div>
-          ) : null}
-          {row.notes ? (
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Notes</p>
-              <p className="mt-1 whitespace-pre-wrap">{row.notes}</p>
-            </div>
-          ) : null}
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Status</p>
-            <p className="mt-1 capitalize">{row.status}</p>
-          </div>
+        <Button type="button" variant="ghost" className="shrink-0 rounded-full px-3 py-1.5 text-xs text-slate-600" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+      <dl className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Time</dt>
+          <dd className="mt-0.5 font-medium text-slate-900">{formatRangeLabel(row.proposedStart, row.proposedEnd)}</dd>
         </div>
-        {row.status === "pending" ? (
-          <div className="flex flex-wrap gap-2 border-t border-slate-100 px-5 py-4">
-            <Button type="button" className="rounded-full" onClick={onAccept}>
-              Accept
+        {row.phone ? (
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Phone</dt>
+            <dd className="mt-0.5">{row.phone}</dd>
+          </div>
+        ) : null}
+        <div className="sm:col-span-2">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Their notes</dt>
+          <dd className="mt-0.5 whitespace-pre-wrap">{row.notes?.trim() ? row.notes : "—"}</dd>
+        </div>
+      </dl>
+      {row.status === "pending" ? (
+        <div className="mt-4 space-y-2">
+          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="inquiry-host-msg">
+            Message for partner (optional)
+          </label>
+          <Textarea
+            id="inquiry-host-msg"
+            rows={3}
+            value={instructionsDraft}
+            onChange={(e) => onInstructionsChange(e.target.value)}
+            placeholder="Zoom link, dial-in, parking, agenda…"
+            className="min-h-[5rem] rounded-xl border-slate-200 bg-white text-sm"
+          />
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full !border-0 !bg-emerald-600 !text-white hover:!bg-emerald-700"
+              onClick={onAccept}
+            >
+              Accept & schedule
             </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={onDecline}>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-rose-300 bg-white text-rose-800 hover:bg-rose-50"
+              onClick={onDecline}
+            >
               Decline
             </Button>
           </div>
-        ) : null}
-      </aside>
-    </>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs font-medium capitalize text-slate-500">Status: {row.status}</p>
+      )}
+    </div>
   );
 }
 
-function sameLocalDay(a: Date, b: Date) {
-  return a.toDateString() === b.toDateString();
-}
-
-const MonthGrid = memo(function MonthGrid({
+function MonthGrid({
   anchor,
   availability,
   events,
-  onDayDoubleClick,
+  onDayClick,
 }: {
   anchor: Date;
   availability: Set<string>;
   events: PlannedEvent[];
-  onDayDoubleClick?: (d: Date) => void;
+  onDayClick?: (d: Date) => void;
 }) {
   const year = anchor.getFullYear();
   const month = anchor.getMonth();
@@ -202,32 +224,34 @@ const MonthGrid = memo(function MonthGrid({
   while (cells.length < 42) cells.push(null);
 
   return (
-    <div className="rounded-xl border border-slate-200/90 bg-slate-50/40 p-2 sm:p-2.5">
-      <div className="grid grid-cols-7 gap-px text-center text-[9px] font-bold uppercase tracking-wide text-slate-400 sm:text-[10px]">
+    <div className="rounded-2xl border border-slate-200/90 bg-slate-50/40 p-3">
+      <p className="mb-2 text-center text-sm font-semibold text-slate-800">
+        {anchor.toLocaleString(undefined, { month: "long", year: "numeric" })}
+      </p>
+      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
         {WEEKDAY_LABELS.map((d) => (
-          <div key={d} className="py-0.5">
+          <div key={d} className="py-1">
             {d}
           </div>
         ))}
       </div>
-      <div className="mt-0.5 grid grid-cols-7 gap-px sm:gap-0.5">
+      <div className="mt-1 grid grid-cols-7 gap-1">
         {cells.map((d, i) =>
           d ? (
             <button
               key={i}
               type="button"
-              title="Double-click for events"
-              onDoubleClick={() => onDayDoubleClick?.(d)}
-              className={`flex min-h-[1.75rem] w-full flex-col items-center justify-center rounded-md border py-0.5 text-[11px] font-semibold text-slate-800 transition-colors duration-150 hover:border-primary/30 sm:min-h-[2rem] sm:text-xs ${dayCellTone(d, availability, events)}`}
+              onClick={() => onDayClick?.(d)}
+              className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-sm font-semibold text-slate-800 transition hover:border-primary/30 ${dayCellTone(d, availability, events)}`}
             >
               {d.getDate()}
             </button>
           ) : (
-            <div key={i} className="min-h-[1.75rem] sm:min-h-[2rem]" />
+            <div key={i} className="aspect-square" />
           ),
         )}
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500 sm:text-xs">
+      <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm bg-emerald-200/90" /> Availability
         </span>
@@ -237,166 +261,100 @@ const MonthGrid = memo(function MonthGrid({
       </div>
     </div>
   );
-});
+}
 
-const EventsWeekGrid = memo(function EventsWeekGrid({
+function EventsWeekGrid({
   weekMonday,
   availability,
   planned,
-  onDayDoubleClick,
 }: {
   weekMonday: Date;
   availability: Set<string>;
   planned: PlannedEvent[];
-  onDayDoubleClick?: (d: Date) => void;
 }) {
   const days = weekDatesFromMonday(weekMonday);
   return (
-    <div className="w-full max-w-full rounded-xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-2.5">
-      <div className="grid w-full grid-cols-7 gap-0.5 text-center text-[9px] font-bold uppercase text-slate-400 sm:gap-1 sm:text-[10px]">
+    <div className="w-full max-w-full rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-3">
+      <div className="grid w-full grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-slate-400 sm:gap-1.5 sm:text-[11px]">
         {days.map((d) => (
-          <div key={toLocalDateStr(d)} className="min-w-0 truncate px-0.5 py-1">
+          <div key={toLocalDateStr(d)} className="min-w-0 truncate px-0.5 py-1.5 sm:py-2">
             {WEEKDAY_LABELS[mondayBasedDayIndex(d)]}{" "}
             <span className="font-semibold text-slate-600">{d.getDate()}</span>
           </div>
         ))}
       </div>
-      <div className="mt-0.5 grid min-h-[min(8rem,22vh)] w-full grid-cols-7 gap-0.5 sm:min-h-[min(10rem,26vh)] sm:gap-1">
+      <div className="mt-1 grid min-h-[min(12rem,28vh)] w-full grid-cols-7 gap-1 sm:min-h-[14rem] sm:gap-1.5">
         {days.map((d) => (
-          <button
+          <div
             key={toLocalDateStr(d)}
-            type="button"
-            onDoubleClick={() => onDayDoubleClick?.(d)}
-            title="Double-click for events"
-            aria-label={`${d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })} — double-click for events`}
-            className={`relative min-h-[7rem] rounded-lg border p-1.5 text-left text-[10px] leading-snug text-slate-600 transition-colors duration-150 hover:border-primary/25 sm:min-h-[8.5rem] sm:p-2 ${dayCellTone(d, availability, planned)}`}
+            className={`min-h-[10rem] rounded-xl border p-2 text-left text-[11px] leading-snug text-slate-600 sm:min-h-[11rem] sm:p-2.5 ${dayCellTone(d, availability, planned)}`}
           >
-            <span className="pointer-events-none absolute bottom-2 left-2 text-[10px] font-semibold text-slate-400">{d.getDate()}</span>
-          </button>
+              {planned
+                .filter((e) => {
+                  const t = new Date(e.start);
+                  return t.toDateString() === d.toDateString();
+                })
+                .map((e) => (
+                  <p key={e.id} className="mb-1 font-medium text-slate-900">
+                    {e.title}
+                  </p>
+                ))}
+          </div>
         ))}
       </div>
     </div>
   );
-});
+}
 
-const DayAgendaView = memo(function DayAgendaView({
+function DayAgendaView({
   day,
   availability,
-  onDayDoubleClick,
+  planned,
 }: {
   day: Date;
   availability: Set<string>;
-  onDayDoubleClick?: (d: Date) => void;
+  planned: PlannedEvent[];
 }) {
   const ds = toLocalDateStr(day);
+  const dayEvents = planned.filter((e) => new Date(e.start).toDateString() === day.toDateString());
 
   return (
-    <div
-      className="rounded-xl border border-slate-200/90 bg-white p-3"
-      onDoubleClick={() => onDayDoubleClick?.(day)}
-    >
-      <p className="text-sm font-semibold leading-tight text-slate-900">
-        {day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4">
+      <p className="text-sm font-semibold text-slate-900">
+        {day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
       </p>
-      <p className="mt-1 text-xs text-slate-400">Double-click to open day details.</p>
-      <div className="mt-3 max-h-[min(22rem,42vh)] space-y-0.5 overflow-y-auto">
+      <div className="mt-2 max-h-[min(40rem,72vh)] space-y-0.5 overflow-y-auto">
         {Array.from({ length: SLOTS_PER_DAY }).map((_, slotIndex) => {
           const open = availability.has(dateSlotKey(ds, slotIndex));
           return (
             <div
               key={slotIndex}
-              className={`flex items-start gap-2 rounded-lg border px-2 py-1.5 text-xs ${
+              className={`flex items-center gap-2 rounded-lg border px-2 py-1 text-xs ${
                 open ? "border-emerald-200/80 bg-emerald-50/50" : "border-slate-100 bg-slate-50/40"
               }`}
             >
-              <span className="w-16 shrink-0 text-xs font-medium text-slate-500">{slotLabel(slotIndex)}</span>
-              <span className="text-xs text-slate-600">{open ? "Available" : "Unavailable"}</span>
+              <span className="w-14 shrink-0 font-medium tabular-nums text-slate-500">{slotLabel(slotIndex)}</span>
+              <span className="text-slate-600">{open ? "Open" : "—"}</span>
             </div>
           );
         })}
       </div>
+      {dayEvents.length ? (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Events</p>
+          <ul className="mt-2 space-y-2">
+            {dayEvents.map((e) => (
+              <li key={e.id} className="text-sm font-medium text-slate-800">
+                {e.title} · {formatRangeLabel(e.start, e.end)}
+                {e.instructions ? (
+                  <span className="mt-0.5 block text-xs font-normal text-slate-500">{e.instructions}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
-  );
-});
-
-function EventDaySheet({
-  day,
-  open,
-  onClose,
-  planned,
-  inquiries,
-  onOpenInquiry,
-}: {
-  day: Date | null;
-  open: boolean;
-  onClose: () => void;
-  planned: PlannedEvent[];
-  inquiries: PartnerInquiry[];
-  onOpenInquiry: (row: PartnerInquiry) => void;
-}) {
-  if (!open || !day) return null;
-  const dayEvents = planned.filter((e) => sameLocalDay(new Date(e.start), day));
-  const dayInquiries = inquiries.filter((r) => sameLocalDay(new Date(r.proposedStart), day));
-
-  return (
-    <>
-      <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/25 backdrop-blur-[1px]" onClick={onClose} />
-      <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">This day</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900">
-              {day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-            </p>
-          </div>
-          <Button type="button" variant="ghost" className="shrink-0 rounded-full" onClick={onClose}>
-            Close
-          </Button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Planned events</p>
-            {dayEvents.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-500">No events on this day.</p>
-            ) : (
-              <ul className="mt-2 space-y-2">
-                {dayEvents.map((e) => (
-                  <li key={e.id} className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2 text-sm text-slate-800">
-                    <span className="font-semibold text-slate-900">{e.title}</span>
-                    <span className="text-slate-500"> · {formatRangeLabel(e.start, e.end)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Partner inquiries</p>
-            {dayInquiries.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-500">No meeting requests on this day.</p>
-            ) : (
-              <ul className="mt-2 space-y-2">
-                {dayInquiries.map((row) => (
-                  <li key={row.id} className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-3 text-sm">
-                    <div>
-                      <p className="font-semibold text-slate-900">{row.name}</p>
-                      <p className="text-xs text-slate-500">{row.email}</p>
-                      <p className="mt-1 text-xs text-slate-600">{formatRangeLabel(row.proposedStart, row.proposedEnd)}</p>
-                    </div>
-                    {row.status === "pending" ? (
-                      <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => onOpenInquiry(row)}>
-                        Review
-                      </Button>
-                    ) : (
-                      <p className="text-xs capitalize text-slate-500">Status: {row.status}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      </aside>
-    </>
   );
 }
 
@@ -460,6 +418,7 @@ function AvailabilityEditor() {
 
   return (
     <div className="w-full min-w-0 space-y-4">
+      <p className="text-sm text-slate-600">Paint half-hour cells for the week. Partners can only book inside green slots.</p>
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Editing week</p>
@@ -478,14 +437,11 @@ function AvailabilityEditor() {
         </div>
       </div>
       <div
-        className="flex h-[min(78vh,960px)] min-h-[28rem] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-3"
+        className="flex h-[min(72vh,820px)] min-h-[26rem] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-3"
         onMouseLeave={() => setDragMode(null)}
         onMouseUp={() => setDragMode(null)}
       >
-        <div
-          className="grid min-h-0 w-full flex-1 grid-cols-[minmax(3.25rem,4.75rem)_repeat(7,minmax(0,1fr))] gap-x-0.5 gap-y-px sm:gap-x-1 sm:gap-y-0.5"
-          style={{ gridTemplateRows: `auto repeat(${SLOTS_PER_DAY}, minmax(0, 1fr))` }}
-        >
+        <div className="grid min-h-0 w-full flex-1 grid-cols-[minmax(3.25rem,4.75rem)_repeat(7,minmax(0,1fr))] grid-rows-[auto_repeat(24,minmax(0,1fr))] gap-x-0.5 gap-y-px sm:gap-x-1 sm:gap-y-0.5">
           <div className="min-w-0" />
           {weekDays.map((d) => (
             <div
@@ -587,16 +543,26 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
   const { showToast } = useAppUi();
   const [tick, setTick] = useState(0);
   const [detail, setDetail] = useState<PartnerInquiry | null>(null);
-  const [eventSheetDay, setEventSheetDay] = useState<Date | null>(null);
+  const [inquiryInstructionsDraft, setInquiryInstructionsDraft] = useState("");
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [monthAnchor] = useState(() => new Date());
-  const [calMode, setCalMode] = useState<CalendarMode>("week");
+  const [calModeOverride, setCalModeOverride] = useState<CalendarMode | null>(null);
   const [calAnchor, setCalAnchor] = useState(() => {
     const t = new Date();
     t.setHours(12, 0, 0, 0);
     return t;
   });
 
+  const derivedCalMode = useMemo(() => calendarModeFromAnchor(calAnchor), [calAnchor]);
+  const calMode = calModeOverride ?? derivedCalMode;
+  const calModeNavRef = useRef(calMode);
+  calModeNavRef.current = calMode;
+
   const bump = useCallback(() => setTick((t) => t + 1), []);
+
+  useEffect(() => {
+    setInquiryInstructionsDraft("");
+  }, [detail?.id]);
 
   useEffect(() => {
     const on = () => bump();
@@ -608,135 +574,232 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
     };
   }, [bump]);
 
-  const { availability, inquiries, planned, kpis } = useMemo(() => {
+  const { availability, planned, kpis, pendingRows } = useMemo(() => {
     const inq = readPartnerInquiries();
     return {
       availability: readAvailabilityDateSet(),
-      inquiries: inq,
       planned: readPlannedEvents(),
       kpis: eventKpis(monthAnchor),
+      pendingRows: inq.filter((r) => r.status === "pending"),
     };
   }, [tick, monthAnchor]);
 
-  const refresh = useCallback(() => {
+  const refresh = () => {
     bump();
     showToast("Refreshed.");
-  }, [bump, showToast]);
+  };
 
-  const shellActions = useMemo(() => [{ label: "Refresh", variant: "outline" as const, onClick: refresh }], [refresh]);
+  const shellActions = [
+    { label: "Refresh", variant: "outline" as const, onClick: refresh },
+  ];
 
   const weekMondayForGrid = useMemo(() => startOfWeekMonday(calAnchor), [calAnchor]);
   const monthDisplayAnchor = useMemo(() => new Date(calAnchor.getFullYear(), calAnchor.getMonth(), 1), [calAnchor]);
 
-  const calPrev = useCallback(() => setCalAnchor((a) => shiftCalendarAnchor(a, calMode, -1)), [calMode]);
-  const calNext = useCallback(() => setCalAnchor((a) => shiftCalendarAnchor(a, calMode, 1)), [calMode]);
-  const calToday = useCallback(() => {
+  const calPrev = () => {
+    setCalModeOverride(null);
+    setCalAnchor((a) => shiftCalendarAnchor(a, calModeNavRef.current, -1));
+  };
+  const calNext = () => {
+    setCalModeOverride(null);
+    setCalAnchor((a) => shiftCalendarAnchor(a, calModeNavRef.current, 1));
+  };
+  const calToday = () => {
+    setCalModeOverride(null);
     const t = new Date();
     t.setHours(12, 0, 0, 0);
     setCalAnchor(t);
-  }, []);
-
-  const openDaySheet = useCallback((d: Date) => {
-    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
-    setEventSheetDay(x);
-  }, []);
-
-  const handleCalModeChange = useCallback((id: string) => {
-    setCalMode(id as CalendarMode);
-  }, []);
-
-  const goTodayCalendar = useCallback(() => {
-    calToday();
-    setCalMode("day");
-  }, [calToday]);
-
-  const goThisWeekCalendar = useCallback(() => {
-    calToday();
-    setCalMode("week");
-  }, [calToday]);
-
-  const goThisMonthCalendar = useCallback(() => {
-    const t = new Date();
-    t.setDate(1);
-    t.setHours(12, 0, 0, 0);
-    setCalAnchor(t);
-    setCalMode("month");
-  }, []);
-
-  const kpiCompactValue = "text-lg font-bold tabular-nums leading-tight tracking-tight text-[#0d1f4e] sm:text-xl";
-  const kpiCompactLabel = "mt-0.5 text-[11px] font-medium leading-snug text-slate-500";
-  const kpiChipBtn = (active: boolean) =>
-    `${active ? PORTAL_KPI_CHIP_ACTIVE : PORTAL_KPI_CHIP_INACTIVE} !px-3 !py-2`;
+  };
 
   return (
-    <ManagerSectionShell title="Events" actions={shellActions} bodyClassName="mt-4">
-      <div className="space-y-3">
+    <ManagerSectionShell title="Events" actions={shellActions}>
+      <div className="space-y-5">
         <TabNav items={tabs} activeId={tabId} />
 
         {tabId === "availability" ? (
           <AvailabilityEditor />
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-              <button type="button" onClick={goTodayCalendar} className={kpiChipBtn(calMode === "day")}>
-                <p className={kpiCompactValue}>{kpis.today}</p>
-                <p className={kpiCompactLabel}>Today · day</p>
-              </button>
-              <button type="button" onClick={goThisWeekCalendar} className={kpiChipBtn(calMode === "week")}>
-                <p className={kpiCompactValue}>{kpis.week}</p>
-                <p className={kpiCompactLabel}>This week · week</p>
-              </button>
-              <button type="button" onClick={goThisMonthCalendar} className={kpiChipBtn(calMode === "month")}>
-                <p className={kpiCompactValue}>{kpis.month}</p>
-                <p className={kpiCompactLabel}>This month · month</p>
-              </button>
-              <div className={`${PORTAL_KPI_CHIP_STATIC} !px-3 !py-2`}>
-                <p className={kpiCompactValue}>{kpis.total}</p>
-                <p className={kpiCompactLabel}>Total booked</p>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {(
+                [
+                  ["Today", kpis.today],
+                  ["This week", kpis.week],
+                  ["This month", kpis.month],
+                  ["Total booked", kpis.total],
+                ] as const
+              ).map(([label, value], i) => (
+                <div
+                  key={label}
+                  className={`rounded-2xl border px-4 py-3 ${
+                    i === 2 ? "border-primary/25 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]" : "border-slate-100 bg-slate-50/60"
+                  }`}
+                >
+                  <p className="text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
+                  <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-b border-slate-100 pb-2">
+              <Link href="#events-calendar" className="text-xs font-medium text-primary underline-offset-2 hover:underline">
+                Calendar ↓
+              </Link>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Planned events</p>
+              {planned.length === 0 ? (
+                <p className="mt-2 text-sm text-slate-500">No meetings yet.</p>
+              ) : (
+                <ul className="mt-2 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200/90 bg-white text-sm">
+                  {planned.map((e) => (
+                    <Fragment key={e.id}>
+                      <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4">
+                        <div className="min-w-0 flex-1">
+                          <span className="font-semibold text-slate-900">{e.title}</span>
+                          <span className="text-slate-500"> · {formatRangeLabel(e.start, e.end)}</span>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full border-slate-200 px-3 py-1.5 text-xs"
+                            onClick={() => setExpandedEventId((id) => (id === e.id ? null : e.id))}
+                          >
+                            {expandedEventId === e.id ? "Hide" : "Details"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full !border-0 !bg-rose-600 px-3 py-1.5 text-xs !text-white hover:!bg-rose-700"
+                            onClick={() => {
+                              if (deletePlannedEvent(e.id)) {
+                                showToast("Event removed.");
+                                setExpandedEventId((id) => (id === e.id ? null : id));
+                                bump();
+                              } else showToast("Could not delete.");
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </li>
+                      {expandedEventId === e.id ? (
+                        <li className="bg-slate-50/80 px-3 py-3 text-xs text-slate-600 sm:px-4">
+                          <p>
+                            <span className="font-semibold text-slate-500">When: </span>
+                            {formatRangeLabel(e.start, e.end)}
+                          </p>
+                          {e.instructions ? (
+                            <p className="mt-2 whitespace-pre-wrap">
+                              <span className="font-semibold text-slate-500">Host message: </span>
+                              {e.instructions}
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-slate-400">No host message stored.</p>
+                          )}
+                          {e.sourceInquiryId ? (
+                            <p className="mt-2 font-mono text-[10px] text-slate-400">Inquiry ref: {e.sourceInquiryId}</p>
+                          ) : null}
+                        </li>
+                      ) : null}
+                    </Fragment>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Partner inquiries</p>
+              <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
+                {pendingRows.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-slate-500">No pending requests.</div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[640px] border-collapse text-left">
+                        <thead>
+                          <tr className="border-b border-slate-200/90 bg-white">
+                            <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Partner</th>
+                            <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Email</th>
+                            <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Proposed window</th>
+                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pendingRows.map((row) => (
+                            <tr
+                              key={row.id}
+                              className={`border-b border-slate-100 last:border-0 ${detail?.id === row.id ? "bg-primary/[0.04]" : ""}`}
+                            >
+                              <td className="px-5 py-4 font-semibold text-slate-900">{row.name}</td>
+                              <td className="px-5 py-4 text-slate-600">{row.email}</td>
+                              <td className="px-5 py-4 text-sm text-slate-600">{formatRangeLabel(row.proposedStart, row.proposedEnd)}</td>
+                              <td className="px-5 py-4 text-right">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={`rounded-full border-slate-200 px-4 py-2 text-sm font-medium ${
+                                    detail?.id === row.id ? "border-primary/40 bg-primary/10 text-primary" : "text-slate-800"
+                                  }`}
+                                  onClick={() => setDetail((cur) => (cur?.id === row.id ? null : row))}
+                                >
+                                  {detail?.id === row.id ? "Hide" : "Details"}
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {detail ? (
+                      <PartnerInquiryDetailPanel
+                        row={detail}
+                        instructionsDraft={inquiryInstructionsDraft}
+                        onInstructionsChange={setInquiryInstructionsDraft}
+                        onClose={() => setDetail(null)}
+                        onChanged={bump}
+                        showToast={showToast}
+                      />
+                    ) : null}
+                  </>
+                )}
               </div>
             </div>
 
-            <section id="events-calendar" className="scroll-mt-24 space-y-2 pt-0">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Calendar · Availability</p>
-                  <p className="mt-0.5 text-xs text-slate-600">Double-click a day for events and meeting requests.</p>
+            <section id="events-calendar" className="scroll-mt-28 space-y-3 pt-3">
+              <div className="flex flex-col gap-2 border-t border-slate-200/80 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Calendar</p>
+                  <p className="mt-0.5 text-sm text-slate-600">View zooms out the farther you move from today. Use arrows to move.</p>
                 </div>
-                <SegmentedThree
-                  value={calMode}
-                  onChange={handleCalModeChange}
-                  first={{ id: "day", label: "Day" }}
-                  second={{ id: "week", label: "Week" }}
-                  third={{ id: "month", label: "Month" }}
-                />
+                <span className="shrink-0 rounded-full border border-slate-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                  {calMode === "day" ? "Day" : calMode === "week" ? "Week" : "Month"}
+                </span>
               </div>
 
-              <div className="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-slate-50/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-semibold text-slate-900">{calendarNavLabel(calAnchor, calMode)}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  <Button type="button" variant="outline" className="h-8 rounded-full px-3 py-0 text-xs" onClick={calPrev}>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" className="rounded-full" onClick={calPrev}>
                     Back
                   </Button>
-                  <Button type="button" variant="outline" className="h-8 rounded-full px-3 py-0 text-xs" onClick={calToday}>
+                  <Button type="button" variant="outline" className="rounded-full" onClick={calToday}>
                     Today
                   </Button>
-                  <Button type="button" variant="outline" className="h-8 rounded-full px-3 py-0 text-xs" onClick={calNext}>
+                  <Button type="button" variant="outline" className="rounded-full" onClick={calNext}>
                     Forward
                   </Button>
                 </div>
               </div>
 
               {calMode === "day" ? (
-                <DayAgendaView day={calAnchor} availability={availability} onDayDoubleClick={openDaySheet} />
+                <DayAgendaView day={calAnchor} availability={availability} planned={planned} />
               ) : null}
 
               {calMode === "week" ? (
-                <EventsWeekGrid
-                  weekMonday={weekMondayForGrid}
-                  availability={availability}
-                  planned={planned}
-                  onDayDoubleClick={openDaySheet}
-                />
+                <EventsWeekGrid weekMonday={weekMondayForGrid} availability={availability} planned={planned} />
               ) : null}
 
               {calMode === "month" ? (
@@ -744,7 +807,11 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
                   anchor={monthDisplayAnchor}
                   availability={availability}
                   events={planned}
-                  onDayDoubleClick={openDaySheet}
+                  onDayClick={(d) => {
+                    setCalModeOverride("day");
+                    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+                    setCalAnchor(x);
+                  }}
                 />
               ) : null}
             </section>
@@ -752,25 +819,6 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
         )}
       </div>
 
-      <EventDaySheet
-        day={eventSheetDay}
-        open={Boolean(eventSheetDay)}
-        onClose={() => setEventSheetDay(null)}
-        planned={planned}
-        inquiries={inquiries}
-        onOpenInquiry={(row) => {
-          setEventSheetDay(null);
-          setDetail(row);
-        }}
-      />
-
-      <InquiryDetailSheet
-        open={Boolean(detail)}
-        onClose={() => setDetail(null)}
-        row={detail}
-        onChanged={bump}
-        showToast={showToast}
-      />
     </ManagerSectionShell>
   );
 }

@@ -233,6 +233,13 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
     return e;
   }
 
+  if (step === 12) {
+    if (!f.applicationFeeAcknowledged) {
+      e.applicationFeeAcknowledged = "Confirm the application fee to submit.";
+    }
+    return e;
+  }
+
   return e;
 }
 

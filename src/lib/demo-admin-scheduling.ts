@@ -1,4 +1,5 @@
 import { emitAdminUi } from "@/lib/demo-admin-ui";
+import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 
 const AVAIL_KEY = "axis_admin_avail_slots_v1";
 /** Per calendar date (local `YYYY-MM-DD`) + half-hour slot — supports future weeks. */
@@ -9,7 +10,7 @@ const PLANNED_KEY = "axis_admin_planned_events_v1";
 /** Monday = 0 … Sunday = 6 */
 export const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
-/** Half-hour slots from 8:00 AM through 8:00 PM (index 0 = 8:00–8:30, last = 7:30–8:00). */
+/** Half-hour slots from 8:00 through 19:30 (index 0 = 8:00–8:30; last slot ends 20:00). */
 export const SLOTS_PER_DAY = 24;
 
 function isBrowser() {
@@ -177,6 +178,7 @@ export function mondayBasedDayIndex(d: Date) {
 export function slotIndexForDate(d: Date) {
   const h = d.getHours();
   const m = d.getMinutes();
+  if (h < 8) return null;
   const base = (h - 8) * 2 + (m >= 30 ? 1 : 0);
   if (base < 0 || base >= SLOTS_PER_DAY) return null;
   return base;
@@ -213,6 +215,8 @@ export type PlannedEvent = {
   start: string;
   end: string;
   sourceInquiryId?: string;
+  /** Shown in admin details; emailed to partner when accepted (demo log). */
+  instructions?: string;
 };
 
 export function readPartnerInquiries(): PartnerInquiry[] {
@@ -253,14 +257,23 @@ function appendPlannedEvent(ev: PlannedEvent) {
   writeJson(PLANNED_KEY, rows);
 }
 
+export function deletePlannedEvent(id: string): boolean {
+  const rows = readPlannedEvents();
+  const next = rows.filter((e) => e.id !== id);
+  if (next.length === rows.length) return false;
+  writeJson(PLANNED_KEY, next);
+  return true;
+}
+
 export function pendingInquiryCount() {
   return readPartnerInquiries().filter((r) => r.status === "pending").length;
 }
 
-export function acceptPartnerInquiry(id: string): boolean {
+export function acceptPartnerInquiry(id: string, opts?: { instructions?: string }): boolean {
   const rows = readPartnerInquiries();
   const row = rows.find((r) => r.id === id);
   if (!row || row.status !== "pending") return false;
+  const instructions = opts?.instructions?.trim() || undefined;
   updatePartnerInquiry(id, { status: "accepted" });
   appendPlannedEvent({
     id: crypto.randomUUID(),
@@ -268,7 +281,15 @@ export function acceptPartnerInquiry(id: string): boolean {
     start: row.proposedStart,
     end: row.proposedEnd,
     sourceInquiryId: id,
+    instructions,
   });
+  const when = formatRangeLabel(row.proposedStart, row.proposedEnd);
+  const extra = instructions ? `\n\nDetails from the host:\n${instructions}` : "";
+  logDemoOutboundEmail(
+    row.email,
+    "Your Axis partner meeting is scheduled",
+    `Hi ${row.name},\n\nYour meeting is confirmed for:\n${when}.${extra}\n\n— Axis Housing (demo: check sessionStorage axis_demo_outbound_mail_v1)`,
+  );
   return true;
 }
 

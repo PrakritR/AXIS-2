@@ -1,24 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import {
-  PORTAL_PAGE_TITLE,
-  PORTAL_SECTION_SURFACE,
-  PortalContentWell,
-  PortalKpiTabStrip,
-} from "@/components/portal/portal-metrics";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { adminManagerCounts, readAdminManagers, setManagerStatus, type AdminManagerRow } from "@/lib/demo-admin-managers";
 
-function GridIcon({ className }: { className?: string }) {
+function ManagersEmptyIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="13" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="13" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   );
 }
@@ -126,7 +130,6 @@ function ManagerDetailSheet({
 export function AdminManagersClient() {
   const { showToast } = useAppUi();
   const [tick, setTick] = useState(0);
-  const [tabIndex, setTabIndex] = useState(0);
   const [detailRow, setDetailRow] = useState<AdminManagerRow | null>(null);
 
   const refresh = useCallback(() => {
@@ -145,38 +148,35 @@ export function AdminManagersClient() {
   }, []);
 
   const { current, past } = useMemo(() => adminManagerCounts(), [tick]);
-  const kpiItems = useMemo(
-    () => [
-      { value: String(current), label: "Current" },
-      { value: String(past), label: "Past" },
-    ],
-    [current, past],
-  );
-  const filteredRows = useMemo(() => {
-    const want: AdminManagerRow["status"] = tabIndex === 0 ? "active" : "disabled";
-    return readAdminManagers().filter((r) => r.status === want);
-  }, [tick, tabIndex]);
+  const rows = useMemo(() => readAdminManagers(), [tick]);
 
   return (
-    <div className={PORTAL_SECTION_SURFACE}>
+    <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className={PORTAL_PAGE_TITLE}>Managers</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Managers</h1>
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
           Refresh
         </Button>
       </div>
 
-      <PortalKpiTabStrip items={kpiItems} activeIndex={tabIndex} onSelect={setTabIndex} textAlign="left" />
+      <div className="mt-5 flex flex-wrap items-end gap-6">
+        <div className="min-w-[10rem] rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]">
+          <p className="text-2xl font-bold tabular-nums text-slate-900">{current}</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">Current subscribers</p>
+        </div>
+        <div className="min-w-[10rem] rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]">
+          <p className="text-2xl font-bold tabular-nums text-slate-900">{past}</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">Past subscribers</p>
+        </div>
+      </div>
 
-      <PortalContentWell>
-        {filteredRows.length === 0 ? (
+      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
+        {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-400 shadow-sm">
-              <GridIcon className="h-7 w-7" />
-            </div>
-            <p className="mt-4 text-sm font-medium text-slate-500">
-              {tabIndex === 0 ? "No current managers" : "No past managers"}
-            </p>
+            <AxisHeaderMarkTile>
+              <ManagersEmptyIcon className="h-[26px] w-[26px]" />
+            </AxisHeaderMarkTile>
+            <p className="mt-4 text-sm font-medium text-slate-500">No active managers</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -198,7 +198,7 @@ export function AdminManagersClient() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => (
+                {rows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-5 py-4 align-middle">
                       <p className="font-semibold text-slate-900">{row.name}</p>
@@ -227,7 +227,7 @@ export function AdminManagersClient() {
             </table>
           </div>
         )}
-      </PortalContentWell>
+      </div>
 
       <ManagerDetailSheet
         open={Boolean(detailRow)}

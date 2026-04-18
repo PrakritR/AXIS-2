@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useId } from "react";
 
 const markTileClass =
@@ -63,6 +64,18 @@ export function AxisLogoMark({
   return (
     <div className={`${markTileClass} ${className}`} aria-hidden>
       <AxisLogoGlyph />
+    </div>
+  );
+}
+
+/**
+ * Same sky-gradient tile as the header AX mark — use for portal empty states
+ * so icons read with the same weight and chrome as the global header.
+ */
+export function AxisHeaderMarkTile({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`${markTileClass} text-[#0f172a] ${className}`} aria-hidden>
+      {children}
     </div>
   );
 }

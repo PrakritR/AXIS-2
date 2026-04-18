@@ -1163,8 +1163,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Review and submit</h2>
-          <StepIntro className="mt-3">Confirm everything below before you submit. You can jump back to any section with Edit.</StepIntro>
+          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Review</h2>
+          <StepIntro className="mt-3">Confirm everything below, then continue to the application fee step.</StepIntro>
         </div>
         <div className="space-y-4">
           <ReviewSection title="Group application" stepTarget={1}>
@@ -1268,9 +1268,36 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Row k="Date signed" v={displayOrDash(form.dateSigned)} />
           </ReviewSection>
         </div>
-        <p className="text-center text-xs text-slate-500">
-          Payment or application fees, if any, are processed after submission in a live system.
-        </p>
+        <p className="text-center text-xs text-slate-500">Next: application fee confirmation before final submit.</p>
+      </div>
+    );
+  }
+
+  if (step === 12) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Application fee</h2>
+          <StepIntro className="mt-2">
+            A non-refundable $50 processing fee applies with this application. This demo does not charge a card — connect payments in production.
+          </StepIntro>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-5 sm:p-6">
+          <p className="text-3xl font-bold tabular-nums text-slate-900">$50.00</p>
+          <p className="mt-1 text-sm text-slate-600">Screening and administrative processing.</p>
+          <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-primary"
+              checked={form.applicationFeeAcknowledged}
+              onChange={(e) => patch({ applicationFeeAcknowledged: e.target.checked })}
+            />
+            <span className="text-sm font-medium leading-snug text-slate-800">
+              I understand this fee is non-refundable and agree to pay it as part of submitting my application.
+            </span>
+          </label>
+          <FieldError msg={errors.applicationFeeAcknowledged} />
+        </div>
       </div>
     );
   }

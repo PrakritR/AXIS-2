@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
+import { AdminPortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 function hrefForSection(def: PortalDefinition, section: string) {
@@ -33,6 +34,8 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         ? "from-slate-800 to-slate-700"
         : "from-[#007aff] to-[#339cff]";
 
+  const adminNavIcons = definition.kind === "admin";
+
   const desktopAside = useMinShell ? (
     <aside className="hidden w-[15.5rem] shrink-0 border-r border-slate-200/70 bg-slate-50/60 lg:flex lg:flex-col lg:self-stretch">
       <nav className="flex min-h-0 flex-1 flex-col px-2.5 py-5">
@@ -44,13 +47,18 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               <Link
                 key={s.section}
                 href={href}
-                className={`flex items-center rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
                   active
                     ? "bg-primary text-white shadow-[0_2px_14px_-2px_rgba(0,122,255,0.45)]"
                     : "text-slate-700 hover:bg-white/70 hover:text-slate-900"
                 }`}
               >
-                {s.label}
+                {adminNavIcons ? (
+                  <span className="shrink-0 opacity-90" aria-hidden>
+                    <AdminPortalNavIcon section={s.section} />
+                  </span>
+                ) : null}
+                <span className="min-w-0">{s.label}</span>
               </Link>
             );
           })}
@@ -126,7 +134,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     key={s.section}
                     href={hrefForSection(definition, s.section)}
                     onClick={() => setOpen(false)}
-                    className={`block rounded-xl px-3 py-2 text-sm font-medium ${
+                    className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium ${
                       useMinShell
                         ? active
                           ? "bg-primary text-white shadow-[0_2px_14px_-2px_rgba(0,122,255,0.45)]"
@@ -134,7 +142,12 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                         : "text-slate-800 hover:bg-slate-50"
                     }`}
                   >
-                    {s.label}
+                    {adminNavIcons ? (
+                      <span className="shrink-0 opacity-90" aria-hidden>
+                        <AdminPortalNavIcon section={s.section} />
+                      </span>
+                    ) : null}
+                    <span className="min-w-0">{s.label}</span>
                   </Link>
                 );
               })}

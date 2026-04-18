@@ -84,16 +84,36 @@ export function ManagerPaymentsLedgerPanel() {
                           <span className="font-semibold text-slate-900">{row.residentName}</span> · {row.notes}
                         </p>
                         <div className="mt-4 flex flex-wrap gap-2">
-                          <Button type="button" className="rounded-full text-xs" onClick={() => showToast("Marked paid (demo).")}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full !border-0 !bg-emerald-600 px-4 text-xs !text-white hover:!bg-emerald-700"
+                            onClick={() => showToast("Marked paid (demo).")}
+                          >
                             Mark paid
                           </Button>
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => showToast("Moved to pending (demo).")}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full border-slate-300 px-4 text-xs"
+                            onClick={() => showToast("Moved to pending (demo).")}
+                          >
                             Move to pending
                           </Button>
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => showToast("Recorded Zelle payment (demo).")}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full border-sky-300 px-4 text-xs text-sky-900 hover:bg-sky-50"
+                            onClick={() => showToast("Recorded Zelle payment (demo).")}
+                          >
                             Paid with Zelle
                           </Button>
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => showToast("Line removed (demo).")}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full border-rose-300 px-4 text-xs text-rose-800 hover:bg-rose-50"
+                            onClick={() => showToast("Line removed (demo).")}
+                          >
                             Delete line
                           </Button>
                         </div>

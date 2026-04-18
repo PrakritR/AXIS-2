@@ -72,5 +72,6 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     consentTruth: false,
     digitalSignature: "",
     dateSigned: todayISO(),
+    applicationFeeAcknowledged: false,
   };
 }

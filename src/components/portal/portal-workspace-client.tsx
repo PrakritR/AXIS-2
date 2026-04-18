@@ -51,8 +51,10 @@ export function PortalWorkspaceClient({
   breadcrumbs: Crumb[];
 }) {
   const { showToast, openModal } = useAppUi();
-  const isCompactPortalShell = portalKind === "admin" || portalKind === "resident";
-  const useSectionShell = portalKind === "admin" || portalKind === "resident";
+  const isCompactPortalShell =
+    portalKind === "admin" || portalKind === "resident" || portalKind === "manager" || portalKind === "owner";
+  const useSectionShell =
+    portalKind === "admin" || portalKind === "resident" || portalKind === "manager" || portalKind === "owner";
   const showToolbar = model.showToolbar !== false;
   const showQuickLinks = model.showQuickLinks !== false;
 
@@ -184,11 +186,16 @@ export function PortalWorkspaceClient({
     </>
   );
 
-  const hideAdminPropertyFilter = portalKind === "admin" && model.title === "Inbox";
+  const hideInboxPropertyFilter =
+    (portalKind === "admin" || portalKind === "manager") && model.title === "Inbox";
 
   const headerFilters =
-    portalKind === "admin" && !hideAdminPropertyFilter ? (
+    portalKind === "admin" && !hideInboxPropertyFilter ? (
       <PortalPropertyFilter residents={model.title === "Payments"} applications={model.title === "Work orders"} />
+    ) : portalKind === "manager" && !hideInboxPropertyFilter ? (
+      <PortalPropertyFilter residents={model.title === "Payments"} applications={model.title === "Applications"} />
+    ) : portalKind === "owner" ? (
+      <PortalPropertyFilter />
     ) : portalKind === "resident" ? (
       <PortalPropertyFilter residents={model.title === "Payments"} />
     ) : null;

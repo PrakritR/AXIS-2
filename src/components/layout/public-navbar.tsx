@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const RENT_LINKS = [
-  { href: "/rent/listings", label: "View all rooms" },
+  { href: "/rent/listings", label: "View all properties" },
   { href: "/rent/tours-contact", label: "Schedule tour" },
   { href: "/rent/apply", label: "Apply" },
 ];
@@ -17,14 +17,19 @@ const PARTNER_LINKS = [
   { href: "/partner/contact", label: "Partner inquiries" },
 ];
 
-/** Resolve which nav link is active using the longest matching href so `/partner` does not shadow `/partner/pricing`. */
-function activeHrefForPath(pathname: string, links: { href: string }[]): string | undefined {
-  const matches = links.filter((l) => pathname === l.href || pathname.startsWith(`${l.href}/`));
-  if (matches.length === 0) return undefined;
-  return matches.sort((a, b) => b.href.length - a.href.length)[0].href;
+type MenuKey = "rent" | "partner";
+
+/** Path is this route or a deeper segment (`/partner/pricing` must not match only `/partner`). */
+function pathMatchesHref(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-type MenuKey = "rent" | "partner";
+/** Pick the longest matching link so `/partner/pricing` highlights Software & pricing, not Partner overview. */
+function pickActiveNavHref(pathname: string, links: readonly { href: string }[]): string | undefined {
+  const matches = links.filter((l) => pathMatchesHref(pathname, l.href)).map((l) => l.href);
+  if (matches.length === 0) return undefined;
+  return matches.reduce((a, b) => (a.length >= b.length ? a : b));
+}
 
 export function PublicNavbar() {
   const pathname = usePathname();
@@ -52,9 +57,8 @@ export function PublicNavbar() {
 
   const rentActive = useMemo(() => pathname === "/" || pathname.startsWith("/rent"), [pathname]);
   const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
-  const activeRentHref = useMemo(() => activeHrefForPath(pathname, RENT_LINKS), [pathname]);
-  const activePartnerHref = useMemo(() => activeHrefForPath(pathname, PARTNER_LINKS), [pathname]);
-  /** Portal always starts at sign-in; users choose role or land in the right app after auth. */
+  const activeRentHref = useMemo(() => pickActiveNavHref(pathname, RENT_LINKS), [pathname]);
+  const activePartnerHref = useMemo(() => pickActiveNavHref(pathname, PARTNER_LINKS), [pathname]);
   const portalHref = "/auth/sign-in";
 
   return (
@@ -163,13 +167,25 @@ export function PublicNavbar() {
             <MobileSection label="Rent with Axis">
               <MobileLink href="/" label="Axis Housing home" active={pathname === "/"} onClose={() => setMobileOpen(false)} />
               {RENT_LINKS.map(({ href, label }) => (
-                <MobileLink key={href} href={href} label={label} active={activeRentHref === href} onClose={() => setMobileOpen(false)} />
+                <MobileLink
+                  key={href}
+                  href={href}
+                  label={label}
+                  active={activeRentHref === href}
+                  onClose={() => setMobileOpen(false)}
+                />
               ))}
             </MobileSection>
             <div className="pt-1">
               <MobileSection label="Partner with Axis">
                 {PARTNER_LINKS.map(({ href, label }) => (
-                  <MobileLink key={href} href={href} label={label} active={activePartnerHref === href} onClose={() => setMobileOpen(false)} />
+                  <MobileLink
+                    key={href}
+                    href={href}
+                    label={label}
+                    active={activePartnerHref === href}
+                    onClose={() => setMobileOpen(false)}
+                  />
                 ))}
               </MobileSection>
             </div>
@@ -290,7 +306,7 @@ function DropdownPanel({
 }) {
   return (
     <div
-      className={`absolute left-1/2 top-full z-50 -translate-x-1/2 pt-3 transition-all duration-200 ${
+      className={`absolute left-1/2 top-full z-50 -translate-x-1/2 pt-4 transition-all duration-200 ${
         open ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none -translate-y-1 opacity-0"
       }`}
       onMouseEnter={cancelClose}

@@ -1,4 +1,4 @@
-export const RENTAL_WIZARD_STEP_COUNT = 11;
+export const RENTAL_WIZARD_STEP_COUNT = 12;
 
 export type YesNo = "yes" | "no" | null;
 export type GroupRole = "first" | "joining" | null;
@@ -70,6 +70,8 @@ export type RentalWizardFormState = {
   consentTruth: boolean;
   digitalSignature: string;
   dateSigned: string;
+  /** Step 12 — non-refundable application processing fee acknowledgement */
+  applicationFeeAcknowledged: boolean;
 };
 
 /** Field and step-level messages (string keys so consent booleans can still surface errors). */
