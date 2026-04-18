@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { adminOwnerCounts } from "@/lib/demo-admin-owners";
+import { pendingInquiryCount, readPlannedEvents } from "@/lib/demo-admin-scheduling";
+import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 
 const launchPreviewClassName =
@@ -31,6 +33,7 @@ function StatCard({
 
 export function AdminDashboard() {
   const [ownerTotal, setOwnerTotal] = useState("0");
+  const [eventsTotal, setEventsTotal] = useState("0");
 
   useEffect(() => {
     const sync = () => {
@@ -43,6 +46,21 @@ export function AdminDashboard() {
     window.addEventListener("storage", on);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+      window.removeEventListener("storage", on);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncEvents = () => {
+      const n = readPlannedEvents().length + pendingInquiryCount();
+      setEventsTotal(String(n));
+    };
+    syncEvents();
+    const on = () => syncEvents();
+    window.addEventListener(ADMIN_UI_EVENT, on);
+    window.addEventListener("storage", on);
+    return () => {
+      window.removeEventListener(ADMIN_UI_EVENT, on);
       window.removeEventListener("storage", on);
     };
   }, []);
@@ -117,12 +135,11 @@ export function AdminDashboard() {
         </div>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Properties" value="0" href="/admin/properties" />
         <StatCard label="Managers" value="0" href="/admin/managers" />
         <StatCard label="Owners" value={ownerTotal} href="/admin/owners" />
-        <StatCard label="Leases · in review" value="0" href="/admin/leases" />
-        <StatCard label="Inbox · unopened" value="0" href="/admin/inbox/unopened" />
+        <StatCard label="Events" value={eventsTotal} href="/admin/events/events" />
       </div>
     </div>
   );

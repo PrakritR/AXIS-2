@@ -11,6 +11,7 @@ import { AdminManagersClient } from "@/components/portal/admin-managers-client";
 import { AdminOwnersClient } from "@/components/portal/admin-owners-client";
 import { AdminLeasesClient } from "@/components/portal/admin-leases-client";
 import { AdminPropertiesClient } from "@/components/portal/admin-properties-client";
+import { AdminEventsClient } from "@/components/portal/admin-events-client";
 import { ManagerProperties } from "@/components/portal/manager-properties";
 import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
 import { OwnerManagers } from "@/components/portal/owner-managers";
@@ -63,6 +64,16 @@ export async function renderPortalSection(
   if (kind === "admin" && section === "leases") {
     if (tabParts?.length) notFound();
     return <AdminLeasesClient />;
+  }
+
+  if (kind === "admin" && section === "events") {
+    if (!meta.tabs.length) notFound();
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+    }
+    const eventsTab = tabParts[0];
+    if (eventsTab !== "events" && eventsTab !== "availability") notFound();
+    return <AdminEventsClient tabId={eventsTab} />;
   }
 
   if (kind === "manager") {

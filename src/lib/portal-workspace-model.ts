@@ -215,7 +215,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
     if (
       section === "managers" ||
       section === "leases" ||
-      section === "calendar" ||
+      section === "events" ||
       section === "applications" ||
       section === "payments" ||
       section === "work-orders"
@@ -746,45 +746,6 @@ export function buildPortalWorkspaceModel(
     };
   }
 
-  if (portal === "admin" && section === "calendar") {
-    return {
-      eyebrow,
-      title: "Calendar",
-      subtitle: "",
-      kpis: [
-        { label: "Today", value: demoKpis.calendar.today, hint: "Booked" },
-        { label: "This week", value: demoKpis.calendar.week, hint: "" },
-        { label: "This month", value: demoKpis.calendar.month, hint: "" },
-        { label: "Total booked", value: demoKpis.calendar.total, hint: "" },
-      ],
-      showToolbar: false,
-      showQuickLinks: false,
-      columns: [
-        { key: "item", label: "Item" },
-        { key: "window", label: "Window" },
-        { key: "owner", label: "Owner" },
-      ],
-      rows: [
-        {
-          item: "Tour block",
-          window: "Sat · 10:00–2:00",
-          owner: "Leasing",
-        },
-        {
-          item: "Lease countersign",
-          window: "Due Fri",
-          owner: "Admin",
-        },
-        {
-          item: "Vendor follow-up",
-          window: "Due Wed",
-          owner: "Maintenance",
-        },
-      ],
-      actions: actionsFor(portal, section),
-    };
-  }
-
   if (portal === "resident" && section === "calendar") {
     return {
       eyebrow,
@@ -852,7 +813,7 @@ export function buildPortalWorkspaceModel(
     };
   }
 
-  if ((section === "calendar" || section === "analytics") && portal !== "resident") {
+  if ((section === "calendar" || section === "analytics") && portal !== "resident" && portal !== "admin") {
     return {
       eyebrow,
       title: humanize(section),

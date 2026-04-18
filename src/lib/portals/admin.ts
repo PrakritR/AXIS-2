@@ -13,10 +13,10 @@ export const adminPortal: PortalDefinition = {
     { section: "owners", label: "Owners", tabs: [] },
     { section: "leases", label: "Leases", tabs: [] },
     {
-      section: "calendar",
-      label: "Calendar",
+      section: "events",
+      label: "Events",
       tabs: [
-        { id: "week", label: "Week view" },
+        { id: "events", label: "Events" },
         { id: "availability", label: "Availability" },
       ],
     },

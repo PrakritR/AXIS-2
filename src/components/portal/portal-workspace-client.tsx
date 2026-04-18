@@ -183,8 +183,10 @@ export function PortalWorkspaceClient({
     </>
   );
 
+  const hideAdminPropertyFilter = portalKind === "admin" && model.title === "Inbox";
+
   const headerFilters =
-    portalKind === "admin" ? (
+    portalKind === "admin" && !hideAdminPropertyFilter ? (
       <PortalPropertyFilter residents={model.title === "Payments"} applications={model.title === "Work orders"} />
     ) : portalKind === "resident" ? (
       <PortalPropertyFilter residents={model.title === "Payments"} />
