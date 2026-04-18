@@ -6,9 +6,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const RENT_LINKS = [
+  { href: "/rent/listings", label: "View all properties" },
   { href: "/rent/tours-contact", label: "Schedule tour" },
   { href: "/rent/apply", label: "Apply" },
-  { href: "/rent/listings", label: "Rental listings" },
 ];
 
 const PARTNER_LINKS = [
@@ -145,7 +145,7 @@ export function PublicNavbar() {
               (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(0,122,255,0.32)";
             }}
           >
-            Manager / Owner login
+            Portal
           </Link>
 
           {/* Mobile menu button */}
@@ -192,7 +192,7 @@ export function PublicNavbar() {
                 className="flex min-h-[48px] w-full items-center justify-center rounded-full py-3 text-[14px] font-semibold text-white"
                 style={{ background: "linear-gradient(135deg, #007aff, #339cff)", boxShadow: "0 4px 20px rgba(0,122,255,0.3)" }}
               >
-                Manager / Owner login
+                Portal
               </Link>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-black/[0.06] pt-3 text-xs">

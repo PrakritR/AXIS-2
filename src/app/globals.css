@@ -1,13 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  /* Apple-style blue system */
+  /* Portal blue system */
   --background: #ffffff;
   --foreground: #1d1d1f;
   --muted: #6e6e73;
   --border: rgba(0, 0, 0, 0.08);
   --card: rgba(255, 255, 255, 0.72);
   --primary: #007aff;
+  --primary-alt: #339cff;
   --primary-foreground: #ffffff;
   --accent: rgba(0, 122, 255, 0.08);
   --auth-input-bg: rgba(0, 0, 0, 0.04);
@@ -23,6 +24,7 @@
   --color-border: var(--border);
   --color-card: var(--card);
   --color-primary: var(--primary);
+  --color-primary-alt: var(--primary-alt);
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
   --color-ring: var(--ring);
@@ -62,7 +64,7 @@ html {
   margin-top: -6px;
   border-radius: 9999px;
   background: #fff;
-  border: 2.5px solid #007aff;
+  border: 2.5px solid var(--primary);
   box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
   cursor: pointer;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
@@ -76,7 +78,7 @@ html {
   height: 18px;
   border-radius: 9999px;
   background: #fff;
-  border: 2.5px solid #007aff;
+  border: 2.5px solid var(--primary);
   box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
   cursor: pointer;
 }
@@ -85,8 +87,8 @@ html {
   border-radius: 9999px;
   background: linear-gradient(
     90deg,
-    #007aff 0%,
-    #339cff var(--budget-pct),
+    var(--primary) 0%,
+    var(--primary-alt) var(--budget-pct),
     rgba(0, 0, 0, 0.08) var(--budget-pct),
     rgba(0, 0, 0, 0.08) 100%
   );
@@ -96,8 +98,8 @@ html {
   border-radius: 9999px;
   background: linear-gradient(
     90deg,
-    #007aff 0%,
-    #339cff var(--budget-pct),
+    var(--primary) 0%,
+    var(--primary-alt) var(--budget-pct),
     rgba(0, 0, 0, 0.08) var(--budget-pct),
     rgba(0, 0, 0, 0.08) 100%
   );

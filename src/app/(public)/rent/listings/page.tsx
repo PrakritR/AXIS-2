@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { HomeHeroSearch } from "@/components/marketing/home-hero-search";
 import { PropertyCard } from "@/components/marketing/property-card";
 import { mockProperties } from "@/data/mock-properties";
 import {
@@ -39,17 +38,10 @@ export default async function ListingsPage({ searchParams }: PageProps) {
   });
 
   const hasSearch = centerZip !== null || maxBudgetNum !== null;
-  const hydrateKey = [zipRaw, String(radiusMiles), moveIn, moveOut, maxBudgetRaw ?? "", bathroom].join("|");
-
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">Listings</p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Available homes (mock)</h1>
-      <p className="mt-3 max-w-prose text-sm text-muted">
-        Same search as the homepage: 5-digit US ZIP, search radius, optional move-in / move-out, max monthly rent, and
-        bath preference. ZIP matching is a simple demo (numeric proximity, not map miles). Max rent filters on the
-        dollar amount shown in each card.
-      </p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight">View all properties</h1>
 
       {hasSearch ? (
         <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
@@ -95,19 +87,6 @@ export default async function ListingsPage({ searchParams }: PageProps) {
           </Link>
         </div>
       ) : null}
-
-      <div className="mt-8">
-        <HomeHeroSearch
-          key={hydrateKey}
-          variant="listings"
-          initialZip={zipRaw}
-          initialRadius={radiusMiles}
-          initialMoveIn={moveIn}
-          initialMoveOut={moveOut}
-          initialMaxBudget={maxBudgetNum}
-          initialBathroom={bathroom}
-        />
-      </div>
 
       {filtered.length === 0 ? (
         <div className="mt-12 rounded-3xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-14 text-center">

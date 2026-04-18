@@ -11,7 +11,7 @@ export function AdminPortalTopbar() {
           <p className="mt-1 text-xs text-slate-500">Axis Housing · admin portal</p>
         </div>
         <p className="shrink-0 text-xs font-medium text-slate-500" aria-live="polite">
-          <span className="text-[#3b66f5]">●</span> Syncing…
+          <span className="text-primary">●</span> Syncing…
         </p>
       </div>
     </header>

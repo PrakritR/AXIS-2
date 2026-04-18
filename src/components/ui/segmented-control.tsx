@@ -18,7 +18,7 @@ export function SegmentedTwo<T extends string>({ value, onChange, left, right, c
     <div className={`relative flex gap-1 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm backdrop-blur-sm ${className}`}>
       <span
         aria-hidden
-        className="segmented-pill absolute bottom-1 left-1 top-1 w-[calc(50%-6px)] rounded-xl bg-gradient-to-br from-[#3b66f5] to-[#5b7cff] shadow-[0_4px_14px_-4px_rgba(59,102,245,0.5)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+        className="segmented-pill absolute bottom-1 left-1 top-1 w-[calc(50%-6px)] rounded-xl bg-gradient-to-br from-[#007aff] to-[#339cff] shadow-[0_4px_14px_-4px_rgba(0,122,255,0.45)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
         style={{ transform: isRight ? "translateX(calc(100% + 0.25rem))" : "translateX(0)" }}
       />
       <button

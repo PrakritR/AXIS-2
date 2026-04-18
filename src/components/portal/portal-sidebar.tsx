@@ -34,7 +34,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
       ? "from-teal-600 to-cyan-600"
       : definition.accent === "slate"
         ? "from-slate-800 to-slate-700"
-        : "from-blue-600 to-indigo-600";
+        : "from-[#007aff] to-[#339cff]";
 
   const desktopAside = useMinShell ? (
     <aside className="hidden w-56 shrink-0 border-r border-slate-200/90 bg-slate-50/80 lg:block">
@@ -48,7 +48,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               href={href}
               className={`flex items-center rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
                 active
-                  ? "bg-primary text-white shadow-[0_0_20px_rgba(59,102,245,0.35)]"
+                  ? "bg-primary text-white shadow-[0_0_20px_rgba(0,122,255,0.28)]"
                   : "text-slate-700 hover:bg-white"
               }`}
             >

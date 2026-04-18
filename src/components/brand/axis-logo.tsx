@@ -4,27 +4,36 @@ const ink = "#0f172a";
 
 export type AxisLogoVariant = "default" | "portalHeader" | "adminHeader";
 
-/** Primary AX mark — single blue accent bar between letters (clean consumer header). */
+function AxisLogoGlyph() {
+  return (
+    <span className="relative flex select-none items-center text-[17px] font-black leading-none tracking-[-0.08em]">
+      <span style={{ color: ink }}>A</span>
+      <span className="-ml-[1px]" style={{ color: ink }}>
+        X
+      </span>
+      <span
+        className="pointer-events-none absolute left-[21px] top-[-2px] h-[34px] w-[4px] rotate-[20deg] rounded-full bg-gradient-to-b from-[#74b7ff] via-[#4d95ff] to-[#2e6eff]"
+        aria-hidden
+      />
+    </span>
+  );
+}
+
+/** Primary AX mark — rounded blue tile with crossed accent bar. */
 export function AxisLogoMark({
   className = "",
-  variant: _variant,
+  variant,
 }: {
   className?: string;
   variant?: AxisLogoVariant;
 }) {
+  void variant;
   return (
     <div
-      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-slate-200/90 bg-white shadow-sm ${className}`}
+      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] border border-[#bfd6ff] bg-[linear-gradient(180deg,#eaf3ff_0%,#dbeaff_100%)] shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_6px_18px_rgba(96,146,220,0.22)] ${className}`}
       aria-hidden
     >
-      <span className="flex select-none items-center gap-[3px] text-[15px] font-black leading-none tracking-tight">
-        <span style={{ color: ink }}>A</span>
-        <span
-          className="h-[18px] w-[3px] shrink-0 rounded-full bg-gradient-to-b from-[#7eb0ff] to-[#3b66f5]"
-          aria-hidden
-        />
-        <span style={{ color: ink }}>X</span>
-      </span>
+      <AxisLogoGlyph />
     </div>
   );
 }
@@ -33,14 +42,10 @@ export function AxisLogoMark({
 export function AxisLogoMarkSoft({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-slate-50/90 shadow-sm ${className}`}
+      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] border border-[#bfd6ff] bg-[linear-gradient(180deg,#eef5ff_0%,#deebff_100%)] shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_6px_18px_rgba(96,146,220,0.18)] ${className}`}
       aria-hidden
     >
-      <span className="flex select-none items-center gap-[3px] text-[15px] font-black leading-none tracking-tight">
-        <span style={{ color: ink }}>A</span>
-        <span className="h-[18px] w-[3px] shrink-0 rounded-full bg-gradient-to-b from-[#7eb0ff] to-[#3b66f5]" aria-hidden />
-        <span style={{ color: ink }}>X</span>
-      </span>
+      <AxisLogoGlyph />
     </div>
   );
 }

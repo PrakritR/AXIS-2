@@ -1,58 +1,39 @@
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import Link from "next/link";
 
-const PARTNER_LINKS = [
-  { href: "/partner", label: "Partner program overview" },
-  { href: "/partner/pricing", label: "Software & pricing" },
-  { href: "/partner/contact", label: "Partner inquiries" },
+const RENT_LINKS = [
+  { href: "/rent/listings", label: "Properties" },
+  { href: "/rent/tours-contact", label: "Schedule a tour" },
+  { href: "/rent/apply", label: "Apply" },
 ];
 
-const HOUSING_LINKS = [
-  { href: "/rent", label: "Leasing overview" },
-  { href: "/rent/tours-contact", label: "Schedule a tour" },
-  { href: "/rent/apply", label: "Rental application" },
-  { href: "/rent/listings", label: "Browse rental listings" },
-  { href: "/rent/faq", label: "Renting FAQ" },
-  { href: "/rent/contact", label: "Leasing & resident support" },
+const PARTNER_LINKS = [
+  { href: "/partner", label: "Partner overview" },
+  { href: "/partner/pricing", label: "Software & pricing" },
+  { href: "/partner/contact", label: "Partner inquiries" },
 ];
 
 export function PublicFooter() {
   return (
     <footer className="border-t border-slate-200/80 bg-white">
-      <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 md:grid-cols-4">
-        {/* Brand */}
-        <div className="space-y-4">
+      <div className="mx-auto max-w-6xl px-6 py-14">
+        <div className="space-y-4 border-b border-slate-100 pb-8">
           <AxisLogoLink href="/" />
           <p className="text-sm leading-relaxed text-slate-500">
-            Software and visibility for property owners and operators.
+            Software and visibility for property owners and managers.
           </p>
-          <div className="space-y-2">
-            <a
-              href="tel:+15103098345"
-              className="flex items-center gap-2 text-sm font-medium text-slate-700 transition-colors duration-200 hover:text-[#3b66f5]"
-            >
-              <PhoneIcon />
-              (510) 309-8345
-            </a>
-            <a
-              href="mailto:info@axishousing.com"
-              className="flex items-center gap-2 text-sm font-medium text-slate-700 transition-colors duration-200 hover:text-[#3b66f5]"
-            >
-              <MailIcon />
-              info@axishousing.com
-            </a>
-          </div>
         </div>
 
-        {/* Partner — primary site links, left of housing */}
+        <div className="grid gap-10 pt-8 md:grid-cols-3">
+        {/* Rent */}
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Partner</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Rent</p>
           <ul className="mt-4 space-y-2.5">
-            {PARTNER_LINKS.map(({ href, label }) => (
+            {RENT_LINKS.map(({ href, label }) => (
               <li key={href}>
                 <Link
                   href={href}
-                  className="text-sm font-medium text-slate-700 transition-[color,transform] duration-200 hover:text-[#3b66f5] hover:translate-x-0.5"
+                  className="text-sm font-medium text-slate-700 transition-[color,transform] duration-200 hover:text-primary hover:translate-x-0.5"
                 >
                   {label}
                 </Link>
@@ -61,9 +42,26 @@ export function PublicFooter() {
           </ul>
         </div>
 
-        {/* Location */}
+        {/* Partner */}
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Location</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Partner</p>
+          <ul className="mt-4 space-y-2.5">
+            {PARTNER_LINKS.map(({ href, label }) => (
+              <li key={href}>
+                <Link
+                  href={href}
+                  className="text-sm font-medium text-slate-700 transition-[color,transform] duration-200 hover:text-primary hover:translate-x-0.5"
+                >
+                  {label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Locations */}
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Locations</p>
           <div className="mt-4 space-y-1">
             <p className="text-sm text-slate-700">5259 Brooklyn Ave NE</p>
             <p className="text-sm text-slate-700">WA 98105</p>
@@ -72,29 +70,13 @@ export function PublicFooter() {
               href="https://www.google.com/maps/search/?api=1&query=5259+Brooklyn+Ave+NE%2C+98105"
               target="_blank"
               rel="noreferrer"
-              className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[#3b66f5] transition-[opacity,transform] duration-200 hover:underline hover:opacity-90"
+              className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-[opacity,transform] duration-200 hover:underline hover:opacity-90"
             >
               <PinIcon />
               View on Google Maps
             </a>
           </div>
         </div>
-
-        {/* Housing / rent — right column */}
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Housing</p>
-          <ul className="mt-4 space-y-2.5">
-            {HOUSING_LINKS.map(({ href, label }) => (
-              <li key={href}>
-                <Link
-                  href={href}
-                  className="text-sm font-medium text-slate-700 transition-[color,transform] duration-200 hover:text-[#3b66f5] hover:translate-x-0.5"
-                >
-                  {label}
-                </Link>
-              </li>
-            ))}
-          </ul>
         </div>
       </div>
 
@@ -105,22 +87,6 @@ export function PublicFooter() {
         </div>
       </div>
     </footer>
-  );
-}
-
-function PhoneIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-400">
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.55a16 16 0 0 0 6.54 6.54l1.21-1.21a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-    </svg>
-  );
-}
-
-function MailIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-400">
-      <rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-    </svg>
   );
 }
 

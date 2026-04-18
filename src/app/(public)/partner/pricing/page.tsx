@@ -121,7 +121,7 @@ export default function PartnerPricingPage() {
             type="button"
             onClick={() => setBilling("monthly")}
             className={`rounded-full px-5 py-2 text-sm font-semibold transition-all duration-150 ${
-              billing === "monthly" ? "bg-[#3b66f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              billing === "monthly" ? "bg-primary text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
             }`}
           >
             Monthly
@@ -130,7 +130,7 @@ export default function PartnerPricingPage() {
             type="button"
             onClick={() => setBilling("annual")}
             className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-150 ${
-              billing === "annual" ? "bg-[#3b66f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              billing === "annual" ? "bg-primary text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
             }`}
           >
             Annual
@@ -154,7 +154,7 @@ export default function PartnerPricingPage() {
               key={t.id}
               className={`flex flex-col rounded-3xl border bg-white p-7 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.1)] transition-all duration-200 ${
                 isSelected
-                  ? "border-[#3b66f5] ring-2 ring-[#3b66f5]/25 shadow-[0_8px_32px_-8px_rgba(59,102,245,0.35)]"
+                  ? "border-primary ring-2 ring-primary/25 shadow-[0_8px_32px_-8px_rgba(0,122,255,0.28)]"
                   : "border-slate-200/80 hover:border-slate-300"
               }`}
             >
@@ -184,7 +184,7 @@ export default function PartnerPricingPage() {
               <ul className="space-y-3">
                 {t.features.map((f) => (
                   <li key={f.text} className="flex items-center gap-3 text-sm">
-                    <span className={f.included ? "text-[#3b66f5]" : "text-slate-300"} aria-hidden>
+                    <span className={f.included ? "text-primary" : "text-slate-300"} aria-hidden>
                       <CheckIcon />
                     </span>
                     <span className={f.included ? "text-slate-700" : "text-slate-400"}>{f.text}</span>
@@ -207,7 +207,7 @@ export default function PartnerPricingPage() {
                   type="button"
                   onClick={() => setSelectedTierId(t.id)}
                   className={`rounded-full px-4 py-2 text-xs font-semibold transition-all sm:text-sm ${
-                    active ? "bg-[#3b66f5] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    active ? "bg-primary text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
                 >
                   {t.tabLabel}
@@ -308,7 +308,8 @@ export default function PartnerPricingPage() {
                   `Continue with ${selected.label}: ${billing} checkout (demo). Next: create your manager account.`,
                 )
               }
-              className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#3b66f5] px-8 py-3 text-sm font-semibold text-white shadow-[0_0_20px_rgba(59,102,245,0.35)] transition-all duration-150 hover:bg-[#3259e3] active:scale-[0.98]"
+              className="inline-flex shrink-0 items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all duration-150 hover:brightness-105 active:scale-[0.98]"
+              style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
             >
               Continue with {selected.label}
             </button>
@@ -316,7 +317,7 @@ export default function PartnerPricingPage() {
 
           <p className="mt-6 text-center text-sm text-slate-400 sm:text-left">
             Already have an account?{" "}
-            <Link href="/auth/sign-in?role=manager" className="font-semibold text-[#3b66f5] hover:underline">
+            <Link href="/auth/sign-in?role=manager" className="font-semibold text-primary hover:underline">
               Manager login
             </Link>
           </p>

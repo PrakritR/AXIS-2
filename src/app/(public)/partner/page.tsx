@@ -5,7 +5,7 @@ export default function PartnerLandingPage() {
     <div className="bg-white">
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-[#eef2ff] via-[#f3f6ff] to-white pb-24 pt-20 sm:pt-28">
+      <section className="relative overflow-hidden bg-gradient-to-b from-[#eef6ff] via-[#f5f9ff] to-white pb-24 pt-20 sm:pt-28">
         <div className="mx-auto max-w-4xl px-6 text-center">
           <h1 className="text-[2.6rem] font-bold leading-[1.1] tracking-tight text-[#0d1f4e] sm:text-5xl md:text-[3.25rem]">
             We manage your property<br className="hidden sm:block" /> so you don&apos;t have to.
@@ -16,7 +16,8 @@ export default function PartnerLandingPage() {
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
               href="/partner/contact?tab=schedule"
-              className="inline-flex items-center justify-center rounded-2xl bg-[#3b66f5] px-8 py-3.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,102,245,0.4)] transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_36px_-8px_rgba(59,102,245,0.55)] hover:brightness-105 active:translate-y-px active:scale-[0.98]"
+              className="inline-flex items-center justify-center rounded-2xl px-8 py-3.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(0,122,255,0.34)] transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_36px_-8px_rgba(0,122,255,0.46)] hover:brightness-105 active:translate-y-px active:scale-[0.98]"
+              style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
             >
               Book a consultation
             </Link>
@@ -28,14 +29,14 @@ export default function PartnerLandingPage() {
             </Link>
           </div>
         </div>
-        <div className="pointer-events-none absolute -right-32 -top-32 h-[480px] w-[480px] rounded-full bg-[#3b66f5]/5 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-16 -left-24 h-[360px] w-[360px] rounded-full bg-[#6366f1]/5 blur-3xl" />
+        <div className="pointer-events-none absolute -right-32 -top-32 h-[480px] w-[480px] rounded-full bg-primary/[0.06] blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 -left-24 h-[360px] w-[360px] rounded-full bg-[rgba(51,156,255,0.08)] blur-3xl" />
       </section>
 
       {/* ── What we handle ── */}
       <section className="mx-auto max-w-6xl px-6 py-20 sm:py-24">
         <div className="text-center">
-          <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#3b66f5]">What we handle</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">What we handle</p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0d1f4e] sm:text-4xl">
             Full-service, start to finish
           </h2>
@@ -45,9 +46,9 @@ export default function PartnerLandingPage() {
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className="group rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm transition-all duration-200 hover:border-[#c7d4fb] hover:shadow-[0_8px_32px_-4px_rgba(59,102,245,0.12)]"
+              className="group rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm transition-all duration-200 hover:border-primary/25 hover:shadow-[0_8px_32px_-4px_rgba(0,122,255,0.12)]"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eef2ff] text-[#3b66f5] transition-colors duration-200 group-hover:bg-[#3b66f5] group-hover:text-white">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/[0.08] text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-white">
                 {f.icon}
               </div>
               <h3 className="mt-5 text-base font-semibold text-slate-900">{f.title}</h3>
@@ -61,7 +62,7 @@ export default function PartnerLandingPage() {
       <section className="border-y border-slate-100 bg-slate-50/60 py-20 sm:py-24">
         <div className="mx-auto max-w-5xl px-6">
           <div className="text-center">
-            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#3b66f5]">How it works</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">How it works</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0d1f4e] sm:text-4xl">
               Simple for you. Thorough for us.
             </h2>
@@ -69,7 +70,7 @@ export default function PartnerLandingPage() {
           <ol className="mt-14 grid gap-6 md:grid-cols-3">
             {HOW_STEPS.map((s, i) => (
               <li key={s.title} className="relative rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#3b66f5] text-xs font-bold text-white">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
                   {i + 1}
                 </span>
                 <h3 className="mt-5 text-base font-semibold text-slate-900">{s.title}</h3>
@@ -81,23 +82,23 @@ export default function PartnerLandingPage() {
       </section>
 
       {/* ── CTA ── */}
-      <section id="consultation" className="bg-gradient-to-br from-[#1a3ebf] to-[#3b66f5] py-20 sm:py-24">
+      <section id="consultation" className="py-20 sm:py-24" style={{ background: "linear-gradient(135deg, #005fd1 0%, var(--primary) 45%, var(--primary-alt) 100%)" }}>
         <div className="mx-auto max-w-3xl px-6 text-center">
           <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
             Interested in working with us?
           </h2>
-          <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-blue-100">
+          <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-white/85">
             Schedule a consultation to discuss full-service management and how we can help.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
               href="/partner/contact?tab=schedule"
-              className="inline-flex items-center justify-center rounded-2xl bg-white px-9 py-3.5 text-sm font-semibold text-[#3b66f5] shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-200 hover:bg-slate-50 active:scale-[0.98]"
+              className="inline-flex items-center justify-center rounded-2xl bg-white px-9 py-3.5 text-sm font-semibold text-primary shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-200 hover:bg-slate-50 active:scale-[0.98]"
             >
               Book Consultation
             </Link>
           </div>
-          <p className="mt-8 text-sm text-blue-200">
+          <p className="mt-8 text-sm text-white/70">
             No commitment required · Typically respond within 1 business day
           </p>
         </div>

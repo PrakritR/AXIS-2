@@ -24,7 +24,7 @@ export function OwnerProperties() {
         {propertyCards.map((property) => (
           <Card key={property.name} className="relative p-5 opacity-95">
             <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-gradient-to-b from-transparent to-slate-50/30" aria-hidden />
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700/70">Linked property</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary/70">Linked property</p>
             <h2 className="mt-3 text-xl font-semibold text-slate-950">{property.name}</h2>
             <p className="mt-1 text-sm text-slate-600">Manager: {property.note}</p>
             <dl className="mt-4 space-y-3 text-sm text-slate-600">

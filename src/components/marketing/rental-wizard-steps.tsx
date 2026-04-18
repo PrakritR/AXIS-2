@@ -125,8 +125,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </div>
 
         {form.applyingAsGroup === "yes" ? (
-          <div className="space-y-6 rounded-2xl border border-sky-200/80 bg-gradient-to-b from-sky-50/90 to-white p-5 shadow-sm sm:p-6">
-            <p className="text-sm font-semibold text-sky-950">Group application</p>
+          <div className="space-y-6 rounded-2xl border border-primary/15 bg-gradient-to-b from-primary/[0.08] to-white p-5 shadow-sm sm:p-6">
+            <p className="text-sm font-semibold text-primary">Group application</p>
             <p className="text-sm leading-relaxed text-slate-700">
               You will either start the group and receive a Group ID to share, or paste the Group ID from the first applicant.
             </p>
@@ -1277,4 +1277,3 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
 
   return null;
 }
-

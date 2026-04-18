@@ -8,7 +8,7 @@ const variants: Record<Variant, string> = {
   secondary:
     "bg-[#1d1d1f] text-white shadow-sm hover:-translate-y-px hover:bg-black/90 hover:shadow-md active:translate-y-0 active:scale-[0.98]",
   ghost:
-    "bg-transparent text-[#007aff] hover:bg-[#007aff]/[0.08] active:scale-[0.98]",
+    "bg-transparent text-primary hover:bg-primary/[0.08] active:scale-[0.98]",
   danger:
     "bg-[#ff3b30] text-white shadow-sm hover:-translate-y-px hover:bg-red-500 hover:shadow-md active:scale-[0.98]",
   outline:
@@ -32,7 +32,7 @@ export function Button({
       style={
         isPrimary
           ? {
-              background: "linear-gradient(135deg, #007aff, #339cff)",
+              background: "linear-gradient(135deg, var(--primary), var(--primary-alt))",
               ...style,
             }
           : style

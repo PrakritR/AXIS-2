@@ -17,7 +17,7 @@ const hours = ["9 AM", "10 AM", "11 AM", "12 PM", "1 PM", "2 PM", "3 PM", "4 PM"
 const slotRows = ["9:00", "9:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "1:00", "1:30", "2:00", "2:30", "3:00", "3:30", "4:00", "4:30"];
 
 const meetings = [
-  { day: "mon", start: 1, span: 2, title: "Pioneer leasing sync", color: "bg-sky-100 text-sky-900 border-sky-200" },
+  { day: "mon", start: 1, span: 2, title: "Pioneer leasing sync", color: "border-primary/20 bg-primary/[0.08] text-primary" },
   { day: "wed", start: 5, span: 3, title: "Applicant review block", color: "bg-violet-100 text-violet-900 border-violet-200" },
   { day: "thu", start: 9, span: 2, title: "Vendor calls", color: "bg-emerald-100 text-emerald-900 border-emerald-200" },
 ];
@@ -154,7 +154,7 @@ export function ManagerCalendar() {
                       className={`h-8 rounded-xl border transition ${
                         active
                           ? "border-emerald-300 bg-emerald-200/80"
-                          : "border-white bg-white hover:border-sky-200 hover:bg-sky-50"
+                          : "border-white bg-white hover:border-primary/20 hover:bg-primary/[0.06]"
                       }`}
                     />
                   );

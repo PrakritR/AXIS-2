@@ -12,7 +12,7 @@ const columns = [
   },
   {
     label: "Scheduled",
-    tone: "bg-sky-50 text-sky-700",
+    tone: "bg-primary/[0.08] text-primary",
     items: [
       { title: "Dryer vent cleaning", home: "Summit House · Apt 2", meta: "Tomorrow · 11:00 AM" },
     ],

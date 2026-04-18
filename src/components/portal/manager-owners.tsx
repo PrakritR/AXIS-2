@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/input";
@@ -95,7 +94,7 @@ export function ManagerOwners() {
           <Card key={slot.id} className="p-5 sm:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700/80">Owner slot {slot.id}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary/80">Owner slot {slot.id}</p>
                 <Input
                   className="mt-2 max-w-md"
                   value={slot.label}

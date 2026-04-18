@@ -23,7 +23,7 @@ export function PropertyDetailActions({ propertyId }: { propertyId: string }) {
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
       <Link href="/rent/listings">
         <Button type="button" variant="outline" className="w-full sm:w-auto">
-          Properties
+          View all properties
         </Button>
       </Link>
       <Link href="/rent/tours-contact">
@@ -34,11 +34,6 @@ export function PropertyDetailActions({ propertyId }: { propertyId: string }) {
       <Link href="/rent/apply">
         <Button type="button" className="w-full sm:w-auto">
           Apply
-        </Button>
-      </Link>
-      <Link href="/rent/contact">
-        <Button type="button" variant="outline" className="w-full sm:w-auto">
-          Contact us
         </Button>
       </Link>
       <Button type="button" variant="ghost" className="w-full font-semibold text-primary sm:w-auto" onClick={copyListingLink}>

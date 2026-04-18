@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { SegmentedTwo } from "@/components/ui/segmented-control";
 import { getPropertySelectOptions } from "@/lib/rental-application/data";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
@@ -27,6 +28,7 @@ const STEP_META = [
 ] as const;
 
 export function RentalApplicationWizard({ showToast }: { showToast: (msg: string) => void }) {
+  const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<RentalWizardFormState>(createInitialRentalWizardState);
   const [errors, setErrors] = useState<RentalWizardErrors>({});
@@ -128,60 +130,79 @@ export function RentalApplicationWizard({ showToast }: { showToast: (msg: string
     <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
       <div className="text-center sm:text-left">
         <h1 className="text-2xl font-bold tracking-tight text-[#0d1f4e] sm:text-3xl md:text-4xl">Residential rental application</h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600 sm:text-base">
-          Complete each step in order. Your answers are saved as you go. This demo does not send data to a server.
-        </p>
       </div>
 
-      <div
-        className="mt-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
-        style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
-      >
-        <div className="border-b border-slate-100 pb-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Step {step} of {RENTAL_WIZARD_STEP_COUNT}</p>
-          <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{meta.title}</p>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="pt-8">
-          <RentalWizardStepBody
-            step={step}
-            form={form}
-            errors={errors}
-            propertyOptions={propertyOptions}
-            patch={patchForm}
-            setPhone={setPhone}
-            setLandlordPhone={setLandlordPhone}
-            setPrevLandlordPhone={setPrevLandlordPhone}
-            setSupervisorPhone={setSupervisorPhone}
-            setRef1Phone={setRef1Phone}
-            setRef2Phone={setRef2Phone}
-            setSsn={setSsn}
-            goToStep={goToStep}
+      <div className="mt-6 rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:p-6">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Choose your form</p>
+        <div className="mt-4">
+          <SegmentedTwo
+            value={applicationPath}
+            onChange={setApplicationPath}
+            left={{ id: "signer", label: "Signer form" }}
+            right={{ id: "cosigner", label: "Co-signer form" }}
+            className="max-w-md"
           />
         </div>
-
-        <div className="mt-10 flex flex-col-reverse gap-3 border-t border-slate-100 pt-8 sm:flex-row sm:items-center sm:justify-between">
-          <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack} disabled={step <= 1}>
-            Back
-          </Button>
-          <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={handleContinue}>
-            {step === 11 ? "Submit application" : "Continue"}
-          </Button>
-        </div>
+        <p className="mt-4 text-sm leading-relaxed text-slate-600">
+          {applicationPath === "signer"
+            ? "Use the signer form if you are the main applicant for the lease."
+            : "Filing as a co-signer on someone else's application? Open the co-signer form."}
+        </p>
+        {applicationPath === "cosigner" ? (
+          <div className="mt-5">
+            <Link href="/rent/apply/cosigner" className="inline-flex">
+              <Button type="button" className="min-h-[48px] px-6">
+                Open the co-signer form
+              </Button>
+            </Link>
+          </div>
+        ) : null}
       </div>
 
-      <p className="mt-8 text-center text-sm text-slate-600">
-        Filing as a co-signer on someone else&apos;s application?{" "}
-        <Link href="/rent/apply/cosigner" className="font-semibold text-primary underline-offset-4 hover:underline">
-          Open the co-signer form
-        </Link>
-      </p>
+      {applicationPath === "signer" ? (
+        <div
+          className="mt-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+          style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
+        >
+          <div className="border-b border-slate-100 pb-6">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Step {step} of {RENTAL_WIZARD_STEP_COUNT}</p>
+            <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{meta.title}</p>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="pt-8">
+            <RentalWizardStepBody
+              step={step}
+              form={form}
+              errors={errors}
+              propertyOptions={propertyOptions}
+              patch={patchForm}
+              setPhone={setPhone}
+              setLandlordPhone={setLandlordPhone}
+              setPrevLandlordPhone={setPrevLandlordPhone}
+              setSupervisorPhone={setSupervisorPhone}
+              setRef1Phone={setRef1Phone}
+              setRef2Phone={setRef2Phone}
+              setSsn={setSsn}
+              goToStep={goToStep}
+            />
+          </div>
+
+          <div className="mt-10 flex flex-col-reverse gap-3 border-t border-slate-100 pt-8 sm:flex-row sm:items-center sm:justify-between">
+            <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack} disabled={step <= 1}>
+              Back
+            </Button>
+            <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={handleContinue}>
+              {step === 11 ? "Submit application" : "Continue"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

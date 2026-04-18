@@ -16,9 +16,9 @@ export default function HomePage() {
       <div className="relative px-4 pb-24 pt-16 sm:pb-28 sm:pt-28 md:pt-32">
         <div className="mx-auto max-w-5xl text-center">
           {/* Eyebrow */}
-          <div className="animate-fade-up mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-[#007aff]/20 bg-[#007aff]/[0.07] px-3 py-1.5 sm:mb-6 sm:px-4">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#007aff]" />
-            <span className="text-xs font-semibold tracking-wide text-[#007aff] sm:text-[13px]">
+          <div className="animate-fade-up mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.07] px-3 py-1.5 sm:mb-6 sm:px-4">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+            <span className="text-xs font-semibold tracking-wide text-primary sm:text-[13px]">
               Axis Housing · Now Leasing
             </span>
           </div>
@@ -31,7 +31,7 @@ export default function HomePage() {
             Find housing that{" "}
             <span
               style={{
-                background: "linear-gradient(135deg, #007aff 0%, #339cff 100%)",
+                background: "linear-gradient(135deg, var(--primary) 0%, var(--primary-alt) 100%)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
               }}

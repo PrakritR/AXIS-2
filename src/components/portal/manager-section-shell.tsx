@@ -16,9 +16,9 @@ export function ManagerSectionShell({
 }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-[28px] border border-sky-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.20),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.96))] px-6 py-6 shadow-[0_24px_70px_-38px_rgba(30,64,175,0.35)] sm:px-8">
+      <div className="rounded-[28px] border border-primary/15 bg-[radial-gradient(circle_at_top_left,_rgba(0,122,255,0.16),_transparent_38%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.96))] px-6 py-6 shadow-[0_24px_70px_-38px_rgba(0,122,255,0.18)] sm:px-8">
         {eyebrow ? (
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-sky-700/75">{eyebrow}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary/75">{eyebrow}</p>
         ) : null}
         <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">

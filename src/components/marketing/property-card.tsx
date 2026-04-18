@@ -59,10 +59,10 @@ export function PropertyCard({ property }: { property: MockProperty }) {
               {property.petFriendly ? "Pet friendly" : "Ask about pets"}
             </Badge>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="flex flex-col gap-2">
             <Link href={listingPath} className="contents">
               <Button type="button" variant="outline" className="w-full text-[13px] sm:text-sm">
-                Properties
+                View all properties
               </Button>
             </Link>
             <Link href="/rent/tours-contact" className="contents">

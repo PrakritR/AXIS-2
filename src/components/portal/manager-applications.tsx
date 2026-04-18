@@ -43,7 +43,7 @@ export function ManagerApplications() {
           <Card key={lane.label} className="p-5">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-semibold text-slate-950">{lane.label}</h2>
-              <span className="rounded-full bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-700">{lane.count}</span>
+              <span className="rounded-full bg-primary/[0.08] px-3 py-1 text-sm font-semibold text-primary">{lane.count}</span>
             </div>
             <div className="mt-4 space-y-3">
               {lane.items.map((item) => (

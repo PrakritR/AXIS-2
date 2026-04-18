@@ -4,11 +4,11 @@ import Link from "next/link";
 
 export default function ManagerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-[linear-gradient(180deg,_#eff6ff_0%,_#f8fafc_16%,_#ffffff_52%,_#f8fafc_100%)]">
-      <div className="border-b border-sky-100/80 bg-white/75 px-4 py-3 backdrop-blur-sm lg:px-8">
+    <div className="flex min-h-screen flex-col bg-[linear-gradient(180deg,_#eef7ff_0%,_#f8fbff_16%,_#ffffff_52%,_#f8fbff_100%)]">
+      <div className="border-b border-primary/10 bg-white/75 px-4 py-3 backdrop-blur-sm lg:px-8">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700/70">Axis Housing</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary/70">Axis Housing</p>
             <p className="mt-1 text-sm font-semibold text-slate-900">Manager portal</p>
             <p className="mt-1 hidden text-sm text-slate-500 sm:block lg:hidden">
               Portfolio operations, leasing, billing, and resident support.

@@ -116,7 +116,7 @@ export function ManagerInbox() {
                   onClick={() => setSelectedThreadId(thread.id)}
                   className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
                     selectedThread?.id === thread.id
-                      ? "border-sky-300 bg-sky-50/70 shadow-sm"
+                      ? "border-primary/30 bg-primary/[0.08] shadow-sm"
                       : "border-transparent bg-white hover:border-slate-200"
                   }`}
                 >

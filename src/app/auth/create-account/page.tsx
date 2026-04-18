@@ -26,10 +26,15 @@ function CreateAccountContent() {
   const searchParams = useSearchParams();
   const roleFromUrl = useMemo(() => parseAuthRole(searchParams.get("role")), [searchParams]);
   const [role, setRole] = useState<AuthRole>(roleFromUrl);
+  const [ownerInviteRef, setOwnerInviteRef] = useState(searchParams.get("slot") ?? "");
 
   useEffect(() => {
     setRole(roleFromUrl);
   }, [roleFromUrl]);
+
+  useEffect(() => {
+    setOwnerInviteRef(searchParams.get("slot") ?? "");
+  }, [searchParams, role]);
 
   const title = useMemo(() => titleFor(role), [role]);
 
@@ -70,8 +75,7 @@ function CreateAccountContent() {
           </>
         ) : (
           <>
-            For this demo you can open the admin portal without an invite. Production will use real permissions and
-            provisioning.
+            Admin access is provisioned through your organization and permissioned before portal access is enabled.
           </>
         )}
       </div>
@@ -105,9 +109,16 @@ function CreateAccountContent() {
         {role === "owner" ? (
           <div>
             <label className="text-xs font-semibold text-[#334155]" htmlFor="invite">
-              Invite reference (optional)
+              Invite reference
+              <Req />
             </label>
-            <Input id="invite" className="mt-1.5" placeholder="From your manager link, e.g. slot id" />
+            <Input
+              id="invite"
+              className="mt-1.5"
+              placeholder="From your manager link, e.g. slot id"
+              value={ownerInviteRef}
+              onChange={(e) => setOwnerInviteRef(e.target.value)}
+            />
           </div>
         ) : null}
         <div>
@@ -130,7 +141,11 @@ function CreateAccountContent() {
         type="button"
         className="mt-8 w-full rounded-full py-3 text-base font-semibold"
         onClick={() => {
-          showToast("Account created (demo)");
+          if (role === "owner" && !ownerInviteRef.trim()) {
+            showToast("Invite reference is required to create an owner account.");
+            return;
+          }
+          showToast("Account created successfully.");
           router.push(portalDashboardPath(role));
         }}
       >

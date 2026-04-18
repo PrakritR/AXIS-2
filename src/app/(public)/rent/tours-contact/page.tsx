@@ -149,9 +149,9 @@ function TourFlow({ onSuccess }: { onSuccess: () => void }) {
             >
               <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
                 step === s.n
-                  ? "bg-[#3b66f5] text-white"
+                  ? "bg-primary text-white"
                   : s.n < step
-                  ? "bg-[#3b66f5]/20 text-[#3b66f5]"
+                  ? "bg-primary/20 text-primary"
                   : "bg-slate-100 text-slate-400"
               }`}>
                 {s.n < step ? <CheckSmIcon /> : s.n}
@@ -248,7 +248,7 @@ function TourFlow({ onSuccess }: { onSuccess: () => void }) {
             type="button"
             disabled={step === 1 ? !canContinue1 : !canContinue2}
             onClick={() => setStep((s) => (s + 1) as TourStep)}
-            className="rounded-full bg-[#3b66f5] px-7 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#3259e3] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            className="rounded-full bg-primary px-7 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
           >
             Continue
           </button>
@@ -324,7 +324,7 @@ function Step1({
         <button
           type="button"
           onClick={onBackToProperties}
-          className="text-sm font-semibold text-[#3b66f5] hover:underline"
+          className="text-sm font-semibold text-primary hover:underline"
         >
           ← All properties
         </button>
@@ -338,7 +338,7 @@ function Step1({
             onClick={() => onSelectRoom(p)}
             className={`w-full rounded-2xl border p-4 text-left transition-all duration-150 ${
               isSelected
-                ? "border-[#3b66f5] bg-[#eef2ff] ring-2 ring-[#3b66f5]/20"
+                ? "border-primary bg-primary/[0.08] ring-2 ring-primary/20"
                 : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
             }`}
           >
@@ -356,7 +356,7 @@ function Step1({
               </div>
               <div
                 className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                  isSelected ? "border-[#3b66f5] bg-[#3b66f5]" : "border-slate-300 bg-white"
+                  isSelected ? "border-primary bg-primary" : "border-slate-300 bg-white"
                 }`}
               >
                 {isSelected && (
@@ -418,9 +418,9 @@ function Step2({
                 onClick={() => { onSelectDay(day); onSelectTime(null!); }}
                 className={`aspect-square rounded-xl text-sm font-medium transition-all ${
                   isSelected
-                    ? "bg-[#3b66f5] text-white shadow-sm"
+                    ? "bg-primary text-white shadow-sm"
                     : isAvailable && !isPast
-                    ? "bg-white text-slate-800 hover:bg-[#eef2ff] hover:text-[#3b66f5]"
+                    ? "bg-white text-slate-800 hover:bg-primary/[0.08] hover:text-primary"
                     : "cursor-not-allowed text-slate-300"
                 }`}
               >
@@ -446,8 +446,8 @@ function Step2({
                 onClick={() => onSelectTime(t)}
                 className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
                   selectedTime === t
-                    ? "border-[#3b66f5] bg-[#3b66f5] text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-[#3b66f5] hover:text-[#3b66f5]"
+                    ? "border-primary bg-primary text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
                 }`}
               >
                 {t}
@@ -494,7 +494,8 @@ function Step3({
       <button
         type="button"
         onClick={onSubmit}
-        className="w-full rounded-2xl bg-[#3b66f5] py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(59,102,245,0.3)] transition-all hover:bg-[#3259e3] active:scale-[0.98]"
+        className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98]"
+        style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
       >
         Book tour
       </button>
@@ -536,7 +537,7 @@ function MessageFlow({ onSuccess }: { onSuccess: () => void }) {
         <h2 className="text-base font-bold text-slate-900">Topic</h2>
         <p className="mt-1 text-sm leading-relaxed text-slate-500">
           For rent, payments, maintenance, or portal login issues, use the{" "}
-          <Link href="/resident/dashboard" className="font-semibold text-[#3b66f5] hover:underline">
+          <Link href="/resident/dashboard" className="font-semibold text-primary hover:underline">
             resident portal
           </Link>
           . These topics are for leasing questions, the area around our homes, and availability.
@@ -624,7 +625,7 @@ function MessageFlow({ onSuccess }: { onSuccess: () => void }) {
                   setMsgBuildingId(null);
                   setSelectedProperty(null);
                 }}
-                className="text-sm font-semibold text-[#3b66f5] hover:underline"
+                className="text-sm font-semibold text-primary hover:underline"
               >
                 ← All properties
               </button>
@@ -643,7 +644,7 @@ function MessageFlow({ onSuccess }: { onSuccess: () => void }) {
                       }}
                       className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${
                         isSelected
-                          ? "border-[#3b66f5] bg-white text-[#3b66f5] ring-2 ring-[#3b66f5]/15"
+                          ? "border-primary bg-white text-primary ring-2 ring-primary/15"
                           : "border-slate-200/80 bg-white text-slate-700 hover:border-slate-300"
                       }`}
                     >
@@ -662,7 +663,7 @@ function MessageFlow({ onSuccess }: { onSuccess: () => void }) {
         )}
 
         {selectedProperty ? (
-          <p className="mt-3 text-xs text-[#3b66f5]">
+          <p className="mt-3 text-xs text-primary">
             Context: <strong>{selectedProperty.title}</strong>
           </p>
         ) : null}
@@ -693,7 +694,8 @@ function MessageFlow({ onSuccess }: { onSuccess: () => void }) {
       <button
         type="button"
         onClick={handleSend}
-        className="w-full rounded-2xl bg-[#3b66f5] py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(59,102,245,0.3)] transition-all hover:bg-[#3259e3] active:scale-[0.98]"
+        className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98]"
+        style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
       >
         Send message
       </button>
@@ -720,7 +722,7 @@ function Chip({ children }: { children: React.ReactNode }) {
 }
 
 const inputCls =
-  "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all duration-150 placeholder:text-slate-400 focus:border-[#3b66f5] focus:bg-white focus:ring-2 focus:ring-[#3b66f5]/15 hover:border-slate-300";
+  "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all duration-150 placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15 hover:border-slate-300";
 
 function CheckSmIcon() {
   return (

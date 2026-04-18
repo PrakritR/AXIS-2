@@ -28,7 +28,7 @@ export function ManagerProperties() {
         <div className="grid gap-4 md:grid-cols-3">
           {propertyCards.map((property) => (
             <Card key={property.name} className="p-5">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700/70">{property.status}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary/70">{property.status}</p>
               <h2 className="mt-3 text-xl font-semibold text-slate-950">{property.name}</h2>
               <dl className="mt-4 space-y-3 text-sm text-slate-600">
                 <div className="flex items-center justify-between gap-4">
