@@ -11,7 +11,7 @@ export function ManagerSectionShell({
   eyebrow?: string;
   title: string;
   subtitle: string;
-  actions?: { label: string; variant?: "primary" | "secondary" | "outline" }[];
+  actions?: { label: string; variant?: "primary" | "secondary" | "outline"; onClick?: () => void }[];
   children: ReactNode;
 }) {
   return (
@@ -28,7 +28,12 @@ export function ManagerSectionShell({
           {actions?.length ? (
             <div className="flex flex-wrap gap-2 lg:justify-end">
               {actions.map((action) => (
-                <Button key={action.label} type="button" variant={action.variant ?? "outline"}>
+                <Button
+                  key={action.label}
+                  type="button"
+                  variant={action.variant ?? "outline"}
+                  onClick={action.onClick}
+                >
                   {action.label}
                 </Button>
               ))}

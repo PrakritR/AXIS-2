@@ -1,0 +1,458 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useState } from "react";
+import type {
+  ListingBathroomRow,
+  ListingFloorCard,
+  ListingRoomRow,
+  ListingSharedRow,
+} from "@/data/listing-rich-content";
+
+function AvailabilityPill({ text }: { text: string }) {
+  const green = text.toLowerCase().includes("available");
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+        green ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80" : "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80"
+      }`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${green ? "bg-emerald-500" : "bg-slate-400"}`} />
+      {text}
+    </span>
+  );
+}
+
+function FeatureCheck({ on }: { on: boolean }) {
+  return on ? (
+    <span className="text-sm font-semibold text-emerald-600">Yes</span>
+  ) : (
+    <span className="text-sm text-slate-300">—</span>
+  );
+}
+
+function DetailsButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex min-h-[40px] shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-800 transition hover:border-primary hover:text-primary sm:min-h-0 ${className}`}
+    >
+      Details
+    </button>
+  );
+}
+
+function ModalVideoBlock({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle: string }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center gap-2 bg-primary px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-sm">▶</span>
+        {eyebrow}
+      </div>
+      <div className="flex aspect-video flex-col items-center justify-center bg-gradient-to-b from-slate-800 to-slate-950 px-6 text-center text-white">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-white/40 text-2xl text-white/90">▶</div>
+        <p className="mt-4 text-sm font-semibold">{title}</p>
+        <p className="mt-1 max-w-sm text-xs text-white/60">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function PhotoStrip({ captions }: { captions: string[] }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {captions.map((cap) => (
+        <div
+          key={cap}
+          className="flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 p-2"
+        >
+          <p className="text-[11px] font-semibold text-slate-800">{cap}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type ModalState =
+  | { kind: "room"; room: ListingRoomRow; floorLabel: string }
+  | { kind: "bathroom"; row: ListingBathroomRow }
+  | { kind: "shared"; row: ListingSharedRow }
+  | null;
+
+function ListingDetailModal({ state, onClose }: { state: ModalState; onClose: () => void }) {
+  const stop = useCallback((e: React.MouseEvent) => e.stopPropagation(), []);
+
+  if (!state) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center p-3 sm:items-center sm:p-6" role="dialog" aria-modal>
+      <button type="button" className="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]" onClick={onClose} aria-label="Close dialog" />
+      <div
+        className="relative z-10 max-h-[min(92vh,760px)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white shadow-2xl sm:max-w-2xl"
+        onClick={stop}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-lg text-slate-600 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-slate-50"
+          aria-label="Close"
+        >
+          ×
+        </button>
+
+        {state.kind === "room" ? (
+          <div className="p-6 pb-8 sm:p-8">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.floorLabel}</p>
+            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.room.name}</h2>
+            <p className="mt-2 text-sm text-slate-600">{state.room.detail}</p>
+            <div className="mt-4 flex justify-end">
+              <AvailabilityPill text={state.room.availability} />
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Monthly rent</p>
+                <p className="mt-2 text-lg font-bold text-slate-900">{state.room.price}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Bathroom setup</p>
+                <p className="mt-2 text-sm font-medium leading-snug text-slate-800">{state.room.modal.setupLine}</p>
+              </div>
+            </div>
+            <div className="mt-6">
+              <ModalVideoBlock
+                eyebrow={state.room.modal.tourEyebrow}
+                title={state.room.modal.tourTitle}
+                subtitle={state.room.modal.tourSubtitle}
+              />
+            </div>
+            <div className="mt-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>
+              <p className="mt-1 text-sm text-slate-600">This room includes the following features:</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {state.room.modal.includedTags.map((t) => (
+                  <span key={t} className="rounded-full border border-sky-200/90 bg-sky-50/80 px-3 py-1 text-xs font-medium text-slate-800">
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-8 flex flex-col gap-2 sm:flex-row">
+              <Link href="/rent/apply" className="flex-1">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
+                  Apply for this room
+                </span>
+              </Link>
+              <Link href="/rent/tours-contact" className="flex-1">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
+                  Ask a question
+                </span>
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        {state.kind === "bathroom" ? (
+          <div className="p-6 pb-8 sm:p-8">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.row.modal.eyebrow}</p>
+            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.row.name}</h2>
+            <p className="mt-2 text-sm text-slate-600">{state.row.detail}</p>
+            <div className="mt-4 flex justify-end">
+              <AvailabilityPill text={state.row.availability} />
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Setup</p>
+                <p className="mt-2 text-sm font-medium leading-snug text-slate-800">{state.row.modal.setupCard}</p>
+              </div>
+            </div>
+            <div className="mt-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Includes</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {state.row.modal.includedTags.map((t) => (
+                  <span key={t} className="rounded-full border border-sky-200/90 bg-sky-50/80 px-3 py-1 text-xs font-medium text-slate-800">
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Photos</p>
+              <div className="mt-3">
+                <PhotoStrip captions={state.row.modal.photoCaptions} />
+              </div>
+            </div>
+            <div className="mt-8 flex flex-col gap-2 sm:flex-row">
+              <Link href="/rent/tours-contact" className="flex-1">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
+                  Ask about this bathroom
+                </span>
+              </Link>
+              <Link href="/rent/apply" className="flex-1">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
+                  Apply
+                </span>
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        {state.kind === "shared" ? (
+          <div className="p-6 pb-8 sm:p-8">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.row.modal.eyebrow}</p>
+            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.row.name}</h2>
+            <p className="mt-2 text-sm text-slate-600">{state.row.detail}</p>
+            <p className="mt-1 text-sm text-slate-500">{state.row.useNote}</p>
+            <div className="mt-4 flex justify-end">
+              <AvailabilityPill text={state.row.availability} />
+            </div>
+            <div className="mt-6">
+              <ModalVideoBlock
+                eyebrow={state.row.modal.tourEyebrow}
+                title={state.row.modal.tourTitle}
+                subtitle={state.row.modal.tourSubtitle}
+              />
+            </div>
+            <div className="mt-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {state.row.modal.includedTags.map((t) => (
+                  <span key={t} className="rounded-full border border-sky-200/90 bg-sky-50/80 px-3 py-1 text-xs font-medium text-slate-800">
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Photos</p>
+              <div className="mt-3">
+                <PhotoStrip captions={state.row.modal.photoCaptions} />
+              </div>
+            </div>
+            <div className="mt-8 flex flex-col gap-2 sm:flex-row">
+              <Link href="/rent/apply" className="flex-1">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
+                  Apply
+                </span>
+              </Link>
+              <Link href="/rent/tours-contact" className="flex-1">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
+                  Ask a question
+                </span>
+              </Link>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function InteractiveFloorPlanCard({ floor }: { floor: ListingFloorCard }) {
+  const [modal, setModal] = useState<ModalState>(null);
+
+  return (
+    <>
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{floor.floorLabel}</p>
+            <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{floor.fromPrice}</p>
+            {floor.remainingNote ? (
+              <p className="mt-2 flex items-center gap-2 text-sm text-amber-800">
+                <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden />
+                {floor.remainingNote}
+              </p>
+            ) : null}
+          </div>
+          <div className="text-right">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Rooms</p>
+            <p className="text-2xl font-bold text-slate-900">{floor.roomCount}</p>
+          </div>
+        </div>
+        <div className="mt-4 md:overflow-x-auto">
+          <RoomTableWithModals rooms={floor.rooms} onOpen={(r) => setModal({ kind: "room", room: r, floorLabel: floor.floorLabel })} />
+        </div>
+        {floor.hiddenRoomNames && floor.hiddenRoomNames.length > 0 ? (
+          <details className="group mt-2 border-t border-slate-100 pt-3">
+            <summary className="cursor-pointer list-none text-sm font-semibold text-primary marker:content-none [&::-webkit-details-marker]:hidden">
+              <span className="group-open:hidden">
+                Show {floor.hiddenRoomNames.length} more room{floor.hiddenRoomNames.length > 1 ? "s" : ""} ↓
+              </span>
+              <span className="hidden group-open:inline">Hide extra rooms ↑</span>
+            </summary>
+            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              {floor.hiddenRoomNames.map((n) => (
+                <li key={n} className="rounded-xl bg-slate-50 px-3 py-2">
+                  {n}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </div>
+      <ListingDetailModal state={modal} onClose={() => setModal(null)} />
+    </>
+  );
+}
+
+function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpen: (r: ListingRoomRow) => void }) {
+  return (
+    <>
+      <div className="space-y-3 md:hidden">
+        {rooms.map((r) => (
+          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+            <p className="font-semibold text-slate-900">{r.name}</p>
+            <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-slate-900">{r.price}</p>
+              <AvailabilityPill text={r.availability} />
+            </div>
+            <DetailsButton className="mt-3 w-full" onClick={() => onOpen(r)} />
+          </div>
+        ))}
+      </div>
+      <div className="hidden min-w-0 md:block">
+        <div className="min-w-[560px] lg:min-w-0">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-3 border-b border-slate-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <span>Room</span>
+            <span>Price</span>
+            <span>Availability</span>
+            <span className="w-[88px] text-right sm:text-left" />
+          </div>
+          {rooms.map((r) => (
+            <div
+              key={r.id}
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-3 border-b border-slate-100 py-4 last:border-0"
+            >
+              <div>
+                <p className="font-semibold text-slate-900">{r.name}</p>
+                <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
+              </div>
+              <p className="text-sm font-semibold text-slate-900">{r.price}</p>
+              <AvailabilityPill text={r.availability} />
+              <DetailsButton onClick={() => onOpen(r)} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+export function BathroomTableInteractive({ rows }: { rows: ListingBathroomRow[] }) {
+  const [modal, setModal] = useState<ModalState>(null);
+
+  return (
+    <>
+      <div className="space-y-3 md:hidden">
+        {rows.map((r) => (
+          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+            <p className="font-semibold text-slate-900">{r.name}</p>
+            <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+              <div>
+                <p className="font-semibold text-slate-500">Shower</p>
+                <FeatureCheck on={r.shower} />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-500">Toilet</p>
+                <FeatureCheck on={r.toilet} />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-500">Tub</p>
+                <FeatureCheck on={r.bathtub} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <AvailabilityPill text={r.availability} />
+            </div>
+            <DetailsButton className="mt-3 w-full" onClick={() => setModal({ kind: "bathroom", row: r })} />
+          </div>
+        ))}
+      </div>
+      <div className="hidden min-w-0 md:block">
+        <div className="min-w-[720px] lg:min-w-0">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,0.65fr)_minmax(0,0.65fr)_minmax(0,0.65fr)_minmax(0,1fr)_auto] gap-3 border-b border-slate-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <span>Bathroom</span>
+            <span className="text-center">Shower</span>
+            <span className="text-center">Toilet</span>
+            <span className="text-center">Bathtub</span>
+            <span>Availability</span>
+            <span className="w-[88px]" />
+          </div>
+          {rows.map((r) => (
+            <div
+              key={r.id}
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,0.65fr)_minmax(0,0.65fr)_minmax(0,0.65fr)_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 py-4 last:border-0"
+            >
+              <div>
+                <p className="font-semibold text-slate-900">{r.name}</p>
+                <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
+              </div>
+              <div className="flex justify-center">
+                <FeatureCheck on={r.shower} />
+              </div>
+              <div className="flex justify-center">
+                <FeatureCheck on={r.toilet} />
+              </div>
+              <div className="flex justify-center">
+                <FeatureCheck on={r.bathtub} />
+              </div>
+              <AvailabilityPill text={r.availability} />
+              <DetailsButton onClick={() => setModal({ kind: "bathroom", row: r })} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <ListingDetailModal state={modal} onClose={() => setModal(null)} />
+    </>
+  );
+}
+
+export function SharedTableInteractive({ rows }: { rows: ListingSharedRow[] }) {
+  const [modal, setModal] = useState<ModalState>(null);
+
+  return (
+    <>
+      <div className="space-y-3 md:hidden">
+        {rows.map((r) => (
+          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+            <p className="font-semibold text-slate-900">{r.name}</p>
+            <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
+            <p className="mt-2 text-sm text-slate-700">{r.useNote}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <AvailabilityPill text={r.availability} />
+            </div>
+            <DetailsButton className="mt-3 w-full" onClick={() => setModal({ kind: "shared", row: r })} />
+          </div>
+        ))}
+      </div>
+      <div className="hidden min-w-0 md:block">
+        <div className="min-w-[560px] lg:min-w-0">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1.1fr)_auto] gap-3 border-b border-slate-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <span>Space</span>
+            <span>Details</span>
+            <span>Availability</span>
+            <span className="w-[88px]" />
+          </div>
+          {rows.map((r) => (
+            <div
+              key={r.id}
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1.1fr)_auto] items-center gap-3 border-b border-slate-100 py-4 last:border-0"
+            >
+              <div>
+                <p className="font-semibold text-slate-900">{r.name}</p>
+                <p className="mt-0.5 text-sm text-slate-500">{r.detail}</p>
+              </div>
+              <p className="text-sm text-slate-700">{r.useNote}</p>
+              <AvailabilityPill text={r.availability} />
+              <DetailsButton onClick={() => setModal({ kind: "shared", row: r })} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <ListingDetailModal state={modal} onClose={() => setModal(null)} />
+    </>
+  );
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
+import { ManagerSectionShell } from "@/components/portal/manager-section-shell";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ export function PortalWorkspaceClient({
 }) {
   const { showToast, openModal } = useAppUi();
   const isMarketingPortalShell = portalKind === "admin" || portalKind === "resident";
+  const useResidentManagerShell = portalKind === "resident";
   const showToolbar = model.showToolbar !== false;
   const showQuickLinks = model.showQuickLinks !== false;
 
@@ -44,45 +46,15 @@ export function PortalWorkspaceClient({
 
   const hasTable = Boolean(model.columns && model.rows?.length);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3">
-        {!isMarketingPortalShell ? <Breadcrumbs items={breadcrumbs} /> : null}
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            {!isMarketingPortalShell ? (
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{model.eyebrow}</p>
-            ) : null}
-            <h1
-              className={`font-semibold tracking-tight text-foreground ${isMarketingPortalShell ? "text-3xl" : "mt-1 text-2xl"}`}
-            >
-              {model.title}
-            </h1>
-            <p className="mt-2 max-w-prose text-sm text-muted">{model.subtitle}</p>
-          </div>
-          {isMarketingPortalShell ? (
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              {model.actions.map((a) => (
-                <Button
-                  key={a.label}
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    a.kind === "modal"
-                      ? openModal({ title: a.label, body: a.message })
-                      : showToast(a.message)
-                  }
-                >
-                  {a.label}
-                </Button>
-              ))}
-            </div>
-          ) : (
-            <Badge tone="info">{portalLabel}</Badge>
-          )}
-        </div>
-      </div>
+  const shellActions = model.actions.map((a) => ({
+    label: a.label,
+    variant: "outline" as const,
+    onClick: () =>
+      a.kind === "modal" ? openModal({ title: a.label, body: a.message }) : showToast(a.message),
+  }));
 
+  const workspaceBody = (
+    <>
       {tabs.length ? (
         <TabNav items={tabs} activeId={tabId} />
       ) : null}
@@ -187,6 +159,64 @@ export function PortalWorkspaceClient({
           </div>
         </Card>
       ) : null}
+    </>
+  );
+
+  if (useResidentManagerShell) {
+    return (
+      <ManagerSectionShell
+        eyebrow={model.eyebrow}
+        title={model.title}
+        subtitle={model.subtitle}
+        actions={shellActions}
+      >
+        <div className="space-y-6">{workspaceBody}</div>
+      </ManagerSectionShell>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3">
+        {!isMarketingPortalShell ? <Breadcrumbs items={breadcrumbs} /> : null}
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            {!isMarketingPortalShell ? (
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{model.eyebrow}</p>
+            ) : null}
+            <h1
+              className={`font-semibold tracking-tight text-foreground ${isMarketingPortalShell ? "text-3xl" : "mt-1 text-2xl"}`}
+            >
+              {model.title}
+            </h1>
+            {model.subtitle.trim() ? (
+              <p className="mt-2 max-w-prose text-sm text-muted">{model.subtitle}</p>
+            ) : null}
+          </div>
+          {isMarketingPortalShell ? (
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              {model.actions.map((a) => (
+                <Button
+                  key={a.label}
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    a.kind === "modal"
+                      ? openModal({ title: a.label, body: a.message })
+                      : showToast(a.message)
+                  }
+                >
+                  {a.label}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <Badge tone="info">{portalLabel}</Badge>
+          )}
+        </div>
+      </div>
+
+      {workspaceBody}
     </div>
   );
 }

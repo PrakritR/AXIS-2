@@ -51,15 +51,6 @@ export function PublicNavbar() {
   const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
   const activeRentHref = RENT_LINKS.find((l) => pathname.startsWith(l.href))?.href;
   const activePartnerHref = PARTNER_LINKS.find((l) => pathname.startsWith(l.href))?.href;
-  const logoHref = isAdminPortal
-    ? "/admin/dashboard"
-    : isResidentPortal
-      ? "/resident/dashboard"
-      : isManagerPortal
-        ? "/manager/dashboard"
-        : isOwnerPortal
-          ? "/owner/dashboard"
-          : "/";
   const portalHref = isAdminPortal
     ? "/admin/dashboard"
     : isResidentPortal
@@ -84,7 +75,7 @@ export function PublicNavbar() {
         }`}
       >
         <div className="justify-self-start">
-          <AxisLogoLink href={logoHref} />
+          <AxisLogoLink href="/" />
         </div>
 
         <nav
@@ -196,17 +187,11 @@ export function PublicNavbar() {
               </Link>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-black/[0.06] pt-3 text-xs">
-              <Link href="/auth/sign-in?role=manager" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
-                Manager login
+              <Link href="/auth/sign-in" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
+                Sign in
               </Link>
-              <Link href="/auth/sign-in?role=owner" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
-                Owner login
-              </Link>
-              <Link href="/resident/dashboard" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
-                Resident
-              </Link>
-              <Link href="/admin/dashboard" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
-                Admin
+              <Link href="/auth/create-account" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
+                Create account
               </Link>
             </div>
           </div>

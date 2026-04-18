@@ -31,7 +31,7 @@ export default async function CreateOwnerPage({
           Continue to create account
         </Link>
         <Link
-          href="/auth/sign-in?role=owner"
+          href="/auth/sign-in"
           className="flex w-full items-center justify-center rounded-full border border-[#e0e4ec] py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
         >
           Already have an account? Sign in

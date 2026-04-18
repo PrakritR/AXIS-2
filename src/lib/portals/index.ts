@@ -1,17 +1,17 @@
-import type { PortalDefinition } from "@/lib/portal-types";
+import type { PortalDefinition, PortalKind } from "@/lib/portal-types";
 import { adminPortal } from "./admin";
 import { managerPortal } from "./manager";
 import { ownerPortal } from "./owner";
-import { residentPortal } from "./resident";
+import { getResidentPortalDefinition } from "./resident";
 
-export const portalsByKind: Record<PortalDefinition["kind"], PortalDefinition> = {
+const portalsByKind: Record<Exclude<PortalKind, "resident">, PortalDefinition> = {
   manager: managerPortal,
   owner: ownerPortal,
-  resident: residentPortal,
   admin: adminPortal,
 };
 
-export function getPortalDefinition(kind: PortalDefinition["kind"]) {
+export function getPortalDefinition(kind: PortalKind): PortalDefinition {
+  if (kind === "resident") return getResidentPortalDefinition();
   return portalsByKind[kind];
 }
 

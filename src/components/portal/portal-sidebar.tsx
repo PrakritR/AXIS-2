@@ -23,9 +23,6 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
 
   const useMinShell =
     definition.kind === "admin" || definition.kind === "resident" || definition.kind === "manager" || definition.kind === "owner";
-  const isResident = definition.kind === "resident";
-  const isManager = definition.kind === "manager";
-  const isOwner = definition.kind === "owner";
   const hasSignOut =
     definition.kind === "resident" || definition.kind === "manager" || definition.kind === "owner" || definition.kind === "admin";
 
@@ -37,65 +34,37 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         : "from-[#007aff] to-[#339cff]";
 
   const desktopAside = useMinShell ? (
-    <aside className="hidden w-56 shrink-0 border-r border-slate-200/90 bg-slate-50/80 lg:block">
-      <nav className="space-y-1 px-2 py-6">
-        {definition.sections.map((s) => {
-          const href = hrefForSection(definition, s.section);
-          const active = activeSection === s.section;
-          return (
-            <Link
-              key={s.section}
-              href={href}
-              className={`flex items-center rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
-                active
-                  ? "bg-primary text-white shadow-[0_0_20px_rgba(0,122,255,0.28)]"
-                  : "text-slate-700 hover:bg-white"
-              }`}
-            >
-              {s.label}
-            </Link>
-          );
-        })}
-        <div className="mt-8 space-y-1 border-t border-slate-200/80 pt-4">
-          {isResident ? (
-            <Link
-              href="/resident/payments/pending"
-              className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
-            >
-              Billing
-            </Link>
-          ) : null}
-          {isManager ? (
-            <Link
-              href="/manager/payments"
-              className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
-            >
-              Billing
-            </Link>
-          ) : null}
-          {isOwner ? (
-            <Link
-              href="/owner/payments"
-              className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
-            >
-              Billing
-            </Link>
-          ) : null}
-          {hasSignOut ? (
+    <aside className="hidden w-[15.5rem] shrink-0 border-r border-slate-200/70 bg-slate-50/60 lg:flex lg:flex-col lg:self-stretch">
+      <nav className="flex min-h-0 flex-1 flex-col px-2.5 py-5">
+        <div className="min-h-0 flex-1 space-y-0.5">
+          {definition.sections.map((s) => {
+            const href = hrefForSection(definition, s.section);
+            const active = activeSection === s.section;
+            return (
+              <Link
+                key={s.section}
+                href={href}
+                className={`flex items-center rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white text-primary shadow-sm ring-1 ring-slate-200/80 ring-inset"
+                    : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+                }`}
+              >
+                {s.label}
+              </Link>
+            );
+          })}
+        </div>
+        {hasSignOut ? (
+          <div className="mt-auto border-t border-slate-200/70 pt-3">
             <Link
               href="/auth/sign-in"
-              className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+              className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-white/70 hover:text-slate-900"
             >
               Sign out
             </Link>
-          ) : null}
-          <Link
-            href="/"
-            className="block rounded-2xl px-3 py-2 text-xs font-semibold text-slate-500 underline-offset-4 hover:text-primary hover:underline"
-          >
-            ← Back to site
-          </Link>
-        </div>
+          </div>
+        ) : null}
       </nav>
     </aside>
   ) : (
@@ -103,12 +72,6 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
       <div className={`bg-gradient-to-br px-6 py-6 text-white ${accent}`}>
         <p className="text-xs font-semibold uppercase tracking-wide text-white/80">Axis Housing</p>
         <p className="mt-2 text-lg font-semibold">{definition.title}</p>
-        <Link
-          href="/"
-          className="mt-3 inline-flex text-sm font-semibold text-white/90 underline-offset-4 hover:underline"
-        >
-          ← Back to marketing site
-        </Link>
       </div>
       <nav className="space-y-1 px-3 py-4">
         {definition.sections.map((s) => {
@@ -163,11 +126,11 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     key={s.section}
                     href={hrefForSection(definition, s.section)}
                     onClick={() => setOpen(false)}
-                    className={`block rounded-2xl px-3 py-2 text-sm font-semibold ${
+                    className={`block rounded-xl px-3 py-2 text-sm font-medium ${
                       useMinShell
                         ? active
-                          ? "bg-primary text-white"
-                          : "text-slate-800 hover:bg-white"
+                          ? "bg-white text-primary shadow-sm ring-1 ring-slate-200/80 ring-inset"
+                          : "text-slate-700 hover:bg-white/80"
                         : "text-slate-800 hover:bg-slate-50"
                     }`}
                   >
@@ -175,52 +138,18 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                   </Link>
                 );
               })}
-              {isResident ? (
-                <Link
-                  href="/resident/payments/pending"
-                  onClick={() => setOpen(false)}
-                  className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
-                >
-                  Billing
-                </Link>
-              ) : null}
-              {isManager ? (
-                <Link
-                  href="/manager/payments"
-                  onClick={() => setOpen(false)}
-                  className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
-                >
-                  Billing
-                </Link>
-              ) : null}
-              {isOwner ? (
-                <Link
-                  href="/owner/payments"
-                  onClick={() => setOpen(false)}
-                  className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
-                >
-                  Billing
-                </Link>
-              ) : null}
-              {hasSignOut ? (
+            </div>
+            {hasSignOut ? (
+              <div className={`mt-3 border-t pt-3 ${useMinShell ? "border-slate-200/80" : "border-border"}`}>
                 <Link
                   href="/auth/sign-in"
                   onClick={() => setOpen(false)}
-                  className="block rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-white"
+                  className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-white/80"
                 >
                   Sign out
                 </Link>
-              ) : null}
-              <Link
-                href="/"
-                onClick={() => setOpen(false)}
-                className={`block rounded-2xl px-3 py-2 text-sm font-semibold ${
-                  useMinShell ? "text-slate-600 hover:bg-white" : "text-primary hover:bg-accent"
-                }`}
-              >
-                ← Marketing site
-              </Link>
-            </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

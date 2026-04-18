@@ -1,12 +1,21 @@
 import { parseMonthlyRent } from "@/lib/listings-search";
 import type { MockProperty } from "./types";
 
+export type ListingRoomModal = {
+  setupLine: string;
+  tourEyebrow: string;
+  tourTitle: string;
+  tourSubtitle: string;
+  includedTags: string[];
+};
+
 export type ListingRoomRow = {
   id: string;
   name: string;
   detail: string;
   price: string;
   availability: string;
+  modal: ListingRoomModal;
 };
 
 export type ListingFloorCard = {
@@ -18,12 +27,32 @@ export type ListingFloorCard = {
   hiddenRoomNames?: string[];
 };
 
+export type ListingBathroomModal = {
+  eyebrow: string;
+  setupCard: string;
+  includedTags: string[];
+  /** Placeholder “photos” for the gallery strip (no separate video). */
+  photoCaptions: string[];
+};
+
 export type ListingBathroomRow = {
   id: string;
   name: string;
   detail: string;
-  setup: string;
+  shower: boolean;
+  toilet: boolean;
+  bathtub: boolean;
   availability: string;
+  modal: ListingBathroomModal;
+};
+
+export type ListingSharedModal = {
+  eyebrow: string;
+  tourEyebrow: string;
+  tourTitle: string;
+  tourSubtitle: string;
+  includedTags: string[];
+  photoCaptions: string[];
 };
 
 export type ListingSharedRow = {
@@ -32,6 +61,7 @@ export type ListingSharedRow = {
   detail: string;
   useNote: string;
   availability: string;
+  modal: ListingSharedModal;
 };
 
 export type LeaseBasicRow = {
@@ -63,6 +93,14 @@ export type ListingRichContent = {
   quickFacts: { label: string; value: string }[];
 };
 
+const roomModal = (partial: Partial<ListingRoomModal> & Pick<ListingRoomModal, "setupLine">): ListingRoomModal => ({
+  tourEyebrow: "Room tour",
+  tourTitle: "Video placeholder",
+  tourSubtitle: "Tour coming soon — swap in hosted video when ready.",
+  includedTags: ["Bed", "Desk", "Keypad lock", "Heating", "AC"],
+  ...partial,
+});
+
 const defaultFloors: ListingFloorCard[] = [
   {
     floorLabel: "First floor",
@@ -76,6 +114,12 @@ const defaultFloors: ListingFloorCard[] = [
         detail: "First floor · Shares bathroom with the second floor as well",
         price: "$775/month",
         availability: "Available now",
+        modal: roomModal({
+          setupLine: "Shares bathroom with the second floor as well",
+          tourTitle: "Room 1 tour coming soon.",
+          tourSubtitle: "Walkthrough placeholder — connect Vimeo, YouTube, or Mux when media is ready.",
+          includedTags: ["Bed", "Desk", "Keypad lock", "Heating", "AC", "Shares bathroom with the second floor as well"],
+        }),
       },
     ],
     hiddenRoomNames: ["Room 1A (flex lease)"],
@@ -91,6 +135,11 @@ const defaultFloors: ListingFloorCard[] = [
         detail: "Second floor",
         price: "$800/month",
         availability: "Available now",
+        modal: roomModal({
+          setupLine: "Second floor · en-suite bath",
+          tourTitle: "Room 2 tour coming soon.",
+          includedTags: ["Bed", "Closet", "Heating", "AC", "Private bath"],
+        }),
       },
       {
         id: "r3",
@@ -98,6 +147,11 @@ const defaultFloors: ListingFloorCard[] = [
         detail: "Second floor",
         price: "$800/month",
         availability: "Available now",
+        modal: roomModal({
+          setupLine: "Second floor",
+          tourTitle: "Room 3 tour coming soon.",
+          includedTags: ["Bed", "Desk", "Heating", "Shared bath"],
+        }),
       },
     ],
     hiddenRoomNames: ["Room 4", "Room 5"],
@@ -109,46 +163,139 @@ const defaultBathrooms: ListingBathroomRow[] = [
     id: "b1",
     name: "Full bath (hall)",
     detail: "Between Room 1 and stairs",
-    setup: "Tub · single vanity · shared with 1st & 2nd floor",
+    shower: true,
+    toilet: true,
+    bathtub: true,
     availability: "Available now",
+    modal: {
+      eyebrow: "First floor",
+      setupCard: "Tub · single vanity · shared with 1st & 2nd floor",
+      includedTags: ["Shower", "Toilet", "Bathtub", "Vanity", "Exhaust fan"],
+      photoCaptions: ["Vanity & mirror", "Tub & shower combo", "Tile detail"],
+    },
   },
   {
     id: "b2",
     name: "Three-quarter bath",
     detail: "Second floor landing",
-    setup: "Walk-in shower · vanity",
+    shower: true,
+    toilet: true,
+    bathtub: false,
     availability: "Available now",
+    modal: {
+      eyebrow: "Second floor",
+      setupCard: "Walk-in shower · vanity",
+      includedTags: ["Shower", "Toilet", "Vanity", "Heated floor"],
+      photoCaptions: ["Walk-in shower", "Vanity"],
+    },
   },
   {
     id: "b3",
     name: "Powder room",
     detail: "Main level by kitchen",
-    setup: "Toilet · sink",
+    shower: false,
+    toilet: true,
+    bathtub: false,
     availability: "Common area",
+    modal: {
+      eyebrow: "Main floor",
+      setupCard: "Toilet · sink",
+      includedTags: ["Toilet", "Sink", "Mirror"],
+      photoCaptions: ["Powder room overview"],
+    },
   },
 ];
 
 const defaultShared: ListingSharedRow[] = [
   {
     id: "s1",
+    name: "Laundry room",
+    detail: "Basement · two washers / two dryers",
+    useNote: "Card or app payment · detergent shelf",
+    availability: "Shared",
+    modal: {
+      eyebrow: "Shared space",
+      tourEyebrow: "Space tour",
+      tourTitle: "Laundry tour coming soon.",
+      tourSubtitle: "Video placeholder — washers, dryers, and folding counters.",
+      includedTags: ["Washers", "Dryers", "Folding counter", "Utility sink", "Storage"],
+      photoCaptions: ["Washer wall", "Folding area", "Detergent storage"],
+    },
+  },
+  {
+    id: "s2",
     name: "Chef’s kitchen",
     detail: "Main floor · south exposure",
     useNote: "Full appliances · island seating for 6",
     availability: "Shared",
-  },
-  {
-    id: "s2",
-    name: "Living room & TV nook",
-    detail: "Main floor",
-    useNote: "Sectional · streaming TV · A/C in space",
-    availability: "Shared",
+    modal: {
+      eyebrow: "Shared space",
+      tourEyebrow: "Space tour",
+      tourTitle: "Kitchen walkthrough coming soon.",
+      tourSubtitle: "Island, appliances, and pantry — drop in your hosted clip.",
+      includedTags: ["Gas range", "Dishwasher", "Island", "Pantry", "Coffee station"],
+      photoCaptions: ["Island seating", "Appliance wall", "Pantry"],
+    },
   },
   {
     id: "s3",
+    name: "Living room",
+    detail: "Main floor · open to dining",
+    useNote: "Sectional · streaming TV · A/C",
+    availability: "Shared",
+    modal: {
+      eyebrow: "Shared space",
+      tourEyebrow: "Space tour",
+      tourTitle: "Living room tour coming soon.",
+      tourSubtitle: "Seating layout and TV nook placeholder.",
+      includedTags: ["Sectional", "Smart TV", "Ceiling fan", "Large windows"],
+      photoCaptions: ["Seating area", "TV nook", "Windows"],
+    },
+  },
+  {
+    id: "s4",
+    name: "Dining room",
+    detail: "Main floor",
+    useNote: "Seats 8 · adjacent to kitchen",
+    availability: "Shared",
+    modal: {
+      eyebrow: "Shared space",
+      tourEyebrow: "Space tour",
+      tourTitle: "Dining room tour coming soon.",
+      tourSubtitle: "Table, lighting, and flow into kitchen.",
+      includedTags: ["8-seat table", "Built-in buffet", "Pendant lighting"],
+      photoCaptions: ["Table view", "Buffet wall"],
+    },
+  },
+  {
+    id: "s5",
+    name: "Movie theater",
+    detail: "Lower level",
+    useNote: "1080p projector · soundbar · tiered seating",
+    availability: "Shared",
+    modal: {
+      eyebrow: "Shared space",
+      tourEyebrow: "Space tour",
+      tourTitle: "Theater tour coming soon.",
+      tourSubtitle: "Seating and screen — ideal for hosted walkthrough video.",
+      includedTags: ["Projector", "Soundbar", "Blackout shades", "Tiered seating"],
+      photoCaptions: ["Screen wall", "Seating rows", "Snack ledge"],
+    },
+  },
+  {
+    id: "s6",
     name: "Back deck + yard",
     detail: "Ground level",
     useNote: "Grill hookups · bike rack nearby",
     availability: "Shared",
+    modal: {
+      eyebrow: "Outdoor",
+      tourEyebrow: "Space tour",
+      tourTitle: "Outdoor tour coming soon.",
+      tourSubtitle: "Deck, yard, and grill area.",
+      includedTags: ["Deck", "Grill gas line", "Bike rack", "Yard lights"],
+      photoCaptions: ["Deck overview", "Grill corner", "Yard"],
+    },
   },
 ];
 

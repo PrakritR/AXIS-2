@@ -1,27 +1,20 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { PortalSwitcher, type AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { useState } from "react";
 
 export default function ForgotPasswordPage() {
   const { showToast } = useAppUi();
-  const [role, setRole] = useState<AuthRole>("resident");
 
   return (
     <AuthCard>
       <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Reset password</h1>
       <p className="mt-2 text-center text-sm text-slate-600">
-        Choose the portal you use most often (demo only).
+        Enter the email you use to sign in. We&apos;ll send reset instructions to that address (demo only).
       </p>
-
-      <div className="mt-7">
-        <PortalSwitcher value={role} onChange={setRole} />
-      </div>
 
       <div className="mt-8">
         <label className="text-xs font-semibold text-[#334155]" htmlFor="email">

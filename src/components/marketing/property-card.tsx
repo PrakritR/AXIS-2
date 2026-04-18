@@ -1,25 +1,10 @@
-"use client";
-
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { MockProperty } from "@/data/types";
 
 export function PropertyCard({ property }: { property: MockProperty }) {
-  const { showToast } = useAppUi();
   const listingPath = `/rent/listings/${property.id}`;
-
-  const copyListingLink = async () => {
-    const url =
-      typeof window !== "undefined" ? `${window.location.origin}${listingPath}` : listingPath;
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast("Listing link copied");
-    } catch {
-      showToast("Could not copy link");
-    }
-  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-[transform,box-shadow,border-color] duration-300 ease-out hover:-translate-y-1 hover:border-primary/15 hover:shadow-[0_20px_50px_-28px_rgba(15,23,42,0.18)] active:translate-y-0 active:scale-[0.99]">
@@ -48,16 +33,9 @@ export function PropertyCard({ property }: { property: MockProperty }) {
           <p className="mt-0.5 text-xs font-medium text-slate-500">ZIP {property.zip}</p>
         </div>
         <div className="mt-auto flex flex-col gap-2">
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-xs text-muted">From</p>
-              <p className="text-xl font-semibold text-foreground">
-                {property.rentLabel}
-              </p>
-            </div>
-            <Badge tone={property.petFriendly ? "success" : "neutral"}>
-              {property.petFriendly ? "Pet friendly" : "Ask about pets"}
-            </Badge>
+          <div>
+            <p className="text-xs text-muted">From</p>
+            <p className="text-xl font-semibold text-foreground">{property.rentLabel}</p>
           </div>
           <div className="flex flex-col gap-2">
             <Link href={listingPath} className="contents">
@@ -75,11 +53,6 @@ export function PropertyCard({ property }: { property: MockProperty }) {
                 Apply
               </Button>
             </Link>
-          </div>
-          <div className="flex justify-center">
-            <Button type="button" variant="ghost" className="text-[13px] font-semibold text-primary" onClick={copyListingLink}>
-              Share
-            </Button>
           </div>
         </div>
       </div>

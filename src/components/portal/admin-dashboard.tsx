@@ -102,7 +102,7 @@ export function AdminDashboard() {
         <StatCard
           label="Properties · pending review"
           value="0"
-          href="/admin/properties/pending-review"
+          href="/admin/properties"
         />
         <StatCard label="Managers · subscribed" value="0" href="/admin/managers" />
         <StatCard label="Leases · admin review" value="0" href="/admin/leases/admin-review" />

@@ -16,6 +16,7 @@ import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-clie
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
 import { findSection, getPortalDefinition } from "@/lib/portals";
+import { isResidentApplicationApproved } from "@/lib/portals/resident-state";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
@@ -62,7 +63,7 @@ export async function renderPortalSection(
 
   if (kind === "resident" && section === "dashboard") {
     if (tabParts?.length) notFound();
-    return <ResidentDashboard />;
+    return <ResidentDashboard applicationApproved={isResidentApplicationApproved()} />;
   }
 
   if (!meta.tabs.length) {

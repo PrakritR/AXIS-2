@@ -612,26 +612,15 @@ export function buildPortalWorkspaceModel(
   }
 
   if (portal === "admin" && section === "properties") {
-    const emptyTitle =
-      tabId === "pending-review"
-        ? "No properties awaiting review"
-        : "No properties in this view";
     return {
       eyebrow,
       title: "Properties",
-      subtitle: "Review listings and status changes from managers.",
-      kpis: [
-        { label: "Pending review", value: "0", hint: "" },
-        { label: "Request change", value: "0", hint: "" },
-        { label: "Listed", value: "0", hint: "" },
-        { label: "Unlisted", value: "0", hint: "" },
-        { label: "Rejected", value: "0", hint: "" },
-      ],
+      subtitle: "",
       showToolbar: false,
       showQuickLinks: false,
       actions: actionsFor(portal, section),
       emptyState: {
-        title: emptyTitle,
+        title: "No properties yet",
         description: "When managers submit properties, they will appear in this queue.",
       },
     };

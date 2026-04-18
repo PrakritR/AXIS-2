@@ -1,24 +1,7 @@
-"use client";
-
-import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
-export function PropertyDetailActions({ propertyId }: { propertyId: string }) {
-  const { showToast } = useAppUi();
-  const listingPath = `/rent/listings/${propertyId}`;
-
-  const copyListingLink = async () => {
-    const url =
-      typeof window !== "undefined" ? `${window.location.origin}${listingPath}` : listingPath;
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast("Listing link copied");
-    } catch {
-      showToast("Could not copy link");
-    }
-  };
-
+export function PropertyDetailActions({ propertyId: _propertyId }: { propertyId: string }) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
       <Link href="/rent/listings">
@@ -36,9 +19,6 @@ export function PropertyDetailActions({ propertyId }: { propertyId: string }) {
           Apply
         </Button>
       </Link>
-      <Button type="button" variant="ghost" className="w-full font-semibold text-primary sm:w-auto" onClick={copyListingLink}>
-        Share
-      </Button>
     </div>
   );
 }

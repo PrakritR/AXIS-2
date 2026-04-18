@@ -1,25 +1,57 @@
-import Link from "next/link";
+"use client";
 
-const ink = "#0f172a";
+import Link from "next/link";
+import { useId } from "react";
+
+const markTileClass =
+  "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-sky-200/90 bg-[linear-gradient(165deg,#f0f9ff_0%,#e0f2fe_42%,#dbeafe_100%)] shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_8px_22px_rgba(56,146,255,0.18)]";
 
 export type AxisLogoVariant = "default" | "portalHeader" | "adminHeader";
 
-function AxisLogoGlyph() {
+/** Inline “AX”: solid A, X with one diagonal in sky → primary gradient, one diagonal in slate. */
+function AxisLogoGlyph({ className = "" }: { className?: string }) {
+  const raw = useId().replace(/:/g, "");
+  const gradId = `ax-x-${raw}`;
+
   return (
-    <span className="relative flex select-none items-center text-[17px] font-black leading-none tracking-[-0.08em]">
-      <span style={{ color: ink }}>A</span>
-      <span className="-ml-[1px]" style={{ color: ink }}>
-        X
-      </span>
-      <span
-        className="pointer-events-none absolute left-[21px] top-[-2px] h-[34px] w-[4px] rotate-[20deg] rounded-full bg-gradient-to-b from-[#74b7ff] via-[#4d95ff] to-[#2e6eff]"
-        aria-hidden
+    <svg
+      className={`block h-[26px] w-[42px] shrink-0 ${className}`}
+      viewBox="0 0 42 22"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <defs>
+        <linearGradient
+          id={gradId}
+          x1="24.25"
+          y1="3.25"
+          x2="39.75"
+          y2="18.75"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0%" stopColor="#e0f2fe" />
+          <stop offset="45%" stopColor="#7dd3fc" />
+          <stop offset="100%" stopColor="#007aff" />
+        </linearGradient>
+      </defs>
+      {/* A */}
+      <path
+        d="M2.5 18.5L10 2.5L17.5 18.5M6.75 12.25H13.25"
+        stroke="#0f172a"
+        strokeWidth="2.35"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
-    </span>
+      {/* X — gradient limb (\) */}
+      <path d="M24.25 3.25L39.75 18.75" stroke={`url(#${gradId})`} strokeWidth="2.45" strokeLinecap="round" />
+      {/* X — solid limb (/) */}
+      <path d="M39.75 3.25L24.25 18.75" stroke="#0f172a" strokeWidth="2.45" strokeLinecap="round" />
+    </svg>
   );
 }
 
-/** Primary AX mark — rounded blue tile with crossed accent bar. */
+/** Primary AX mark — light blue tile + SVG glyph. */
 export function AxisLogoMark({
   className = "",
   variant,
@@ -29,20 +61,17 @@ export function AxisLogoMark({
 }) {
   void variant;
   return (
-    <div
-      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] border border-[#bfd6ff] bg-[linear-gradient(180deg,#eaf3ff_0%,#dbeaff_100%)] shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_6px_18px_rgba(96,146,220,0.22)] ${className}`}
-      aria-hidden
-    >
+    <div className={`${markTileClass} ${className}`} aria-hidden>
       <AxisLogoGlyph />
     </div>
   );
 }
 
-/** Alternate mark — same single blue bar treatment on a softer tile. */
+/** Softer shadow variant — same glyph and light blue tile. */
 export function AxisLogoMarkSoft({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] border border-[#bfd6ff] bg-[linear-gradient(180deg,#eef5ff_0%,#deebff_100%)] shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_6px_18px_rgba(96,146,220,0.18)] ${className}`}
+      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-sky-200/80 bg-[linear-gradient(165deg,#f8fcff_0%,#e8f4ff_50%,#dff0ff_100%)] shadow-[0_1px_0_rgba(255,255,255,0.95)_inset,0_6px_18px_rgba(56,146,255,0.14)] ${className}`}
       aria-hidden
     >
       <AxisLogoGlyph />

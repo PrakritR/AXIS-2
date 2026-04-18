@@ -317,8 +317,8 @@ export default function PartnerPricingPage() {
 
           <p className="mt-6 text-center text-sm text-slate-400 sm:text-left">
             Already have an account?{" "}
-            <Link href="/auth/sign-in?role=manager" className="font-semibold text-primary hover:underline">
-              Manager login
+            <Link href="/auth/sign-in" className="font-semibold text-primary hover:underline">
+              Sign in
             </Link>
           </p>
         </div>

@@ -1,10 +1,11 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { PortalSwitcher, parseAuthRole, portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
+import { parseAuthRole, portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { isValidAdminRegisterKey } from "@/lib/auth/resolve-portal-role";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -27,6 +28,7 @@ function CreateAccountContent() {
   const roleFromUrl = useMemo(() => parseAuthRole(searchParams.get("role")), [searchParams]);
   const [role, setRole] = useState<AuthRole>(roleFromUrl);
   const [ownerInviteRef, setOwnerInviteRef] = useState(searchParams.get("slot") ?? "");
+  const [adminKey, setAdminKey] = useState("");
 
   useEffect(() => {
     setRole(roleFromUrl);
@@ -34,22 +36,34 @@ function CreateAccountContent() {
 
   useEffect(() => {
     setOwnerInviteRef(searchParams.get("slot") ?? "");
-  }, [searchParams, role]);
+  }, [searchParams]);
 
-  const title = useMemo(() => titleFor(role), [role]);
+  const portalTitle = useMemo(() => titleFor(role), [role]);
 
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">{title}</h1>
+      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Create account</h1>
+      <p className="mt-2 text-center text-sm text-slate-600">Choose your portal type, then complete the fields below.</p>
 
       <div className="mt-7">
-        <PortalSwitcher value={role} onChange={setRole} />
+        <label className="text-xs font-semibold text-[#334155]" htmlFor="account-type">
+          Portal type
+        </label>
+        <Select
+          id="account-type"
+          className="mt-1.5"
+          value={role}
+          onChange={(e) => setRole(parseAuthRole(e.target.value))}
+        >
+          <option value="resident">Resident</option>
+          <option value="manager">Manager</option>
+          <option value="owner">Owner</option>
+          <option value="admin">Admin</option>
+        </Select>
+        <p className="mt-2 text-center text-xs font-medium text-slate-500">Account for: {portalTitle}</p>
       </div>
 
-      <Link
-        className="mt-5 inline-flex text-sm font-semibold text-primary hover:opacity-90"
-        href={`/auth/sign-in?role=${encodeURIComponent(role)}`}
-      >
+      <Link className="mt-5 inline-flex text-sm font-semibold text-primary hover:opacity-90" href="/auth/sign-in">
         ← Back to sign in
       </Link>
 
@@ -75,12 +89,35 @@ function CreateAccountContent() {
           </>
         ) : (
           <>
-            Admin access is provisioned through your organization and permissioned before portal access is enabled.
+            Admin accounts require the registration key issued by your organization. After sign-in, use an email whose
+            local part is <span className="font-mono text-xs font-semibold text-slate-800">admin</span> or ends with{" "}
+            <span className="font-mono text-xs font-semibold text-slate-800">+admin</span> before @.
           </>
         )}
       </div>
 
       <div className="mt-6 space-y-4">
+        {role === "admin" ? (
+          <div>
+            <label className="text-xs font-semibold text-[#334155]" htmlFor="admin-key">
+              Admin registration key
+              <Req />
+            </label>
+            <Input
+              id="admin-key"
+              className="mt-1.5"
+              type="password"
+              autoComplete="off"
+              placeholder="Key from your organization"
+              value={adminKey}
+              onChange={(e) => setAdminKey(e.target.value)}
+            />
+            <p className="mt-1.5 text-xs text-slate-500">
+              Demo default: <span className="font-mono font-medium text-slate-700">axis-demo-admin</span> unless{" "}
+              <span className="font-mono">NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY</span> is set.
+            </p>
+          </div>
+        ) : null}
         {role === "resident" ? (
           <div>
             <label className="text-xs font-semibold text-[#334155]" htmlFor="app">
@@ -141,6 +178,10 @@ function CreateAccountContent() {
         type="button"
         className="mt-8 w-full rounded-full py-3 text-base font-semibold"
         onClick={() => {
+          if (role === "admin" && !isValidAdminRegisterKey(adminKey)) {
+            showToast("Invalid admin registration key.");
+            return;
+          }
           if (role === "owner" && !ownerInviteRef.trim()) {
             showToast("Invite reference is required to create an owner account.");
             return;

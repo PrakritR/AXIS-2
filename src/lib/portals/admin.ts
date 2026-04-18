@@ -8,17 +8,7 @@ export const adminPortal: PortalDefinition = {
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
-    {
-      section: "properties",
-      label: "Properties",
-      tabs: [
-        { id: "pending-review", label: "Pending review" },
-        { id: "request-change", label: "Request change" },
-        { id: "listed", label: "Listed" },
-        { id: "unlisted", label: "Unlisted" },
-        { id: "rejected", label: "Rejected" },
-      ],
-    },
+    { section: "properties", label: "Properties", tabs: [] },
     { section: "managers", label: "Managers", tabs: [] },
     {
       section: "leases",
