@@ -1,14 +1,20 @@
 import { PublicNavbar } from "@/components/layout/public-navbar";
+import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
+import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { ResidentPortalPillNav } from "@/components/portal/resident-portal-pill-nav";
 import { ResidentPortalTopbar } from "@/components/portal/resident-portal-topbar";
-import { PortalSidebar } from "@/components/portal/portal-sidebar";
+import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
+import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
+import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
 import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
 import { residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 
 export default async function ResidentLayout({ children }: { children: React.ReactNode }) {
+  await assertPortalLayoutRole("resident", "resident");
+
   const residentPortal = await getResidentPortalDefinition();
-  const { profile, user } = await getServerSessionProfile();
+  const { profile, user } = await getEffectiveSessionForPortal("resident");
   const workspaceUnlocked = residentHasFullPortalAccess({
     applicationApproved: profile?.application_approved ?? false,
     role: profile?.role,
@@ -16,10 +22,19 @@ export default async function ResidentLayout({ children }: { children: React.Rea
   });
   const displayName = profile?.full_name ?? profile?.email ?? user?.email ?? "Resident";
 
+  const session = await getServerSessionProfile();
+  const preview = await getAdminPreviewFromCookies();
+  const showPreviewBanner = session.profile?.role === "admin" && preview?.portal === "resident";
+  let previewLabel: string | null = null;
+  if (showPreviewBanner && preview) {
+    previewLabel = profile?.full_name?.trim() || profile?.email || preview.targetUserId;
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100/80 via-white to-slate-50/90">
       <PublicNavbar />
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      {showPreviewBanner ? <AdminPreviewBanner label={previewLabel} /> : null}
+      <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col lg:flex-row">
         <PortalSidebar definition={residentPortal} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <ResidentPortalTopbar displayName={displayName} />

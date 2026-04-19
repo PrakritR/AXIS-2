@@ -27,7 +27,9 @@ import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-order
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
+import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getServerSessionProfile } from "@/lib/auth/server-profile";
+import { getManagerSubscriptionTier, managerSectionAllowedForTier } from "@/lib/manager-access";
 import { residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
@@ -40,7 +42,17 @@ export async function renderPortalSection(
   tabParts?: string[],
 ) {
   const def = await getPortalDefinition(kind);
-  const residentCtx = kind === "resident" ? await getServerSessionProfile() : null;
+
+  if (kind === "manager") {
+    const uid = await getEffectiveUserIdForPortal("manager");
+    if (!uid) redirect("/admin/dashboard");
+    const tier = await getManagerSubscriptionTier(uid);
+    if (!managerSectionAllowedForTier(section, tier)) {
+      redirect(`${def.basePath}/dashboard`);
+    }
+  }
+
+  const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
   const residentWorkspaceUnlocked =
     kind === "resident"
       ? residentHasFullPortalAccess({
