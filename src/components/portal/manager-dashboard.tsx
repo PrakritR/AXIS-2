@@ -7,15 +7,16 @@ import {
   demoManagerWorkOrderRowsFull,
 } from "@/data/demo-portal";
 import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
+import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "./portal-metrics";
 
 function StatLink({ label, value, href }: { label: string; value: string; href: string }) {
   return (
     <Link
       href={href}
-      className="rounded-2xl border border-slate-200/80 bg-slate-50/60 px-4 py-4 transition hover:border-primary/25 hover:bg-white hover:shadow-sm"
+      className="block rounded-xl border border-slate-200/80 bg-white px-5 py-4 transition hover:border-primary/35 hover:shadow-sm"
     >
-      <p className="text-2xl font-bold tabular-nums text-slate-900">{value}</p>
-      <p className="mt-1 text-xs font-medium text-slate-500">{label}</p>
+      <p className={PORTAL_KPI_VALUE}>{value}</p>
+      <p className={PORTAL_KPI_LABEL}>{label}</p>
     </Link>
   );
 }

@@ -19,7 +19,7 @@ export default function HomePage() {
           <div className="animate-fade-up mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.07] px-3 py-1.5 sm:mb-6 sm:px-4">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
             <span className="text-xs font-semibold tracking-wide text-primary sm:text-[13px]">
-              Axis Housing · Now Leasing
+              Axis · Rooms for rent
             </span>
           </div>
 
@@ -28,7 +28,7 @@ export default function HomePage() {
             className="animate-fade-up mx-auto max-w-3xl text-[2.25rem] font-semibold leading-[1.1] tracking-[-0.03em] text-[#1d1d1f] sm:text-[3.75rem] sm:leading-[1.08] md:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
-            Find housing that{" "}
+            Find a room that{" "}
             <span
               style={{
                 background: "linear-gradient(135deg, var(--primary) 0%, var(--primary-alt) 100%)",

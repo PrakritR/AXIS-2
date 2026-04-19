@@ -9,8 +9,8 @@ const PLANNED_KEY = "axis_admin_planned_events_v1";
 /** Monday = 0 … Sunday = 6 */
 export const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
-/** Half-hour slots from 8:00 through 17:30 (index 0 = 8:00–8:30). */
-export const SLOTS_PER_DAY = 20;
+/** Half-hour slots from 8:00 AM through 8:00 PM (index 0 = 8:00–8:30, last = 7:30–8:00). */
+export const SLOTS_PER_DAY = 24;
 
 function isBrowser() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -177,7 +177,6 @@ export function mondayBasedDayIndex(d: Date) {
 export function slotIndexForDate(d: Date) {
   const h = d.getHours();
   const m = d.getMinutes();
-  if (h < 8 || h > 18 || (h === 18 && m > 0)) return null;
   const base = (h - 8) * 2 + (m >= 30 ? 1 : 0);
   if (base < 0 || base >= SLOTS_PER_DAY) return null;
   return base;

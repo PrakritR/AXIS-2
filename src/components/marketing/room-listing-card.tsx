@@ -132,7 +132,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" aria-hidden />
 
         <span className="pointer-events-none absolute left-3 top-3 rounded-md bg-white/95 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-900 shadow-sm ring-1 ring-black/5">
-          Shared housing
+          Room rental
         </span>
 
         <div className="pointer-events-none absolute bottom-3 right-3 text-right text-white drop-shadow-md">

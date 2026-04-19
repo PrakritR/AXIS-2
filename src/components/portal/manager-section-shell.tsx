@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
 
 export type ShellAction = {
   label: string;
@@ -64,9 +65,9 @@ export function ManagerSectionShell({
   const [activeKpi, setActiveKpi] = useState(activeKpiIndexProp);
 
   return (
-    <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
+    <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
+        <h1 className={PORTAL_PAGE_TITLE}>{title}</h1>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           {filters ? <div className="flex flex-wrap items-center gap-2">{filters}</div> : null}
           {actions?.length ? (
@@ -94,26 +95,12 @@ export function ManagerSectionShell({
       </div>
 
       {kpis?.length ? (
-        <div className="mt-5 flex flex-wrap gap-2">
-          {kpis.map((k, i) => {
-            const active = i === activeKpi;
-            return (
-              <button
-                key={k.label}
-                type="button"
-                onClick={() => setActiveKpi(i)}
-                className={`min-w-[7.5rem] rounded-2xl border px-4 py-3 text-left transition ${
-                  active
-                    ? "border-slate-200/90 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.18)]"
-                    : "border-transparent bg-slate-50/80 hover:border-slate-200/60 hover:bg-slate-50"
-                }`}
-              >
-                <p className="text-xl font-bold tabular-nums text-slate-900">{k.value}</p>
-                <p className="mt-0.5 text-xs font-medium text-slate-500">{k.label}</p>
-              </button>
-            );
-          })}
-        </div>
+        <PortalKpiTabStrip
+          items={kpis}
+          activeIndex={activeKpi}
+          onSelect={setActiveKpi}
+          textAlign="center"
+        />
       ) : null}
 
       <div className="mt-6">{children}</div>

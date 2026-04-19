@@ -77,9 +77,8 @@ export function RentListingsView() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Listings</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Rooms</p>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight">Available rooms</h1>
-      <p className="mt-1 text-sm text-slate-600">Each card is a rentable room. Open a card for the full listing.</p>
 
       {hasSearch ? (
         <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
@@ -132,12 +131,6 @@ export function RentListingsView() {
             Clear search
           </Link>
         </div>
-      ) : null}
-
-      {!hasSearch ? (
-        <p className="mt-4 text-sm font-medium text-slate-700">
-          {roomResults.length} room{roomResults.length === 1 ? "" : "s"} available (demo inventory)
-        </p>
       ) : null}
 
       {roomResults.length === 0 ? (

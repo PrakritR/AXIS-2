@@ -12,16 +12,30 @@ const nav = [
   { id: "location", label: "Location" },
 ] as const;
 
+function getListingScrollOffsetPx(): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--listing-sticky-stack").trim();
+  if (raw) {
+    const px = Number.parseFloat(raw);
+    if (!Number.isNaN(px)) return px;
+  }
+  const navEl = document.getElementById(NAVBAR_ID);
+  const navH = navEl?.getBoundingClientRect().height ?? 64;
+  return navH + 52 + 12;
+}
+
+/** Scroll so the section heading clears the public nav + sticky tab bar (matches section `scroll-mt` token). */
 function scrollToSection(id: string) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  const offset = getListingScrollOffsetPx();
+  const top = el.getBoundingClientRect().top + window.scrollY - offset;
+  window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
 }
 
 /** Sticks directly under the public marketing navbar; tabs smooth-scroll and track the active section. */
 export function ListingStickySubnav() {
   const rootRef = useRef<HTMLElement>(null);
-  const tabRefs = useRef<Map<string, HTMLAnchorElement | null>>(new Map());
+  const tabRefs = useRef<Map<string, HTMLButtonElement | null>>(new Map());
   const [stickyTopPx, setStickyTopPx] = useState(64);
   const [pageScrolled, setPageScrolled] = useState(false);
   const [activeId, setActiveId] = useState<string>(nav[0].id);
@@ -81,6 +95,24 @@ export function ListingStickySubnav() {
     node?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
   }, [activeId]);
 
+  /** Deep links (#lease-basics, etc.) after client navigation — browser often does not scroll. */
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash || !nav.some((n) => n.id === hash)) return;
+    let cancelled = false;
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        scrollToSection(hash);
+        setActiveId(hash);
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(id);
+    };
+  }, []);
+
   return (
     <nav
       ref={rootRef}
@@ -97,25 +129,29 @@ export function ListingStickySubnav() {
           const active = activeId === item.id;
           return (
             <li key={item.id} className="shrink-0">
-              <a
+              <button
                 ref={(el) => {
                   tabRefs.current.set(item.id, el);
                 }}
-                href={`#${item.id}`}
-                aria-current={active ? "location" : undefined}
-                className={`inline-flex min-h-[44px] items-center rounded-full px-3.5 py-2 no-underline transition-colors sm:min-h-0 sm:py-1.5 ${
+                type="button"
+                aria-current={active ? "true" : undefined}
+                className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-full border-0 px-3.5 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
                   active
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-slate-500 hover:bg-white/90 hover:text-slate-800"
+                    : "bg-transparent text-slate-500 hover:bg-white/90 hover:text-slate-800"
                 }`}
-                onClick={(e) => {
-                  e.preventDefault();
+                onClick={() => {
                   setActiveId(item.id);
                   scrollToSection(item.id);
+                  try {
+                    window.history.replaceState(null, "", `#${item.id}`);
+                  } catch {
+                    /* ignore */
+                  }
                 }}
               >
                 {item.label}
-              </a>
+              </button>
             </li>
           );
         })}

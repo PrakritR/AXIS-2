@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button";
 import { SegmentedThree } from "@/components/ui/segmented-control";
 import { TabNav, type TabItem } from "@/components/ui/tabs";
 import { ManagerSectionShell } from "@/components/portal/manager-section-shell";
+import {
+  PORTAL_KPI_CHIP_ACTIVE,
+  PORTAL_KPI_CHIP_INACTIVE,
+  PORTAL_KPI_CHIP_STATIC,
+  PORTAL_KPI_LABEL,
+  PORTAL_KPI_VALUE,
+} from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   acceptPartnerInquiry,
@@ -667,40 +674,34 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
           <AvailabilityEditor />
         ) : (
           <>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <button
                 type="button"
                 onClick={goTodayCalendar}
-                className={`rounded-2xl border px-4 py-3 text-left transition-[border-color,background-color] duration-150 ease-out hover:border-primary/30 hover:bg-white ${
-                  calMode === "day" ? "border-primary/30 bg-white ring-1 ring-primary/15" : "border-slate-100 bg-slate-50/60"
-                }`}
+                className={calMode === "day" ? PORTAL_KPI_CHIP_ACTIVE : PORTAL_KPI_CHIP_INACTIVE}
               >
-                <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.today}</p>
-                <p className="mt-0.5 text-xs font-medium text-slate-500">Today · day view</p>
+                <p className={PORTAL_KPI_VALUE}>{kpis.today}</p>
+                <p className={PORTAL_KPI_LABEL}>Today · day view</p>
               </button>
               <button
                 type="button"
                 onClick={goThisWeekCalendar}
-                className={`rounded-2xl border px-4 py-3 text-left transition-[border-color,background-color] duration-150 ease-out hover:border-primary/30 hover:bg-white ${
-                  calMode === "week" ? "border-primary/30 bg-white ring-1 ring-primary/15" : "border-slate-100 bg-slate-50/60"
-                }`}
+                className={calMode === "week" ? PORTAL_KPI_CHIP_ACTIVE : PORTAL_KPI_CHIP_INACTIVE}
               >
-                <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.week}</p>
-                <p className="mt-0.5 text-xs font-medium text-slate-500">This week · week view</p>
+                <p className={PORTAL_KPI_VALUE}>{kpis.week}</p>
+                <p className={PORTAL_KPI_LABEL}>This week · week view</p>
               </button>
               <button
                 type="button"
                 onClick={goThisMonthCalendar}
-                className={`rounded-2xl border px-4 py-3 text-left transition-[border-color,background-color] duration-150 ease-out hover:border-primary/30 hover:bg-white ${
-                  calMode === "month" ? "border-primary/30 bg-white ring-1 ring-primary/15" : "border-slate-100 bg-slate-50/60"
-                }`}
+                className={calMode === "month" ? PORTAL_KPI_CHIP_ACTIVE : PORTAL_KPI_CHIP_INACTIVE}
               >
-                <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.month}</p>
-                <p className="mt-0.5 text-xs font-medium text-slate-500">This month · month view</p>
+                <p className={PORTAL_KPI_VALUE}>{kpis.month}</p>
+                <p className={PORTAL_KPI_LABEL}>This month · month view</p>
               </button>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
-                <p className="text-2xl font-semibold tabular-nums text-slate-900">{kpis.total}</p>
-                <p className="mt-0.5 text-xs font-medium text-slate-500">Total booked</p>
+              <div className={PORTAL_KPI_CHIP_STATIC}>
+                <p className={PORTAL_KPI_VALUE}>{kpis.total}</p>
+                <p className={PORTAL_KPI_LABEL}>Total booked</p>
               </div>
             </div>
 

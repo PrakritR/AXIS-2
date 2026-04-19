@@ -186,8 +186,19 @@ export function moveInboxMessageToTrash(id: string): boolean {
   const rows = readAll();
   const idx = rows.findIndex((r) => r.id === id);
   if (idx === -1) return false;
+  const row = rows[idx]!;
+  if (row.folder === "trash") return false;
   const next = [...rows];
-  next[idx] = { ...next[idx]!, folder: "trash" };
+  next[idx] = { ...row, folder: "trash" };
+  writeAll(next);
+  return true;
+}
+
+/** Remove a message from storage (e.g. from Trash). */
+export function permanentlyDeleteInboxMessage(id: string): boolean {
+  const rows = readAll();
+  const next = rows.filter((r) => r.id !== id);
+  if (next.length === rows.length) return false;
   writeAll(next);
   return true;
 }

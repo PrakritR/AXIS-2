@@ -2,6 +2,7 @@
 
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { ManagerSectionShell, PortalPropertyFilter, type ShellAction } from "@/components/portal/manager-section-shell";
+import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,8 +75,8 @@ export function PortalWorkspaceClient({
       >
         {model.kpis.map((k) => (
           <Card key={k.label} className="border-slate-200/80 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{k.label}</p>
-            <p className="mt-2 text-3xl font-semibold text-foreground">{k.value}</p>
+            <p className={PORTAL_KPI_VALUE}>{k.value}</p>
+            <p className={PORTAL_KPI_LABEL}>{k.label}</p>
             {k.hint ? <p className="mt-2 text-sm text-muted">{k.hint}</p> : null}
           </Card>
         ))}

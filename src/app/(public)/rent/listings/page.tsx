@@ -4,7 +4,7 @@ import { RentListingsView } from "@/components/marketing/rent-listings-view";
 function ListingsFallback() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 text-center text-sm text-slate-600" aria-live="polite">
-      Loading listings…
+      Loading rooms…
     </div>
   );
 }

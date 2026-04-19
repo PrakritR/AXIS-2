@@ -18,11 +18,11 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "Axis Housing",
-    template: "%s · Axis Housing",
+    default: "Axis",
+    template: "%s · Axis",
   },
   description:
-    "Axis Housing — housing search, applications, and portals (UI shell).",
+    "Axis — find rooms for rent, apply online, and manage your lease in one place (demo UI).",
 };
 
 export default function RootLayout({

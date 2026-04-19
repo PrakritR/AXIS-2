@@ -1,9 +1,11 @@
 "use client";
 
+import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type TierId = "free" | "pro" | "business";
 
@@ -103,10 +105,30 @@ export default function PartnerPricingPage() {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+  const [returnedSessionId, setReturnedSessionId] = useState<string | null>(null);
 
   const selected = useMemo(() => tierById(selectedTierId), [selectedTierId]);
   const price = billing === "monthly" ? selected.monthly : selected.annual;
   const showAnnualDiscountNote = billing === "annual" && selectedTierId !== "free";
+
+  const onEmbeddedError = useCallback(
+    (message: string) => {
+      showToast(message);
+      setCheckoutClientSecret(null);
+    },
+    [showToast],
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get("session_id");
+    if (sid) {
+      setReturnedSessionId(sid);
+      window.history.replaceState({}, "", "/partner/pricing");
+    }
+  }, []);
 
   return (
     <div className="min-h-screen px-4 py-16 sm:py-20">
@@ -199,7 +221,21 @@ export default function PartnerPricingPage() {
 
       <div className="mx-auto mt-10 max-w-5xl rounded-3xl border border-slate-200/80 bg-[#f8fafc] p-1 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.1)] sm:p-2">
         <div className="rounded-[1.35rem] border border-slate-200/80 bg-white p-6 sm:p-8">
-          <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-5">
+          {returnedSessionId ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-4 text-left sm:px-5">
+              <p className="text-sm font-semibold text-emerald-900">Payment successful</p>
+              <p className="mt-1 text-sm text-emerald-800/90">Continue to create your manager portal password.</p>
+              <Link
+                href={`/auth/create-manager?session_id=${encodeURIComponent(returnedSessionId)}`}
+                className="mt-4 inline-flex rounded-full px-5 py-2.5 text-sm font-semibold text-white"
+                style={{ background: "linear-gradient(135deg, #007aff, #339cff)" }}
+              >
+                Continue to create account
+              </Link>
+            </div>
+          ) : null}
+
+          <div className={`flex flex-wrap gap-2 border-b border-slate-100 pb-5 ${returnedSessionId ? "mt-6" : ""}`}>
             {TIERS.map((t) => {
               const active = selectedTierId === t.id;
               return (
@@ -285,8 +321,38 @@ export default function PartnerPricingPage() {
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
+              {selectedTierId === "pro" && billing === "monthly" ? (
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Use code{" "}
+                  <span className="font-mono font-semibold text-slate-700">{PRO_MONTHLY_FIRST_FREE_PROMO_CODE}</span> in
+                  the payment step for first month free.
+                </p>
+              ) : code.trim().toUpperCase() === PRO_MONTHLY_FIRST_FREE_PROMO_CODE ? (
+                <p className="mt-1.5 text-xs text-amber-800">
+                  {PRO_MONTHLY_FIRST_FREE_PROMO_CODE} only applies to <span className="font-semibold">Pro</span> with{" "}
+                  <span className="font-semibold">monthly</span> billing.
+                </p>
+              ) : null}
             </div>
           </div>
+
+          {checkoutClientSecret ? (
+            <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-semibold text-slate-900">Complete payment below</p>
+                <button
+                  type="button"
+                  className="self-start rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setCheckoutClientSecret(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="mt-4">
+                <EmbeddedCheckoutMount clientSecret={checkoutClientSecret} onError={onEmbeddedError} />
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-8 flex flex-col items-stretch justify-between gap-4 border-t border-slate-100 pt-6 sm:flex-row sm:items-center">
             <p
@@ -304,11 +370,24 @@ export default function PartnerPricingPage() {
             </p>
             <button
               type="button"
-              disabled={checkoutBusy}
+              disabled={checkoutBusy || Boolean(checkoutClientSecret)}
               onClick={() => {
                 void (async () => {
                   if (!email.trim() || !fullName.trim()) {
                     showToast("Enter your full name and email before checkout.");
+                    return;
+                  }
+                  if (selectedTierId === "free") {
+                    showToast("Free tier has no checkout. Sign in or contact us to get started.");
+                    return;
+                  }
+                  if (
+                    code.trim().toUpperCase() === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
+                    (selectedTierId !== "pro" || billing !== "monthly")
+                  ) {
+                    showToast(
+                      `${PRO_MONTHLY_FIRST_FREE_PROMO_CODE} is only valid for Pro monthly. Switch tier or billing, or clear the code.`,
+                    );
                     return;
                   }
                   setCheckoutBusy(true);
@@ -317,20 +396,27 @@ export default function PartnerPricingPage() {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        tierId: selectedTierId,
+                        tier: selectedTierId,
                         billing,
                         email: email.trim(),
-                        fullName: fullName.trim(),
-                        phone: phone.trim(),
-                        promo: code.trim(),
+                        embedded: true,
+                        ...(code.trim() ? { promo: code.trim() } : {}),
                       }),
                     });
-                    const payload = (await res.json()) as { url?: string; error?: string };
-                    if (!res.ok || !payload.url) {
+                    const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string };
+                    if (!res.ok) {
                       showToast(payload.error ?? "Could not start checkout. Configure Stripe env vars.");
                       return;
                     }
-                    window.location.href = payload.url;
+                    if (payload.clientSecret) {
+                      setCheckoutClientSecret(payload.clientSecret);
+                      return;
+                    }
+                    if (payload.url) {
+                      window.location.href = payload.url;
+                      return;
+                    }
+                    showToast("Unexpected checkout response.");
                   } catch {
                     showToast("Network error starting checkout.");
                   } finally {
@@ -341,7 +427,7 @@ export default function PartnerPricingPage() {
               className="inline-flex shrink-0 items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all duration-150 hover:brightness-105 active:scale-[0.98] disabled:opacity-60"
               style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
             >
-              {checkoutBusy ? "Redirecting…" : `Continue with ${selected.label}`}
+              {checkoutBusy ? "Starting…" : checkoutClientSecret ? "Checkout open" : `Continue with ${selected.label}`}
             </button>
           </div>
 

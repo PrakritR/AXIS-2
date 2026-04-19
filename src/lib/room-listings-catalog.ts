@@ -47,11 +47,11 @@ function descriptionBlurb(p: MockProperty, room: ListingRoomRow): string {
   const detail = room.detail.replace(/\s+/g, " ").trim();
   const extra = detail.length > 80 ? `${detail.slice(0, 80)}…` : detail;
   if (p.tagline && extra) return `${p.tagline} ${extra}`;
-  return p.tagline || extra || "Seattle shared housing with common areas and a practical layout.";
+  return p.tagline || extra || "Seattle shared home with furnished rooms and common areas.";
 }
 
 function listingTags(p: MockProperty): readonly string[] {
-  return ["Shared Housing", p.neighborhood, "Shared Living"] as const;
+  return ["Room rental", p.neighborhood, "Shared living"] as const;
 }
 
 function priceOverlayLabelForProperty(p: MockProperty): string {

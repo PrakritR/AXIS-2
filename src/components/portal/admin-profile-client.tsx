@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 
 function ProfileField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
@@ -32,9 +33,9 @@ export function AdminProfileClient({
   const { showToast } = useAppUi();
 
   return (
-    <div className="rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-8">
+    <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Profile</h1>
+        <h1 className={PORTAL_PAGE_TITLE}>Profile</h1>
         <Button
           type="button"
           variant="outline"

@@ -42,7 +42,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
           <div className="flex flex-col gap-2">
             <Link href={listingPath} className="contents">
               <Button type="button" variant="outline" className="w-full text-[13px] sm:text-sm">
-                View all properties
+                View room
               </Button>
             </Link>
             <Link href="/rent/tours-contact" className="contents">

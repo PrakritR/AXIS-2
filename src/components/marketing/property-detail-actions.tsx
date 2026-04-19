@@ -7,7 +7,7 @@ export function PropertyDetailActions({ propertyId }: { propertyId: string }) {
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
       <Link href="/rent/listings">
         <Button type="button" variant="outline" className="w-full sm:w-auto">
-          View all properties
+          Browse all rooms
         </Button>
       </Link>
       <Link href="/rent/tours-contact">

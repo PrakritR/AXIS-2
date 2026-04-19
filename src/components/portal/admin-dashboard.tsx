@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
 import { adminOwnerCounts } from "@/lib/demo-admin-owners";
 import { pendingInquiryCount, readPlannedEvents } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
@@ -23,10 +24,10 @@ function StatCard({
   return (
     <Link
       href={href}
-      className="rounded-2xl border border-primary/15 bg-white px-4 py-4 shadow-[0_12px_40px_-28px_rgba(0,122,255,0.22)] transition hover:border-primary/35"
+      className="block min-w-[10rem] rounded-xl border border-slate-200/80 bg-white px-5 py-4 transition hover:border-primary/35 hover:shadow-sm"
     >
-      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tabular-nums text-slate-900">{value}</p>
+      <p className={PORTAL_KPI_VALUE}>{value}</p>
+      <p className={PORTAL_KPI_LABEL}>{label}</p>
     </Link>
   );
 }

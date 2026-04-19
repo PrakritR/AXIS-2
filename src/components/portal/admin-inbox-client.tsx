@@ -10,6 +10,8 @@ import {
   appendThreadReply,
   composeAdminSentMessage,
   markInboxMessageRead,
+  moveInboxMessageToTrash,
+  permanentlyDeleteInboxMessage,
   readInboxMessages,
   roleAllowsThread,
   type InboxMessage,
@@ -121,6 +123,21 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     bump();
   };
 
+  const sendToTrash = (id: string) => {
+    if (!moveInboxMessageToTrash(id)) return;
+    if (expandedId === id) setExpandedId(null);
+    showToast("Moved to Trash.");
+    bump();
+  };
+
+  const deleteForever = (id: string) => {
+    if (!window.confirm("Delete this message forever? This cannot be undone.")) return;
+    if (!permanentlyDeleteInboxMessage(id)) return;
+    if (expandedId === id) setExpandedId(null);
+    showToast("Message deleted permanently.");
+    bump();
+  };
+
   const shellActions = [
     { label: "New message", variant: "primary" as const, onClick: () => setComposeOpen(true) },
     { label: "Refresh", variant: "outline" as const, onClick: refresh },
@@ -175,16 +192,37 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                           </td>
                           <td className="px-5 py-4 align-middle text-sm text-slate-500">{formatWhen(row.createdAt)}</td>
                           <td className="px-5 py-4 text-right align-middle">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                                expandedId === row.id ? "border-primary/40 bg-primary/10 text-primary" : "border-slate-200 text-slate-800"
-                              }`}
-                              onClick={() => openDetails(row)}
-                            >
-                              {expandedId === row.id ? "Hide" : "Details"}
-                            </Button>
+                            <div className="flex flex-col items-end gap-2 sm:flex-row sm:justify-end sm:gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                                  expandedId === row.id ? "border-primary/40 bg-primary/10 text-primary" : "border-slate-200 text-slate-800"
+                                }`}
+                                onClick={() => openDetails(row)}
+                              >
+                                {expandedId === row.id ? "Hide" : "Details"}
+                              </Button>
+                              {row.folder === "trash" ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-full border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                                  onClick={() => deleteForever(row.id)}
+                                >
+                                  Delete forever
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-full border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:border-amber-200 hover:bg-amber-50/80"
+                                  onClick={() => sendToTrash(row.id)}
+                                >
+                                  Move to trash
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                         {expandedId === row.id ? (
@@ -225,7 +263,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   </ul>
                                 )}
 
-                                {roleAllowsThread(row.senderRole) ? (
+                                {roleAllowsThread(row.senderRole) && row.folder !== "trash" ? (
                                   <div className="mt-4">
                                     <label className="text-xs font-semibold uppercase text-slate-500" htmlFor={`reply-${row.id}`}>
                                       Reply as Axis Admin
@@ -246,6 +284,8 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                       Post reply
                                     </Button>
                                   </div>
+                                ) : row.folder === "trash" ? (
+                                  <p className="mt-4 text-xs text-slate-500">Replies are disabled for messages in Trash.</p>
                                 ) : (
                                   <p className="mt-4 text-xs text-slate-500">
                                     Threads are enabled for messages from partner, manager, resident, or owner.

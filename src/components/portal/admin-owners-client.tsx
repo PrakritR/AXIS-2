@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalStatRow } from "@/components/portal/portal-metrics";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { adminOwnerCounts, readAdminOwners } from "@/lib/demo-admin-owners";
 
@@ -40,24 +41,20 @@ export function AdminOwnersClient() {
   const currentRows = useMemo(() => readAdminOwners().filter((r) => r.status === "current"), [tick]);
 
   return (
-    <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
+    <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Owners</h1>
+        <h1 className={PORTAL_PAGE_TITLE}>Owners</h1>
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
           Refresh
         </Button>
       </div>
 
-      <div className="mt-5 flex flex-wrap items-end gap-6">
-        <div className="min-w-[10rem] rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]">
-          <p className="text-2xl font-bold tabular-nums text-slate-900">{current}</p>
-          <p className="mt-1 text-xs font-medium text-slate-500">Current owners</p>
-        </div>
-        <div className="min-w-[10rem] rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]">
-          <p className="text-2xl font-bold tabular-nums text-slate-900">{past}</p>
-          <p className="mt-1 text-xs font-medium text-slate-500">Past owners</p>
-        </div>
-      </div>
+      <PortalStatRow
+        items={[
+          { value: String(current), label: "Current owners" },
+          { value: String(past), label: "Past owners" },
+        ]}
+      />
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
         {currentRows.length === 0 ? (

@@ -30,6 +30,19 @@ This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription
    - Copy **Signing secret** → `STRIPE_WEBHOOK_SECRET`
 5. Use **Stripe test mode** locally; use **live keys** only in production with live price IDs.
 
+### Promo `FREEFIRST` (first month free, Pro monthly only)
+
+Checkout only shows the Stripe promotion-code field for **Pro + monthly**; the app rejects `FREEFIRST` for any other tier/billing.
+
+1. In **Product catalog**, open your **Pro monthly** recurring price and copy its **Price ID** (`price_…`).
+2. **Product catalog → Coupons → Create coupon**:
+   - **Percent off**: `100` (or use **Amount off** equal to one month if you prefer).
+   - **Duration**: **Once** (applies to the first subscription invoice = first month on monthly billing).
+   - **Applies to**: **Specific products** → choose the product that contains **only** the Pro monthly price, or use **Eligible items** so the coupon applies exclusively to that `price_…` (Stripe UI: restrict to the Pro monthly price so it cannot be used on Business or annual).
+3. **Product catalog → Coupons** → open the coupon → **Promotion codes** → **Add promotion code**:
+   - **Code**: `FREEFIRST` (must match exactly; codes are not case-sensitive in Stripe for entry, but use this spelling).
+4. Test in Checkout (Pro, Monthly): the embedded form includes “Add promotion code”; enter `FREEFIRST` and confirm the first invoice is $0.
+
 ## 3. Local environment
 
 Copy `.env.example` to `.env.local` and fill all variables. Set:

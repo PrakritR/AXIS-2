@@ -1,10 +1,41 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-session";
-import { getStripe } from "@/lib/stripe/server";
+import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
+
+function logCheckoutCompleted(session: Stripe.Checkout.Session) {
+  const customer = session.customer;
+  const subscription = session.subscription;
+
+  const customerId = typeof customer === "string" ? customer : customer?.id ?? null;
+  const subscriptionId = typeof subscription === "string" ? subscription : subscription?.id ?? null;
+
+  const tier = session.metadata?.tier ?? null;
+  const billing = session.metadata?.billing ?? null;
+  const userId = session.metadata?.userId ?? null;
+
+  // eslint-disable-next-line no-console -- intentional webhook audit log
+  console.info("[stripe webhook] checkout.session.completed", {
+    sessionId: session.id,
+    customerId,
+    subscriptionId,
+    tier,
+    billing,
+    userId,
+  });
+
+  /*
+   * TODO: Persist subscription to your database (e.g. Supabase):
+   * - Link Stripe customer id + subscription id to user (userId from metadata when present)
+   * - Store tier + billing for entitlements
+   * - Idempotent upsert on session.id or subscription.id
+   *
+   * Optional: call existing helpers such as recordPaidManagerCheckoutSession(session)
+   * if you rely on manager_purchases rows for manager signup.
+   */
+}
 
 export async function POST(req: Request) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -15,7 +46,7 @@ export async function POST(req: Request) {
   const body = await req.text();
   const signature = (await headers()).get("stripe-signature");
   if (!signature) {
-    return NextResponse.json({ error: "Missing stripe-signature" }, { status: 400 });
+    return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
   }
 
   let event: Stripe.Event;
@@ -30,12 +61,12 @@ export async function POST(req: Request) {
   try {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
-      await recordPaidManagerCheckoutSession(session);
+      logCheckoutCompleted(session);
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Webhook handler error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
-  return NextResponse.json({ received: true });
+  return NextResponse.json({ received: true }, { status: 200 });
 }

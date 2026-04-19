@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const RENT_LINKS = [
-  { href: "/rent/listings", label: "View all properties" },
+  { href: "/rent/listings", label: "View all rooms" },
   { href: "/rent/tours-contact", label: "Schedule tour" },
   { href: "/rent/apply", label: "Apply" },
 ];
@@ -50,23 +50,12 @@ export function PublicNavbar() {
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
-  const isAdminPortal = pathname.startsWith("/admin");
-  const isResidentPortal = pathname.startsWith("/resident");
-  const isManagerPortal = pathname.startsWith("/manager");
-  const isOwnerPortal = pathname.startsWith("/owner");
   const rentActive = useMemo(() => pathname === "/" || pathname.startsWith("/rent"), [pathname]);
   const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
   const activeRentHref = useMemo(() => activeHrefForPath(pathname, RENT_LINKS), [pathname]);
   const activePartnerHref = useMemo(() => activeHrefForPath(pathname, PARTNER_LINKS), [pathname]);
-  const portalHref = isAdminPortal
-    ? "/admin/dashboard"
-    : isResidentPortal
-      ? "/resident/dashboard"
-      : isManagerPortal
-        ? "/manager/dashboard"
-        : isOwnerPortal
-          ? "/owner/dashboard"
-          : "/auth/sign-in";
+  /** Portal always starts at sign-in; users choose role or land in the right app after auth. */
+  const portalHref = "/auth/sign-in";
 
   return (
     <div

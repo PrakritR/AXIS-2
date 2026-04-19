@@ -26,7 +26,7 @@ export function AdminNotificationBanners() {
   const items = useMemo(() => {
     void tick;
     const leaseAdminReview = adminLeaseKpiCounts()[1];
-    const inbox = readPartnerInboxMessages().filter((m) => !m.read).length;
+    const inbox = readPartnerInboxMessages().filter((m) => m.folder === "inbox" && !m.read).length;
     const inquiries = pendingInquiryCount();
     const out: { id: string; href: string; text: string }[] = [];
     if (leaseAdminReview > 0) {
