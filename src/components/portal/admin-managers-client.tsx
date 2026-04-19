@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalStatRow } from "@/components/portal/portal-metrics";
+import {
+  PORTAL_PAGE_TITLE,
+  PORTAL_SECTION_SURFACE,
+  PortalContentWell,
+  PortalKpiTabStrip,
+} from "@/components/portal/portal-metrics";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { adminManagerCounts, readAdminManagers, setManagerStatus, type AdminManagerRow } from "@/lib/demo-admin-managers";
 
@@ -121,6 +126,7 @@ function ManagerDetailSheet({
 export function AdminManagersClient() {
   const { showToast } = useAppUi();
   const [tick, setTick] = useState(0);
+  const [tabIndex, setTabIndex] = useState(0);
   const [detailRow, setDetailRow] = useState<AdminManagerRow | null>(null);
 
   const refresh = useCallback(() => {
@@ -139,7 +145,17 @@ export function AdminManagersClient() {
   }, []);
 
   const { current, past } = useMemo(() => adminManagerCounts(), [tick]);
-  const rows = useMemo(() => readAdminManagers(), [tick]);
+  const kpiItems = useMemo(
+    () => [
+      { value: String(current), label: "Current" },
+      { value: String(past), label: "Past" },
+    ],
+    [current, past],
+  );
+  const filteredRows = useMemo(() => {
+    const want: AdminManagerRow["status"] = tabIndex === 0 ? "active" : "disabled";
+    return readAdminManagers().filter((r) => r.status === want);
+  }, [tick, tabIndex]);
 
   return (
     <div className={PORTAL_SECTION_SURFACE}>
@@ -150,20 +166,17 @@ export function AdminManagersClient() {
         </Button>
       </div>
 
-      <PortalStatRow
-        items={[
-          { value: String(current), label: "Current subscribers" },
-          { value: String(past), label: "Past subscribers" },
-        ]}
-      />
+      <PortalKpiTabStrip items={kpiItems} activeIndex={tabIndex} onSelect={setTabIndex} textAlign="left" />
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
-        {rows.length === 0 ? (
+      <PortalContentWell>
+        {filteredRows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-400 shadow-sm">
               <GridIcon className="h-7 w-7" />
             </div>
-            <p className="mt-4 text-sm font-medium text-slate-500">No active managers</p>
+            <p className="mt-4 text-sm font-medium text-slate-500">
+              {tabIndex === 0 ? "No current managers" : "No past managers"}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -185,7 +198,7 @@ export function AdminManagersClient() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {filteredRows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-5 py-4 align-middle">
                       <p className="font-semibold text-slate-900">{row.name}</p>
@@ -214,7 +227,7 @@ export function AdminManagersClient() {
             </table>
           </div>
         )}
-      </div>
+      </PortalContentWell>
 
       <ManagerDetailSheet
         open={Boolean(detailRow)}

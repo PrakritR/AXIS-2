@@ -52,6 +52,7 @@ export function ManagerSectionShell({
   actions,
   kpis,
   activeKpiIndex: activeKpiIndexProp = 0,
+  bodyClassName = "mt-6",
   children,
 }: {
   title: string;
@@ -59,6 +60,8 @@ export function ManagerSectionShell({
   actions?: ShellAction[];
   kpis?: { value: string; label: string }[];
   activeKpiIndex?: number;
+  /** Spacing between header and main content (default mt-6). */
+  bodyClassName?: string;
   children: ReactNode;
 }) {
   const { showToast } = useAppUi();
@@ -103,7 +106,7 @@ export function ManagerSectionShell({
         />
       ) : null}
 
-      <div className="mt-6">{children}</div>
+      <div className={bodyClassName}>{children}</div>
     </div>
   );
 }

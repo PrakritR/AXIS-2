@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalStatRow } from "@/components/portal/portal-metrics";
+import {
+  PORTAL_PAGE_TITLE,
+  PORTAL_SECTION_SURFACE,
+  PortalContentWell,
+  PortalKpiTabStrip,
+} from "@/components/portal/portal-metrics";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import { adminOwnerCounts, readAdminOwners } from "@/lib/demo-admin-owners";
+import { adminOwnerCounts, readAdminOwners, type AdminOwnerRow } from "@/lib/demo-admin-owners";
 
 function GridIcon({ className }: { className?: string }) {
   return (
@@ -21,6 +26,7 @@ function GridIcon({ className }: { className?: string }) {
 export function AdminOwnersClient() {
   const { showToast } = useAppUi();
   const [tick, setTick] = useState(0);
+  const [tabIndex, setTabIndex] = useState(0);
 
   const refresh = useCallback(() => {
     setTick((t) => t + 1);
@@ -38,7 +44,17 @@ export function AdminOwnersClient() {
   }, []);
 
   const { current, past } = useMemo(() => adminOwnerCounts(), [tick]);
-  const currentRows = useMemo(() => readAdminOwners().filter((r) => r.status === "current"), [tick]);
+  const kpiItems = useMemo(
+    () => [
+      { value: String(current), label: "Current" },
+      { value: String(past), label: "Past" },
+    ],
+    [current, past],
+  );
+  const filteredRows = useMemo(() => {
+    const want: AdminOwnerRow["status"] = tabIndex === 0 ? "current" : "past";
+    return readAdminOwners().filter((r) => r.status === want);
+  }, [tick, tabIndex]);
 
   return (
     <div className={PORTAL_SECTION_SURFACE}>
@@ -49,20 +65,17 @@ export function AdminOwnersClient() {
         </Button>
       </div>
 
-      <PortalStatRow
-        items={[
-          { value: String(current), label: "Current owners" },
-          { value: String(past), label: "Past owners" },
-        ]}
-      />
+      <PortalKpiTabStrip items={kpiItems} activeIndex={tabIndex} onSelect={setTabIndex} textAlign="left" />
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
-        {currentRows.length === 0 ? (
+      <PortalContentWell>
+        {filteredRows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-400 shadow-sm">
               <GridIcon className="h-7 w-7" />
             </div>
-            <p className="mt-4 text-sm font-medium text-slate-500">No active owners</p>
+            <p className="mt-4 text-sm font-medium text-slate-500">
+              {tabIndex === 0 ? "No current owners" : "No past owners"}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -75,7 +88,7 @@ export function AdminOwnersClient() {
                 </tr>
               </thead>
               <tbody>
-                {currentRows.map((row) => (
+                {filteredRows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-100 last:border-0">
                     <td className="px-5 py-4 align-middle">
                       <p className="font-semibold text-slate-900">{row.name}</p>
@@ -84,10 +97,17 @@ export function AdminOwnersClient() {
                       <p className="text-sm text-slate-600">{row.email}</p>
                     </td>
                     <td className="px-5 py-4 align-middle">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
-                        Active
-                      </span>
+                      {row.status === "current" ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />
+                          Past
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -95,7 +115,7 @@ export function AdminOwnersClient() {
             </table>
           </div>
         )}
-      </div>
+      </PortalContentWell>
     </div>
   );
 }

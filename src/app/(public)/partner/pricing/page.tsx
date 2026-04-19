@@ -2,9 +2,10 @@
 
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
+import { normalizeProMonthlyPromoInput, PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type TierId = "free" | "pro" | "business";
@@ -97,6 +98,7 @@ function tierById(id: TierId) {
 }
 
 export default function PartnerPricingPage() {
+  const router = useRouter();
   const { showToast } = useAppUi();
   const [billing, setBilling] = useState<"monthly" | "annual">("annual");
   const [selectedTierId, setSelectedTierId] = useState<TierId>("pro");
@@ -106,7 +108,6 @@ export default function PartnerPricingPage() {
   const [code, setCode] = useState("");
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
-  const [returnedSessionId, setReturnedSessionId] = useState<string | null>(null);
 
   const selected = useMemo(() => tierById(selectedTierId), [selectedTierId]);
   const price = billing === "monthly" ? selected.monthly : selected.annual;
@@ -125,10 +126,10 @@ export default function PartnerPricingPage() {
     const params = new URLSearchParams(window.location.search);
     const sid = params.get("session_id");
     if (sid) {
-      setReturnedSessionId(sid);
       window.history.replaceState({}, "", "/partner/pricing");
+      router.replace(`/auth/create-manager?session_id=${encodeURIComponent(sid)}`);
     }
-  }, []);
+  }, [router]);
 
   return (
     <div className="min-h-screen px-4 py-16 sm:py-20">
@@ -221,21 +222,7 @@ export default function PartnerPricingPage() {
 
       <div className="mx-auto mt-10 max-w-5xl rounded-3xl border border-slate-200/80 bg-[#f8fafc] p-1 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.1)] sm:p-2">
         <div className="rounded-[1.35rem] border border-slate-200/80 bg-white p-6 sm:p-8">
-          {returnedSessionId ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-4 text-left sm:px-5">
-              <p className="text-sm font-semibold text-emerald-900">Payment successful</p>
-              <p className="mt-1 text-sm text-emerald-800/90">Continue to create your manager portal password.</p>
-              <Link
-                href={`/auth/create-manager?session_id=${encodeURIComponent(returnedSessionId)}`}
-                className="mt-4 inline-flex rounded-full px-5 py-2.5 text-sm font-semibold text-white"
-                style={{ background: "linear-gradient(135deg, #007aff, #339cff)" }}
-              >
-                Continue to create account
-              </Link>
-            </div>
-          ) : null}
-
-          <div className={`flex flex-wrap gap-2 border-b border-slate-100 pb-5 ${returnedSessionId ? "mt-6" : ""}`}>
+          <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-5">
             {TIERS.map((t) => {
               const active = selectedTierId === t.id;
               return (
@@ -324,10 +311,12 @@ export default function PartnerPricingPage() {
               {selectedTierId === "pro" && billing === "monthly" ? (
                 <p className="mt-1.5 text-xs text-slate-500">
                   Use code{" "}
-                  <span className="font-mono font-semibold text-slate-700">{PRO_MONTHLY_FIRST_FREE_PROMO_CODE}</span> in
-                  the payment step for first month free.
+                  <span className="font-mono font-semibold text-slate-700">{PRO_MONTHLY_FIRST_FREE_PROMO_CODE}</span>{" "}
+                  (or <span className="font-mono font-semibold text-slate-700">FIRSTFREE</span>) in the payment step for
+                  first month free. A Manager ID is created at checkout for your account setup.
                 </p>
-              ) : code.trim().toUpperCase() === PRO_MONTHLY_FIRST_FREE_PROMO_CODE ? (
+              ) : normalizeProMonthlyPromoInput(code) === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
+                (selectedTierId !== "pro" || billing !== "monthly") ? (
                 <p className="mt-1.5 text-xs text-amber-800">
                   {PRO_MONTHLY_FIRST_FREE_PROMO_CODE} only applies to <span className="font-semibold">Pro</span> with{" "}
                   <span className="font-semibold">monthly</span> billing.
@@ -382,7 +371,7 @@ export default function PartnerPricingPage() {
                     return;
                   }
                   if (
-                    code.trim().toUpperCase() === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
+                    normalizeProMonthlyPromoInput(code) === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
                     (selectedTierId !== "pro" || billing !== "monthly")
                   ) {
                     showToast(
@@ -399,8 +388,10 @@ export default function PartnerPricingPage() {
                         tier: selectedTierId,
                         billing,
                         email: email.trim(),
+                        fullName: fullName.trim(),
+                        phone: phone.trim(),
                         embedded: true,
-                        ...(code.trim() ? { promo: code.trim() } : {}),
+                        ...(code.trim() ? { promo: normalizeProMonthlyPromoInput(code) } : {}),
                       }),
                     });
                     const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string };

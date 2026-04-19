@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
+import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-session";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,12 @@ export async function POST(req: Request) {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
       logCheckoutCompleted(session);
+      try {
+        await recordPaidManagerCheckoutSession(session);
+      } catch (e) {
+        // eslint-disable-next-line no-console -- webhook persistence
+        console.error("[stripe webhook] recordPaidManagerCheckoutSession", e);
+      }
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Webhook handler error";

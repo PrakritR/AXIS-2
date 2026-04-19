@@ -9,8 +9,6 @@ import {
   PORTAL_KPI_CHIP_ACTIVE,
   PORTAL_KPI_CHIP_INACTIVE,
   PORTAL_KPI_CHIP_STATIC,
-  PORTAL_KPI_LABEL,
-  PORTAL_KPI_VALUE,
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -204,18 +202,15 @@ const MonthGrid = memo(function MonthGrid({
   while (cells.length < 42) cells.push(null);
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-slate-50/40 p-3">
-      <p className="mb-2 text-center text-sm font-semibold text-slate-800">
-        {anchor.toLocaleString(undefined, { month: "long", year: "numeric" })}
-      </p>
-      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
+    <div className="rounded-xl border border-slate-200/90 bg-slate-50/40 p-2 sm:p-2.5">
+      <div className="grid grid-cols-7 gap-px text-center text-[9px] font-bold uppercase tracking-wide text-slate-400 sm:text-[10px]">
         {WEEKDAY_LABELS.map((d) => (
-          <div key={d} className="py-1">
+          <div key={d} className="py-0.5">
             {d}
           </div>
         ))}
       </div>
-      <div className="mt-1 grid grid-cols-7 gap-1">
+      <div className="mt-0.5 grid grid-cols-7 gap-px sm:gap-0.5">
         {cells.map((d, i) =>
           d ? (
             <button
@@ -223,16 +218,16 @@ const MonthGrid = memo(function MonthGrid({
               type="button"
               title="Double-click for events"
               onDoubleClick={() => onDayDoubleClick?.(d)}
-              className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-sm font-semibold text-slate-800 transition-colors duration-150 hover:border-primary/30 ${dayCellTone(d, availability, events)}`}
+              className={`flex min-h-[1.75rem] w-full flex-col items-center justify-center rounded-md border py-0.5 text-[11px] font-semibold text-slate-800 transition-colors duration-150 hover:border-primary/30 sm:min-h-[2rem] sm:text-xs ${dayCellTone(d, availability, events)}`}
             >
               {d.getDate()}
             </button>
           ) : (
-            <div key={i} className="aspect-square" />
+            <div key={i} className="min-h-[1.75rem] sm:min-h-[2rem]" />
           ),
         )}
       </div>
-      <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500 sm:text-xs">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm bg-emerald-200/90" /> Availability
         </span>
@@ -257,16 +252,16 @@ const EventsWeekGrid = memo(function EventsWeekGrid({
 }) {
   const days = weekDatesFromMonday(weekMonday);
   return (
-    <div className="w-full max-w-full rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-3">
-      <div className="grid w-full grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-slate-400 sm:gap-1.5 sm:text-[11px]">
+    <div className="w-full max-w-full rounded-xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-2.5">
+      <div className="grid w-full grid-cols-7 gap-0.5 text-center text-[9px] font-bold uppercase text-slate-400 sm:gap-1 sm:text-[10px]">
         {days.map((d) => (
-          <div key={toLocalDateStr(d)} className="min-w-0 truncate px-0.5 py-1.5 sm:py-2">
+          <div key={toLocalDateStr(d)} className="min-w-0 truncate px-0.5 py-1">
             {WEEKDAY_LABELS[mondayBasedDayIndex(d)]}{" "}
             <span className="font-semibold text-slate-600">{d.getDate()}</span>
           </div>
         ))}
       </div>
-      <div className="mt-1 grid min-h-[min(12rem,28vh)] w-full grid-cols-7 gap-1 sm:min-h-[14rem] sm:gap-1.5">
+      <div className="mt-0.5 grid min-h-[min(8rem,22vh)] w-full grid-cols-7 gap-0.5 sm:min-h-[min(10rem,26vh)] sm:gap-1">
         {days.map((d) => (
           <button
             key={toLocalDateStr(d)}
@@ -274,7 +269,7 @@ const EventsWeekGrid = memo(function EventsWeekGrid({
             onDoubleClick={() => onDayDoubleClick?.(d)}
             title="Double-click for events"
             aria-label={`${d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })} — double-click for events`}
-            className={`relative min-h-[10rem] rounded-xl border p-2 text-left text-[11px] leading-snug text-slate-600 transition-colors duration-150 hover:border-primary/25 sm:min-h-[11rem] sm:p-2.5 ${dayCellTone(d, availability, planned)}`}
+            className={`relative min-h-[7rem] rounded-lg border p-1.5 text-left text-[10px] leading-snug text-slate-600 transition-colors duration-150 hover:border-primary/25 sm:min-h-[8.5rem] sm:p-2 ${dayCellTone(d, availability, planned)}`}
           >
             <span className="pointer-events-none absolute bottom-2 left-2 text-[10px] font-semibold text-slate-400">{d.getDate()}</span>
           </button>
@@ -297,20 +292,20 @@ const DayAgendaView = memo(function DayAgendaView({
 
   return (
     <div
-      className="rounded-2xl border border-slate-200/90 bg-white p-4"
+      className="rounded-xl border border-slate-200/90 bg-white p-3"
       onDoubleClick={() => onDayDoubleClick?.(day)}
     >
-      <p className="text-sm font-semibold text-slate-900">
+      <p className="text-sm font-semibold leading-tight text-slate-900">
         {day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
       </p>
-      <p className="mt-1 text-xs text-slate-400">Double-click to view events and meeting requests for this day.</p>
-      <div className="mt-4 max-h-[min(28rem,55vh)] space-y-1 overflow-y-auto">
+      <p className="mt-1 text-xs text-slate-400">Double-click to open day details.</p>
+      <div className="mt-3 max-h-[min(22rem,42vh)] space-y-0.5 overflow-y-auto">
         {Array.from({ length: SLOTS_PER_DAY }).map((_, slotIndex) => {
           const open = availability.has(dateSlotKey(ds, slotIndex));
           return (
             <div
               key={slotIndex}
-              className={`flex items-start gap-3 rounded-xl border px-3 py-2 text-sm ${
+              className={`flex items-start gap-2 rounded-lg border px-2 py-1.5 text-xs ${
                 open ? "border-emerald-200/80 bg-emerald-50/50" : "border-slate-100 bg-slate-50/40"
               }`}
             >
@@ -483,11 +478,14 @@ function AvailabilityEditor() {
         </div>
       </div>
       <div
-        className="flex h-[min(72vh,820px)] min-h-[26rem] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-3"
+        className="flex h-[min(78vh,960px)] min-h-[28rem] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-3"
         onMouseLeave={() => setDragMode(null)}
         onMouseUp={() => setDragMode(null)}
       >
-        <div className="grid min-h-0 w-full flex-1 grid-cols-[minmax(3.25rem,4.75rem)_repeat(7,minmax(0,1fr))] grid-rows-[auto_repeat(20,minmax(0,1fr))] gap-x-0.5 gap-y-px sm:gap-x-1 sm:gap-y-0.5">
+        <div
+          className="grid min-h-0 w-full flex-1 grid-cols-[minmax(3.25rem,4.75rem)_repeat(7,minmax(0,1fr))] gap-x-0.5 gap-y-px sm:gap-x-1 sm:gap-y-0.5"
+          style={{ gridTemplateRows: `auto repeat(${SLOTS_PER_DAY}, minmax(0, 1fr))` }}
+        >
           <div className="min-w-0" />
           {weekDays.map((d) => (
             <div
@@ -665,52 +663,44 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
     setCalMode("month");
   }, []);
 
+  const kpiCompactValue = "text-lg font-bold tabular-nums leading-tight tracking-tight text-[#0d1f4e] sm:text-xl";
+  const kpiCompactLabel = "mt-0.5 text-[11px] font-medium leading-snug text-slate-500";
+  const kpiChipBtn = (active: boolean) =>
+    `${active ? PORTAL_KPI_CHIP_ACTIVE : PORTAL_KPI_CHIP_INACTIVE} !px-3 !py-2`;
+
   return (
-    <ManagerSectionShell title="Events" actions={shellActions}>
-      <div className="space-y-5">
+    <ManagerSectionShell title="Events" actions={shellActions} bodyClassName="mt-4">
+      <div className="space-y-3">
         <TabNav items={tabs} activeId={tabId} />
 
         {tabId === "availability" ? (
           <AvailabilityEditor />
         ) : (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <button
-                type="button"
-                onClick={goTodayCalendar}
-                className={calMode === "day" ? PORTAL_KPI_CHIP_ACTIVE : PORTAL_KPI_CHIP_INACTIVE}
-              >
-                <p className={PORTAL_KPI_VALUE}>{kpis.today}</p>
-                <p className={PORTAL_KPI_LABEL}>Today · day view</p>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+              <button type="button" onClick={goTodayCalendar} className={kpiChipBtn(calMode === "day")}>
+                <p className={kpiCompactValue}>{kpis.today}</p>
+                <p className={kpiCompactLabel}>Today · day</p>
               </button>
-              <button
-                type="button"
-                onClick={goThisWeekCalendar}
-                className={calMode === "week" ? PORTAL_KPI_CHIP_ACTIVE : PORTAL_KPI_CHIP_INACTIVE}
-              >
-                <p className={PORTAL_KPI_VALUE}>{kpis.week}</p>
-                <p className={PORTAL_KPI_LABEL}>This week · week view</p>
+              <button type="button" onClick={goThisWeekCalendar} className={kpiChipBtn(calMode === "week")}>
+                <p className={kpiCompactValue}>{kpis.week}</p>
+                <p className={kpiCompactLabel}>This week · week</p>
               </button>
-              <button
-                type="button"
-                onClick={goThisMonthCalendar}
-                className={calMode === "month" ? PORTAL_KPI_CHIP_ACTIVE : PORTAL_KPI_CHIP_INACTIVE}
-              >
-                <p className={PORTAL_KPI_VALUE}>{kpis.month}</p>
-                <p className={PORTAL_KPI_LABEL}>This month · month view</p>
+              <button type="button" onClick={goThisMonthCalendar} className={kpiChipBtn(calMode === "month")}>
+                <p className={kpiCompactValue}>{kpis.month}</p>
+                <p className={kpiCompactLabel}>This month · month</p>
               </button>
-              <div className={PORTAL_KPI_CHIP_STATIC}>
-                <p className={PORTAL_KPI_VALUE}>{kpis.total}</p>
-                <p className={PORTAL_KPI_LABEL}>Total booked</p>
+              <div className={`${PORTAL_KPI_CHIP_STATIC} !px-3 !py-2`}>
+                <p className={kpiCompactValue}>{kpis.total}</p>
+                <p className={kpiCompactLabel}>Total booked</p>
               </div>
             </div>
 
-            <section id="events-calendar" className="scroll-mt-28 space-y-4 pt-2">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Calendar</p>
-                  <h2 className="mt-1 text-lg font-semibold text-slate-900">Availability</h2>
-                  <p className="mt-1 text-sm text-slate-600">Double-click a day to see events and meeting requests.</p>
+            <section id="events-calendar" className="scroll-mt-24 space-y-2 pt-0">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Calendar · Availability</p>
+                  <p className="mt-0.5 text-xs text-slate-600">Double-click a day for events and meeting requests.</p>
                 </div>
                 <SegmentedThree
                   value={calMode}
@@ -721,16 +711,16 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
                 />
               </div>
 
-              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-slate-50/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-semibold text-slate-900">{calendarNavLabel(calAnchor, calMode)}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" className="rounded-full" onClick={calPrev}>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button type="button" variant="outline" className="h-8 rounded-full px-3 py-0 text-xs" onClick={calPrev}>
                     Back
                   </Button>
-                  <Button type="button" variant="outline" className="rounded-full" onClick={calToday}>
+                  <Button type="button" variant="outline" className="h-8 rounded-full px-3 py-0 text-xs" onClick={calToday}>
                     Today
                   </Button>
-                  <Button type="button" variant="outline" className="rounded-full" onClick={calNext}>
+                  <Button type="button" variant="outline" className="h-8 rounded-full px-3 py-0 text-xs" onClick={calNext}>
                     Forward
                   </Button>
                 </div>

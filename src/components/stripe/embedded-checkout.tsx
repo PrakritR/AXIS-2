@@ -36,11 +36,19 @@ export function EmbeddedCheckoutMount({ clientSecret, onError }: Props) {
         const stripe = await loadStripe(pk);
         if (!stripe || cancelled) return;
 
-        const checkout = (await (
-          stripe as unknown as {
-            initEmbeddedCheckout: (opts: { clientSecret: string }) => Promise<EmbeddedApi>;
-          }
-        ).initEmbeddedCheckout({ clientSecret })) as EmbeddedApi;
+        const s = stripe as unknown as {
+          createEmbeddedCheckoutPage?: (opts: { fetchClientSecret: () => Promise<string> }) => Promise<EmbeddedApi>;
+          initEmbeddedCheckout?: (opts: { clientSecret: string }) => Promise<EmbeddedApi>;
+        };
+
+        const checkout = (await (s.createEmbeddedCheckoutPage
+          ? s.createEmbeddedCheckoutPage({
+              fetchClientSecret: async () => clientSecret,
+            })
+          : s.initEmbeddedCheckout?.({ clientSecret }))) as EmbeddedApi | undefined;
+        if (!checkout) {
+          throw new Error("Stripe.js missing embedded checkout (createEmbeddedCheckoutPage). Update @stripe/stripe-js.");
+        }
         if (cancelled) {
           checkout.destroy();
           return;

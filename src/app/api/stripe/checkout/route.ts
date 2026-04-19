@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateManagerId } from "@/lib/manager-id";
-import { PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
+import { normalizeProMonthlyPromoInput, PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
 import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -12,8 +12,11 @@ type Body = {
   tier?: string;
   billing?: string;
   email?: string;
+  /** Passed into session metadata for manager signup / profiles. */
+  fullName?: string;
+  phone?: string;
   userId?: string;
-  /** Optional; if set to FREEFIRST, checkout must be Pro monthly. */
+  /** Optional; if set to FREEFIRST (or alias), checkout must be Pro monthly. */
   promo?: string;
   /**
    * When true (default), returns `clientSecret` for Embedded Checkout on the same page.
@@ -76,8 +79,10 @@ export async function POST(req: Request) {
     }
 
     const email = typeof body.email === "string" ? body.email.trim() : "";
+    const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+    const phone = typeof body.phone === "string" ? body.phone.trim() : "";
     const userId = typeof body.userId === "string" ? body.userId.trim() : "";
-    const promoRaw = typeof body.promo === "string" ? body.promo.trim() : "";
+    const promoRaw = typeof body.promo === "string" ? normalizeProMonthlyPromoInput(body.promo) : "";
     const promoUpper = promoRaw.toUpperCase();
 
     const isProMonthly = tier === "pro" && billing === "monthly";
@@ -95,6 +100,9 @@ export async function POST(req: Request) {
       billing,
       manager_id: generateManagerId(),
     };
+    if (email) metadata.email = email;
+    if (fullName) metadata.full_name = fullName;
+    if (phone) metadata.phone = phone;
     if (userId) metadata.userId = userId;
     if (promoRaw) metadata.promo = promoRaw;
 
@@ -102,16 +110,16 @@ export async function POST(req: Request) {
     const allowPromotionCodes = isProMonthly;
 
     if (useEmbedded) {
-      /** `ui_mode: embedded` is valid in Stripe API; SDK types may lag. */
+      /** Dahlia API: `embedded` → `embedded_page` (same-tab embedded checkout). */
       const session = await stripe.checkout.sessions.create({
-        ui_mode: "embedded",
+        ui_mode: "embedded_page",
         mode: "subscription",
         line_items: [{ price, quantity: 1 }],
         return_url: `${appUrl}/partner/pricing?session_id={CHECKOUT_SESSION_ID}`,
         ...(email ? { customer_email: email } : {}),
         ...(allowPromotionCodes ? { allow_promotion_codes: true } : {}),
         metadata,
-      } as unknown as Parameters<typeof stripe.checkout.sessions.create>[0]);
+      } as Parameters<typeof stripe.checkout.sessions.create>[0]);
 
       const clientSecret = session.client_secret;
       if (!clientSecret) {
@@ -125,6 +133,7 @@ export async function POST(req: Request) {
     }
 
     const session = await stripe.checkout.sessions.create({
+      ui_mode: "hosted_page",
       mode: "subscription",
       line_items: [{ price, quantity: 1 }],
       ...(email ? { customer_email: email } : {}),
@@ -132,7 +141,7 @@ export async function POST(req: Request) {
       success_url: `${appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/pricing`,
       metadata,
-    });
+    } as Parameters<typeof stripe.checkout.sessions.create>[0]);
 
     if (!session.url) {
       return NextResponse.json({ error: "Stripe did not return a checkout URL." }, { status: 500 });
