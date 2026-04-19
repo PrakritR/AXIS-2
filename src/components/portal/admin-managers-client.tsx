@@ -70,6 +70,7 @@ function DetailSheet({
   showToast: (m: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const toggle = async () => {
     setBusy(true);
@@ -85,6 +86,28 @@ function DetailSheet({
       onClose();
     } finally {
       setBusy(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/managers", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: row.id }),
+      });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: "Could not delete account." }));
+        showToast(error || "Could not delete account.");
+        return;
+      }
+      showToast("Manager account deleted.");
+      onToggle();
+      onClose();
+    } finally {
+      setBusy(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -122,6 +145,44 @@ function DetailSheet({
           >
             {busy ? "Updating…" : row.active ? "Disable account" : "Enable account"}
           </Button>
+
+          <div className="border-t border-slate-100 pt-4">
+            {confirmDelete ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                <p className="text-sm font-semibold text-rose-900">Delete this manager account?</p>
+                <p className="mt-1 text-xs text-rose-700">This permanently removes the account and cannot be undone.</p>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    type="button"
+                    className="rounded-full bg-rose-600 text-white hover:bg-rose-700"
+                    onClick={() => void deleteAccount()}
+                    disabled={busy}
+                  >
+                    {busy ? "Deleting…" : "Yes, delete"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => setConfirmDelete(false)}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-full border-rose-200 text-rose-700 hover:bg-rose-50"
+                onClick={() => setConfirmDelete(true)}
+                disabled={busy}
+              >
+                Delete account
+              </Button>
+            )}
+          </div>
         </div>
       </aside>
     </>

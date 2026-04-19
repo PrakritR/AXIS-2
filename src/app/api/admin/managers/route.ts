@@ -80,3 +80,24 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    if (!(await requireAdmin())) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+    const { id } = (await req.json()) as { id?: string };
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    const supabase = createSupabaseServiceRoleClient();
+
+    // Delete auth user — cascades to profiles via FK on delete cascade
+    const { error } = await supabase.auth.admin.deleteUser(id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
