@@ -17,10 +17,13 @@ create index if not exists profiles_role_idx on public.profiles (role);
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "profiles_select_self" on public.profiles;
 create policy "profiles_select_self" on public.profiles for select using (auth.uid() = id);
 
+drop policy if exists "profiles_insert_self" on public.profiles;
 create policy "profiles_insert_self" on public.profiles for insert with check (auth.uid() = id);
 
+drop policy if exists "profiles_update_self" on public.profiles;
 create policy "profiles_update_self" on public.profiles for update using (auth.uid() = id);
 
 -- Paid manager checkout (written by service role + read for signup completion)

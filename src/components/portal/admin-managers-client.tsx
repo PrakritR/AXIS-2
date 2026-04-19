@@ -1,11 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import { adminManagerCounts, readAdminManagers, setManagerStatus, type AdminManagerRow } from "@/lib/demo-admin-managers";
+
+type AdminManagerRow = {
+  id: string;
+  name: string;
+  email: string;
+  accountType: string;
+  joinedLabel: string;
+  propertyGroup: string;
+  status: "active" | "disabled";
+};
 
 function ManagersEmptyIcon({ className }: { className?: string }) {
   return (
@@ -59,6 +67,22 @@ function ManagerDetailSheet({
 }) {
   if (!open || !row) return null;
 
+  async function updateStatus(status: "active" | "disabled") {
+    const res = await fetch("/api/admin/managers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: row!.id, status }),
+    });
+    if (res.ok) {
+      showToast(status === "active" ? "Manager account enabled." : "Manager account disabled.");
+      onUpdated();
+      onClose();
+    } else {
+      const { error } = await res.json().catch(() => ({ error: "Could not update account." }));
+      showToast(error || "Could not update account.");
+    }
+  }
+
   return (
     <>
       <button
@@ -91,17 +115,7 @@ function ManagerDetailSheet({
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Account</p>
           <div className="flex flex-col gap-2">
             {row.status === "disabled" ? (
-              <Button
-                type="button"
-                className="rounded-full"
-                onClick={() => {
-                  if (setManagerStatus(row.id, "active")) {
-                    showToast("Manager account enabled.");
-                    onUpdated();
-                    onClose();
-                  } else showToast("Could not update account.");
-                }}
-              >
+              <Button type="button" className="rounded-full" onClick={() => updateStatus("active")}>
                 Enable account
               </Button>
             ) : (
@@ -109,13 +123,7 @@ function ManagerDetailSheet({
                 type="button"
                 variant="outline"
                 className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
-                onClick={() => {
-                  if (setManagerStatus(row.id, "disabled")) {
-                    showToast("Manager account disabled.");
-                    onUpdated();
-                    onClose();
-                  } else showToast("Could not update account.");
-                }}
+                onClick={() => updateStatus("disabled")}
               >
                 Disable account
               </Button>
@@ -129,26 +137,38 @@ function ManagerDetailSheet({
 
 export function AdminManagersClient() {
   const { showToast } = useAppUi();
-  const [tick, setTick] = useState(0);
+  const [rows, setRows] = useState<AdminManagerRow[]>([]);
+  const [counts, setCounts] = useState({ current: 0, past: 0 });
+  const [loading, setLoading] = useState(true);
   const [detailRow, setDetailRow] = useState<AdminManagerRow | null>(null);
 
-  const refresh = useCallback(() => {
-    setTick((t) => t + 1);
-    showToast("Refreshed managers.");
+  const fetchManagers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/managers");
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: "Failed to load." }));
+        showToast(error || "Failed to load managers.");
+        return;
+      }
+      const data = await res.json();
+      setRows(data.managers ?? []);
+      setCounts(data.counts ?? { current: 0, past: 0 });
+    } catch {
+      showToast("Failed to load managers.");
+    } finally {
+      setLoading(false);
+    }
   }, [showToast]);
 
   useEffect(() => {
-    const on = () => setTick((t) => t + 1);
-    window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
-    window.addEventListener("storage", on);
-    return () => {
-      window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
-      window.removeEventListener("storage", on);
-    };
-  }, []);
+    fetchManagers();
+  }, [fetchManagers]);
 
-  const { current, past } = useMemo(() => adminManagerCounts(), [tick]);
-  const rows = useMemo(() => readAdminManagers(), [tick]);
+  const refresh = useCallback(async () => {
+    await fetchManagers();
+    showToast("Refreshed managers.");
+  }, [fetchManagers, showToast]);
 
   return (
     <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
@@ -161,17 +181,21 @@ export function AdminManagersClient() {
 
       <div className="mt-5 flex flex-wrap items-end gap-6">
         <div className="min-w-[10rem] rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]">
-          <p className="text-2xl font-bold tabular-nums text-slate-900">{current}</p>
+          <p className="text-2xl font-bold tabular-nums text-slate-900">{counts.current}</p>
           <p className="mt-1 text-xs font-medium text-slate-500">Current subscribers</p>
         </div>
         <div className="min-w-[10rem] rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]">
-          <p className="text-2xl font-bold tabular-nums text-slate-900">{past}</p>
+          <p className="text-2xl font-bold tabular-nums text-slate-900">{counts.past}</p>
           <p className="mt-1 text-xs font-medium text-slate-500">Past subscribers</p>
         </div>
       </div>
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
-        {rows.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center bg-slate-50/30 px-4 py-16 text-sm text-slate-400">
+            Loading managers…
+          </div>
+        ) : rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
             <AxisHeaderMarkTile>
               <ManagersEmptyIcon className="h-[26px] w-[26px]" />
@@ -233,7 +257,7 @@ export function AdminManagersClient() {
         open={Boolean(detailRow)}
         onClose={() => setDetailRow(null)}
         row={detailRow}
-        onUpdated={() => setTick((t) => t + 1)}
+        onUpdated={fetchManagers}
         showToast={showToast}
       />
     </div>
