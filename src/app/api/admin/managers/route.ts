@@ -5,43 +5,11 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-type ProfileRow = {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  application_approved: boolean;
-  created_at: string;
-};
-
-type PurchaseRow = {
-  email: string;
-  tier: string | null;
-  billing: string | null;
-};
-
-function formatAccountType(tier: string | null, billing: string | null): string {
-  if (!tier) return "—";
-  const t = tier.charAt(0).toUpperCase() + tier.slice(1);
-  const b = billing ? " " + billing.charAt(0).toUpperCase() + billing.slice(1) : "";
-  return t + b;
-}
-
-function formatJoined(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-  } catch {
-    return iso;
-  }
-}
-
 async function requireAdmin() {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  if (!(await isAdminUser(user.id))) return null;
-  return user;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  return isAdminUser(user.id);
 }
 
 export async function GET() {
@@ -49,53 +17,43 @@ export async function GET() {
     if (!(await requireAdmin())) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
-
-    const db = createSupabaseServiceRoleClient();
-
-    const { data: profiles, error: profilesError } = await db
+    const supabase = createSupabaseServiceRoleClient();
+    const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, full_name, application_approved, created_at")
+      .select("id, email, full_name, manager_id, application_approved, created_at")
       .eq("role", "manager")
       .order("created_at", { ascending: false });
 
-    if (profilesError) {
-      return NextResponse.json({ error: profilesError.message }, { status: 500 });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const rows = (profiles ?? []) as ProfileRow[];
-    const emails = rows.map((r) => r.email).filter(Boolean) as string[];
+    // Also get tier info from manager_purchases
+    const emails = (data ?? []).map((p) => p.email).filter(Boolean);
+    const { data: purchases } = await supabase
+      .from("manager_purchases")
+      .select("email, tier, billing, paid_at")
+      .in("email", emails);
 
-    let purchaseMap: Record<string, PurchaseRow> = {};
-    if (emails.length > 0) {
-      const { data: purchases } = await db
-        .from("manager_purchases")
-        .select("email, tier, billing")
-        .in("email", emails);
+    const purchaseByEmail = new Map(purchases?.map((p) => [p.email, p]) ?? []);
 
-      for (const p of (purchases ?? []) as PurchaseRow[]) {
-        if (p.email) purchaseMap[p.email.toLowerCase()] = p;
-      }
-    }
-
-    const managers = rows.map((r) => {
-      const purchase = r.email ? purchaseMap[r.email.toLowerCase()] : null;
+    const managers = (data ?? []).map((profile) => {
+      const purchase = purchaseByEmail.get(profile.email);
       return {
-        id: r.id,
-        name: r.full_name || r.email?.split("@")[0] || r.id.slice(0, 8),
-        email: r.email || "",
-        accountType: formatAccountType(purchase?.tier ?? null, purchase?.billing ?? null),
-        joinedLabel: formatJoined(r.created_at),
-        propertyGroup: "",
-        status: (r.application_approved ? "active" : "disabled") as "active" | "disabled",
+        id: profile.id,
+        email: profile.email ?? "",
+        fullName: profile.full_name ?? "",
+        managerId: profile.manager_id ?? "",
+        tier: purchase?.tier ?? "free",
+        billing: purchase?.billing ?? "free",
+        active: profile.application_approved !== false,
+        joinedAt: profile.created_at ?? purchase?.paid_at ?? null,
       };
     });
 
-    const current = managers.filter((m) => m.status === "active").length;
-    const past = managers.filter((m) => m.status === "disabled").length;
-
-    return NextResponse.json({ managers, counts: { current, past } });
+    return NextResponse.json({ managers });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to load managers.";
+    const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -105,26 +63,20 @@ export async function PATCH(req: Request) {
     if (!(await requireAdmin())) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
+    const { id, active } = (await req.json()) as { id: string; active: boolean };
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-    const { id, status } = (await req.json()) as { id?: string; status?: string };
-    if (!id || (status !== "active" && status !== "disabled")) {
-      return NextResponse.json({ error: "id and status (active|disabled) are required." }, { status: 400 });
-    }
-
-    const db = createSupabaseServiceRoleClient();
-    const { error } = await db
+    const supabase = createSupabaseServiceRoleClient();
+    const { error } = await supabase
       .from("profiles")
-      .update({ application_approved: status === "active", updated_at: new Date().toISOString() })
+      .update({ application_approved: active })
       .eq("id", id)
       .eq("role", "manager");
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to update manager.";
+    const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
