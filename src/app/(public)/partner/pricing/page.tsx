@@ -100,7 +100,8 @@ function tierById(id: TierId) {
 export default function PartnerPricingPage() {
   const router = useRouter();
   const { showToast } = useAppUi();
-  const [billing, setBilling] = useState<"monthly" | "annual">("annual");
+  /** Default monthly so Pro shows $20/mo and FREEFIRST skip-Stripe path matches user expectations. */
+  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [selectedTierId, setSelectedTierId] = useState<TierId>("pro");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -137,9 +138,15 @@ export default function PartnerPricingPage() {
             ...(opts.promo ? { promo: opts.promo } : {}),
           }),
         });
-        const payload = (await res.json()) as { sessionId?: string; error?: string };
+        let payload: { sessionId?: string; error?: string };
+        try {
+          payload = (await res.json()) as { sessionId?: string; error?: string };
+        } catch {
+          showToast("Invalid response from server. Try again.");
+          return;
+        }
         if (!res.ok) {
-          showToast(payload.error ?? "Could not start signup.");
+          showToast(typeof payload.error === "string" ? payload.error : "Could not start signup.");
           return;
         }
         if (payload.sessionId) {
@@ -352,7 +359,7 @@ export default function PartnerPricingPage() {
                   <span className="font-semibold text-slate-700">skip Stripe</span> and go straight to Manager ID +
                   password setup. Otherwise you will pay at checkout and get a Manager ID after payment.
                 </p>
-              ) : normalizeProMonthlyPromoInput(code) === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
+              ) : normalizeProMonthlyPromoInput(typeof code === "string" ? code : "") === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
                 selectedTierId !== "free" &&
                 (selectedTierId !== "pro" || billing !== "monthly") ? (
                 <p className="mt-1.5 text-xs text-amber-800">
@@ -400,68 +407,76 @@ export default function PartnerPricingPage() {
               disabled={checkoutBusy || Boolean(checkoutClientSecret)}
               onClick={() => {
                 void (async () => {
-                  if (!email.trim() || !fullName.trim()) {
-                    showToast("Enter your full name and email before checkout.");
-                    return;
-                  }
-                  const normalizedPromo = normalizeProMonthlyPromoInput(code);
-                  const isProMonthly = selectedTierId === "pro" && billing === "monthly";
-                  const promoSkipsStripe = isProMonthly && normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE;
-
-                  if (
-                    normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
-                    selectedTierId !== "free" &&
-                    !isProMonthly
-                  ) {
-                    showToast(
-                      `${PRO_MONTHLY_FIRST_FREE_PROMO_CODE} is only valid for Pro monthly. Switch tier or billing, or clear the code.`,
-                    );
-                    return;
-                  }
-
-                  if (selectedTierId === "free") {
-                    await startManagerSignupIntent({ tier: "free", billing });
-                    return;
-                  }
-
-                  if (promoSkipsStripe) {
-                    await startManagerSignupIntent({ tier: "pro", billing: "monthly", promo: normalizedPromo });
-                    return;
-                  }
-
-                  setCheckoutBusy(true);
                   try {
-                    const res = await fetch("/api/stripe/checkout", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        tier: selectedTierId,
-                        billing,
-                        email: email.trim(),
-                        fullName: fullName.trim(),
-                        phone: phone.trim(),
-                        embedded: true,
-                        ...(code.trim() ? { promo: normalizedPromo } : {}),
-                      }),
-                    });
-                    const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string };
-                    if (!res.ok) {
-                      showToast(payload.error ?? "Could not start checkout. Configure Stripe env vars.");
+                    const emailSafe = typeof email === "string" ? email : "";
+                    const fullNameSafe = typeof fullName === "string" ? fullName : "";
+                    const codeSafe = typeof code === "string" ? code : "";
+                    if (!emailSafe.trim() || !fullNameSafe.trim()) {
+                      showToast("Enter your full name and email before checkout.");
                       return;
                     }
-                    if (payload.clientSecret) {
-                      setCheckoutClientSecret(payload.clientSecret);
+                    const normalizedPromo = normalizeProMonthlyPromoInput(codeSafe);
+                    const isProMonthly = selectedTierId === "pro" && billing === "monthly";
+                    const promoSkipsStripe = isProMonthly && normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE;
+
+                    if (
+                      normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
+                      selectedTierId !== "free" &&
+                      !isProMonthly
+                    ) {
+                      showToast(
+                        `${PRO_MONTHLY_FIRST_FREE_PROMO_CODE} is only valid for Pro monthly. Switch tier or billing, or clear the code.`,
+                      );
                       return;
                     }
-                    if (payload.url) {
-                      window.location.href = payload.url;
+
+                    if (selectedTierId === "free") {
+                      await startManagerSignupIntent({ tier: "free", billing });
                       return;
                     }
-                    showToast("Unexpected checkout response.");
-                  } catch {
-                    showToast("Network error starting checkout.");
-                  } finally {
-                    setCheckoutBusy(false);
+
+                    if (promoSkipsStripe) {
+                      await startManagerSignupIntent({ tier: "pro", billing: "monthly", promo: normalizedPromo });
+                      return;
+                    }
+
+                    setCheckoutBusy(true);
+                    try {
+                      const res = await fetch("/api/stripe/checkout", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          tier: selectedTierId,
+                          billing,
+                          email: emailSafe.trim(),
+                          fullName: fullNameSafe.trim(),
+                          phone: typeof phone === "string" ? phone.trim() : "",
+                          embedded: true,
+                          ...(codeSafe.trim() ? { promo: normalizedPromo } : {}),
+                        }),
+                      });
+                      const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string };
+                      if (!res.ok) {
+                        showToast(payload.error ?? "Could not start checkout. Configure Stripe env vars.");
+                        return;
+                      }
+                      if (payload.clientSecret) {
+                        setCheckoutClientSecret(payload.clientSecret);
+                        return;
+                      }
+                      if (payload.url) {
+                        window.location.href = payload.url;
+                        return;
+                      }
+                      showToast("Unexpected checkout response.");
+                    } catch {
+                      showToast("Network error starting checkout.");
+                    } finally {
+                      setCheckoutBusy(false);
+                    }
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : "Something went wrong. Try again.";
+                    showToast(msg);
                   }
                 })();
               }}
