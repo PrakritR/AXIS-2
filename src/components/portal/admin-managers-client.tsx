@@ -16,6 +16,9 @@ type ManagerRow = {
   joinedAt: string | null;
 };
 
+type StatusTab = "active" | "disabled";
+type TierFilter = "all" | "free" | "pro" | "business";
+
 function ManagersEmptyIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -58,15 +61,13 @@ function TierBadge({ tier }: { tier: string }) {
   );
 }
 
-function DetailSheet({
+function ExpandedDetail({
   row,
-  onClose,
-  onToggle,
+  onRefresh,
   showToast,
 }: {
   row: ManagerRow;
-  onClose: () => void;
-  onToggle: () => void;
+  onRefresh: () => void;
   showToast: (m: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -82,8 +83,7 @@ function DetailSheet({
       });
       if (!res.ok) { showToast("Could not update account."); return; }
       showToast(row.active ? "Manager account disabled." : "Manager account enabled.");
-      onToggle();
-      onClose();
+      onRefresh();
     } finally {
       setBusy(false);
     }
@@ -103,8 +103,7 @@ function DetailSheet({
         return;
       }
       showToast("Manager account deleted.");
-      onToggle();
-      onClose();
+      onRefresh();
     } finally {
       setBusy(false);
       setConfirmDelete(false);
@@ -112,70 +111,60 @@ function DetailSheet({
   };
 
   return (
-    <>
-      <button type="button" className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-[1px]" aria-label="Close" onClick={onClose} />
-      <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-slate-200/90 bg-white shadow-[0_0_48px_-12px_rgba(15,23,42,0.2)]" role="dialog" aria-modal="true">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">Manager details</h2>
-          <Button type="button" variant="ghost" className="rounded-full px-3 py-1.5 text-sm" onClick={onClose}>Close</Button>
-        </div>
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
-          <div>
-            <p className="text-base font-semibold text-slate-900">{row.fullName || row.email}</p>
-            <p className="mt-1 text-sm text-slate-500">{row.email}</p>
-            {row.managerId && (
-              <p className="mt-2 font-mono text-xs text-slate-400">{row.managerId}</p>
+    <tr className="bg-slate-50/60">
+      <td colSpan={4} className="px-5 py-5">
+        <div className="flex flex-wrap items-start gap-8">
+          <div className="min-w-[160px] space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Account</p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <TierBadge tier={row.tier} />
+              <StatusPill active={row.active} />
+            </div>
+            {row.joinedAt && (
+              <p className="pt-1 text-xs text-slate-500">
+                Joined {new Date(row.joinedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+              </p>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <TierBadge tier={row.tier} />
-            <StatusPill active={row.active} />
-          </div>
-          {row.joinedAt && (
-            <p className="text-xs text-slate-500">
-              Joined {new Date(row.joinedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
-            </p>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            className={`w-full rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-rose-50" : ""}`}
-            onClick={() => void toggle()}
-            disabled={busy}
-          >
-            {busy ? "Updating…" : row.active ? "Disable account" : "Enable account"}
-          </Button>
 
-          <div className="border-t border-slate-100 pt-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              
+              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-rose-50" : ""}`}
+              onClick={() => void toggle()}
+              disabled={busy}
+            >
+              {busy && !confirmDelete ? "Updating…" : row.active ? "Disable account" : "Enable account"}
+            </Button>
+
             {confirmDelete ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-                <p className="text-sm font-semibold text-rose-900">Delete this manager account?</p>
-                <p className="mt-1 text-xs text-rose-700">This permanently removes the account and cannot be undone.</p>
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    type="button"
-                    className="rounded-full bg-rose-600 text-white hover:bg-rose-700"
-                    onClick={() => void deleteAccount()}
-                    disabled={busy}
-                  >
-                    {busy ? "Deleting…" : "Yes, delete"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={() => setConfirmDelete(false)}
-                    disabled={busy}
-                  >
-                    Cancel
-                  </Button>
-                </div>
+              <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5">
+                <span className="text-xs font-semibold text-rose-800">Delete permanently?</span>
+                <button
+                  type="button"
+                  className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                  onClick={() => void deleteAccount()}
+                  disabled={busy}
+                >
+                  {busy ? "Deleting…" : "Yes, delete"}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={busy}
+                >
+                  Cancel
+                </button>
               </div>
             ) : (
               <Button
                 type="button"
                 variant="outline"
-                className="w-full rounded-full border-rose-200 text-rose-700 hover:bg-rose-50"
+                
+                className="rounded-full border-rose-200 text-rose-700 hover:bg-rose-50"
                 onClick={() => setConfirmDelete(true)}
                 disabled={busy}
               >
@@ -184,8 +173,8 @@ function DetailSheet({
             )}
           </div>
         </div>
-      </aside>
-    </>
+      </td>
+    </tr>
   );
 }
 
@@ -194,7 +183,9 @@ export function AdminManagersClient() {
   const [managers, setManagers] = useState<ManagerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [detailRow, setDetailRow] = useState<ManagerRow | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [statusTab, setStatusTab] = useState<StatusTab>("active");
+  const [tierFilter, setTierFilter] = useState<TierFilter>("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -216,8 +207,29 @@ export function AdminManagersClient() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const current = managers.filter((m) => m.active).length;
-  const past = managers.filter((m) => !m.active).length;
+  const total = managers.length;
+  const activeCount = managers.filter((m) => m.active).length;
+  const disabledCount = managers.filter((m) => !m.active).length;
+
+  const visible = managers.filter((m) => {
+    if (statusTab === "active" && !m.active) return false;
+    if (statusTab === "disabled" && m.active) return false;
+
+    if (tierFilter !== "all" && m.tier.toLowerCase() !== tierFilter) return false;
+    return true;
+  });
+
+  const STATUS_TABS: { id: StatusTab; label: string; count: number }[] = [
+    { id: "active", label: "Active", count: activeCount },
+    { id: "disabled", label: "Disabled", count: disabledCount },
+  ];
+
+  const TIER_OPTIONS: { id: TierFilter; label: string }[] = [
+    { id: "all", label: "All tiers" },
+    { id: "free", label: "Free" },
+    { id: "pro", label: "Pro" },
+    { id: "business", label: "Business" },
+  ];
 
   return (
     <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
@@ -228,18 +240,49 @@ export function AdminManagersClient() {
         </Button>
       </div>
 
-      <div className="mt-5 flex flex-wrap items-end gap-6">
-        <div className="min-w-[10rem] rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]">
-          <p className="text-2xl font-bold tabular-nums text-slate-900">{current}</p>
-          <p className="mt-1 text-xs font-medium text-slate-500">Active managers</p>
+      {/* Tabs + tier filter */}
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => { setStatusTab(tab.id); setExpandedId(null); }}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+                statusTab === tab.id
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {tab.label}
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                statusTab === tab.id ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
         </div>
-        <div className="min-w-[10rem] rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]">
-          <p className="text-2xl font-bold tabular-nums text-slate-900">{past}</p>
-          <p className="mt-1 text-xs font-medium text-slate-500">Disabled managers</p>
+
+        <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+          {TIER_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => { setTierFilter(opt.id); setExpandedId(null); }}
+              className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+                tierFilter === opt.id
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
+      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <p className="text-sm text-slate-400">Loading…</p>
@@ -251,12 +294,14 @@ export function AdminManagersClient() {
               Try again
             </button>
           </div>
-        ) : managers.length === 0 ? (
+        ) : visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
             <AxisHeaderMarkTile>
               <ManagersEmptyIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
-            <p className="mt-4 text-sm font-medium text-slate-500">No manager accounts yet</p>
+            <p className="mt-4 text-sm font-medium text-slate-500">
+              {managers.length === 0 ? "No manager accounts yet" : "No managers match this filter"}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -270,40 +315,49 @@ export function AdminManagersClient() {
                 </tr>
               </thead>
               <tbody>
-                {managers.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-5 py-4 align-middle">
-                      <p className="font-semibold text-slate-900">{row.fullName || row.email}</p>
-                      <p className="mt-0.5 text-sm text-slate-500">{row.email}</p>
-                      {row.managerId && <p className="mt-0.5 font-mono text-xs text-slate-400">{row.managerId}</p>}
-                    </td>
-                    <td className="px-5 py-4 align-middle">
-                      <TierBadge tier={row.tier} />
-                    </td>
-                    <td className="px-5 py-4 align-middle">
-                      <StatusPill active={row.active} />
-                    </td>
-                    <td className="px-5 py-4 text-right align-middle">
-                      <Button type="button" variant="outline" className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800" onClick={() => setDetailRow(row)}>
-                        Details
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {visible.map((row) => {
+                  const isOpen = expandedId === row.id;
+                  return (
+                    <>
+                      <tr key={row.id} className={`border-b border-slate-100 ${isOpen ? "" : "last:border-0"}`}>
+                        <td className="px-5 py-4 align-middle">
+                          <p className="font-semibold text-slate-900">{row.fullName || row.email}</p>
+                          <p className="mt-0.5 text-sm text-slate-500">{row.email}</p>
+                          {row.managerId && <p className="mt-0.5 font-mono text-xs text-slate-400">{row.managerId}</p>}
+                        </td>
+                        <td className="px-5 py-4 align-middle">
+                          <TierBadge tier={row.tier} />
+                        </td>
+                        <td className="px-5 py-4 align-middle">
+                          <StatusPill active={row.active} />
+                        </td>
+                        <td className="px-5 py-4 text-right align-middle">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
+                            onClick={() => setExpandedId(isOpen ? null : row.id)}
+                          >
+                            {isOpen ? "Hide" : "Details"}
+                          </Button>
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <ExpandedDetail
+                          key={`detail-${row.id}`}
+                          row={row}
+                          onRefresh={() => { setExpandedId(null); void load(); }}
+                          showToast={showToast}
+                        />
+                      )}
+                    </>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
-
-      {detailRow && (
-        <DetailSheet
-          row={detailRow}
-          onClose={() => setDetailRow(null)}
-          onToggle={() => void load()}
-          showToast={showToast}
-        />
-      )}
     </div>
   );
 }
