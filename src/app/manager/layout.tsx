@@ -15,7 +15,7 @@ export default async function ManagerLayout({ children }: { children: React.Reac
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col lg:flex-row">
         <PortalSidebar definition={nav.definition} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white/40 lg:bg-transparent">
-          <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>
+          <main className="flex min-h-0 flex-1 flex-col px-4 py-6 lg:px-8 lg:py-8">{children}</main>
         </div>
       </div>
     </div>

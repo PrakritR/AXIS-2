@@ -10,7 +10,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <PortalSidebar definition={adminPortal} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">
+          <main className="flex min-h-0 flex-1 flex-col px-4 py-6 lg:px-8 lg:py-8">
             <AdminNotificationBanners />
             {children}
           </main>

@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { TabNav, type TabItem } from "@/components/ui/tabs";
@@ -274,8 +273,8 @@ function EventsWeekGrid({
 }) {
   const days = weekDatesFromMonday(weekMonday);
   return (
-    <div className="w-full max-w-full rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-3">
-      <div className="grid w-full grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-slate-400 sm:gap-1.5 sm:text-[11px]">
+    <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-3">
+      <div className="grid w-full shrink-0 grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-slate-400 sm:gap-1.5 sm:text-[11px]">
         {days.map((d) => (
           <div key={toLocalDateStr(d)} className="min-w-0 truncate px-0.5 py-1.5 sm:py-2">
             {WEEKDAY_LABELS[mondayBasedDayIndex(d)]}{" "}
@@ -283,11 +282,11 @@ function EventsWeekGrid({
           </div>
         ))}
       </div>
-      <div className="mt-1 grid min-h-[min(12rem,28vh)] w-full grid-cols-7 gap-1 sm:min-h-[14rem] sm:gap-1.5">
+      <div className="mt-1 grid min-h-0 w-full flex-1 grid-cols-7 gap-1 overflow-y-auto overscroll-contain sm:gap-1.5">
         {days.map((d) => (
           <div
             key={toLocalDateStr(d)}
-            className={`min-h-[10rem] rounded-xl border p-2 text-left text-[11px] leading-snug text-slate-600 sm:min-h-[11rem] sm:p-2.5 ${dayCellTone(d, availability, planned)}`}
+            className={`min-h-[6rem] rounded-xl border p-1.5 text-left text-[11px] leading-snug text-slate-600 sm:min-h-[7rem] sm:p-2 ${dayCellTone(d, availability, planned)}`}
           >
               {planned
                 .filter((e) => {
@@ -319,11 +318,11 @@ function DayAgendaView({
   const dayEvents = planned.filter((e) => new Date(e.start).toDateString() === day.toDateString());
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4">
-      <p className="text-sm font-semibold text-slate-900">
+    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4">
+      <p className="shrink-0 text-sm font-semibold text-slate-900">
         {day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
       </p>
-      <div className="mt-2 max-h-[min(40rem,72vh)] space-y-0.5 overflow-y-auto">
+      <div className="mt-2 min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain">
         {Array.from({ length: SLOTS_PER_DAY }).map((_, slotIndex) => {
           const open = availability.has(dateSlotKey(ds, slotIndex));
           return (
@@ -340,7 +339,7 @@ function DayAgendaView({
         })}
       </div>
       {dayEvents.length ? (
-        <div className="mt-4 border-t border-slate-100 pt-4">
+        <div className="mt-4 shrink-0 border-t border-slate-100 pt-4">
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Events</p>
           <ul className="mt-2 space-y-2">
             {dayEvents.map((e) => (
@@ -612,15 +611,15 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
   };
 
   return (
-    <ManagerSectionShell title="Events" actions={shellActions}>
-      <div className="space-y-5">
+    <ManagerSectionShell title="Events" actions={shellActions} bodyClassName="mt-4 lg:mt-5">
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
         <TabNav items={tabs} activeId={tabId} />
 
         {tabId === "availability" ? (
           <AvailabilityEditor />
         ) : (
-          <>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 lg:max-h-[calc(100dvh-9rem)] lg:gap-4">
+            <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
               {(
                 [
                   ["Today", kpis.today],
@@ -631,194 +630,216 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
               ).map(([label, value], i) => (
                 <div
                   key={label}
-                  className={`rounded-2xl border px-4 py-3 ${
+                  className={`rounded-xl border px-3 py-2.5 sm:px-4 sm:py-3 ${
                     i === 2 ? "border-primary/25 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]" : "border-slate-100 bg-slate-50/60"
                   }`}
                 >
-                  <p className="text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
-                  <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
+                  <p className="text-xl font-semibold tabular-nums text-slate-900 sm:text-2xl">{value}</p>
+                  <p className="mt-0.5 text-[11px] font-medium text-slate-500 sm:text-xs">{label}</p>
                 </div>
               ))}
             </div>
 
-            <div className="border-b border-slate-100 pb-2">
-              <Link href="#events-calendar" className="text-xs font-medium text-primary underline-offset-2 hover:underline">
-                Calendar ↓
-              </Link>
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Planned events</p>
-              {planned.length === 0 ? (
-                <p className="mt-2 text-sm text-slate-500">No meetings yet.</p>
-              ) : (
-                <ul className="mt-2 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200/90 bg-white text-sm">
-                  {planned.map((e) => (
-                    <Fragment key={e.id}>
-                      <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4">
-                        <div className="min-w-0 flex-1">
-                          <span className="font-semibold text-slate-900">{e.title}</span>
-                          <span className="text-slate-500"> · {formatRangeLabel(e.start, e.end)}</span>
-                        </div>
-                        <div className="flex shrink-0 flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded-full border-slate-200 px-3 py-1.5 text-xs"
-                            onClick={() => setExpandedEventId((id) => (id === e.id ? null : e.id))}
-                          >
-                            {expandedEventId === e.id ? "Hide" : "Details"}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded-full !border-0 !bg-rose-600 px-3 py-1.5 text-xs !text-white hover:!bg-rose-700"
-                            onClick={() => {
-                              if (deletePlannedEvent(e.id)) {
-                                showToast("Event removed.");
-                                setExpandedEventId((id) => (id === e.id ? null : id));
-                                bump();
-                              } else showToast("Could not delete.");
-                            }}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </li>
-                      {expandedEventId === e.id ? (
-                        <li className="bg-slate-50/80 px-3 py-3 text-xs text-slate-600 sm:px-4">
-                          <p>
-                            <span className="font-semibold text-slate-500">When: </span>
-                            {formatRangeLabel(e.start, e.end)}
-                          </p>
-                          {e.instructions ? (
-                            <p className="mt-2 whitespace-pre-wrap">
-                              <span className="font-semibold text-slate-500">Host message: </span>
-                              {e.instructions}
-                            </p>
-                          ) : (
-                            <p className="mt-2 text-slate-400">No host message stored.</p>
-                          )}
-                          {e.sourceInquiryId ? (
-                            <p className="mt-2 font-mono text-[10px] text-slate-400">Inquiry ref: {e.sourceInquiryId}</p>
-                          ) : null}
-                        </li>
-                      ) : null}
-                    </Fragment>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Partner inquiries</p>
-              <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
-                {pendingRows.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-sm text-slate-500">No pending requests.</div>
-                ) : (
-                  <>
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[640px] border-collapse text-left">
-                        <thead>
-                          <tr className="border-b border-slate-200/90 bg-white">
-                            <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Partner</th>
-                            <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Email</th>
-                            <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Proposed window</th>
-                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {pendingRows.map((row) => (
-                            <tr
-                              key={row.id}
-                              className={`border-b border-slate-100 last:border-0 ${detail?.id === row.id ? "bg-primary/[0.04]" : ""}`}
-                            >
-                              <td className="px-5 py-4 font-semibold text-slate-900">{row.name}</td>
-                              <td className="px-5 py-4 text-slate-600">{row.email}</td>
-                              <td className="px-5 py-4 text-sm text-slate-600">{formatRangeLabel(row.proposedStart, row.proposedEnd)}</td>
-                              <td className="px-5 py-4 text-right">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-12 lg:gap-5 lg:overflow-hidden">
+              {/* Lists: scroll independently on small screens; fixed column on large */}
+              <div className="flex min-h-0 flex-col gap-3 lg:col-span-5 lg:max-h-full lg:overflow-hidden">
+                <div className="flex min-h-0 max-h-[40vh] flex-col rounded-2xl border border-slate-200/90 bg-white lg:max-h-[min(220px,32vh)]">
+                  <p className="shrink-0 border-b border-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400 sm:px-4">
+                    Planned events
+                  </p>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-2 sm:px-2">
+                    {planned.length === 0 ? (
+                      <p className="px-2 py-1 text-sm text-slate-500">No meetings yet.</p>
+                    ) : (
+                      <ul className="divide-y divide-slate-100 text-sm">
+                        {planned.map((e) => (
+                          <Fragment key={e.id}>
+                            <li className="flex flex-wrap items-center justify-between gap-2 px-2 py-2 sm:px-3">
+                              <div className="min-w-0 flex-1">
+                                <span className="font-semibold text-slate-900">{e.title}</span>
+                                <span className="text-slate-500"> · {formatRangeLabel(e.start, e.end)}</span>
+                              </div>
+                              <div className="flex shrink-0 flex-wrap gap-1.5">
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  className={`rounded-full border-slate-200 px-4 py-2 text-sm font-medium ${
-                                    detail?.id === row.id ? "border-primary/40 bg-primary/10 text-primary" : "text-slate-800"
-                                  }`}
-                                  onClick={() => setDetail((cur) => (cur?.id === row.id ? null : row))}
+                                  className="rounded-full border-slate-200 px-2.5 py-1 text-xs"
+                                  onClick={() => setExpandedEventId((id) => (id === e.id ? null : e.id))}
                                 >
-                                  {detail?.id === row.id ? "Hide" : "Details"}
+                                  {expandedEventId === e.id ? "Hide" : "Details"}
                                 </Button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {detail ? (
-                      <PartnerInquiryDetailPanel
-                        row={detail}
-                        instructionsDraft={inquiryInstructionsDraft}
-                        onInstructionsChange={setInquiryInstructionsDraft}
-                        onClose={() => setDetail(null)}
-                        onChanged={bump}
-                        showToast={showToast}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-full !border-0 !bg-rose-600 px-2.5 py-1 text-xs !text-white hover:!bg-rose-700"
+                                  onClick={() => {
+                                    if (deletePlannedEvent(e.id)) {
+                                      showToast("Event removed.");
+                                      setExpandedEventId((id) => (id === e.id ? null : id));
+                                      bump();
+                                    } else showToast("Could not delete.");
+                                  }}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </li>
+                            {expandedEventId === e.id ? (
+                              <li className="bg-slate-50/80 px-2 py-2 text-xs text-slate-600 sm:px-3">
+                                <p>
+                                  <span className="font-semibold text-slate-500">When: </span>
+                                  {formatRangeLabel(e.start, e.end)}
+                                </p>
+                                {e.instructions ? (
+                                  <p className="mt-2 whitespace-pre-wrap">
+                                    <span className="font-semibold text-slate-500">Host message: </span>
+                                    {e.instructions}
+                                  </p>
+                                ) : (
+                                  <p className="mt-2 text-slate-400">No host message stored.</p>
+                                )}
+                                {e.sourceInquiryId ? (
+                                  <p className="mt-2 font-mono text-[10px] text-slate-400">Inquiry ref: {e.sourceInquiryId}</p>
+                                ) : null}
+                              </li>
+                            ) : null}
+                          </Fragment>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex min-h-[12rem] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white lg:min-h-0">
+                  <p className="shrink-0 border-b border-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400 sm:px-4">
+                    Partner inquiries
+                  </p>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                    {pendingRows.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-sm text-slate-500">No pending requests.</div>
+                    ) : (
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+                            <thead>
+                              <tr className="sticky top-0 z-[1] border-b border-slate-200/90 bg-white">
+                                <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:px-4 sm:text-xs">
+                                  Partner
+                                </th>
+                                <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:px-4 sm:text-xs">
+                                  Email
+                                </th>
+                                <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:px-4 sm:text-xs">
+                                  Window
+                                </th>
+                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:px-4 sm:text-xs">
+                                  Actions
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pendingRows.map((row) => (
+                                <tr
+                                  key={row.id}
+                                  className={`border-b border-slate-100 last:border-0 ${detail?.id === row.id ? "bg-primary/[0.04]" : ""}`}
+                                >
+                                  <td className="px-3 py-2.5 font-semibold text-slate-900 sm:px-4">{row.name}</td>
+                                  <td className="max-w-[8rem] truncate px-3 py-2.5 text-slate-600 sm:px-4">{row.email}</td>
+                                  <td className="px-3 py-2.5 text-slate-600 sm:px-4">{formatRangeLabel(row.proposedStart, row.proposedEnd)}</td>
+                                  <td className="px-3 py-2.5 text-right sm:px-4">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className={`rounded-full border-slate-200 px-3 py-1.5 text-xs font-medium ${
+                                        detail?.id === row.id ? "border-primary/40 bg-primary/10 text-primary" : "text-slate-800"
+                                      }`}
+                                      onClick={() => setDetail((cur) => (cur?.id === row.id ? null : row))}
+                                    >
+                                      {detail?.id === row.id ? "Hide" : "Details"}
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {detail ? (
+                          <PartnerInquiryDetailPanel
+                            row={detail}
+                            instructionsDraft={inquiryInstructionsDraft}
+                            onInstructionsChange={setInquiryInstructionsDraft}
+                            onClose={() => setDetail(null)}
+                            onChanged={bump}
+                            showToast={showToast}
+                          />
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Calendar: primary column — fills remaining viewport height on lg */}
+              <section
+                id="events-calendar"
+                className="flex min-h-[min(28rem,55vh)] flex-col gap-2 lg:col-span-7 lg:min-h-0 lg:max-h-full lg:overflow-hidden"
+              >
+                <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Calendar</p>
+                    <p className="hidden text-sm text-slate-600 sm:block">
+                      Zoom follows distance from today. Use arrows to navigate.
+                    </p>
+                  </div>
+                  <span className="shrink-0 self-start rounded-full border border-slate-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-600 sm:self-auto">
+                    {calMode === "day" ? "Day" : calMode === "week" ? "Week" : "Month"}
+                  </span>
+                </div>
+
+                <div className="flex shrink-0 flex-col gap-2 rounded-xl border border-slate-200/80 bg-slate-50/40 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+                  <p className="text-sm font-semibold leading-tight text-slate-900">{calendarNavLabel(calAnchor, calMode)}</p>
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                    <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs sm:text-sm" onClick={calPrev}>
+                      Back
+                    </Button>
+                    <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs sm:text-sm" onClick={calToday}>
+                      Today
+                    </Button>
+                    <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs sm:text-sm" onClick={calNext}>
+                      Forward
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-h-[12rem]">
+                  {calMode === "day" ? (
+                    <DayAgendaView day={calAnchor} availability={availability} planned={planned} />
+                  ) : null}
+
+                  {calMode === "week" ? (
+                    <EventsWeekGrid weekMonday={weekMondayForGrid} availability={availability} planned={planned} />
+                  ) : null}
+
+                  {calMode === "month" ? (
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                      <MonthGrid
+                        anchor={monthDisplayAnchor}
+                        availability={availability}
+                        events={planned}
+                        onDayClick={(d) => {
+                          setCalModeOverride("day");
+                          const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+                          setCalAnchor(x);
+                        }}
                       />
-                    ) : null}
-                  </>
-                )}
-              </div>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
             </div>
-
-            <section id="events-calendar" className="scroll-mt-28 space-y-3 pt-3">
-              <div className="flex flex-col gap-2 border-t border-slate-200/80 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Calendar</p>
-                  <p className="mt-0.5 text-sm text-slate-600">View zooms out the farther you move from today. Use arrows to move.</p>
-                </div>
-                <span className="shrink-0 rounded-full border border-slate-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-600">
-                  {calMode === "day" ? "Day" : calMode === "week" ? "Week" : "Month"}
-                </span>
-              </div>
-
-              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm font-semibold text-slate-900">{calendarNavLabel(calAnchor, calMode)}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" className="rounded-full" onClick={calPrev}>
-                    Back
-                  </Button>
-                  <Button type="button" variant="outline" className="rounded-full" onClick={calToday}>
-                    Today
-                  </Button>
-                  <Button type="button" variant="outline" className="rounded-full" onClick={calNext}>
-                    Forward
-                  </Button>
-                </div>
-              </div>
-
-              {calMode === "day" ? (
-                <DayAgendaView day={calAnchor} availability={availability} planned={planned} />
-              ) : null}
-
-              {calMode === "week" ? (
-                <EventsWeekGrid weekMonday={weekMondayForGrid} availability={availability} planned={planned} />
-              ) : null}
-
-              {calMode === "month" ? (
-                <MonthGrid
-                  anchor={monthDisplayAnchor}
-                  availability={availability}
-                  events={planned}
-                  onDayClick={(d) => {
-                    setCalModeOverride("day");
-                    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
-                    setCalAnchor(x);
-                  }}
-                />
-              ) : null}
-            </section>
-          </>
+          </div>
         )}
       </div>
-
     </ManagerSectionShell>
   );
 }
