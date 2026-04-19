@@ -1,0 +1,111 @@
+import { NextResponse } from "next/server";
+import { generateManagerId } from "@/lib/manager-id";
+import { newAxisIntentSessionId } from "@/lib/manager-signup-intent";
+import { normalizeProMonthlyPromoInput, PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+
+export const runtime = "nodejs";
+
+type Tier = "free" | "pro" | "business";
+type Billing = "monthly" | "annual";
+
+type Body = {
+  tier?: string;
+  billing?: string;
+  email?: string;
+  fullName?: string;
+  phone?: string;
+  promo?: string;
+};
+
+function isTier(s: string): s is Tier {
+  return s === "free" || s === "pro" || s === "business";
+}
+
+function isBilling(s: string): s is Billing {
+  return s === "monthly" || s === "annual";
+}
+
+/**
+ * Creates a manager purchase row without Stripe (free tier, or Pro monthly + FREEFIRST skip).
+ * Returns session_id used by /auth/create-account and manager-signup.
+ */
+export async function POST(req: Request) {
+  try {
+    const body = (await req.json()) as Body;
+    const tierRaw = typeof body.tier === "string" ? body.tier.toLowerCase().trim() : "";
+    const billingRaw = typeof body.billing === "string" ? body.billing.toLowerCase().trim() : "";
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+    const promoRaw = typeof body.promo === "string" ? normalizeProMonthlyPromoInput(body.promo) : "";
+    const promoUpper = promoRaw.toUpperCase();
+
+    if (!email.includes("@")) {
+      return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
+    }
+    if (!fullName) {
+      return NextResponse.json({ error: "Enter your full name." }, { status: 400 });
+    }
+    if (!tierRaw || !billingRaw || !isTier(tierRaw) || !isBilling(billingRaw)) {
+      return NextResponse.json({ error: "tier and billing are required." }, { status: 400 });
+    }
+
+    const isProMonthly = tierRaw === "pro" && billingRaw === "monthly";
+    const skipStripeForPromo = isProMonthly && promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE;
+    const skipStripeForFree = tierRaw === "free";
+
+    if (promoRaw && !skipStripeForFree && !skipStripeForPromo) {
+      if (promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE && !isProMonthly) {
+        return NextResponse.json(
+          { error: `${PRO_MONTHLY_FIRST_FREE_PROMO_CODE} applies only to Pro monthly billing.` },
+          { status: 400 },
+        );
+      }
+      return NextResponse.json(
+        { error: "Unknown promo for instant signup. Use paid checkout or a supported skip code." },
+        { status: 400 },
+      );
+    }
+
+    if (!skipStripeForFree && !skipStripeForPromo) {
+      return NextResponse.json(
+        { error: "This tier requires Stripe checkout. Use Continue only for Free tier or Pro monthly with the free-first code." },
+        { status: 400 },
+      );
+    }
+
+    const supabase = createSupabaseServiceRoleClient();
+
+    const { data: purchasesForEmail } = await supabase.from("manager_purchases").select("user_id").eq("email", email);
+
+    if (purchasesForEmail?.some((r) => r.user_id != null)) {
+      return NextResponse.json(
+        { error: "A manager account already exists for this email. Sign in instead." },
+        { status: 409 },
+      );
+    }
+
+    const sessionId = newAxisIntentSessionId();
+    const managerId = generateManagerId();
+
+    const { error: insErr } = await supabase.from("manager_purchases").insert({
+      stripe_checkout_session_id: sessionId,
+      email,
+      manager_id: managerId,
+      tier: tierRaw,
+      billing: billingRaw,
+      promo_code: skipStripeForPromo ? promoUpper : null,
+      paid_at: new Date().toISOString(),
+      full_name: fullName,
+    });
+
+    if (insErr) {
+      return NextResponse.json({ error: insErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ sessionId });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Could not create signup.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

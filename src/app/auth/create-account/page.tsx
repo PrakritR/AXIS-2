@@ -16,31 +16,125 @@ function Req() {
   return <span className="text-danger"> *</span>;
 }
 
+type ManagerCheckoutPreview = {
+  managerId: string;
+  email: string;
+  fullName: string | null;
+};
+
 function CreateAccountContent() {
   const { showToast } = useAppUi();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const sessionIdFromUrl = useMemo(() => searchParams.get("session_id")?.trim() ?? "", [searchParams]);
   const roleFromUrl = useMemo(() => parseAuthRole(searchParams.get("role")), [searchParams]);
   const [role, setRole] = useState<AuthRole>(roleFromUrl);
   const [ownerInviteRef, setOwnerInviteRef] = useState(searchParams.get("slot") ?? "");
   const [adminKey, setAdminKey] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [applicationId, setApplicationId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checkoutPreview, setCheckoutPreview] = useState<ManagerCheckoutPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
-    setRole(roleFromUrl);
-  }, [roleFromUrl]);
+    setRole(sessionIdFromUrl ? "manager" : roleFromUrl);
+  }, [roleFromUrl, sessionIdFromUrl]);
 
   useEffect(() => {
     setOwnerInviteRef(searchParams.get("slot") ?? "");
   }, [searchParams]);
 
+  useEffect(() => {
+    if (role !== "manager" || !sessionIdFromUrl) {
+      setCheckoutPreview(null);
+      setPreviewError(null);
+      setPreviewLoading(false);
+      setConfirmPassword("");
+      return;
+    }
+
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setCheckoutPreview(null);
+
+    void fetch(`/api/auth/manager-checkout-preview?session_id=${encodeURIComponent(sessionIdFromUrl)}`)
+      .then(async (res) => {
+        const body = (await res.json()) as ManagerCheckoutPreview & { error?: string };
+        if (!res.ok) {
+          throw new Error(body.error ?? "Could not load checkout session.");
+        }
+        if (!cancelled) {
+          setCheckoutPreview({
+            managerId: body.managerId,
+            email: body.email,
+            fullName: body.fullName ?? null,
+          });
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setPreviewError(e instanceof Error ? e.message : "Could not load checkout session.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [role, sessionIdFromUrl]);
+
+  const managerPostCheckout = role === "manager" && !!sessionIdFromUrl && !!checkoutPreview;
+  const managerNeedsPricing = role === "manager" && !sessionIdFromUrl;
+  const isAxisIntentSignup = sessionIdFromUrl.startsWith("axis_intent_");
+
   const submit = async () => {
+    if (managerPostCheckout && checkoutPreview) {
+      if (password.length < 8) {
+        showToast("Enter a valid password (8+ characters).");
+        return;
+      }
+      if (password !== confirmPassword) {
+        showToast("Passwords do not match.");
+        return;
+      }
+      setBusy(true);
+      try {
+        const res = await fetch("/api/auth/manager-signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: sessionIdFromUrl, password }),
+        });
+        const body = (await res.json()) as { error?: string; managerId?: string };
+        if (!res.ok) {
+          showToast(body.error ?? "Could not create account.");
+          return;
+        }
+        showToast(`Account ready. Manager ID ${body.managerId ?? checkoutPreview.managerId}. Sign in with your email.`);
+        router.push("/auth/sign-in");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Sign up failed";
+        showToast(msg);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (role === "manager" && sessionIdFromUrl && !checkoutPreview) {
+      showToast(previewLoading ? "Still loading checkout details…" : "Fix checkout session or start from Partner pricing.");
+      return;
+    }
+
     if (role === "manager") {
-      showToast("Managers complete Stripe checkout first, then set a password on the next screen.");
+      showToast("Managers complete Stripe checkout first, then finish account creation here with your Manager ID.");
       router.push("/partner/pricing");
       return;
     }
@@ -136,6 +230,8 @@ function CreateAccountContent() {
     }
   };
 
+  const readOnlyInputClass = "mt-1.5 bg-[#f1f5f9] text-slate-800 cursor-default";
+
   return (
     <AuthCard>
       <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Create account</h1>
@@ -148,6 +244,7 @@ function CreateAccountContent() {
           id="account-type"
           className="mt-1.5"
           value={role}
+          disabled={!!sessionIdFromUrl}
           onChange={(e) => setRole(parseAuthRole(e.target.value))}
         >
           <option value="resident">Resident</option>
@@ -158,18 +255,35 @@ function CreateAccountContent() {
       </div>
 
       <div className="mt-6 rounded-2xl border border-[#e0e4ec] bg-[#f8fafc] p-4 text-sm leading-relaxed text-slate-600">
-        {role === "resident" ? (
+        {managerPostCheckout ? (
+          <>
+            {isAxisIntentSignup ? (
+              <>
+                Your <span className="font-semibold text-slate-800">Manager ID</span> is reserved for this signup—use it
+                like an Application ID when you need support. Set a password below to finish your manager account.
+              </>
+            ) : (
+              <>
+                Payment confirmed. Your <span className="font-semibold text-slate-800">Manager ID</span> is tied to this
+                checkout—use it like an Application ID when you need support. Set a password below to finish your manager
+                account.
+              </>
+            )}
+          </>
+        ) : role === "resident" ? (
           <>
             Use your application email and Application ID. After signup, an Axis manager can mark your application
             approved so the full resident portal unlocks.
           </>
         ) : role === "manager" ? (
           <>
-            Managers must pay on{" "}
+            Start from{" "}
             <Link className="font-semibold text-primary hover:opacity-90" href="/partner/pricing">
               Partner pricing
-            </Link>{" "}
-            (Stripe). After payment succeeds you will set your password on the next step.
+            </Link>
+            : choose <span className="font-semibold text-slate-800">Free</span> (no payment) or a paid plan (Stripe), or
+            use the Pro monthly free-first code to skip checkout. You will return here with your Manager ID to set your
+            password.
           </>
         ) : role === "owner" ? (
           <>
@@ -181,106 +295,205 @@ function CreateAccountContent() {
         )}
       </div>
 
+      {role === "manager" && sessionIdFromUrl && previewLoading ? (
+        <p className="mt-6 text-center text-sm text-slate-600">Loading checkout details…</p>
+      ) : null}
+
+      {role === "manager" && sessionIdFromUrl && previewError ? (
+        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p>{previewError}</p>
+          <Link className="mt-3 inline-block font-semibold text-primary hover:underline" href="/partner/pricing">
+            Back to Partner pricing
+          </Link>
+        </div>
+      ) : null}
+
       <div className="mt-6 space-y-4">
-        {role === "admin" ? (
-          <div>
-            <label className="text-xs font-semibold text-[#334155]" htmlFor="admin-key">
-              Admin registration key
-              <Req />
-            </label>
-            <PasswordInput
-              id="admin-key"
-              className="mt-1.5"
-              autoComplete="off"
-              placeholder="Key from your organization"
-              value={adminKey}
-              onChange={(e) => setAdminKey(e.target.value)}
-            />
-          </div>
-        ) : null}
-        {role === "resident" ? (
-          <div>
-            <label className="text-xs font-semibold text-[#334155]" htmlFor="app">
-              Application ID
-              <Req />
-            </label>
-            <Input
-              id="app"
-              className="mt-1.5"
-              placeholder="APP-recXXXXXXXXXXXXXXXXX"
-              value={applicationId}
-              onChange={(e) => setApplicationId(e.target.value)}
-            />
-          </div>
-        ) : null}
-        {role === "manager" || role === "owner" ? (
-          <div>
-            <label className="text-xs font-semibold text-[#334155]" htmlFor="name">
-              Full name
-            </label>
-            <Input
-              id="name"
-              className="mt-1.5"
-              placeholder="Your full name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-            />
-          </div>
-        ) : null}
-        {role === "owner" ? (
-          <div>
-            <label className="text-xs font-semibold text-[#334155]" htmlFor="invite">
-              Invite reference
-              <Req />
-            </label>
-            <Input
-              id="invite"
-              className="mt-1.5"
-              placeholder="From your manager link, e.g. slot id"
-              value={ownerInviteRef}
-              onChange={(e) => setOwnerInviteRef(e.target.value)}
-            />
-          </div>
-        ) : null}
-        <div>
-          <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
-            Email
-            <Req />
-          </label>
-          <Input
-            id="email"
-            className="mt-1.5"
-            placeholder="Your email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-[#334155]" htmlFor="pw">
-            Create password
-            <Req />
-          </label>
-          <PasswordInput
-            id="pw"
-            className="mt-1.5"
-            autoComplete="new-password"
-            placeholder="Minimum 8 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
+        {managerPostCheckout && checkoutPreview ? (
+          <>
+            <div>
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="manager-id">
+                Manager ID
+              </label>
+              <Input
+                id="manager-id"
+                readOnly
+                className={`font-mono text-[13px] ${readOnlyInputClass}`}
+                value={checkoutPreview.managerId}
+                tabIndex={-1}
+              />
+            </div>
+            {checkoutPreview.fullName ? (
+              <div>
+                <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-name">
+                  Full name
+                </label>
+                <Input id="mgr-name" readOnly className={readOnlyInputClass} value={checkoutPreview.fullName} tabIndex={-1} />
+              </div>
+            ) : null}
+            <div>
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-email">
+                Email
+                <Req />
+              </label>
+              <Input
+                id="mgr-email"
+                readOnly
+                className={readOnlyInputClass}
+                type="email"
+                value={checkoutPreview.email}
+                tabIndex={-1}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw">
+                Create password
+                <Req />
+              </label>
+              <PasswordInput
+                id="mgr-pw"
+                className="mt-1.5"
+                autoComplete="new-password"
+                placeholder="Minimum 8 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw2">
+                Confirm password
+                <Req />
+              </label>
+              <PasswordInput
+                id="mgr-pw2"
+                className="mt-1.5"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+          </>
+        ) : managerNeedsPricing ? (
+          <p className="text-center text-sm text-slate-600">
+            Use the button below to choose a plan and pay. You will come back here with your{" "}
+            <span className="font-semibold text-slate-800">Manager ID</span> after checkout.
+          </p>
+        ) : (
+          <>
+            {role === "admin" ? (
+              <div>
+                <label className="text-xs font-semibold text-[#334155]" htmlFor="admin-key">
+                  Admin registration key
+                  <Req />
+                </label>
+                <PasswordInput
+                  id="admin-key"
+                  className="mt-1.5"
+                  autoComplete="off"
+                  placeholder="Key from your organization"
+                  value={adminKey}
+                  onChange={(e) => setAdminKey(e.target.value)}
+                />
+              </div>
+            ) : null}
+            {role === "resident" ? (
+              <div>
+                <label className="text-xs font-semibold text-[#334155]" htmlFor="app">
+                  Application ID
+                  <Req />
+                </label>
+                <Input
+                  id="app"
+                  className="mt-1.5"
+                  placeholder="APP-recXXXXXXXXXXXXXXXXX"
+                  value={applicationId}
+                  onChange={(e) => setApplicationId(e.target.value)}
+                />
+              </div>
+            ) : null}
+            {role === "manager" || role === "owner" ? (
+              <div>
+                <label className="text-xs font-semibold text-[#334155]" htmlFor="name">
+                  Full name
+                </label>
+                <Input
+                  id="name"
+                  className="mt-1.5"
+                  placeholder="Your full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
+            ) : null}
+            {role === "owner" ? (
+              <div>
+                <label className="text-xs font-semibold text-[#334155]" htmlFor="invite">
+                  Invite reference
+                  <Req />
+                </label>
+                <Input
+                  id="invite"
+                  className="mt-1.5"
+                  placeholder="From your manager link, e.g. slot id"
+                  value={ownerInviteRef}
+                  onChange={(e) => setOwnerInviteRef(e.target.value)}
+                />
+              </div>
+            ) : null}
+            <div>
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
+                Email
+                <Req />
+              </label>
+              <Input
+                id="email"
+                className="mt-1.5"
+                placeholder="Your email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="pw">
+                Create password
+                <Req />
+              </label>
+              <PasswordInput
+                id="pw"
+                className="mt-1.5"
+                autoComplete="new-password"
+                placeholder="Minimum 8 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+          </>
+        )}
       </div>
 
-      <Button
-        type="button"
-        className="mt-8 w-full rounded-full py-3 text-base font-semibold"
-        onClick={() => void submit()}
-        disabled={busy}
-      >
-        {busy ? "Working…" : "Create account"}
-      </Button>
+      {managerNeedsPricing ? (
+        <Button
+          type="button"
+          className="mt-8 w-full rounded-full py-3 text-base font-semibold"
+          onClick={() => router.push("/partner/pricing")}
+        >
+          Continue to Partner pricing
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          className="mt-8 w-full rounded-full py-3 text-base font-semibold"
+          onClick={() => void submit()}
+          disabled={
+            busy ||
+            (role === "manager" && !!sessionIdFromUrl && (previewLoading || !!previewError || !checkoutPreview))
+          }
+        >
+          {busy ? "Working…" : "Create account"}
+        </Button>
+      )}
 
       <div className="mt-6 flex justify-center">
         <Link className="text-sm font-semibold text-primary hover:opacity-90" href="/auth/sign-in">

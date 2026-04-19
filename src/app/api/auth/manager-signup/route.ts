@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-session";
+import { isAxisIntentSessionId } from "@/lib/manager-signup-intent";
 import { getStripe } from "@/lib/stripe/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -17,6 +18,62 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
     }
 
+    const supabase = createSupabaseServiceRoleClient();
+
+    if (isAxisIntentSessionId(sessionId)) {
+      const { data: purchase, error: pErr } = await supabase
+        .from("manager_purchases")
+        .select("id, email, manager_id, user_id, full_name")
+        .eq("stripe_checkout_session_id", sessionId)
+        .maybeSingle();
+
+      if (pErr || !purchase) {
+        return NextResponse.json({ error: "Could not load signup for this link." }, { status: 400 });
+      }
+      if (purchase.user_id) {
+        return NextResponse.json({ error: "This signup link was already used." }, { status: 409 });
+      }
+
+      const fullName = purchase.full_name?.trim() ?? "";
+      const email = purchase.email;
+
+      const { data: created, error: cErr } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { role: "manager", manager_id: purchase.manager_id },
+      });
+
+      if (cErr || !created.user) {
+        return NextResponse.json({ error: cErr?.message ?? "Could not create user." }, { status: 400 });
+      }
+
+      const userId = created.user.id;
+
+      const { error: upErr } = await supabase.from("profiles").upsert(
+        {
+          id: userId,
+          email,
+          role: "manager",
+          manager_id: purchase.manager_id,
+          full_name: fullName || null,
+          application_approved: true,
+        },
+        { onConflict: "id" },
+      );
+
+      if (upErr) {
+        return NextResponse.json({ error: upErr.message }, { status: 500 });
+      }
+
+      const { error: linkErr } = await supabase.from("manager_purchases").update({ user_id: userId }).eq("id", purchase.id);
+      if (linkErr) {
+        return NextResponse.json({ error: linkErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ ok: true, managerId: purchase.manager_id });
+    }
+
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
@@ -30,7 +87,6 @@ export async function POST(req: Request) {
 
     await recordPaidManagerCheckoutSession(session);
 
-    const supabase = createSupabaseServiceRoleClient();
     const { data: purchase, error: pErr } = await supabase
       .from("manager_purchases")
       .select("id, email, manager_id, user_id")

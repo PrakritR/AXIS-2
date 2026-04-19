@@ -121,13 +121,48 @@ export default function PartnerPricingPage() {
     [showToast],
   );
 
+  const startManagerSignupIntent = useCallback(
+    async (opts: { tier: TierId; billing: "monthly" | "annual"; promo?: string }) => {
+      setCheckoutBusy(true);
+      try {
+        const res = await fetch("/api/manager/signup-intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tier: opts.tier,
+            billing: opts.billing,
+            email: email.trim(),
+            fullName: fullName.trim(),
+            phone: phone.trim(),
+            ...(opts.promo ? { promo: opts.promo } : {}),
+          }),
+        });
+        const payload = (await res.json()) as { sessionId?: string; error?: string };
+        if (!res.ok) {
+          showToast(payload.error ?? "Could not start signup.");
+          return;
+        }
+        if (payload.sessionId) {
+          router.push(`/auth/create-account?role=manager&session_id=${encodeURIComponent(payload.sessionId)}`);
+          return;
+        }
+        showToast("Unexpected signup response.");
+      } catch {
+        showToast("Network error.");
+      } finally {
+        setCheckoutBusy(false);
+      }
+    },
+    [email, fullName, phone, router, showToast],
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const sid = params.get("session_id");
     if (sid) {
       window.history.replaceState({}, "", "/partner/pricing");
-      router.replace(`/auth/create-manager?session_id=${encodeURIComponent(sid)}`);
+      router.replace(`/auth/create-account?role=manager&session_id=${encodeURIComponent(sid)}`);
     }
   }, [router]);
 
@@ -310,12 +345,15 @@ export default function PartnerPricingPage() {
               />
               {selectedTierId === "pro" && billing === "monthly" ? (
                 <p className="mt-1.5 text-xs text-slate-500">
-                  Use code{" "}
+                  Enter{" "}
                   <span className="font-mono font-semibold text-slate-700">{PRO_MONTHLY_FIRST_FREE_PROMO_CODE}</span>{" "}
-                  (or <span className="font-mono font-semibold text-slate-700">FIRSTFREE</span>) in the payment step for
-                  first month free. A Manager ID is created at checkout for your account setup.
+                  (or <span className="font-mono font-semibold text-slate-700">FIRSTFREE</span>,{" "}
+                  <span className="font-mono font-semibold text-slate-700">FIRSTFEE</span>) to{" "}
+                  <span className="font-semibold text-slate-700">skip Stripe</span> and go straight to Manager ID +
+                  password setup. Otherwise you will pay at checkout and get a Manager ID after payment.
                 </p>
               ) : normalizeProMonthlyPromoInput(code) === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
+                selectedTierId !== "free" &&
                 (selectedTierId !== "pro" || billing !== "monthly") ? (
                 <p className="mt-1.5 text-xs text-amber-800">
                   {PRO_MONTHLY_FIRST_FREE_PROMO_CODE} only applies to <span className="font-semibold">Pro</span> with{" "}
@@ -366,19 +404,31 @@ export default function PartnerPricingPage() {
                     showToast("Enter your full name and email before checkout.");
                     return;
                   }
-                  if (selectedTierId === "free") {
-                    showToast("Free tier has no checkout. Sign in or contact us to get started.");
-                    return;
-                  }
+                  const normalizedPromo = normalizeProMonthlyPromoInput(code);
+                  const isProMonthly = selectedTierId === "pro" && billing === "monthly";
+                  const promoSkipsStripe = isProMonthly && normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE;
+
                   if (
-                    normalizeProMonthlyPromoInput(code) === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
-                    (selectedTierId !== "pro" || billing !== "monthly")
+                    normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
+                    selectedTierId !== "free" &&
+                    !isProMonthly
                   ) {
                     showToast(
                       `${PRO_MONTHLY_FIRST_FREE_PROMO_CODE} is only valid for Pro monthly. Switch tier or billing, or clear the code.`,
                     );
                     return;
                   }
+
+                  if (selectedTierId === "free") {
+                    await startManagerSignupIntent({ tier: "free", billing });
+                    return;
+                  }
+
+                  if (promoSkipsStripe) {
+                    await startManagerSignupIntent({ tier: "pro", billing: "monthly", promo: normalizedPromo });
+                    return;
+                  }
+
                   setCheckoutBusy(true);
                   try {
                     const res = await fetch("/api/stripe/checkout", {
@@ -391,7 +441,7 @@ export default function PartnerPricingPage() {
                         fullName: fullName.trim(),
                         phone: phone.trim(),
                         embedded: true,
-                        ...(code.trim() ? { promo: normalizeProMonthlyPromoInput(code) } : {}),
+                        ...(code.trim() ? { promo: normalizedPromo } : {}),
                       }),
                     });
                     const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string };

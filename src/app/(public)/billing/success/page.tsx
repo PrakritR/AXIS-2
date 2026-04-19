@@ -11,7 +11,9 @@ function BillingSuccessContent() {
 
   useEffect(() => {
     if (!sessionId) return;
-    router.replace(`/auth/create-manager?session_id=${encodeURIComponent(sessionId)}`);
+    router.replace(
+      `/auth/create-account?role=manager&session_id=${encodeURIComponent(sessionId)}`,
+    );
   }, [sessionId, router]);
 
   if (sessionId) {

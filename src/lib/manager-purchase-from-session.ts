@@ -37,6 +37,7 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
       billing: session.metadata?.billing ?? null,
       promo_code: session.metadata?.promo ?? null,
       paid_at: new Date().toISOString(),
+      full_name: session.metadata?.full_name?.trim() || null,
     },
     { onConflict: "stripe_checkout_session_id" },
   );
