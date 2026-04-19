@@ -132,9 +132,9 @@ export default function PartnerPricingPage() {
           body: JSON.stringify({
             tier: opts.tier,
             billing: opts.billing,
-            email: email.trim(),
-            fullName: fullName.trim(),
-            phone: phone.trim(),
+            email: typeof email === "string" ? email.trim() : "",
+            fullName: typeof fullName === "string" ? fullName.trim() : "",
+            phone: typeof phone === "string" ? phone.trim() : "",
             ...(opts.promo ? { promo: opts.promo } : {}),
           }),
         });
@@ -350,7 +350,16 @@ export default function PartnerPricingPage() {
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
-              {normalizeProMonthlyPromoInput(typeof code === "string" ? code : "") === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
+              {selectedTierId === "pro" && billing === "monthly" ? (
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Enter{" "}
+                  <span className="font-mono font-semibold text-slate-700">{PRO_MONTHLY_FIRST_FREE_PROMO_CODE}</span>{" "}
+                  (or <span className="font-mono font-semibold text-slate-700">FIRSTFREE</span>,{" "}
+                  <span className="font-mono font-semibold text-slate-700">FIRSTFEE</span>) to{" "}
+                  <span className="font-semibold text-slate-700">skip Stripe</span> and go straight to Manager ID +
+                  password setup. Otherwise you will pay at checkout and get a Manager ID after payment.
+                </p>
+              ) : normalizeProMonthlyPromoInput(typeof code === "string" ? code : "") === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
                 selectedTierId !== "free" &&
                 (selectedTierId !== "pro" || billing !== "monthly") ? (
                 <p className="mt-1.5 text-xs text-amber-800">
@@ -408,6 +417,7 @@ export default function PartnerPricingPage() {
                     }
                     const normalizedPromo = normalizeProMonthlyPromoInput(codeSafe);
                     const isProMonthly = selectedTierId === "pro" && billing === "monthly";
+                    const promoSkipsStripe = isProMonthly && normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE;
 
                     if (
                       normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
@@ -422,6 +432,11 @@ export default function PartnerPricingPage() {
 
                     if (selectedTierId === "free") {
                       await startManagerSignupIntent({ tier: "free", billing });
+                      return;
+                    }
+
+                    if (promoSkipsStripe) {
+                      await startManagerSignupIntent({ tier: "pro", billing: "monthly", promo: normalizedPromo });
                       return;
                     }
 
