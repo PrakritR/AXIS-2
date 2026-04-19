@@ -17,20 +17,44 @@ export async function POST(req: Request) {
     }
 
     const supabase = createSupabaseServiceRoleClient();
+    const normalEmail = email.trim().toLowerCase();
+    let userId: string;
+
     const { data, error } = await supabase.auth.admin.createUser({
-      email: email.trim().toLowerCase(),
+      email: normalEmail,
       password,
       email_confirm: true,
       user_metadata: { role: "admin" },
     });
-    if (error || !data.user) {
-      return NextResponse.json({ error: error?.message ?? "Could not create user." }, { status: 400 });
+
+    if (error) {
+      const isAlreadyExists =
+        error.message.toLowerCase().includes("already") ||
+        error.message.toLowerCase().includes("registered");
+      if (!isAlreadyExists) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      const { data: listData, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (listErr || !listData) {
+        return NextResponse.json({ error: "Could not look up existing user." }, { status: 500 });
+      }
+      const existing = listData.users.find((u) => u.email?.toLowerCase() === normalEmail);
+      if (!existing) {
+        return NextResponse.json({ error: "Could not locate existing account for this email." }, { status: 400 });
+      }
+      userId = existing.id;
+      await supabase.auth.admin.updateUserById(userId, { password });
+    } else {
+      if (!data.user) {
+        return NextResponse.json({ error: "Could not create user." }, { status: 400 });
+      }
+      userId = data.user.id;
     }
 
     const { error: pErr } = await supabase.from("profiles").upsert(
       {
-        id: data.user.id,
-        email: email.trim().toLowerCase(),
+        id: userId,
+        email: normalEmail,
         role: "admin",
         full_name: fullName?.trim() || null,
         application_approved: true,

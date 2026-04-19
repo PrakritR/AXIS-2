@@ -47,6 +47,9 @@ export async function POST(req: Request) {
     const fullName = session.metadata?.full_name?.trim() ?? "";
     const email = purchase.email;
 
+    let userId: string;
+
+    // Try creating a new auth user; if email already exists, reuse that user.
     const { data: created, error: cErr } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -54,11 +57,33 @@ export async function POST(req: Request) {
       user_metadata: { role: "manager", manager_id: purchase.manager_id },
     });
 
-    if (cErr || !created.user) {
-      return NextResponse.json({ error: cErr?.message ?? "Could not create user." }, { status: 400 });
+    if (cErr) {
+      const isAlreadyExists =
+        cErr.message.toLowerCase().includes("already") ||
+        cErr.message.toLowerCase().includes("registered");
+      if (!isAlreadyExists) {
+        return NextResponse.json({ error: cErr.message }, { status: 400 });
+      }
+      // Email exists — find the existing user and link manager access to them.
+      const { data: listData, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (listErr || !listData) {
+        return NextResponse.json({ error: "Could not look up existing user." }, { status: 500 });
+      }
+      const existing = listData.users.find(
+        (u) => u.email?.toLowerCase() === email.toLowerCase(),
+      );
+      if (!existing) {
+        return NextResponse.json({ error: "Could not locate existing account for this email." }, { status: 400 });
+      }
+      userId = existing.id;
+      // Update their password so they can use the new one if desired.
+      await supabase.auth.admin.updateUserById(userId, { password });
+    } else {
+      if (!created.user) {
+        return NextResponse.json({ error: "Could not create user." }, { status: 400 });
+      }
+      userId = created.user.id;
     }
-
-    const userId = created.user.id;
 
     const { error: upErr } = await supabase.from("profiles").upsert(
       {
