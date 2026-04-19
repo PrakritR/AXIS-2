@@ -132,17 +132,22 @@ export function AdminManagersClient() {
   const { showToast } = useAppUi();
   const [managers, setManagers] = useState<ManagerRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [detailRow, setDetailRow] = useState<ManagerRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch("/api/admin/managers");
       const body = (await res.json()) as { managers?: ManagerRow[]; error?: string };
-      if (!res.ok) { showToast(body.error ?? "Could not load managers."); return; }
+      if (!res.ok) {
+        setLoadError(body.error ?? "Could not load managers.");
+        return;
+      }
       setManagers(body.managers ?? []);
     } catch {
-      showToast("Network error loading managers.");
+      setLoadError("Could not reach the server. Check that Supabase env vars are configured.");
     } finally {
       setLoading(false);
     }
@@ -177,6 +182,13 @@ export function AdminManagersClient() {
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <p className="text-sm text-slate-400">Loading…</p>
+          </div>
+        ) : loadError ? (
+          <div className="px-5 py-10 text-center">
+            <p className="text-sm font-medium text-rose-600">{loadError}</p>
+            <button type="button" onClick={() => void load()} className="mt-3 text-xs font-semibold text-primary hover:underline">
+              Try again
+            </button>
           </div>
         ) : managers.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">

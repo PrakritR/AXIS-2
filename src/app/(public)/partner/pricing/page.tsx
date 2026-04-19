@@ -143,7 +143,7 @@ export default function PartnerPricingPage() {
           return;
         }
         if (payload.sessionId) {
-          router.push(`/auth/create-account?role=manager&session_id=${encodeURIComponent(payload.sessionId)}`);
+          router.push(`/auth/manager-id?session_id=${encodeURIComponent(payload.sessionId)}`);
           return;
         }
         showToast("Unexpected signup response.");
@@ -162,7 +162,7 @@ export default function PartnerPricingPage() {
     const sid = params.get("session_id");
     if (sid) {
       window.history.replaceState({}, "", "/partner/pricing");
-      router.replace(`/auth/create-account?role=manager&session_id=${encodeURIComponent(sid)}`);
+      router.replace(`/auth/manager-id?session_id=${encodeURIComponent(sid)}`);
     }
   }, [router]);
 

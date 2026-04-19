@@ -40,6 +40,7 @@ function CreateAccountContent() {
   const [checkoutPreview, setCheckoutPreview] = useState<ManagerCheckoutPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [managerIdInput, setManagerIdInput] = useState("");
 
   useEffect(() => {
     setRole(sessionIdFromUrl ? "manager" : roleFromUrl);
@@ -133,9 +134,33 @@ function CreateAccountContent() {
       return;
     }
 
-    if (role === "manager") {
-      showToast("Managers complete Stripe checkout first, then finish account creation here with your Manager ID.");
-      router.push("/partner/pricing");
+    // Manager activating via Manager ID (no session)
+    if (role === "manager" && !sessionIdFromUrl) {
+      if (!managerIdInput.trim() || !email.trim()) {
+        showToast("Enter your Manager ID and email.");
+        return;
+      }
+      if (password.length < 8) {
+        showToast("Password must be at least 8 characters.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        showToast("Passwords do not match.");
+        return;
+      }
+      setBusy(true);
+      try {
+        const res = await fetch("/api/auth/manager-activate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ managerId: managerIdInput.trim(), email: email.trim(), password }),
+        });
+        const body = (await res.json()) as { error?: string; managerId?: string };
+        if (!res.ok) { showToast(body.error ?? "Could not activate account."); return; }
+        showToast(`Account activated. Manager ID: ${body.managerId ?? managerIdInput}. Sign in with your email.`);
+        router.push("/auth/sign-in");
+      } catch { showToast("Network error."); }
+      finally { setBusy(false); }
       return;
     }
 
@@ -374,10 +399,62 @@ function CreateAccountContent() {
             </div>
           </>
         ) : managerNeedsPricing ? (
-          <p className="text-center text-sm text-slate-600">
-            Use the button below to choose a plan and pay. You will come back here with your{" "}
-            <span className="font-semibold text-slate-800">Manager ID</span> after checkout.
-          </p>
+          <>
+            <div>
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-id-input">
+                Manager ID
+              </label>
+              <Input
+                id="mgr-id-input"
+                className="mt-1.5 font-mono"
+                placeholder="MGR-XXXXXXXX"
+                value={managerIdInput}
+                onChange={(e) => setManagerIdInput(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                From your account setup email or the Manager ID page after checkout.
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-email-input">
+                Email <Req />
+              </label>
+              <Input
+                id="mgr-email-input"
+                className="mt-1.5"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw-activate">
+                Create password <Req />
+              </label>
+              <PasswordInput
+                id="mgr-pw-activate"
+                className="mt-1.5"
+                autoComplete="new-password"
+                placeholder="Minimum 8 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw2-activate">
+                Confirm password <Req />
+              </label>
+              <PasswordInput
+                id="mgr-pw2-activate"
+                className="mt-1.5"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+          </>
         ) : (
           <>
             {role === "admin" ? (
@@ -473,12 +550,8 @@ function CreateAccountContent() {
         )}
       </div>
 
-      {managerNeedsPricing ? (
-        <Button
-          type="button"
-          className="mt-8 w-full rounded-full py-3 text-base font-semibold"
-          onClick={() => router.push("/partner/pricing")}
-        >
+      {false ? (
+        <Button type="button" className="mt-8 w-full rounded-full py-3 text-base font-semibold" onClick={() => router.push("/partner/pricing")}>
           Continue to Partner pricing
         </Button>
       ) : (

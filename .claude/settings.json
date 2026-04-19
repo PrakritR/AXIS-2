@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/prakritramachandran/Desktop/axis-2 stash)",
+      "Bash(git stash *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}

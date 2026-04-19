@@ -115,7 +115,7 @@ export async function POST(req: Request) {
         ui_mode: "embedded_page",
         mode: "subscription",
         line_items: [{ price, quantity: 1 }],
-        return_url: `${appUrl}/partner/pricing?session_id={CHECKOUT_SESSION_ID}`,
+        return_url: `${appUrl}/auth/manager-id?session_id={CHECKOUT_SESSION_ID}`,
         ...(email ? { customer_email: email } : {}),
         ...(allowPromotionCodes ? { allow_promotion_codes: true } : {}),
         metadata,
