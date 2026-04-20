@@ -153,6 +153,11 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
     else setAnchorDate((d) => addDays(d, dir));
   };
 
+  /** Move the Mon–Fri availability grid (and schedule anchor) by one week. */
+  const shiftAvailabilityWeek = useCallback((dir: -1 | 1) => {
+    setAnchorDate((d) => addDays(d, dir * 7));
+  }, []);
+
   const scheduleCard = (
     <Card className="overflow-hidden p-0">
       <div className="border-b border-slate-200/80 bg-white px-5 py-4">
@@ -303,9 +308,30 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Availability editor</p>
           <h2 className="mt-2 text-xl font-semibold text-slate-950">Public booking windows</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Week of {formatWeekRangeMonFri(weekMonday)} · paint open times for these dates
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 rounded-full px-3 text-sm"
+              onClick={() => shiftAvailabilityWeek(-1)}
+              aria-label="Previous week"
+            >
+              ←
+            </Button>
+            <p className="min-w-0 flex-1 text-xs leading-snug text-slate-600 sm:text-sm">
+              <span className="font-semibold text-slate-800">Week of {formatWeekRangeMonFri(weekMonday)}</span>
+              <span className="text-slate-500"> · paint open times for these dates</span>
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 rounded-full px-3 text-sm"
+              onClick={() => shiftAvailabilityWeek(1)}
+              aria-label="Next week"
+            >
+              →
+            </Button>
+          </div>
         </div>
         <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open slots</div>
       </div>

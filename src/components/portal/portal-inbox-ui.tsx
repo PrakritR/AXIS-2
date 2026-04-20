@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
+import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import type { TabItem } from "@/components/ui/tabs";
 
 /** Same chrome as admin inbox: list + table container */
@@ -81,11 +82,11 @@ export function PortalInboxMessageTable({
         <table className="w-full min-w-[640px] border-collapse text-left">
           <thead>
             <tr className="border-b border-slate-200/90 bg-white">
-              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">From</th>
-              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Topic</th>
-              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Preview</th>
-              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">When</th>
-              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Actions</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>Topic</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>Preview</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
+              <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
             </tr>
           </thead>
           <tbody>

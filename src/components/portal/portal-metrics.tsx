@@ -188,32 +188,47 @@ export function ManagerPortalStatusPills({
   tabs,
   activeId,
   onChange,
+  /** `primary` = blue active pill (inbox-style); default = white active chip (leases/applications). */
+  activeTone = "default",
 }: {
   tabs: { id: string; label: string; count: number }[];
   activeId: string;
   onChange: (id: string) => void;
+  activeTone?: "default" | "primary";
 }) {
+  const isPrimary = activeTone === "primary";
   return (
     <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          onClick={() => onChange(tab.id)}
-          className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-            activeId === tab.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          {tab.label}
-          <span
-            className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-              activeId === tab.id ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+      {tabs.map((tab) => {
+        const active = activeId === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+              active
+                ? isPrimary
+                  ? "bg-primary text-white shadow-sm"
+                  : "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            {tab.count}
-          </span>
-        </button>
-      ))}
+            {tab.label}
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                active
+                  ? isPrimary
+                    ? "bg-white/20 text-white"
+                    : "bg-slate-100 text-slate-700"
+                  : "bg-slate-200/60 text-slate-500"
+              }`}
+            >
+              {tab.count}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
