@@ -1,15 +1,30 @@
 import { NextResponse } from "next/server";
+import { isAdminUser } from "@/lib/auth/admin-preview";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { generateManagerId } from "@/lib/manager-id";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-type Body = { email: string; fullName: string; password: string; phone?: string };
+type Body = { email: string; password: string; fullName: string };
+
+async function requireAdmin() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  return isAdminUser(user.id);
+}
 
 export async function POST(req: Request) {
   try {
-    const { email, fullName, password, phone } = (await req.json()) as Body;
+    if (!(await requireAdmin())) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const { email, password, fullName } = (await req.json()) as Body;
     if (!email?.trim() || !fullName?.trim()) {
       return NextResponse.json({ error: "Email and full name are required." }, { status: 400 });
     }
@@ -20,9 +35,8 @@ export async function POST(req: Request) {
     const supabase = createSupabaseServiceRoleClient();
     const managerId = generateManagerId();
     const normalEmail = email.trim().toLowerCase();
-    const fakeSessionId = `free_${managerId}`;
+    const fakeSessionId = `admin_${managerId}`;
 
-    // Upsert manager_purchases with tier=free (no Stripe session)
     await supabase.from("manager_purchases").upsert(
       {
         stripe_checkout_session_id: fakeSessionId,
@@ -37,8 +51,6 @@ export async function POST(req: Request) {
       { onConflict: "stripe_checkout_session_id" },
     );
 
-    // Check if email already exists in auth
-    let userId: string;
     const { data: created, error: cErr } = await supabase.auth.admin.createUser({
       email: normalEmail,
       password,
@@ -50,20 +62,13 @@ export async function POST(req: Request) {
       const isAlreadyExists =
         cErr.message.toLowerCase().includes("already") ||
         cErr.message.toLowerCase().includes("registered");
-      if (!isAlreadyExists) {
-        return NextResponse.json({ error: cErr.message }, { status: 400 });
+      if (isAlreadyExists) {
+        return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });
       }
-      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      const existing = listData?.users.find((u) => u.email?.toLowerCase() === normalEmail);
-      if (!existing) {
-        return NextResponse.json({ error: "Could not locate existing account." }, { status: 400 });
-      }
-      userId = existing.id;
-      await supabase.auth.admin.updateUserById(userId, { password });
-    } else {
-      if (!created.user) return NextResponse.json({ error: "Could not create user." }, { status: 400 });
-      userId = created.user.id;
+      return NextResponse.json({ error: cErr.message }, { status: 400 });
     }
+    if (!created?.user) return NextResponse.json({ error: "Could not create user." }, { status: 400 });
+    const userId = created.user.id;
 
     await supabase.from("profiles").upsert(
       {
@@ -83,7 +88,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, managerId });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Signup failed";
+    const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -1,9 +1,11 @@
 import { PublicNavbar } from "@/components/layout/public-navbar";
 import { AdminNotificationBanners } from "@/components/portal/admin-notification-banners";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
+import { assertAdminPortalAccess } from "@/lib/auth/portal-access";
 import { adminPortal } from "@/lib/portals/admin";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  await assertAdminPortalAccess();
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100/80 via-white to-slate-50/90">
       <PublicNavbar />

@@ -4,6 +4,42 @@ import type { ReactNode } from "react";
 export const PORTAL_SECTION_SURFACE =
   "rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6";
 
+/** Calendar week grid outer frame (matches manager calendar chrome). */
+export const PORTAL_CALENDAR_FRAME = "overflow-hidden rounded-[24px] border border-slate-200 bg-slate-200";
+
+/** Pill toggles: Day / Week / Month (Managers filter style). */
+export function PortalSegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+  size = "md",
+}: {
+  options: { id: T; label: string }[];
+  value: T;
+  onChange: (id: T) => void;
+  size?: "sm" | "md";
+}) {
+  const pad = size === "sm" ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-sm";
+  return (
+    <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1" role="tablist" aria-label="View">
+      {options.map((opt) => (
+        <button
+          key={opt.id}
+          type="button"
+          role="tab"
+          aria-selected={value === opt.id}
+          onClick={() => onChange(opt.id)}
+          className={`rounded-full font-semibold transition-all duration-150 ${pad} ${
+            value === opt.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Primary page title in portal workspaces. */
 export const PORTAL_PAGE_TITLE = "text-2xl font-bold tracking-tight text-[#0d1f4e]";
 

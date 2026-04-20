@@ -150,6 +150,7 @@ export const demoResidentChargeRows: DemoResidentChargeRow[] = [];
 export type DemoResidentInboxThread = {
   id: string;
   from: string;
+  email: string;
   subject: string;
   preview: string;
   when: string;
@@ -157,4 +158,25 @@ export type DemoResidentInboxThread = {
   body: string;
 };
 
-export const demoResidentInboxThreads: DemoResidentInboxThread[] = [];
+export const demoResidentInboxThreads: DemoResidentInboxThread[] = [
+  {
+    id: "r1",
+    from: "Property team",
+    email: "team@axishousing.com",
+    subject: "Welcome to your portal",
+    preview: "Your application is approved. Here’s how to access lease documents…",
+    when: "Apr 12",
+    unread: true,
+    body: "Your application is approved. Lease documents will be available under Lease after countersign.",
+  },
+  {
+    id: "r2",
+    from: "Maintenance",
+    email: "maintenance@axishousing.com",
+    subject: "Quarterly HVAC filter",
+    preview: "We’ll replace filters next week. Reply if you need a different window.",
+    when: "Apr 3",
+    unread: false,
+    body: "Scheduled for Tuesday morning. No need to be home unless you prefer to escort.",
+  },
+];

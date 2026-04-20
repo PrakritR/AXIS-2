@@ -51,8 +51,28 @@ function SignInForm() {
         setBusy(false);
         return;
       }
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-      const role = (profile?.role as AuthRole | undefined) ?? "resident";
+      let roles: AuthRole[] = [];
+      try {
+        const rolesRes = await fetch("/api/auth/portal-roles", { credentials: "include" });
+        const rolesBody = (await rolesRes.json()) as { roles?: AuthRole[] };
+        if (rolesRes.ok && rolesBody.roles?.length) {
+          roles = rolesBody.roles;
+        }
+      } catch {
+        /* fallback below */
+      }
+      if (roles.length === 0) {
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+        const role = (profile?.role as AuthRole | undefined) ?? "resident";
+        roles = [role];
+      }
+      if (roles.length > 1) {
+        const q = nextPath.startsWith("/") ? `?next=${encodeURIComponent(nextPath)}` : "";
+        router.push(`/auth/choose-portal${q}`);
+        router.refresh();
+        return;
+      }
+      const role = roles[0] ?? "resident";
       const dest = nextPath.startsWith("/") ? nextPath : roleToPath(role);
       router.push(dest);
       router.refresh();

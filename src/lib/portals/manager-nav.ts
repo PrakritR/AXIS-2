@@ -1,7 +1,8 @@
+import { portalDashboardPath } from "@/components/auth/portal-switcher";
 import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
-import { getServerSessionProfile } from "@/lib/auth/server-profile";
+import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
 import { FREE_MANAGER_SECTIONS, getManagerSubscriptionTier } from "@/lib/manager-access";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -13,16 +14,20 @@ export async function buildManagerPortalDefinition(): Promise<{
   showPreviewBanner: boolean;
   previewLabel: string | null;
 }> {
-  const session = await getServerSessionProfile();
-  if (!session.user) redirect("/auth/sign-in");
+  const ctx = await getPortalAccessContext();
+  if (!ctx.user) redirect("/auth/sign-in");
 
-  if (session.profile?.role === "admin") {
-    const preview = await getAdminPreviewFromCookies();
-    if (!preview || preview.portal !== "manager") {
-      redirect("/admin/dashboard");
-    }
-  } else if (session.profile?.role !== "manager") {
+  const preview = await getAdminPreviewFromCookies();
+  if (hasAdminRole(ctx) && preview?.portal === "manager") {
+    /* admin preview — allowed */
+  } else if (hasAdminRole(ctx) && !hasRole(ctx, "manager")) {
+    redirect("/admin/dashboard");
+  } else if (!hasRole(ctx, "manager")) {
     redirect("/auth/sign-in");
+  } else if (ctx.roles.length > 1 && ctx.effectiveRole === null) {
+    redirect(`/auth/choose-portal?next=${encodeURIComponent("/manager/dashboard")}`);
+  } else if (ctx.effectiveRole !== "manager") {
+    redirect(portalDashboardPath(ctx.effectiveRole ?? "resident"));
   }
 
   const effectiveUserId = await getEffectiveUserIdForPortal("manager");
@@ -36,7 +41,7 @@ export async function buildManagerPortalDefinition(): Promise<{
     : managerPortal.sections;
 
   const previewCookie = await getAdminPreviewFromCookies();
-  const showPreviewBanner = session.profile?.role === "admin" && !!previewCookie?.targetUserId;
+  const showPreviewBanner = hasAdminRole(ctx) && !!previewCookie?.targetUserId;
 
   let previewLabel: string | null = null;
   if (showPreviewBanner && previewCookie) {

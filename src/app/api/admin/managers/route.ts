@@ -18,10 +18,20 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
     const supabase = createSupabaseServiceRoleClient();
+    const { data: roleRows } = await supabase.from("profile_roles").select("user_id").eq("role", "manager");
+    const idsFromRoles = [...new Set((roleRows ?? []).map((r) => r.user_id))];
+    const { data: legacyRows } = await supabase.from("profiles").select("id").eq("role", "manager");
+    const legacyIds = (legacyRows ?? []).map((p) => p.id);
+    const allIds = [...new Set([...idsFromRoles, ...legacyIds])];
+
+    if (allIds.length === 0) {
+      return NextResponse.json({ managers: [] });
+    }
+
     const { data, error } = await supabase
       .from("profiles")
       .select("id, email, full_name, manager_id, application_approved, created_at")
-      .eq("role", "manager")
+      .in("id", allIds)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -67,11 +77,7 @@ export async function PATCH(req: Request) {
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const supabase = createSupabaseServiceRoleClient();
-    const { error } = await supabase
-      .from("profiles")
-      .update({ application_approved: active })
-      .eq("id", id)
-      .eq("role", "manager");
+    const { error } = await supabase.from("profiles").update({ application_approved: active }).eq("id", id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });

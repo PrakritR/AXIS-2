@@ -35,7 +35,16 @@ export async function POST(req: Request) {
 
     const db = createSupabaseServiceRoleClient();
     const { data: profile, error } = await db.from("profiles").select("id, role").eq("id", targetUserId).maybeSingle();
-    if (error || !profile || profile.role !== portal) {
+    if (error || !profile) {
+      return NextResponse.json({ error: "User not found or role does not match portal." }, { status: 400 });
+    }
+    const { data: roleRow } = await db
+      .from("profile_roles")
+      .select("role")
+      .eq("user_id", targetUserId)
+      .eq("role", portal)
+      .maybeSingle();
+    if (!roleRow && profile.role !== portal) {
       return NextResponse.json({ error: "User not found or role does not match portal." }, { status: 400 });
     }
 

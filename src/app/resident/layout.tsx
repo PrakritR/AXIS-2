@@ -5,8 +5,8 @@ import { ResidentPortalPillNav } from "@/components/portal/resident-portal-pill-
 import { ResidentPortalTopbar } from "@/components/portal/resident-portal-topbar";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
+import { getPortalAccessContext, hasAdminRole } from "@/lib/auth/portal-access";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
-import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
 import { residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 
@@ -22,9 +22,9 @@ export default async function ResidentLayout({ children }: { children: React.Rea
   });
   const displayName = profile?.full_name ?? profile?.email ?? user?.email ?? "Resident";
 
-  const session = await getServerSessionProfile();
+  const ctx = await getPortalAccessContext();
   const preview = await getAdminPreviewFromCookies();
-  const showPreviewBanner = session.profile?.role === "admin" && preview?.portal === "resident";
+  const showPreviewBanner = hasAdminRole(ctx) && preview?.portal === "resident";
   let previewLabel: string | null = null;
   if (showPreviewBanner && preview) {
     previewLabel = profile?.full_name?.trim() || profile?.email || preview.targetUserId;

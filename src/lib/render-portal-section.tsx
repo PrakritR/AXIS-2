@@ -7,6 +7,8 @@ import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerOwners } from "@/components/portal/manager-owners";
 import { ManagerPayments } from "@/components/portal/manager-payments";
 import { ManagerProfile } from "@/components/portal/manager-profile";
+import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
+import { AdminCreateResidentClient } from "@/components/portal/admin-create-resident-client";
 import { AdminManagersClient } from "@/components/portal/admin-managers-client";
 import { AdminOwnersClient } from "@/components/portal/admin-owners-client";
 import { AdminLeasesClient } from "@/components/portal/admin-leases-client";
@@ -69,6 +71,16 @@ export async function renderPortalSection(
     return <AdminDashboard />;
   }
 
+  if (kind === "admin" && section === "create-manager") {
+    if (tabParts?.length) notFound();
+    return <AdminCreateManagerClient />;
+  }
+
+  if (kind === "admin" && section === "create-resident") {
+    if (tabParts?.length) notFound();
+    return <AdminCreateResidentClient />;
+  }
+
   if (kind === "admin" && section === "properties") {
     if (tabParts?.length) notFound();
     return <AdminPropertiesClient />;
@@ -127,6 +139,15 @@ export async function renderPortalSection(
   }
 
   if (kind === "manager") {
+    if (section === "inbox") {
+      if (!meta.tabs.length) notFound();
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+      }
+      const inboxTab = tabParts[0]!;
+      if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+      return <ManagerInbox tabId={inboxTab} />;
+    }
     if (tabParts?.length) notFound();
     if (section === "dashboard") return <ManagerDashboard />;
     if (section === "properties") return <ManagerProperties />;
@@ -135,7 +156,6 @@ export async function renderPortalSection(
     if (section === "payments") return <ManagerPayments />;
     if (section === "work-orders") return <ManagerWorkOrders />;
     if (section === "owners") return <ManagerOwners />;
-    if (section === "inbox") return <ManagerInbox />;
     if (section === "calendar") return <ManagerCalendar />;
     if (section === "profile") return <ManagerProfile />;
   }
@@ -170,11 +190,19 @@ export async function renderPortalSection(
 
   if (kind === "resident") {
     if (residentWorkspaceUnlocked) {
+      if (section === "inbox") {
+        if (!meta.tabs.length) notFound();
+        if (!tabParts?.length) {
+          redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+        }
+        const inboxTab = tabParts[0]!;
+        if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+        return <ResidentInboxPanel tabId={inboxTab} />;
+      }
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentLeasePanel />;
       if (section === "payments") return <ResidentPaymentsPanel />;
       if (section === "work-orders") return <ResidentWorkOrdersPanel />;
-      if (section === "inbox") return <ResidentInboxPanel />;
     }
   }
 

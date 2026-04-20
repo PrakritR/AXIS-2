@@ -1,42 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
-import { Button } from "@/components/ui/button";
 import { ManagerSectionShell } from "@/components/portal/manager-section-shell";
+import {
+  inboxTabItems,
+  PortalInboxEmptyState,
+  PortalInboxMessageTable,
+  type PortalInboxTableRow,
+} from "@/components/portal/portal-inbox-ui";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { TabNav, type TabItem } from "@/components/ui/tabs";
+import { TabNav } from "@/components/ui/tabs";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
   markPartnerInboxMessageRead,
   readPartnerInboxMessages,
   type PartnerInboxMessage,
 } from "@/lib/demo-admin-partner-inbox";
-
-const tabs: TabItem[] = [
-  { id: "unopened", label: "Unopened", href: "/admin/inbox/unopened" },
-  { id: "opened", label: "Opened", href: "/admin/inbox/opened" },
-  { id: "sent", label: "Sent", href: "/admin/inbox/sent" },
-  { id: "trash", label: "Trash", href: "/admin/inbox/trash" },
-];
-
-function InboxEmptyIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect width="20" height="16" x="2" y="4" rx="2" />
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-    </svg>
-  );
-}
 
 function formatWhen(iso: string) {
   try {
@@ -49,6 +28,18 @@ function formatWhen(iso: string) {
   } catch {
     return "—";
   }
+}
+
+function toTableRows(messages: PartnerInboxMessage[]): PortalInboxTableRow[] {
+  return messages.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    topic: row.topic,
+    preview: row.body,
+    whenLabel: formatWhen(row.createdAt),
+    read: row.read,
+  }));
 }
 
 export function AdminInboxClient({ tabId }: { tabId: string }) {
@@ -94,80 +85,34 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
         ? "No opened messages yet"
         : "No partner messages yet";
 
+  const tabs = inboxTabItems("/admin");
+
   return (
     <ManagerSectionShell title="Inbox" actions={shellActions}>
       <div className="space-y-5">
         <TabNav items={tabs} activeId={tabId} />
 
         {tabId === "sent" || tabId === "trash" ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200/90 bg-slate-50/30 px-4 py-16 text-center sm:py-20">
-            <AxisHeaderMarkTile>
-              <InboxEmptyIcon className="h-[26px] w-[26px]" />
-            </AxisHeaderMarkTile>
-            <p className="mt-4 text-sm font-medium text-slate-500">{emptyCopy}</p>
-          </div>
+          <PortalInboxEmptyState title={emptyCopy} />
         ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200/90 bg-slate-50/30 px-4 py-16 text-center sm:py-20">
-            <AxisHeaderMarkTile>
-              <InboxEmptyIcon className="h-[26px] w-[26px]" />
-            </AxisHeaderMarkTile>
-            <p className="mt-4 text-sm font-medium text-slate-500">{emptyCopy}</p>
-            {tabId === "unopened" ? (
-              <p className="mt-2 max-w-md text-xs text-slate-400">
-                Partner inquiries sent from the public contact page appear here.
-              </p>
-            ) : null}
-          </div>
+          <PortalInboxEmptyState
+            title={emptyCopy}
+            hint={
+              tabId === "unopened" ? (
+                <p className="max-w-md">Partner inquiries sent from the public contact page appear here.</p>
+              ) : undefined
+            }
+          />
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-slate-200/90 bg-white">
-                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">From</th>
-                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Topic</th>
-                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Preview</th>
-                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">When</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.id} className="border-b border-slate-100 last:border-0">
-                      <td className="px-5 py-4 align-middle">
-                        <p className="font-semibold text-slate-900">{row.name}</p>
-                        <p className="mt-0.5 text-sm text-slate-500">{row.email}</p>
-                      </td>
-                      <td className="px-5 py-4 align-middle text-sm text-slate-800">{row.topic}</td>
-                      <td className="max-w-[220px] px-5 py-4 align-middle text-sm text-slate-600">
-                        <span className="line-clamp-2">{row.body}</span>
-                      </td>
-                      <td className="px-5 py-4 align-middle text-sm text-slate-500">{formatWhen(row.createdAt)}</td>
-                      <td className="px-5 py-4 text-right align-middle">
-                        {!row.read ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
-                            onClick={() => {
-                              if (markPartnerInboxMessageRead(row.id)) {
-                                showToast("Marked as read.");
-                                setTick((t) => t + 1);
-                              }
-                            }}
-                          >
-                            Mark read
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <PortalInboxMessageTable
+            rows={toTableRows(rows)}
+            onMarkRead={(id) => {
+              if (markPartnerInboxMessageRead(id)) {
+                showToast("Marked as read.");
+                setTick((t) => t + 1);
+              }
+            }}
+          />
         )}
       </div>
     </ManagerSectionShell>

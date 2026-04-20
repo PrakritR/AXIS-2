@@ -1,10 +1,11 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { TabNav, type TabItem } from "@/components/ui/tabs";
 import { ManagerSectionShell } from "@/components/portal/manager-section-shell";
+import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   acceptPartnerInquiry,
@@ -36,24 +37,6 @@ const tabs: TabItem[] = [
 
 type CalendarMode = "day" | "week" | "month";
 
-function startOfLocalDay(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-}
-
-function calendarDaysBetween(a: Date, b: Date) {
-  const ua = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
-  const ub = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
-  return Math.round((ua - ub) / 86400000);
-}
-
-/** Farther from today → coarser zoom (day → week → month). */
-function calendarModeFromAnchor(anchor: Date): CalendarMode {
-  const diff = Math.abs(calendarDaysBetween(startOfLocalDay(anchor), startOfLocalDay(new Date())));
-  if (diff <= 3) return "day";
-  if (diff <= 28) return "week";
-  return "month";
-}
-
 function slotLabel(slotIndex: number) {
   const mins = 8 * 60 + slotIndex * 30;
   const h24 = Math.floor(mins / 60);
@@ -69,12 +52,6 @@ function weekDatesFromMonday(weekMonday: Date) {
     d.setDate(start.getDate() + i);
     return d;
   });
-}
-
-function addCalendarMonths(d: Date, delta: number) {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
-  x.setMonth(x.getMonth() + delta);
-  return x;
 }
 
 function dayCellTone(d: Date, availability: Set<string>, events: PlannedEvent[]) {
@@ -223,7 +200,7 @@ function MonthGrid({
   while (cells.length < 42) cells.push(null);
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-slate-50/40 p-3">
+    <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm">
       <p className="mb-2 text-center text-sm font-semibold text-slate-800">
         {anchor.toLocaleString(undefined, { month: "long", year: "numeric" })}
       </p>
@@ -273,31 +250,37 @@ function EventsWeekGrid({
 }) {
   const days = weekDatesFromMonday(weekMonday);
   return (
-    <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2 sm:p-3">
-      <div className="grid w-full shrink-0 grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-slate-400 sm:gap-1.5 sm:text-[11px]">
-        {days.map((d) => (
-          <div key={toLocalDateStr(d)} className="min-w-0 truncate px-0.5 py-1.5 sm:py-2">
-            {WEEKDAY_LABELS[mondayBasedDayIndex(d)]}{" "}
-            <span className="font-semibold text-slate-600">{d.getDate()}</span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-1 grid min-h-0 w-full flex-1 grid-cols-7 gap-1 overflow-y-auto overscroll-contain sm:gap-1.5">
+    <div className={PORTAL_CALENDAR_FRAME}>
+      <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-px bg-slate-200">
         {days.map((d) => (
           <div
             key={toLocalDateStr(d)}
-            className={`min-h-[6rem] rounded-xl border p-1.5 text-left text-[11px] leading-snug text-slate-600 sm:min-h-[7rem] sm:p-2 ${dayCellTone(d, availability, planned)}`}
+            className="bg-slate-50 px-2 py-3 text-center sm:px-3"
           >
-              {planned
-                .filter((e) => {
-                  const t = new Date(e.start);
-                  return t.toDateString() === d.toDateString();
-                })
-                .map((e) => (
-                  <p key={e.id} className="mb-1 font-medium text-slate-900">
-                    {e.title}
-                  </p>
-                ))}
+            <p className="text-sm font-semibold text-slate-900">{WEEKDAY_LABELS[mondayBasedDayIndex(d)]}</p>
+            <p className="text-xs text-slate-500">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid min-h-0 w-full flex-1 grid-cols-7 gap-px overflow-y-auto overscroll-contain bg-slate-200">
+        {days.map((d) => (
+          <div
+            key={toLocalDateStr(d)}
+            className={`min-h-[min(18rem,50vh)] border-t border-slate-200/80 bg-white p-2 text-left text-[11px] leading-snug text-slate-600 sm:min-h-[20rem] sm:p-2.5 ${dayCellTone(d, availability, planned)}`}
+          >
+            {planned
+              .filter((e) => {
+                const t = new Date(e.start);
+                return t.toDateString() === d.toDateString();
+              })
+              .map((e) => (
+                <div
+                  key={e.id}
+                  className="mb-2 rounded-2xl border border-primary/20 bg-primary/[0.08] px-2 py-1.5 text-sm font-semibold text-primary shadow-sm"
+                >
+                  {e.title}
+                </div>
+              ))}
           </div>
         ))}
       </div>
@@ -318,7 +301,7 @@ function DayAgendaView({
   const dayEvents = planned.filter((e) => new Date(e.start).toDateString() === day.toDateString());
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white p-3 sm:p-4">
       <p className="shrink-0 text-sm font-semibold text-slate-900">
         {day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
       </p>
@@ -545,17 +528,12 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
   const [inquiryInstructionsDraft, setInquiryInstructionsDraft] = useState("");
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [monthAnchor] = useState(() => new Date());
-  const [calModeOverride, setCalModeOverride] = useState<CalendarMode | null>(null);
+  const [viewMode, setViewMode] = useState<CalendarMode>("week");
   const [calAnchor, setCalAnchor] = useState(() => {
     const t = new Date();
     t.setHours(12, 0, 0, 0);
     return t;
   });
-
-  const derivedCalMode = useMemo(() => calendarModeFromAnchor(calAnchor), [calAnchor]);
-  const calMode = calModeOverride ?? derivedCalMode;
-  const calModeNavRef = useRef(calMode);
-  calModeNavRef.current = calMode;
 
   const bump = useCallback(() => setTick((t) => t + 1), []);
 
@@ -596,15 +574,12 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
   const monthDisplayAnchor = useMemo(() => new Date(calAnchor.getFullYear(), calAnchor.getMonth(), 1), [calAnchor]);
 
   const calPrev = () => {
-    setCalModeOverride(null);
-    setCalAnchor((a) => shiftCalendarAnchor(a, calModeNavRef.current, -1));
+    setCalAnchor((a) => shiftCalendarAnchor(a, viewMode, -1));
   };
   const calNext = () => {
-    setCalModeOverride(null);
-    setCalAnchor((a) => shiftCalendarAnchor(a, calModeNavRef.current, 1));
+    setCalAnchor((a) => shiftCalendarAnchor(a, viewMode, 1));
   };
   const calToday = () => {
-    setCalModeOverride(null);
     const t = new Date();
     t.setHours(12, 0, 0, 0);
     setCalAnchor(t);
@@ -784,20 +759,24 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
                 id="events-calendar"
                 className="flex min-h-[min(28rem,55vh)] flex-col gap-2 lg:col-span-7 lg:min-h-0 lg:max-h-full lg:overflow-hidden"
               >
-                <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Calendar</p>
-                    <p className="hidden text-sm text-slate-600 sm:block">
-                      Zoom follows distance from today. Use arrows to navigate.
-                    </p>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Calendar</p>
+                    <p className="mt-1 text-xl font-semibold text-slate-950">{calendarNavLabel(calAnchor, viewMode)}</p>
                   </div>
-                  <span className="shrink-0 self-start rounded-full border border-slate-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-600 sm:self-auto">
-                    {calMode === "day" ? "Day" : calMode === "week" ? "Week" : "Month"}
-                  </span>
+                  <PortalSegmentedControl<CalendarMode>
+                    options={[
+                      { id: "day", label: "Day" },
+                      { id: "week", label: "Week" },
+                      { id: "month", label: "Month" },
+                    ]}
+                    value={viewMode}
+                    onChange={setViewMode}
+                  />
                 </div>
 
-                <div className="flex shrink-0 flex-col gap-2 rounded-xl border border-slate-200/80 bg-slate-50/40 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-                  <p className="text-sm font-semibold leading-tight text-slate-900">{calendarNavLabel(calAnchor, calMode)}</p>
+                <div className="flex shrink-0 flex-col gap-2 rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+                  <p className="text-sm font-medium text-slate-600">Navigate</p>
                   <div className="flex flex-wrap gap-1.5 sm:gap-2">
                     <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs sm:text-sm" onClick={calPrev}>
                       Back
@@ -812,22 +791,22 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
                 </div>
 
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-h-[12rem]">
-                  {calMode === "day" ? (
+                  {viewMode === "day" ? (
                     <DayAgendaView day={calAnchor} availability={availability} planned={planned} />
                   ) : null}
 
-                  {calMode === "week" ? (
+                  {viewMode === "week" ? (
                     <EventsWeekGrid weekMonday={weekMondayForGrid} availability={availability} planned={planned} />
                   ) : null}
 
-                  {calMode === "month" ? (
+                  {viewMode === "month" ? (
                     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                       <MonthGrid
                         anchor={monthDisplayAnchor}
                         availability={availability}
                         events={planned}
                         onDayClick={(d) => {
-                          setCalModeOverride("day");
+                          setViewMode("day");
                           const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
                           setCalAnchor(x);
                         }}

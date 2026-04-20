@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
+import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
@@ -232,7 +233,7 @@ export function AdminManagersClient() {
   ];
 
   return (
-    <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6">
+    <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Managers</h1>
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => void load()}>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { demoResidentChargeRows, demoResidentInboxThreads } from "@/data/demo-portal";
 
 function StatCard({
@@ -43,7 +44,7 @@ export function ResidentDashboard({
 
   if (applicationApproved) {
     return (
-      <div className="mx-auto w-full max-w-[1600px] space-y-4">
+      <div className={`mx-auto w-full max-w-[1600px] space-y-4 ${PORTAL_SECTION_SURFACE}`}>
         {showTestAccessNote ? (
           <p className="rounded-2xl border border-sky-200/80 bg-sky-50/90 px-4 py-2.5 text-sm font-medium text-sky-950">
             Test account: full resident portal is unlocked for this email while application approval is still pending in
@@ -95,7 +96,7 @@ export function ResidentDashboard({
           </StatCard>
         </div>
         <Link
-          href="/resident/inbox"
+          href="/resident/inbox/unopened"
           className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-sm font-medium shadow-sm transition hover:border-primary/25"
         >
           <span className="flex items-center gap-2 text-slate-800">
@@ -111,7 +112,7 @@ export function ResidentDashboard({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] space-y-4">
+    <div className={`mx-auto w-full max-w-[1600px] space-y-4 ${PORTAL_SECTION_SURFACE}`}>
       <p className="rounded-2xl border border-amber-200/70 bg-amber-50/90 px-4 py-2.5 text-sm font-medium text-amber-950">
         Application under review
       </p>

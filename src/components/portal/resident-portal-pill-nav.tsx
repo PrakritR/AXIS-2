@@ -7,7 +7,7 @@ const WORKSPACE_TABS: TabItem[] = [
   { id: "lease", label: "Lease", href: "/resident/lease" },
   { id: "payments", label: "Payments", href: "/resident/payments" },
   { id: "work-orders", label: "Work orders", href: "/resident/work-orders" },
-  { id: "inbox", label: "Inbox", href: "/resident/inbox" },
+  { id: "inbox", label: "Inbox", href: "/resident/inbox/unopened" },
 ];
 
 export function ResidentPortalPillNav() {

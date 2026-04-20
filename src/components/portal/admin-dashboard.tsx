@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { Card } from "@/components/ui/card";
-import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
+import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { pendingInquiryCount, readPlannedEvents } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 
@@ -116,8 +115,25 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-slate-200/90 bg-white p-6 shadow-sm">
-        <div className="grid gap-8 lg:grid-cols-3">
+      <div className={PORTAL_SECTION_SURFACE}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/create-manager"
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+            >
+              Create manager
+            </Link>
+            <Link
+              href="/admin/create-resident"
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+            >
+              Create resident
+            </Link>
+          </div>
+        </div>
+        <div className="mt-6 grid gap-8 lg:grid-cols-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Manager portal</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -206,7 +222,7 @@ export function AdminDashboard() {
             </div>
           </div>
         </div>
-      </Card>
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Properties" value="0" href="/admin/properties" />

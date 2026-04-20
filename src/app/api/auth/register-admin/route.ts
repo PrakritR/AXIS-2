@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isValidAdminRegisterKey } from "@/lib/auth/resolve-portal-role";
+import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -64,6 +65,8 @@ export async function POST(req: Request) {
     if (pErr) {
       return NextResponse.json({ error: pErr.message }, { status: 500 });
     }
+
+    await ensureProfileRoleRow(supabase, userId, "admin");
 
     return NextResponse.json({ ok: true });
   } catch (e) {

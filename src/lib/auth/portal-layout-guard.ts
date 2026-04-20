@@ -1,24 +1,30 @@
+import { portalDashboardPath } from "@/components/auth/portal-switcher";
 import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import type { PreviewPortal } from "@/lib/auth/preview-types";
-import { getServerSessionProfile } from "@/lib/auth/server-profile";
+import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
 
 /**
  * Ensures only the correct role (or admin with matching preview cookie) can load a portal layout.
  */
 export async function assertPortalLayoutRole(portal: PreviewPortal, role: "manager" | "resident" | "owner") {
-  const session = await getServerSessionProfile();
-  if (!session.user) redirect("/auth/sign-in");
+  const ctx = await getPortalAccessContext();
+  if (!ctx.user) redirect("/auth/sign-in");
 
-  if (session.profile?.role === "admin") {
-    const preview = await getAdminPreviewFromCookies();
-    if (!preview || preview.portal !== portal) {
-      redirect("/admin/dashboard");
-    }
+  const preview = await getAdminPreviewFromCookies();
+  if (hasAdminRole(ctx) && preview?.portal === portal) {
     return;
   }
 
-  if (session.profile?.role !== role) {
+  if (!hasRole(ctx, role)) {
     redirect("/auth/sign-in");
+  }
+
+  if (ctx.roles.length > 1 && ctx.effectiveRole === null) {
+    redirect(`/auth/choose-portal?next=${encodeURIComponent(portalDashboardPath(role))}`);
+  }
+
+  if (ctx.effectiveRole !== role) {
+    redirect(portalDashboardPath(ctx.effectiveRole ?? "resident"));
   }
 }

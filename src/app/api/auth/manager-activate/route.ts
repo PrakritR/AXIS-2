@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -77,6 +78,8 @@ export async function POST(req: Request) {
       },
       { onConflict: "id" },
     );
+
+    await ensureProfileRoleRow(supabase, userId, "manager");
 
     await supabase.from("manager_purchases").update({ user_id: userId }).eq("id", purchase.id);
 

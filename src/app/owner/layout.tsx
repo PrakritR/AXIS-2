@@ -4,16 +4,16 @@ import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
+import { getPortalAccessContext, hasAdminRole } from "@/lib/auth/portal-access";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
-import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { ownerPortal } from "@/lib/portals/owner";
 
 export default async function OwnerLayout({ children }: { children: ReactNode }) {
   await assertPortalLayoutRole("owner", "owner");
 
-  const session = await getServerSessionProfile();
+  const ctx = await getPortalAccessContext();
   const preview = await getAdminPreviewFromCookies();
-  const showPreviewBanner = session.profile?.role === "admin" && preview?.portal === "owner";
+  const showPreviewBanner = hasAdminRole(ctx) && preview?.portal === "owner";
   const { profile } = await getEffectiveSessionForPortal("owner");
   let previewLabel: string | null = null;
   if (showPreviewBanner && preview) {

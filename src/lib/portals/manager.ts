@@ -14,7 +14,16 @@ export const managerPortal: PortalDefinition = {
     { section: "payments", label: "Payments", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },
-    { section: "inbox", label: "Inbox", tabs: [] },
+    {
+      section: "inbox",
+      label: "Inbox",
+      tabs: [
+        { id: "unopened", label: "Unopened" },
+        { id: "opened", label: "Opened" },
+        { id: "sent", label: "Sent" },
+        { id: "trash", label: "Trash" },
+      ],
+    },
     { section: "profile", label: "Profile", tabs: [] },
   ],
 };

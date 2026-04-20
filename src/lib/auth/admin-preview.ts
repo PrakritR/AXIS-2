@@ -19,6 +19,13 @@ export async function getAdminPreviewFromCookies(): Promise<{ targetUserId: stri
 
 export async function isAdminUser(userId: string): Promise<boolean> {
   const supabase = await createSupabaseServerClient();
+  const { data: pr, error: prErr } = await supabase
+    .from("profile_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (!prErr && pr) return true;
   const { data } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
   return data?.role === "admin";
 }

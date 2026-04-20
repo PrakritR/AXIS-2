@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-session";
 import { isAxisIntentSessionId } from "@/lib/manager-signup-intent";
 import { getStripe } from "@/lib/stripe/server";
@@ -65,6 +66,8 @@ export async function POST(req: Request) {
       if (upErr) {
         return NextResponse.json({ error: upErr.message }, { status: 500 });
       }
+
+      await ensureProfileRoleRow(supabase, userId, "manager");
 
       const { error: linkErr } = await supabase.from("manager_purchases").update({ user_id: userId }).eq("id", purchase.id);
       if (linkErr) {
@@ -156,6 +159,8 @@ export async function POST(req: Request) {
     if (upErr) {
       return NextResponse.json({ error: upErr.message }, { status: 500 });
     }
+
+    await ensureProfileRoleRow(supabase, userId, "manager");
 
     const { error: linkErr } = await supabase.from("manager_purchases").update({ user_id: userId }).eq("id", purchase.id);
     if (linkErr) {

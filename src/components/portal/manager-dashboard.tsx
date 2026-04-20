@@ -67,7 +67,7 @@ export function ManagerDashboard() {
           <StatLink label="Leases" value="4" href="/manager/leases" />
           <StatLink label="Payments" value={String(demoManagerPaymentLedgerRows.length)} href="/manager/payments" />
           <StatLink label="Work orders" value={String(demoManagerWorkOrderRowsFull.length)} href="/manager/work-orders" />
-          <StatLink label="Inbox" value="5" href="/manager/inbox" />
+          <StatLink label="Inbox" value="5" href="/manager/inbox/unopened" />
         </div>
       </div>
     </ManagerSectionShell>

@@ -245,6 +245,15 @@ function CreateAccountContent() {
         return;
       }
 
+      const { error: roleErr } = await supabase.from("profile_roles").upsert(
+        { user_id: uid, role },
+        { onConflict: "user_id,role" },
+      );
+      if (roleErr) {
+        showToast(roleErr.message);
+        return;
+      }
+
       showToast("Account created. You can sign in once email confirmation completes (if enabled).");
       router.push("/auth/sign-in");
     } catch (e) {
