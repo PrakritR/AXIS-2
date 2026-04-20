@@ -399,6 +399,50 @@ export function recordApplicationCharges(
   writeAll([...readAll(), ...created]);
 }
 
+/** Adds demo household charge lines scoped to this manager when none exist (pairs with ledger fallbacks). */
+export function seedDemoHouseholdChargesIfEmpty(managerUserId: string): void {
+  if (!isBrowser() || !managerUserId.trim()) return;
+  if (readChargesForManager(managerUserId).length > 0) return;
+  const now = new Date().toISOString();
+  const tag = managerUserId.slice(0, 8);
+  const extra: HouseholdCharge[] = [
+    {
+      id: `hc_seed_${tag}_rent`,
+      createdAt: now,
+      residentEmail: "alex.chen@example.com",
+      residentName: "Alex Chen",
+      residentUserId: null,
+      propertyId: `seed-demo-building-rent-${tag}`,
+      propertyLabel: "Demo Building · 2A",
+      managerUserId,
+      kind: "payment_at_signing",
+      title: "April rent",
+      amountLabel: "$1,850.00",
+      balanceLabel: "$1,850.00",
+      status: "pending",
+      blocksLeaseUntilPaid: false,
+    },
+    {
+      id: `hc_seed_${tag}_wo`,
+      createdAt: now,
+      residentEmail: "priya.nair@example.com",
+      residentName: "Priya Nair",
+      residentUserId: null,
+      propertyId: "workorder:WO-9005",
+      propertyLabel: "Demo Building · 1C",
+      managerUserId,
+      kind: "work_order_charge",
+      title: "Work order · Kitchen disposal reset",
+      amountLabel: "$85.00",
+      balanceLabel: "$85.00",
+      status: "pending",
+      blocksLeaseUntilPaid: false,
+      workOrderId: "WO-9005",
+    },
+  ];
+  writeAll([...readAll(), ...extra]);
+}
+
 export function residentLeaseBlockedReasons(email: string, userId: string | null): string[] {
   const charges = readChargesForResident(email, userId);
   const out: string[] = [];

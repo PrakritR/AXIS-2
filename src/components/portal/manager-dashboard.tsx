@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -11,7 +11,12 @@ import {
   demoManagerLeaseDraftRows,
   demoManagerPaymentLedgerRows,
   demoManagerWorkOrderRowsFull,
+  demoManagerInboxUnopenedCount,
 } from "@/data/demo-portal";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
+import { HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
+import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readManagerWorkOrderRows, subscribeManagerWorkOrders } from "@/lib/manager-work-orders-storage";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
@@ -36,9 +41,50 @@ function subscribeManagerApplications(cb: () => void) {
   return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, cb);
 }
 
+function subscribePipeline(cb: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(PROPERTY_PIPELINE_EVENT, cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    window.removeEventListener(PROPERTY_PIPELINE_EVENT, cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+
 export function ManagerDashboard() {
   const { showToast } = useAppUi();
-  const pendingProperties = demoManagerHouseRows.filter((p) => p.bucket === "pending").length;
+  const { userId } = useManagerUserId();
+
+  const pipelineTick = useSyncExternalStore(subscribePipeline, () => null, () => null);
+
+  const pipelineSummary = useMemo(() => {
+    void pipelineTick;
+    if (!userId) {
+      return {
+        pendingProperties: demoManagerHouseRows.filter((p) => p.bucket === "pending").length,
+        totalProperties: demoManagerHouseRows.length,
+      };
+    }
+    const [p0, p1, p2, p3, p4] = adminKpiCounts(userId);
+    return {
+      pendingProperties: p0,
+      totalProperties: p0 + p1 + p2 + p3 + p4,
+    };
+  }, [userId, pipelineTick]);
+
+  const [hcTick, setHcTick] = useState(0);
+  useEffect(() => {
+    const on = () => setHcTick((n) => n + 1);
+    window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+    return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+  }, []);
+
+  const paymentLineCount = useMemo(() => {
+    void hcTick;
+    const fromHc = userId ? readChargesForManager(userId).length : 0;
+    return fromHc + demoManagerPaymentLedgerRows.length;
+  }, [userId, hcTick]);
+
   const applicationRows = useSyncExternalStore(
     subscribeManagerApplications,
     () => readManagerApplicationRows(demoApplicantRows),
@@ -76,18 +122,18 @@ export function ManagerDashboard() {
             </Link>
           </p>
         ) : null}
-        {pendingProperties > 0 || pendingApplications > 0 ? (
+        {pipelineSummary.pendingProperties > 0 || pendingApplications > 0 ? (
           <p className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
-            {pendingProperties > 0 ? (
+            {pipelineSummary.pendingProperties > 0 ? (
               <>
-                <span className="font-semibold">{pendingProperties}</span> propert{pendingProperties === 1 ? "y" : "ies"} pending
-                approval.{" "}
+                <span className="font-semibold">{pipelineSummary.pendingProperties}</span> propert
+                {pipelineSummary.pendingProperties === 1 ? "y" : "ies"} pending approval.{" "}
                 <Link className="font-semibold text-primary underline-offset-2 hover:underline" href="/manager/properties">
                   Review properties
                 </Link>
               </>
             ) : null}
-            {pendingProperties > 0 && pendingApplications > 0 ? <span className="mx-1">·</span> : null}
+            {pipelineSummary.pendingProperties > 0 && pendingApplications > 0 ? <span className="mx-1">·</span> : null}
             {pendingApplications > 0 ? (
               <>
                 <span className="font-semibold">{pendingApplications}</span> application{pendingApplications === 1 ? "" : "s"} need a
@@ -101,12 +147,12 @@ export function ManagerDashboard() {
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatLink label="Properties" value={String(demoManagerHouseRows.length)} href="/manager/properties" />
+          <StatLink label="Properties" value={String(pipelineSummary.totalProperties)} href="/manager/properties" />
           <StatLink label="Applications" value={String(applicationRows.length)} href="/manager/applications" />
           <StatLink label="Leases" value={String(demoManagerLeaseDraftRows.length)} href="/manager/leases" />
-          <StatLink label="Payments" value={String(demoManagerPaymentLedgerRows.length)} href="/manager/payments" />
+          <StatLink label="Payments" value={String(paymentLineCount)} href="/manager/payments" />
           <StatLink label="Work orders" value={String(workOrderRows.length)} href="/manager/work-orders" />
-          <StatLink label="Inbox" value="5" href="/manager/inbox/unopened" />
+          <StatLink label="Inbox" value={String(demoManagerInboxUnopenedCount())} href="/manager/inbox/unopened" />
         </div>
       </div>
     </ManagerPortalPageShell>

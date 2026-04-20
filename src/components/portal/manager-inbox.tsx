@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
+import type { DemoManagerInboxThreadSeed } from "@/data/demo-portal";
+import { demoManagerInboxThreads } from "@/data/demo-portal";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
 
@@ -51,7 +53,7 @@ function countThreads(threads: InboxThread[]) {
 export function ManagerInbox({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
-  const [local, setLocal] = useState<InboxThread[]>([]);
+  const [local, setLocal] = useState<InboxThread[]>(() => [...demoManagerInboxThreads]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
 

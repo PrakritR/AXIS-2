@@ -329,7 +329,6 @@ export function PortalCalendarPanels({
             </Button>
             <p className="min-w-0 flex-1 text-xs leading-snug text-slate-600 sm:text-sm">
               <span className="font-semibold text-slate-800">Week of {formatWeekRangeMonFri(weekMonday)}</span>
-              <span className="text-slate-500"> · paint open times for these dates</span>
             </p>
             <Button
               type="button"
@@ -344,10 +343,9 @@ export function PortalCalendarPanels({
         </div>
         <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open slots</div>
       </div>
-      <p className="mt-3 text-sm text-slate-600">Click or drag to paint availability for this work week.</p>
 
       <div
-        className="mt-5 grid grid-cols-[64px_repeat(5,minmax(0,1fr))] gap-1 rounded-[24px] border border-slate-200 bg-slate-50 p-3"
+        className="mt-4 grid grid-cols-[64px_repeat(5,minmax(0,1fr))] gap-1 rounded-[24px] border border-slate-200 bg-slate-50 p-3"
         onMouseLeave={() => setDragMode(null)}
         onMouseUp={() => setDragMode(null)}
       >

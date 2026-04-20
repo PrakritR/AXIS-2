@@ -6,7 +6,9 @@ import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ListingPublicPreviewModal } from "@/components/portal/listing-public-preview-modal";
+import { PropertyRequestEditForm } from "@/components/portal/property-request-edit-form";
 import { PROPERTY_PIPELINE_EVENT, approvePendingManagerProperty } from "@/lib/demo-property-pipeline";
+import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import {
   adminKpiCounts,
@@ -125,6 +127,11 @@ function AdminPropertyPreviewModal({
 }) {
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
   const listingId = row?.listingId;
+  const [composeEdit, setComposeEdit] = useState<null | "pending" | "listed">(null);
+
+  useEffect(() => {
+    setComposeEdit(null);
+  }, [row?.adminRefId, open]);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
@@ -140,9 +147,69 @@ function AdminPropertyPreviewModal({
 
   const footer = (
     <div className="flex flex-col gap-2">
+      {bucket === 1 && row.editRequestNote?.trim() ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Requested changes</p>
+          <p className="mt-1.5 whitespace-pre-wrap text-slate-700">{row.editRequestNote.trim()}</p>
+        </div>
+      ) : null}
       <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Actions</p>
+      {composeEdit === "pending" && bucket === 0 ? (
+        <PropertyRequestEditForm
+          recipientHint="manager / owner who submitted this listing"
+          onCancel={() => setComposeEdit(null)}
+          onSend={(note) => {
+            const t = note.trim();
+            if (!t) {
+              showToast("Enter a message describing the requested edits.");
+              return;
+            }
+            const ok = movePendingToRequestChange(row.adminRefId, undefined, t);
+            if (!ok) {
+              showToast("Action could not be completed.");
+              return;
+            }
+            logDemoOutboundEmail(
+              `listing-submit-${row.adminRefId}@portal.axis.demo`,
+              `Edits requested: ${row.buildingName} · ${row.unitLabel}`,
+              `${t}\n\nProperty: ${row.address}${row.zip ? `, ${row.zip}` : ""}`,
+            );
+            showToast("Edit request sent (demo: check sessionStorage axis_demo_outbound_mail_v1).");
+            setComposeEdit(null);
+            onUpdated();
+            onClose();
+          }}
+        />
+      ) : null}
+      {composeEdit === "listed" && bucket === 2 && listingId ? (
+        <PropertyRequestEditForm
+          recipientHint="manager / owner who listed this property"
+          onCancel={() => setComposeEdit(null)}
+          onSend={(note) => {
+            const t = note.trim();
+            if (!t) {
+              showToast("Enter a message describing the requested edits.");
+              return;
+            }
+            const ok = moveListedToRequestChange(listingId, undefined, t);
+            if (!ok) {
+              showToast("Action could not be completed.");
+              return;
+            }
+            logDemoOutboundEmail(
+              `listing-listed-${listingId}@portal.axis.demo`,
+              `Edits requested (listed): ${row.buildingName} · ${row.unitLabel}`,
+              `${t}\n\nListing ID: ${listingId}\n${row.address}${row.zip ? `, ${row.zip}` : ""}`,
+            );
+            showToast("Edit request sent (demo: check sessionStorage axis_demo_outbound_mail_v1).");
+            setComposeEdit(null);
+            onUpdated();
+            onClose();
+          }}
+        />
+      ) : null}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        {bucket === 0 ? (
+        {bucket === 0 && composeEdit !== "pending" ? (
           <>
             <Button
               type="button"
@@ -154,12 +221,7 @@ function AdminPropertyPreviewModal({
             >
               Approve
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => run("Moved to request change.", movePendingToRequestChange(row.adminRefId))}
-            >
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setComposeEdit("pending")}>
               Request edit
             </Button>
             <Button
@@ -197,17 +259,12 @@ function AdminPropertyPreviewModal({
           </>
         ) : null}
 
-        {bucket === 2 && listingId ? (
+        {bucket === 2 && listingId && composeEdit !== "listed" ? (
           <>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => run("Unlisted property.", unlistManagerListing(listingId))}>
               Unlist
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => run("Moved to request change.", moveListedToRequestChange(listingId))}
-            >
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setComposeEdit("listed")}>
               Request edit
             </Button>
             <Button

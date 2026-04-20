@@ -1,4 +1,5 @@
 import { PublicNavbar } from "@/components/layout/public-navbar";
+import { DemoManagerSeedEffect } from "@/components/portal/demo-manager-seed";
 import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
 import { ManagerPlanBanner } from "@/components/portal/manager-plan-banner";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
@@ -10,6 +11,7 @@ export default async function ManagerLayout({ children }: { children: React.Reac
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100/80 via-white to-slate-50/90">
       <PublicNavbar />
+      <DemoManagerSeedEffect />
       {nav.showPreviewBanner ? <AdminPreviewBanner label={nav.previewLabel} /> : null}
       {nav.showPlanBanner ? <ManagerPlanBanner /> : null}
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col lg:flex-row">

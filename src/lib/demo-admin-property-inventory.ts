@@ -41,6 +41,8 @@ export type AdminPropertyRow = {
   listingId?: string;
   /** Owning manager (Supabase user id) for scoped demo data. */
   managerUserId?: string;
+  /** Last admin “request edit” message shown to the submitting manager/owner (demo localStorage). */
+  editRequestNote?: string;
 };
 
 type SideBuckets = {
@@ -180,11 +182,19 @@ export function readAdminPropertyRows(
   return side.rejected;
 }
 
-export function movePendingToRequestChange(pendingId: string, forManagerUserId?: string | null): boolean {
+export function movePendingToRequestChange(
+  pendingId: string,
+  forManagerUserId?: string | null,
+  editRequestNote?: string,
+): boolean {
   const row = takePendingManagerProperty(pendingId);
   if (!row) return false;
   const side = readSide(forManagerUserId);
-  side.requestChange.push(pendingToAdminRow(row));
+  const note = editRequestNote?.trim();
+  side.requestChange.push({
+    ...pendingToAdminRow(row),
+    ...(note ? { editRequestNote: note } : {}),
+  });
   writeSideStorage(side, forManagerUserId);
   return true;
 }
@@ -258,11 +268,19 @@ export function listAdminRow(row: AdminPropertyRow, forManagerUserId?: string | 
   return listingId;
 }
 
-export function moveListedToRequestChange(listingId: string, forManagerUserId?: string | null): boolean {
+export function moveListedToRequestChange(
+  listingId: string,
+  forManagerUserId?: string | null,
+  editRequestNote?: string,
+): boolean {
   const removed = removeExtraListing(listingId);
   if (!removed) return false;
   const side = readSide(forManagerUserId);
-  side.requestChange.push(mockToAdminRow(removed, listingId));
+  const note = editRequestNote?.trim();
+  side.requestChange.push({
+    ...mockToAdminRow(removed, listingId),
+    ...(note ? { editRequestNote: note } : {}),
+  });
   writeSideStorage(side, forManagerUserId);
   return true;
 }
@@ -297,4 +315,57 @@ export function restoreRejectedToPending(adminRefId: string, forManagerUserId?: 
   submitManagerPendingProperty(legacyAdminFieldsToSubmission(row), uid);
   writeSideStorage({ ...side, rejected: nextR }, forManagerUserId);
   return true;
+}
+
+/** One-time demo rows for request-change / unlisted / rejected buckets when all are empty. */
+export function ensureDemoManagerSideBucketsSeed(forManagerUserId: string | null): void {
+  if (!forManagerUserId || !isBrowser()) return;
+  const side = readSide(forManagerUserId);
+  if (side.requestChange.length + side.unlisted.length + side.rejected.length > 0) return;
+
+  const tag = forManagerUserId.slice(0, 10);
+  side.requestChange.push({
+    adminRefId: `demo-rc-${tag}`,
+    buildingName: "Harbor Studios",
+    unitLabel: "Studio A",
+    address: "88 Embarcadero",
+    zip: "94105",
+    neighborhood: "Embarcadero",
+    beds: 1,
+    baths: 1,
+    monthlyRent: 2100,
+    petFriendly: false,
+    tagline: "Water views — demo request-change row.",
+    managerUserId: forManagerUserId,
+    editRequestNote: "Please upload brighter kitchen photos and confirm parking availability.",
+  });
+  side.unlisted.push({
+    adminRefId: `demo-unl-${tag}`,
+    buildingName: "Lakeview Lofts",
+    unitLabel: "Micro-studio",
+    address: "3000 19th St",
+    zip: "94110",
+    neighborhood: "Mission",
+    beds: 1,
+    baths: 1,
+    monthlyRent: 1795,
+    petFriendly: true,
+    tagline: "Demo unlisted — relist when photos are refreshed.",
+    managerUserId: forManagerUserId,
+  });
+  side.rejected.push({
+    adminRefId: `demo-rej-${tag}`,
+    buildingName: "Fillmore Flats",
+    unitLabel: "Unit 2",
+    address: "900 Fillmore St",
+    zip: "94117",
+    neighborhood: "Lower Haight",
+    beds: 2,
+    baths: 1,
+    monthlyRent: 2650,
+    petFriendly: false,
+    tagline: "Demo rejected submission — insufficient detail.",
+    managerUserId: forManagerUserId,
+  });
+  writeSideStorage(side, forManagerUserId);
 }

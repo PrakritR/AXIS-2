@@ -367,3 +367,70 @@ export function approvePendingManagerProperty(pendingId: string): MockProperty |
   appendExtraListing(prop, owner);
   return prop;
 }
+
+/**
+ * When a manager has no pending submissions and no mgr-* listings, seed two pending rows and one live listing
+ * so Properties / admin queues are exerciseable without manual data entry.
+ */
+export function ensureDemoManagerPipelineSeed(userId: string | null): void {
+  if (!isBrowser() || !userId?.trim()) return;
+  migrateLegacyGlobalIntoUser(userId);
+  const pmap = readPendingMap();
+  const pend = pmap[userId] ?? [];
+  const extras = readExtrasMap()[userId] ?? [];
+  const listedMgr = extras.filter((p) => p.id.startsWith("mgr-"));
+  if (pend.length > 0 || listedMgr.length > 0) return;
+
+  const ts = Date.now();
+  const short = userId.slice(0, 10);
+  const pendA: ManagerPendingPropertyRow = {
+    id: `demo-${short}-pend-a-${ts}`,
+    submittedAt: new Date().toISOString(),
+    buildingName: "Sunset Row Townhomes",
+    address: "450 Duboce Ave",
+    zip: "94117",
+    neighborhood: "Mission",
+    unitLabel: "Unit B",
+    beds: 2,
+    baths: 2,
+    monthlyRent: 2895,
+    petFriendly: true,
+    tagline: "Corner townhome — demo seed pending admin approval.",
+    submittedByUserId: userId,
+  };
+  const pendB: ManagerPendingPropertyRow = {
+    id: `demo-${short}-pend-b-${ts}`,
+    submittedAt: new Date().toISOString(),
+    buildingName: "Fillmore Walk-ups",
+    address: "920 Fillmore St",
+    zip: "94117",
+    neighborhood: "Lower Haight",
+    unitLabel: "Front unit",
+    beds: 3,
+    baths: 2,
+    monthlyRent: 3400,
+    petFriendly: false,
+    tagline: "Hardwood floors — demo seed submission.",
+    submittedByUserId: userId,
+  };
+  pmap[userId] = [pendA, pendB];
+  writePendingMap(pmap);
+
+  const listedDraft: ManagerPendingPropertyRow = {
+    id: `demo-${short}-listed-src-${ts}`,
+    submittedAt: new Date().toISOString(),
+    buildingName: "Market Street Studios",
+    address: "188 Minna St",
+    zip: "94105",
+    neighborhood: "SoMa",
+    unitLabel: "Studio 6L",
+    beds: 1,
+    baths: 1,
+    monthlyRent: 2195,
+    petFriendly: true,
+    tagline: "North light studio — demo seed listed listing.",
+    submittedByUserId: userId,
+  };
+  const listingId = `mgr-market-studios-${slugPart(listedDraft.buildingName)}-${String(ts).slice(-6)}`;
+  appendExtraListing(buildMockPropertyFromDraft(listedDraft, listingId), userId);
+}

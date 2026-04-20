@@ -4,13 +4,18 @@
  */
 
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
-import { snapshotJordanLee, snapshotSamRivera } from "@/data/manager-application-snapshots";
+import {
+  snapshotAlexChenApplicant,
+  snapshotJordanLee,
+  snapshotPriyaNair,
+  snapshotSamRivera,
+} from "@/data/manager-application-snapshots";
 
 export const demoKpis = {
-  applications: { pending: "0", approved: "0", rejected: "0" },
+  applications: { pending: "2", approved: "2", rejected: "1" },
   leases: { managerReview: "0", adminReview: "0", withResident: "0", signed: "0" },
-  payments: { pending: "0", overdue: "0", paid: "0" },
-  workOrders: { open: "0", scheduled: "0", completed: "0" },
+  payments: { pending: "4", overdue: "2", paid: "3" },
+  workOrders: { open: "2", scheduled: "1", completed: "2" },
   managers: { current: "0", past: "0" },
   calendar: { today: "0", week: "0", month: "0", total: "0" },
 } as const;
@@ -77,6 +82,38 @@ export const demoApplicantRows: DemoApplicantRow[] = [
     detail: "ID and pay stubs uploaded. Awaiting employer verification link.",
     application: snapshotSamRivera(),
   },
+  {
+    id: "app_demo_3",
+    name: "Alex Chen",
+    property: "Demo Building · 2A",
+    stage: "Approved",
+    score: "88",
+    bucket: "approved",
+    email: "alex.chen@example.com",
+    detail: "Strong income; approved Mar 28. Lease packet sent.",
+    application: snapshotAlexChenApplicant(),
+  },
+  {
+    id: "app_demo_4",
+    name: "Priya Nair",
+    property: "Demo Building · 1C",
+    stage: "Approved",
+    score: "91",
+    bucket: "approved",
+    email: "priya.nair@example.com",
+    detail: "Approved after reference check. Holding unit per manager notes.",
+    application: snapshotPriyaNair(),
+  },
+  {
+    id: "app_demo_5",
+    name: "Casey Kim",
+    property: "Pioneer Collective · Room 8B",
+    stage: "Rejected",
+    score: "54",
+    bucket: "rejected",
+    email: "casey.kim@example.com",
+    detail: "Income below 2.5× rent threshold; denial letter emailed (demo).",
+  },
 ];
 
 export const demoPaymentRows: { resident: string; unit: string; amount: string; due: string; status: string }[] = [];
@@ -124,6 +161,28 @@ export type DemoManagerHouseRow = {
 
 export const demoManagerHouseRows: DemoManagerHouseRow[] = [
   {
+    id: "house_demo_pending",
+    name: "Sunset Row Townhomes",
+    address: "450 Duboce Ave, San Francisco, CA",
+    propertyType: "Townhome",
+    roomCount: 8,
+    bathCount: 10,
+    appFee: "$50",
+    bucket: "pending",
+    detail: "Demo: awaiting admin approval (shown on dashboard until pipeline seed loads).",
+  },
+  {
+    id: "house_demo_change",
+    name: "Harbor Studios",
+    address: "88 Embarcadero, San Francisco, CA",
+    propertyType: "Mid-rise",
+    roomCount: 42,
+    bathCount: 42,
+    appFee: "$45",
+    bucket: "change",
+    detail: "Demo: edits requested — replace placeholder listing photos.",
+  },
+  {
     id: "house_demo_1",
     name: "Demo Building",
     address: "100 Market St, San Francisco, CA",
@@ -144,6 +203,28 @@ export const demoManagerHouseRows: DemoManagerHouseRow[] = [
     appFee: "$40",
     bucket: "listed",
     detail: "Listed; applications route to this manager workspace.",
+  },
+  {
+    id: "house_demo_unlisted",
+    name: "Lakeview",
+    address: "3000 19th St, San Francisco, CA",
+    propertyType: "Adaptive reuse",
+    roomCount: 12,
+    bathCount: 8,
+    appFee: "$40",
+    bucket: "unlisted",
+    detail: "Demo: pulled from public catalog; list again when ready.",
+  },
+  {
+    id: "house_demo_rejected",
+    name: "Fillmore Flats",
+    address: "900 Fillmore St, San Francisco, CA",
+    propertyType: "Small multifamily",
+    roomCount: 6,
+    bathCount: 6,
+    appFee: "$35",
+    bucket: "rejected",
+    detail: "Demo: submission did not meet marketing standards.",
   },
 ];
 
@@ -166,7 +247,106 @@ export type DemoManagerPaymentLedgerRow = {
   householdChargeId?: string;
 };
 
-export const demoManagerPaymentLedgerRows: DemoManagerPaymentLedgerRow[] = [];
+export const demoManagerPaymentLedgerRows: DemoManagerPaymentLedgerRow[] = [
+  {
+    id: "pay_demo_pending_1",
+    propertyName: "Demo Building",
+    roomNumber: "2A",
+    residentName: "Alex Chen",
+    chargeTitle: "April rent",
+    lineAmount: "$1,850.00",
+    amountPaid: "$0.00",
+    balanceDue: "$1,850.00",
+    dueDate: "May 1",
+    bucket: "pending",
+    statusLabel: "Due soon",
+    notes: "Autopay off — resident pays via Zelle per lease.",
+  },
+  {
+    id: "pay_demo_pending_2",
+    propertyName: "Pioneer Collective",
+    roomNumber: "12A",
+    residentName: "Jordan Lee",
+    chargeTitle: "Application fee",
+    lineAmount: "$40.00",
+    amountPaid: "$0.00",
+    balanceDue: "$40.00",
+    dueDate: "Apr 25",
+    bucket: "pending",
+    statusLabel: "Pending",
+    notes: "Waivable with promo on apply flow; listed here for manager QA.",
+  },
+  {
+    id: "pay_demo_overdue_1",
+    propertyName: "Demo Building",
+    roomNumber: "1C",
+    residentName: "Priya Nair",
+    chargeTitle: "March utilities reconciliation",
+    lineAmount: "$124.50",
+    amountPaid: "$0.00",
+    balanceDue: "$124.50",
+    dueDate: "Apr 5",
+    bucket: "overdue",
+    statusLabel: "Overdue",
+    notes: "Demo overdue line — follow up or mark paid when received.",
+  },
+  {
+    id: "pay_demo_overdue_2",
+    propertyName: "Pioneer Collective",
+    roomNumber: "8B",
+    residentName: "Taylor Brooks",
+    chargeTitle: "Parking (monthly)",
+    lineAmount: "$175.00",
+    amountPaid: "$50.00",
+    balanceDue: "$125.00",
+    dueDate: "Apr 1",
+    bucket: "overdue",
+    statusLabel: "Partial",
+    notes: "Partial payment logged; remainder overdue (demo).",
+  },
+  {
+    id: "pay_demo_paid_1",
+    propertyName: "Demo Building",
+    roomNumber: "3B",
+    residentName: "Sam Rivera",
+    chargeTitle: "April rent",
+    lineAmount: "$1,695.00",
+    amountPaid: "$1,695.00",
+    balanceDue: "$0.00",
+    dueDate: "Apr 1",
+    bucket: "paid",
+    statusLabel: "Paid",
+    notes: "Marked paid Apr 2 via Zelle.",
+  },
+  {
+    id: "pay_demo_paid_2",
+    propertyName: "Pioneer Collective",
+    roomNumber: "12A",
+    residentName: "Jordan Lee",
+    chargeTitle: "Security deposit",
+    lineAmount: "$1,695.00",
+    amountPaid: "$1,695.00",
+    balanceDue: "$0.00",
+    dueDate: "Mar 15",
+    bucket: "paid",
+    statusLabel: "Paid",
+    notes: "Held in escrow per lease terms.",
+  },
+  {
+    id: "pay_demo_paid_3",
+    propertyName: "Lakeview",
+    roomNumber: "Micro-studio",
+    residentName: "Sam Rivera",
+    chargeTitle: "Move-in fee",
+    lineAmount: "$350.00",
+    amountPaid: "$350.00",
+    balanceDue: "$0.00",
+    dueDate: "Feb 10",
+    bucket: "paid",
+    statusLabel: "Paid",
+    notes: "Recorded at lease signing.",
+  },
+];
 
 export type ManagerWorkOrderBucket = "open" | "scheduled" | "completed";
 
@@ -218,6 +398,21 @@ export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [
     residentEmail: "sam.rivera@example.com",
   },
   {
+    id: "WO-9004",
+    propertyName: "Pioneer Collective",
+    unit: "8B",
+    title: "Balcony door weatherstripping",
+    priority: "Medium",
+    status: "Scheduled",
+    bucket: "scheduled",
+    description: "Vendor assigned; confirm access with resident before visit.",
+    scheduled: "Apr 22, 10am",
+    cost: "—",
+    scheduledAtIso: "2026-04-22T17:00:00.000Z",
+    residentName: "Taylor Brooks",
+    residentEmail: "taylor.brooks@example.com",
+  },
+  {
     id: "WO-9003",
     propertyName: "Pioneer Collective",
     unit: "12A",
@@ -231,6 +426,21 @@ export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [
     scheduledAtIso: "2026-03-02T14:00:00.000Z",
     residentName: "Jordan Lee",
     residentEmail: "jordan.lee@example.com",
+  },
+  {
+    id: "WO-9005",
+    propertyName: "Demo Building",
+    unit: "1C",
+    title: "Kitchen disposal reset",
+    priority: "Low",
+    status: "Completed",
+    bucket: "completed",
+    description: "Jam cleared; tested under load.",
+    scheduled: "Apr 8, 3pm",
+    cost: "$85.00",
+    scheduledAtIso: "2026-04-08T20:00:00.000Z",
+    residentName: "Priya Nair",
+    residentEmail: "priya.nair@example.com",
   },
 ];
 
@@ -367,3 +577,78 @@ export type DemoResidentInboxThread = {
 };
 
 export const demoResidentInboxThreads: DemoResidentInboxThread[] = [];
+
+/** Seed threads for manager Inbox (local UI state initializes from this list). */
+export type DemoManagerInboxThreadSeed = {
+  id: string;
+  folder: "inbox" | "sent" | "trash";
+  from: string;
+  email: string;
+  subject: string;
+  preview: string;
+  body: string;
+  time: string;
+  unread: boolean;
+};
+
+export const demoManagerInboxThreads: DemoManagerInboxThreadSeed[] = [
+  {
+    id: "mgr_in_demo_1",
+    folder: "inbox",
+    from: "Jordan Lee",
+    email: "jordan.lee@example.com",
+    subject: "Question about move-in date",
+    preview: "Hi — can we confirm June 1 lease start for Room 12A? Happy to hop on a quick call.",
+    body: "Hi — can we confirm June 1 lease start for Pioneer Collective · 12A? Our current lease ends May 31. Happy to hop on a quick call Tuesday afternoon if easier.\n\nThanks,\nJordan",
+    time: "Apr 18 · 9:14am",
+    unread: true,
+  },
+  {
+    id: "mgr_in_demo_2",
+    folder: "inbox",
+    from: "Vendor · Bay HVAC",
+    email: "dispatch@bayhvac.example.com",
+    subject: "WO-9004 — confirmed Tuesday window",
+    preview: "Technician Enrique arrives 10–11am on Apr 22. Building contact call box used for access.",
+    body: "Hello,\n\nThis confirms WO-9004 (balcony weatherstripping) at Pioneer Collective · 8B on Apr 22 between 10–11am. Technician Enrique will text the resident 15 minutes prior.\n\n— Bay HVAC Dispatch",
+    time: "Apr 17 · 4:02pm",
+    unread: true,
+  },
+  {
+    id: "mgr_in_demo_3",
+    folder: "inbox",
+    from: "Alex Chen",
+    email: "alex.chen@example.com",
+    subject: "Zelle receipt attached",
+    preview: "Paid April rent — screenshot attached. Let me know if anything looks off.",
+    body: "Paid April rent via Zelle — confirmation screenshot is attached on my side. Please confirm receipt when you have a moment.\n\nThanks,\nAlex",
+    time: "Apr 16 · 11:03am",
+    unread: true,
+  },
+  {
+    id: "mgr_in_demo_4",
+    folder: "inbox",
+    from: "Harbor Holdings LLC",
+    email: "harbor.owner@example.com",
+    subject: "Portfolio insurance renewal",
+    preview: "Annual binder uploaded to shared drive. No coverage gaps flagged.",
+    body: "Team — annual liability binder for Demo Building is uploaded to the shared drive under /insurance/2026. No material changes to coverage. Let us know if you need a manager attestation for any listing copy.\n\n— Harbor Holdings",
+    time: "Apr 10 · 2:30pm",
+    unread: false,
+  },
+  {
+    id: "mgr_in_sent_1",
+    folder: "sent",
+    from: "You",
+    email: "Axis admin team",
+    subject: "Clarify pet policy for Pioneer 8B",
+    body: "Can you confirm that the coliving house rules allow one ESA cat in 8B? Applicant asked in writing. Thanks.",
+    preview: "Can you confirm that the coliving house rules allow one ESA cat in 8B? Applicant asked in writing. Thanks.",
+    time: "Apr 9 · 8:50am",
+    unread: false,
+  },
+];
+
+export function demoManagerInboxUnopenedCount(): number {
+  return demoManagerInboxThreads.filter((t) => t.folder === "inbox" && t.unread).length;
+}
