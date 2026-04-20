@@ -68,10 +68,13 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     criminalHistory: null,
     criminalDetails: "",
     additionalNotes: "",
+    expectedUtilitiesMonthly: "",
     consentCredit: false,
     consentTruth: false,
     digitalSignature: "",
     dateSigned: todayISO(),
     applicationFeeAcknowledged: false,
+    applicationFeePromoCode: "",
+    applicationFeeWaivedByPromo: false,
   };
 }

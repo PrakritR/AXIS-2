@@ -113,7 +113,8 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     applicationFee: "$50",
     securityDeposit: "$400",
     moveInFee: "$200",
-    paymentAtSigning: "$600",
+    /** Leave empty so public listing shows deposit + move-in total automatically. */
+    paymentAtSigning: "",
     utilitiesMonthly: "$95/mo",
     houseCostsDetail:
       "Summarize all recurring costs: rent, utilities, parking, HOA, RUBS, pet fees, etc.",

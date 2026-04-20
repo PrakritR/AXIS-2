@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "admin:sync-account": "node scripts/ensure-admin-account.mjs"
+    "admin:sync-account": "node scripts/ensure-admin-account.mjs",
+    "admin:ensure-demo-manager": "node scripts/ensure-demo-manager-account.mjs",
+    "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.2.0",

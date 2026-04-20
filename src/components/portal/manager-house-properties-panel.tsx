@@ -168,7 +168,7 @@ function ManagerPropertyPreviewModal({
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
               onClick={() => run("Declined submission.", movePendingToRejected(row.adminRefId, managerUserId))}
             >
-              Decline
+              REJECT
             </Button>
           </>
         ) : null}
@@ -189,7 +189,7 @@ function ManagerPropertyPreviewModal({
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
               onClick={() => run("Declined.", declineFromRequestChange(row.adminRefId, managerUserId))}
             >
-              Decline
+              REJECT
             </Button>
           </>
         ) : null}
@@ -213,7 +213,7 @@ function ManagerPropertyPreviewModal({
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
               onClick={() => run("Rejected listing.", moveListedToRejected(listingId, managerUserId))}
             >
-              Decline
+              REJECT
             </Button>
           </>
         ) : null}
@@ -236,7 +236,7 @@ function ManagerPropertyPreviewModal({
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
               onClick={() => run("Moved to rejected.", moveUnlistedToRejected(row.adminRefId, managerUserId))}
             >
-              Decline
+              REJECT
             </Button>
           </>
         ) : null}

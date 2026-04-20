@@ -12,8 +12,21 @@ export const MANAGER_TIER_MONTHLY_USD: Record<ManagerSkuTier, number> = {
   business: 200,
 };
 
-/** Sections available to free-tier managers (house posting only). */
-export const FREE_MANAGER_SECTIONS = new Set(["dashboard", "properties", "inbox", "profile", "plan"]);
+/**
+ * Sections available on Free / “owner starter” subscription for managers and owners:
+ * listings, applications, rent collection + Stripe payouts, team invites, account & upgrade.
+ * Everything else (leases, work orders, calendar, inbox, manager “owners” invites, etc.) requires Pro+.
+ */
+export const FREE_SUBSCRIPTION_SECTIONS = new Set([
+  "dashboard",
+  "properties",
+  "applications",
+  "payments",
+  "stripe",
+  "managers",
+  "profile",
+  "plan",
+]);
 
 /** Normalize DB tier string; unknown/null → treat as legacy full access (not Pro-limited). */
 export function normalizeManagerSkuTier(tier: string | null | undefined): ManagerSkuTier | null {
@@ -168,5 +181,8 @@ export async function upgradeManagerAccountToBusiness(
 
 export function managerSectionAllowedForTier(section: string, tier: "free" | "paid" | null): boolean {
   if (tier !== "free") return true;
-  return FREE_MANAGER_SECTIONS.has(section);
+  return FREE_SUBSCRIPTION_SECTIONS.has(section);
 }
+
+/** @deprecated Use FREE_SUBSCRIPTION_SECTIONS */
+export const FREE_MANAGER_SECTIONS = FREE_SUBSCRIPTION_SECTIONS;

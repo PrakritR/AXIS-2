@@ -5,7 +5,11 @@ import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-she
 
 const demoRows = demoManagerSubscriberRows.slice(0, 4);
 
-export function OwnerManagers() {
+export function OwnerManagers({ variant = "owner" }: { variant?: "owner" | "manager" }) {
+  const intro =
+    variant === "manager"
+      ? "Invite property managers or staff who can operate day-to-day on your behalf. On the Free plan they still need your account scope; upgrade to Pro for full delegated tools."
+      : "Invite property managers to handle day-to-day operations. On the Free plan they can take over Pro-only areas once you upgrade, or you stay on Free and keep core tasks yourself.";
   return (
     <ManagerSectionShell
       title="Managers"
@@ -15,6 +19,7 @@ export function OwnerManagers() {
         { label: "Refresh", variant: "outline" },
       ]}
     >
+      <p className="text-sm text-slate-600">{intro}</p>
       <div className="space-y-3">
         {demoRows.map((m) => (
           <Card key={m.name} className="border-slate-200/80 p-5 shadow-sm">

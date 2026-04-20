@@ -168,7 +168,7 @@ function AdminPropertyPreviewModal({
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
               onClick={() => run("Declined submission.", movePendingToRejected(row.adminRefId))}
             >
-              Decline
+              REJECT
             </Button>
           </>
         ) : null}
@@ -192,7 +192,7 @@ function AdminPropertyPreviewModal({
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
               onClick={() => run("Declined.", declineFromRequestChange(row.adminRefId))}
             >
-              Decline
+              REJECT
             </Button>
           </>
         ) : null}
@@ -216,7 +216,7 @@ function AdminPropertyPreviewModal({
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
               onClick={() => run("Rejected listing.", moveListedToRejected(listingId))}
             >
-              Decline
+              REJECT
             </Button>
           </>
         ) : null}
@@ -239,7 +239,7 @@ function AdminPropertyPreviewModal({
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
               onClick={() => run("Moved to rejected.", moveUnlistedToRejected(row.adminRefId))}
             >
-              Decline
+              REJECT
             </Button>
           </>
         ) : null}

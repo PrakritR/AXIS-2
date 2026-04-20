@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
@@ -8,6 +8,7 @@ import { PortalPropertyFilterPill } from "@/components/portal/manager-section-sh
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
 import type { ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { demoManagerWorkOrderRowsFull } from "@/data/demo-portal";
+import { readManagerWorkOrderRows, subscribeManagerWorkOrders } from "@/lib/manager-work-orders-storage";
 
 const WO_LABELS: { id: ManagerWorkOrderBucket; label: string }[] = [
   { id: "open", label: "Open" },
@@ -31,7 +32,13 @@ export function ManagerWorkOrders() {
   const { showToast } = useAppUi();
   const [bucket, setBucket] = useState<ManagerWorkOrderBucket>("open");
 
-  const counts = useMemo(() => countWorkOrders(demoManagerWorkOrderRowsFull), []);
+  const allRows = useSyncExternalStore(
+    subscribeManagerWorkOrders,
+    () => readManagerWorkOrderRows(demoManagerWorkOrderRowsFull),
+    () => demoManagerWorkOrderRowsFull,
+  );
+
+  const counts = useMemo(() => countWorkOrders(allRows), [allRows]);
   const tabs = useMemo(
     () => WO_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),
     [counts],
@@ -54,7 +61,7 @@ export function ManagerWorkOrders() {
         </div>
       }
     >
-      <ManagerWorkOrdersPanel bucket={bucket} />
+      <ManagerWorkOrdersPanel bucket={bucket} onAfterSchedule={() => setBucket("scheduled")} />
     </ManagerPortalPageShell>
   );
 }

@@ -3,6 +3,9 @@
  * Wire Supabase queries into portal panels to replace these empty arrays.
  */
 
+import type { RentalWizardFormState } from "@/lib/rental-application/types";
+import { snapshotJordanLee, snapshotSamRivera } from "@/data/manager-application-snapshots";
+
 export const demoKpis = {
   applications: { pending: "0", approved: "0", rejected: "0" },
   leases: { managerReview: "0", adminReview: "0", withResident: "0", signed: "0" },
@@ -20,9 +23,19 @@ export type DemoOwnerAccountRow = {
   active: boolean;
 };
 
-export const demoOwnerAccounts: DemoOwnerAccountRow[] = [];
+export const demoOwnerAccounts: DemoOwnerAccountRow[] = [
+  {
+    id: "owner_demo_1",
+    name: "Harbor Holdings LLC",
+    email: "harbor.owner@example.com",
+    properties: "Demo Building",
+    active: true,
+  },
+];
 
-export const demoOwnerPropertyCards: { name: string; units: string; access: string; manager: string }[] = [];
+export const demoOwnerPropertyCards: { name: string; units: string; access: string; manager: string }[] = [
+  { name: "Demo Building", units: "24 units", access: "Manager portal", manager: "Demo Property Management" },
+];
 
 export type ManagerApplicationBucket = "pending" | "approved" | "rejected";
 
@@ -34,31 +47,35 @@ export type DemoApplicantRow = {
   score: string;
   bucket: ManagerApplicationBucket;
   email?: string;
-  /** Full copy for expandable Details row */
+  /** Manager-facing notes (shown under full application in Details). */
   detail: string;
+  /** Saved answers as on the rental application review step (demo). */
+  application?: RentalWizardFormState;
 };
 
 export const demoApplicantRows: DemoApplicantRow[] = [
   {
     id: "app_demo_1",
     name: "Jordan Lee",
-    property: "Harbor View Lofts · Unit 4B",
+    property: "Pioneer Collective · Room 12A",
     stage: "Screening",
     score: "82",
     bucket: "pending",
     email: "jordan.lee@example.com",
     detail:
       "Income verified at 3.2× rent. Pet deposit noted. References requested from prior landlord; credit check in progress.",
+    application: snapshotJordanLee(),
   },
   {
     id: "app_demo_2",
     name: "Sam Rivera",
-    property: "Maple Commons · Studio 12",
+    property: "Lakeview · Micro-studio",
     stage: "Documents",
     score: "76",
     bucket: "pending",
     email: "sam.rivera@example.com",
     detail: "ID and pay stubs uploaded. Awaiting employer verification link.",
+    application: snapshotSamRivera(),
   },
 ];
 
@@ -79,9 +96,14 @@ export const demoAdminPropertyRows: { name: string; manager: string; units: stri
 export const demoManagerSubscriberRows: { name: string; org: string; portfolio: string; status: string; since: string }[] =
   [];
 
-export const demoLeasePipelineRows: { resident: string; unit: string; stage: string; updated: string }[] = [];
+export const demoLeasePipelineRows: { resident: string; unit: string; stage: string; updated: string }[] = [
+  { resident: "Alex Chen", unit: "Demo Building · 2A", stage: "With resident", updated: "Apr 12" },
+  { resident: "Jordan Lee", unit: "Pioneer Collective · 12A", stage: "Manager review", updated: "Apr 14" },
+];
 
-export const demoResidentPropertyRows: { building: string; unit: string; manager: string; since: string }[] = [];
+export const demoResidentPropertyRows: { building: string; unit: string; manager: string; since: string }[] = [
+  { building: "Demo Building", unit: "2A", manager: "Demo Property Management", since: "Jan 2025" },
+];
 
 export const demoResidentLeaseRows: { document: string; status: string; updated: string }[] = [];
 
@@ -100,7 +122,30 @@ export type DemoManagerHouseRow = {
   detail: string;
 };
 
-export const demoManagerHouseRows: DemoManagerHouseRow[] = [];
+export const demoManagerHouseRows: DemoManagerHouseRow[] = [
+  {
+    id: "house_demo_1",
+    name: "Demo Building",
+    address: "100 Market St, San Francisco, CA",
+    propertyType: "Multi-family",
+    roomCount: 24,
+    bathCount: 24,
+    appFee: "$45",
+    bucket: "listed",
+    detail: "Demo portfolio property used for applications, leases, and work orders.",
+  },
+  {
+    id: "house_demo_2",
+    name: "Pioneer Collective",
+    address: "2200 Mission St, San Francisco, CA",
+    propertyType: "Co-living",
+    roomCount: 18,
+    bathCount: 18,
+    appFee: "$40",
+    bucket: "listed",
+    detail: "Listed; applications route to this manager workspace.",
+  },
+];
 
 export type ManagerPaymentBucket = "pending" | "overdue" | "paid";
 
@@ -136,6 +181,8 @@ export type DemoManagerWorkOrderRow = {
   description: string;
   scheduled: string;
   cost: string;
+  /** ISO 8601 visit time once the manager schedules a visit */
+  scheduledAtIso?: string;
   /** Prefill when billing resident for work order pass-through */
   residentName?: string;
   residentEmail?: string;
@@ -148,13 +195,42 @@ export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [
     unit: "2A",
     title: "Replace bathroom exhaust fan",
     priority: "Medium",
-    status: "Scheduled",
-    bucket: "scheduled",
+    status: "Open",
+    bucket: "open",
     description: "Motor noisy; replace with quiet model.",
-    scheduled: "Apr 22, 10am",
+    scheduled: "Not scheduled",
     cost: "—",
     residentName: "Alex Chen",
     residentEmail: "alex.chen@example.com",
+  },
+  {
+    id: "WO-9002",
+    propertyName: "Demo Building",
+    unit: "3B",
+    title: "Hallway light flickering",
+    priority: "Low",
+    status: "Open",
+    bucket: "open",
+    description: "LED fixture in 3rd floor hall cycles off after 10 minutes.",
+    scheduled: "Not scheduled",
+    cost: "—",
+    residentName: "Sam Rivera",
+    residentEmail: "sam.rivera@example.com",
+  },
+  {
+    id: "WO-9003",
+    propertyName: "Pioneer Collective",
+    unit: "12A",
+    title: "Annual HVAC filter change",
+    priority: "Low",
+    status: "Completed",
+    bucket: "completed",
+    description: "Replaced filters in suite and common return.",
+    scheduled: "Mar 2, 2pm",
+    cost: "$0.00",
+    scheduledAtIso: "2026-03-02T14:00:00.000Z",
+    residentName: "Jordan Lee",
+    residentEmail: "jordan.lee@example.com",
   },
 ];
 
@@ -171,7 +247,48 @@ export type DemoManagerLeaseDraftRow = {
   notes: string;
 };
 
-export const demoManagerLeaseDraftRows: DemoManagerLeaseDraftRow[] = [];
+export const demoManagerLeaseDraftRows: DemoManagerLeaseDraftRow[] = [
+  {
+    id: "lease_demo_1",
+    resident: "Alex Chen",
+    unit: "Demo Building · 2A",
+    stageLabel: "With resident",
+    updated: "Apr 12",
+    bucket: "resident",
+    pdfVersion: "v3",
+    notes: "Standard 12-month term; pet addendum attached.",
+  },
+  {
+    id: "lease_demo_2",
+    resident: "Jordan Lee",
+    unit: "Pioneer Collective · 12A",
+    stageLabel: "Manager review",
+    updated: "Apr 14",
+    bucket: "manager",
+    pdfVersion: "v2",
+    notes: "Awaiting final rent concession language.",
+  },
+  {
+    id: "lease_demo_3",
+    resident: "Sam Rivera",
+    unit: "Lakeview · Micro-studio",
+    stageLabel: "Admin review",
+    updated: "Apr 15",
+    bucket: "admin",
+    pdfVersion: "v1",
+    notes: "Corporate guarantor attached.",
+  },
+  {
+    id: "lease_demo_4",
+    resident: "Priya Nair",
+    unit: "Demo Building · 1C",
+    stageLabel: "Signed",
+    updated: "Mar 28",
+    bucket: "signed",
+    pdfVersion: "v4",
+    notes: "Fully executed; countersigned by owner.",
+  },
+];
 
 export const demoResidentLeaseHub = {
   moveIn: "—",
@@ -198,6 +315,15 @@ export type DemoResidentWorkOrderRow = {
 };
 
 export const demoResidentWorkOrderRows: DemoResidentWorkOrderRow[] = [
+  {
+    id: "WO-9001",
+    title: "Replace bathroom exhaust fan",
+    category: "HVAC",
+    priority: "Medium",
+    status: "Open",
+    bucket: "open",
+    description: "Motor noisy; replace with quiet model. Your manager will schedule a visit and confirm any pass-through cost.",
+  },
   {
     id: "RWO-1001",
     title: "Kitchen sink slow drain",

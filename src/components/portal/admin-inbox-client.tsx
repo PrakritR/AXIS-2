@@ -22,6 +22,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
   ADMIN_INBOX_DEMO_MANAGERS,
+  ADMIN_INBOX_DEMO_OWNERS,
   ADMIN_INBOX_DEMO_RESIDENTS,
   appendThreadReply,
   composeAdminOutboundMessage,
@@ -31,6 +32,7 @@ import {
   readInboxMessages,
   restoreInboxMessageFromTrash,
   roleAllowsThread,
+  type AdminComposeSendMode,
   type InboxMessage,
 } from "@/lib/demo-admin-partner-inbox";
 
@@ -53,7 +55,15 @@ function previewSnippet(text: string, max = 100) {
   return `${t.slice(0, max)}…`;
 }
 
-type Audience = "manager" | "resident" | "all";
+const ADMIN_COMPOSE_MODE_OPTIONS: { value: AdminComposeSendMode; label: string }[] = [
+  { value: "all_portal", label: "Everyone (managers, residents & owners)" },
+  { value: "all_managers", label: "All managers" },
+  { value: "all_residents", label: "All residents" },
+  { value: "all_owners", label: "All owners" },
+  { value: "pick_managers", label: "Choose managers…" },
+  { value: "pick_residents", label: "Choose residents…" },
+  { value: "pick_owners", label: "Choose owners…" },
+];
 
 function ComposeModal({
   open,
@@ -65,32 +75,56 @@ function ComposeModal({
   onSent: () => void;
 }) {
   const { showToast } = useAppUi();
-  const [audience, setAudience] = useState<Audience>("manager");
-  const [managerId, setManagerId] = useState<string>(ADMIN_INBOX_DEMO_MANAGERS[0]!.id);
-  const [residentId, setResidentId] = useState<string>(ADMIN_INBOX_DEMO_RESIDENTS[0]!.id);
+  const [mode, setMode] = useState<AdminComposeSendMode>("pick_managers");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set([ADMIN_INBOX_DEMO_MANAGERS[0]!.id]));
   const [topic, setTopic] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const pickPool = useMemo(() => {
+    if (mode === "pick_managers") return [...ADMIN_INBOX_DEMO_MANAGERS];
+    if (mode === "pick_residents") return [...ADMIN_INBOX_DEMO_RESIDENTS];
+    if (mode === "pick_owners") return [...ADMIN_INBOX_DEMO_OWNERS];
+    return [] as { id: string; name: string; email: string }[];
+  }, [mode]);
+
   useEffect(() => {
     if (!open) return;
-    setTopic("");
-    setBody("");
-    setAudience("manager");
-    setManagerId(ADMIN_INBOX_DEMO_MANAGERS[0]!.id);
-    setResidentId(ADMIN_INBOX_DEMO_RESIDENTS[0]!.id);
+    queueMicrotask(() => {
+      setTopic("");
+      setBody("");
+      setMode("pick_managers");
+      setSelectedIds(new Set([ADMIN_INBOX_DEMO_MANAGERS[0]!.id]));
+    });
   }, [open]);
 
   if (!open) return null;
 
+  const toggleId = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const pickHeading =
+    mode === "pick_managers" ? "Which managers" : mode === "pick_residents" ? "Which residents" : mode === "pick_owners" ? "Which owners" : null;
+
   const submit = () => {
     setBusy(true);
     try {
+      const isPick = mode.startsWith("pick");
+      if (isPick && selectedIds.size === 0) {
+        showToast("Select at least one recipient.");
+        return;
+      }
       const row = composeAdminOutboundMessage({
-        audience,
-        recipientId: audience === "manager" ? managerId : audience === "resident" ? residentId : null,
         topic,
         body,
+        mode,
+        selectedIds: isPick ? [...selectedIds] : undefined,
       });
       if (!row) {
         showToast("Add a subject and message.");
@@ -113,7 +147,7 @@ function ComposeModal({
         onClick={onClose}
       />
       <div
-        className="fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
+        className="fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] max-h-[min(100%-2rem,90vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="admin-inbox-compose-title"
@@ -121,56 +155,62 @@ function ComposeModal({
         <h2 id="admin-inbox-compose-title" className="text-lg font-semibold text-slate-900">
           New message
         </h2>
-        <p className="mt-1 text-sm text-slate-500">Choose recipients and send an internal message.</p>
+        <p className="mt-1 text-sm text-slate-500">Broadcast to a group or choose specific managers, residents, or owners.</p>
 
         <div className="mt-4 space-y-3">
           <div>
             <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Send to</label>
             <Select
               className="mt-1.5"
-              value={audience}
-              onChange={(e) => setAudience(e.target.value as Audience)}
+              value={mode}
+              onChange={(e) => {
+                const v = e.target.value as AdminComposeSendMode;
+                setMode(v);
+                if (v === "pick_managers") setSelectedIds(new Set([ADMIN_INBOX_DEMO_MANAGERS[0]!.id]));
+                else if (v === "pick_residents") setSelectedIds(new Set([ADMIN_INBOX_DEMO_RESIDENTS[0]!.id]));
+                else if (v === "pick_owners") setSelectedIds(new Set([ADMIN_INBOX_DEMO_OWNERS[0]!.id]));
+                else setSelectedIds(new Set());
+              }}
               aria-label="Recipient type"
             >
-              <option value="manager">Manager</option>
-              <option value="resident">Resident</option>
-              <option value="all">All managers & residents</option>
+              {ADMIN_COMPOSE_MODE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </Select>
           </div>
 
-          {audience === "manager" ? (
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Which manager</label>
-              <Select
-                className="mt-1.5"
-                value={managerId}
-                onChange={(e) => setManagerId(e.target.value)}
-                aria-label="Select manager"
-              >
-                {ADMIN_INBOX_DEMO_MANAGERS.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
+          {pickHeading && pickPool.length > 0 ? (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">{pickHeading}</span>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-primary hover:underline"
+                  onClick={() => setSelectedIds(new Set(pickPool.map((p) => p.id)))}
+                >
+                  Select all
+                </button>
+              </div>
+              <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto pr-1">
+                {pickPool.map((c) => (
+                  <li key={c.id}>
+                    <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-white px-2 py-2 text-sm ring-1 ring-slate-200/80 hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
+                        checked={selectedIds.has(c.id)}
+                        onChange={() => toggleId(c.id)}
+                      />
+                      <span>
+                        <span className="font-medium text-slate-900">{c.name}</span>
+                        <span className="mt-0.5 block text-xs text-slate-500">{c.email}</span>
+                      </span>
+                    </label>
+                  </li>
                 ))}
-              </Select>
-            </div>
-          ) : null}
-
-          {audience === "resident" ? (
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Which resident</label>
-              <Select
-                className="mt-1.5"
-                value={residentId}
-                onChange={(e) => setResidentId(e.target.value)}
-                aria-label="Select resident"
-              >
-                {ADMIN_INBOX_DEMO_RESIDENTS.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </Select>
+              </ul>
             </div>
           ) : null}
 
@@ -226,7 +266,10 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     };
   }, []);
 
-  const all = useMemo(() => readInboxMessages(), [tick]);
+  const all = useMemo(() => {
+    void tick;
+    return readInboxMessages();
+  }, [tick]);
 
   const rows = useMemo(() => {
     if (tabId === "unopened") return all.filter((m) => m.folder === "inbox" && !m.read);
@@ -252,12 +295,12 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
 
   useEffect(() => {
     if (expandedId && !rows.some((r) => r.id === expandedId)) {
-      setExpandedId(null);
+      queueMicrotask(() => setExpandedId(null));
     }
   }, [rows, expandedId]);
 
   useEffect(() => {
-    setReplyDraft("");
+    queueMicrotask(() => setReplyDraft(""));
   }, [expandedId]);
 
   const toggleDetails = (row: InboxMessage) => {
@@ -342,7 +385,14 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                     const isOpen = expandedId === row.id;
                     const primaryName =
                       tabId === "sent" ? row.composeRecipientLabel ?? row.name : row.name;
-                    const primaryEmail = tabId === "sent" && row.composeAudience === "all" ? "" : row.email;
+                    const primaryEmail =
+                      tabId === "sent" &&
+                      (row.composeAudience === "all" ||
+                        row.composeAudience === "all_managers" ||
+                        row.composeAudience === "all_residents" ||
+                        row.composeAudience === "all_owners")
+                        ? ""
+                        : row.email;
                     return (
                       <Fragment key={row.id}>
                         <tr className={`${PORTAL_TABLE_TR} ${isOpen ? "bg-slate-50/30" : ""}`}>

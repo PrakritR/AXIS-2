@@ -3,15 +3,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  INBOX_TAB_DEFS,
-  InboxComposeModal,
-  PortalInboxEmptyState,
-  PortalInboxMessageTable,
-  type PortalInboxTableRow,
-} from "@/components/portal/portal-inbox-ui";
+import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
+import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import type { DemoResidentInboxThread } from "@/data/demo-portal";
 
 function toRows(
@@ -79,26 +75,35 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   };
 
   const handleComposeSend = useCallback(
-    (payload: { to: string; subject: string; body: string }) => {
+    (p: ScopedInboxSendPayload) => {
       const when = new Date().toLocaleString(undefined, {
         month: "short",
         day: "numeric",
         hour: "numeric",
         minute: "2-digit",
       });
+      if (p.kind === "admin") {
+        appendPortalMessageToAdminInbox({
+          role: "resident",
+          name: p.senderName,
+          email: p.senderEmail,
+          topic: p.subject.trim(),
+          body: p.body.trim(),
+        });
+      }
       const row: DemoResidentInboxThread = {
         id: `sent_${Date.now()}`,
         from: "You",
-        email: payload.to.trim(),
-        subject: payload.subject.trim(),
-        preview: previewLine(payload.body),
+        email: p.kind === "admin" ? "Axis admin team" : p.toEmailLine,
+        subject: p.subject.trim(),
+        preview: previewLine(p.body),
         when,
         unread: false,
-        body: payload.body.trim(),
+        body: p.body.trim(),
       };
       setSent((prev) => [row, ...prev]);
       setComposeOpen(false);
-      showToast("Message sent.");
+      showToast(p.kind === "admin" ? "Message sent to the admin team." : "Message sent.");
       router.push("/resident/inbox/sent");
       router.refresh();
     },
@@ -140,7 +145,14 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         />
       }
     >
-      <InboxComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} onSend={handleComposeSend} />
+      <ScopedInboxComposeModal
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        onSend={handleComposeSend}
+        portal="resident"
+        senderName="Resident"
+        senderEmail="resident@example.com"
+      />
 
       {tabId === "trash" ? (
         <PortalInboxEmptyState title={emptyCopy} />

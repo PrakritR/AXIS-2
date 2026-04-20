@@ -1,6 +1,7 @@
 import type { MockProperty } from "@/data/types";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { parseMonthlyRent } from "@/lib/listings-search";
+import { paymentAtSigningDetailBody, paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import type {
   AmenityItem,
   BundleCard,
@@ -206,10 +207,10 @@ export function listingRichFromManagerSubmission(
       id: "lease-signing",
       icon: "✍️",
       title: "Payment due at signing",
-      detail: "Per lease",
-      price: sub.paymentAtSigning.trim() || "—",
+      detail: sub.paymentAtSigning.trim() ? "Per listing" : "Deposit + move-in (calculated)",
+      price: paymentAtSigningPriceLabel(sub),
       status: "At signing",
-      body: sub.paymentAtSigning.trim() || "Confirm with leasing.",
+      body: paymentAtSigningDetailBody(sub),
     },
     {
       id: "lease-utilities",

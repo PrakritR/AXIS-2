@@ -148,35 +148,6 @@ export function AdminDashboard() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Resident portal</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <select
-                aria-label="Resident preview"
-                className="min-w-[12rem] flex-1 rounded-full border border-slate-200 bg-slate-50/80 px-4 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                value={residentId}
-                onChange={(e) => setResidentId(e.target.value)}
-              >
-                <option value="">— choose resident —</option>
-                {residents.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={!residentId || launchingPortal !== null}
-                onClick={() => void goPreview("resident", residentId)}
-                className={`${launchPreviewClassName} ${!residentId ? "pointer-events-none opacity-50" : ""} disabled:opacity-60`}
-                style={{
-                  background: "linear-gradient(135deg, var(--primary), var(--primary-alt))",
-                }}
-              >
-                {launchingPortal === "resident" ? "Opening…" : "Launch preview"}
-              </button>
-            </div>
-          </div>
-          <div>
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Owner portal</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <select
@@ -205,6 +176,35 @@ export function AdminDashboard() {
               </button>
             </div>
           </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Resident portal</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select
+                aria-label="Resident preview"
+                className="min-w-[12rem] flex-1 rounded-full border border-slate-200 bg-slate-50/80 px-4 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                value={residentId}
+                onChange={(e) => setResidentId(e.target.value)}
+              >
+                <option value="">— choose resident —</option>
+                {residents.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!residentId || launchingPortal !== null}
+                onClick={() => void goPreview("resident", residentId)}
+                className={`${launchPreviewClassName} ${!residentId ? "pointer-events-none opacity-50" : ""} disabled:opacity-60`}
+                style={{
+                  background: "linear-gradient(135deg, var(--primary), var(--primary-alt))",
+                }}
+              >
+                {launchingPortal === "resident" ? "Opening…" : "Launch preview"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -212,7 +212,7 @@ export function AdminDashboard() {
         <StatCard label="Properties" value="0" href="/admin/properties" />
         <StatCard label="Managers" value={String(counts.managers)} href="/admin/managers" />
         <StatCard label="Owners" value={String(counts.owners)} href="/admin/owners" />
-        <StatCard label="Events" value={eventsTotal} href="/admin/events/events" />
+        <StatCard label="Calendar" value={eventsTotal} href="/admin/events" />
       </div>
     </div>
   );

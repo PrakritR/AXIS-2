@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   demoApplicantRows,
   demoKpis,
   demoManagerHouseRows,
+  demoManagerLeaseDraftRows,
   demoManagerPaymentLedgerRows,
   demoManagerWorkOrderRowsFull,
 } from "@/data/demo-portal";
+import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import { readManagerWorkOrderRows, subscribeManagerWorkOrders } from "@/lib/manager-work-orders-storage";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilter } from "./manager-section-shell";
 import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "./portal-metrics";
@@ -26,10 +30,27 @@ function StatLink({ label, value, href }: { label: string; value: string; href: 
   );
 }
 
+function subscribeManagerApplications(cb: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(MANAGER_APPLICATIONS_EVENT, cb);
+  return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, cb);
+}
+
 export function ManagerDashboard() {
   const { showToast } = useAppUi();
   const pendingProperties = demoManagerHouseRows.filter((p) => p.bucket === "pending").length;
-  const pendingApplications = demoApplicantRows.filter((a) => a.bucket === "pending").length;
+  const applicationRows = useSyncExternalStore(
+    subscribeManagerApplications,
+    () => readManagerApplicationRows(demoApplicantRows),
+    () => demoApplicantRows,
+  );
+  const pendingApplications = applicationRows.filter((a) => a.bucket === "pending").length;
+
+  const workOrderRows = useSyncExternalStore(
+    subscribeManagerWorkOrders,
+    () => readManagerWorkOrderRows(demoManagerWorkOrderRowsFull),
+    () => demoManagerWorkOrderRowsFull,
+  );
 
   return (
     <ManagerPortalPageShell
@@ -81,10 +102,10 @@ export function ManagerDashboard() {
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatLink label="Properties" value={String(demoManagerHouseRows.length)} href="/manager/properties" />
-          <StatLink label="Applications" value={String(demoApplicantRows.length)} href="/manager/applications" />
-          <StatLink label="Leases" value="4" href="/manager/leases" />
+          <StatLink label="Applications" value={String(applicationRows.length)} href="/manager/applications" />
+          <StatLink label="Leases" value={String(demoManagerLeaseDraftRows.length)} href="/manager/leases" />
           <StatLink label="Payments" value={String(demoManagerPaymentLedgerRows.length)} href="/manager/payments" />
-          <StatLink label="Work orders" value={String(demoManagerWorkOrderRowsFull.length)} href="/manager/work-orders" />
+          <StatLink label="Work orders" value={String(workOrderRows.length)} href="/manager/work-orders" />
           <StatLink label="Inbox" value="5" href="/manager/inbox/unopened" />
         </div>
       </div>

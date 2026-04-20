@@ -30,7 +30,8 @@ export function ManagerPayments() {
   }, []);
 
   const mergedRows = useMemo(() => {
-    const fromHc = userId ? readChargesForManager(userId).map(householdChargeToLedgerRow) : [];
+    void hcTick;
+    const fromHc = readChargesForManager(userId).map(householdChargeToLedgerRow);
     return [...fromHc, ...demoManagerPaymentLedgerRows];
   }, [userId, hcTick]);
 

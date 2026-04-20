@@ -5,9 +5,14 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import {
+  INBOX_TAB_DEFS,
+  PortalInboxEmptyState,
+  PortalInboxMessageTable,
+  type PortalInboxTableRow,
+} from "@/components/portal/portal-inbox-ui";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
-import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
 
 type InboxThread = {
   id: string;
@@ -48,7 +53,7 @@ function countThreads(threads: InboxThread[]) {
   };
 }
 
-export function ManagerInbox({ tabId }: { tabId: string }) {
+export function OwnerInboxPanel({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
   const [local, setLocal] = useState<InboxThread[]>([]);
@@ -114,7 +119,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       });
       if (p.kind === "admin") {
         appendPortalMessageToAdminInbox({
-          role: "manager",
+          role: "owner",
           name: p.senderName,
           email: p.senderEmail,
           topic: p.subject.trim(),
@@ -136,7 +141,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       setLocal((prev) => [row, ...prev]);
       setComposeOpen(false);
       showToast(p.kind === "admin" ? "Message sent to the admin team." : "Message sent.");
-      router.push("/manager/inbox/sent");
+      router.push("/owner/inbox/sent");
       router.refresh();
     },
     [router, showToast],
@@ -175,7 +180,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           activeTone="primary"
           tabs={tabs}
           activeId={tabId}
-          onChange={(id) => router.push(`/manager/inbox/${id}`)}
+          onChange={(id) => router.push(`/owner/inbox/${id}`)}
         />
       }
     >
@@ -183,9 +188,10 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         open={composeOpen}
         onClose={() => setComposeOpen(false)}
         onSend={handleComposeSend}
-        portal="manager"
-        senderName="Property manager"
-        senderEmail="manager@example.com"
+        portal="owner"
+        title="New message"
+        senderName="Property owner"
+        senderEmail="owner@example.com"
       />
 
       {rowsForTab.length === 0 ? (
@@ -193,7 +199,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           title={emptyCopy}
           hint={
             tabId === "unopened" ? (
-              <p className="max-w-md">Messages from applicants, residents, and vendors appear here.</p>
+              <p className="max-w-md">Messages from your managers and residents on linked properties appear here.</p>
             ) : undefined
           }
         />

@@ -14,6 +14,8 @@ export const managerPortal: PortalDefinition = {
     { section: "payments", label: "Payments", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },
+    { section: "stripe", label: "Stripe payouts", tabs: [] },
+    { section: "managers", label: "Managers", tabs: [] },
     { section: "plan", label: "Plan", tabs: [] },
     {
       section: "inbox",

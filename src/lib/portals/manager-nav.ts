@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
-import { FREE_MANAGER_SECTIONS, getManagerSubscriptionTier } from "@/lib/manager-access";
+import { getManagerSubscriptionTier } from "@/lib/manager-access";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { managerPortal } from "./manager";
@@ -36,9 +36,7 @@ export async function buildManagerPortalDefinition(): Promise<{
   const tier = await getManagerSubscriptionTier(effectiveUserId);
   const isFree = tier === "free";
 
-  const sections = isFree
-    ? managerPortal.sections.filter((s) => FREE_MANAGER_SECTIONS.has(s.section))
-    : managerPortal.sections;
+  const sections = managerPortal.sections;
 
   const previewCookie = await getAdminPreviewFromCookies();
   const showPreviewBanner = hasAdminRole(ctx) && !!previewCookie?.targetUserId;

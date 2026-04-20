@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -22,10 +22,13 @@ import {
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
+import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
 import type { ManagerApplicationBucket } from "@/data/demo-portal";
 import { demoApplicantRows } from "@/data/demo-portal";
+import type { DemoApplicantRow } from "@/data/demo-portal";
+import { readManagerApplicationRows, writeManagerApplicationRows } from "@/lib/manager-applications-storage";
 
-function countByBucket(rows: typeof demoApplicantRows) {
+function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
   for (const r of rows) {
     c[r.bucket] += 1;
@@ -37,8 +40,18 @@ export function ManagerApplications() {
   const { showToast } = useAppUi();
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [rows, setRows] = useState<DemoApplicantRow[]>(demoApplicantRows);
 
-  const counts = useMemo(() => countByBucket(demoApplicantRows), []);
+  useEffect(() => {
+    setRows(readManagerApplicationRows(demoApplicantRows));
+  }, []);
+
+  const persist = useCallback((next: DemoApplicantRow[]) => {
+    setRows(next);
+    writeManagerApplicationRows(next);
+  }, []);
+
+  const counts = useMemo(() => countByBucket(rows), [rows]);
   const tabs = useMemo(
     () =>
       [
@@ -49,7 +62,21 @@ export function ManagerApplications() {
     [counts],
   );
 
-  const rows = useMemo(() => demoApplicantRows.filter((r) => r.bucket === bucket), [bucket]);
+  const rowsForBucket = useMemo(() => rows.filter((r) => r.bucket === bucket), [rows, bucket]);
+
+  const setRowBucket = (id: string, nextBucket: ManagerApplicationBucket) => {
+    const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket } : r));
+    persist(next);
+    setExpandedId(null);
+    setBucket(nextBucket);
+    const msg =
+      nextBucket === "approved"
+        ? "Application approved."
+        : nextBucket === "rejected"
+          ? "Application rejected."
+          : "Moved to Pending.";
+    showToast(msg);
+  };
 
   return (
     <ManagerPortalPageShell
@@ -81,14 +108,14 @@ export function ManagerApplications() {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {rowsForBucket.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">
-                    {demoApplicantRows.length === 0 ? "No applications yet (demo)." : "No applications in this bucket (demo)."}
+                    {rows.length === 0 ? "No applications yet (demo)." : "No applications in this bucket (demo)."}
                   </td>
                 </tr>
               ) : (
-                rows.map((row) => (
+                rowsForBucket.map((row) => (
                   <Fragment key={row.id}>
                     <tr className={PORTAL_TABLE_TR}>
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
@@ -112,18 +139,38 @@ export function ManagerApplications() {
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
                         <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                          <p className="text-sm leading-relaxed text-slate-600">{row.detail}</p>
                           <PortalTableDetailActions>
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => showToast("Approved (demo).")}>
-                              Approve
-                            </Button>
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Rejected (demo).")}>
-                              Reject
-                            </Button>
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Request info (demo).")}>
+                            {row.bucket === "pending" ? (
+                              <>
+                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setRowBucket(row.id, "approved")}>
+                                  Approve
+                                </Button>
+                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
+                                  Reject
+                                </Button>
+                              </>
+                            ) : (
+                              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "pending")}>
+                                Move to pending
+                              </Button>
+                            )}
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Request sent to applicant (demo).")}>
                               Request more info
                             </Button>
                           </PortalTableDetailActions>
+
+                          {row.application ? (
+                            <div className="mt-4 max-h-[min(70vh,520px)] overflow-y-auto rounded-xl border border-slate-200/80 bg-white p-4">
+                              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Application on file</p>
+                              <div className="mt-3">
+                                <ManagerApplicationReadonlyReview partial={row.application} />
+                              </div>
+                            </div>
+                          ) : null}
+
+                          <p className="mt-4 text-sm leading-relaxed text-slate-600">
+                            <span className="font-medium text-slate-800">Manager notes</span> — {row.detail}
+                          </p>
                         </td>
                       </tr>
                     ) : null}

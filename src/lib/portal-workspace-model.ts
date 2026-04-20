@@ -62,9 +62,14 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
       if (portal === "owner") {
         return [
           {
-            label: "View application",
+            label: "Approve applicant",
+            kind: "toast",
+            message: "Applicant approved (demo).",
+          },
+          {
+            label: "Request docs",
             kind: "modal",
-            message: "Owner accounts cannot approve or deny applications. Ask your manager to take action.",
+            message: "Messaging will route through Inbox once connected.",
           },
           ...common,
         ];
@@ -91,6 +96,15 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           message: "Stripe wiring is intentionally disabled in this shell.",
         },
         { label: "Send reminder", kind: "toast", message: "Reminder queued…" },
+        ...common,
+      ];
+    if (section === "stripe")
+      return [
+        {
+          label: "Stripe Dashboard",
+          kind: "modal",
+          message: "Use the Stripe payouts page in this portal to start Connect onboarding, or open dashboard.stripe.com.",
+        },
         ...common,
       ];
     if (section === "work-orders") {
@@ -127,12 +141,15 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         },
         ...common,
       ];
-    if (section === "managers" && portal === "owner") {
+    if (section === "managers") {
       return [
         {
-          label: "Contact manager",
+          label: portal === "owner" ? "Contact manager" : "Invite manager",
           kind: "toast",
-          message: "Demo — verified messaging will appear here.",
+          message:
+            portal === "owner"
+              ? "Demo — verified messaging will appear here."
+              : "Demo — invite links for delegated managers will appear here.",
         },
         {
           label: "View agreement",

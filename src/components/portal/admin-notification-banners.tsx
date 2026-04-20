@@ -46,7 +46,7 @@ export function AdminNotificationBanners() {
     if (inquiries > 0) {
       out.push({
         id: "inquiry",
-        href: "/admin/events/events",
+        href: "/admin/events",
         text: `${inquiries} partner meeting request${inquiries === 1 ? "" : "s"} waiting for your response.`,
       });
     }

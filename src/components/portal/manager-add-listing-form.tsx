@@ -323,8 +323,14 @@ export function ManagerAddListingForm({
                     <Input value={sub.moveInFee} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} />
                   </div>
                   <div>
-                    <FieldLabel>Payment due at signing</FieldLabel>
-                    <Input value={sub.paymentAtSigning} onChange={(e) => setSub((s) => ({ ...s, paymentAtSigning: e.target.value }))} />
+                    <FieldLabel hint="Leave blank to show applicants deposit + move-in total automatically on the listing.">
+                      Payment due at signing
+                    </FieldLabel>
+                    <Input
+                      value={sub.paymentAtSigning}
+                      onChange={(e) => setSub((s) => ({ ...s, paymentAtSigning: e.target.value }))}
+                      placeholder="Optional override, e.g. $650"
+                    />
                   </div>
                   <div className="sm:col-span-2">
                     <FieldLabel>Utilities (estimate)</FieldLabel>

@@ -97,7 +97,8 @@ export function ManagerPlan() {
   const planBlurb = useMemo(() => {
     if (!sub) return "";
     const t = pickerValue(sub);
-    if (t === "free") return "House posting only. Limited portal sections on the Free plan.";
+    if (t === "free")
+      return "Core owner tools: listings, applications, payments, Stripe payouts, and inviting managers. Upgrade to Pro for leases, work orders, calendar, inbox, and full manager workflows.";
     if (t === "pro") return "Up to 2 properties · matches $20/mo on the pricing page.";
     return "Unlimited scale · matches $200/mo on the pricing page.";
   }, [sub]);

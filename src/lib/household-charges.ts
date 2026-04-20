@@ -9,7 +9,13 @@ import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/d
 
 export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
+/** Promo code entered on the rental application (step 12) to waive the listing application fee (demo). */
+export const APPLICATION_FEE_PROMO_WAIVE_CODE = "FEEWAIVE";
+
 const STORAGE_KEY = "axis_household_charges_v1";
+
+/** When no manager Supabase session, work-order pass-through charges use this scope so Payments still lists them (demo). */
+export const HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE = "__axis_demo_manager_scope__";
 
 export type HouseholdChargeKind =
   | "application_fee"
@@ -115,6 +121,106 @@ export function findPendingWorkOrderCharge(workOrderId: string): HouseholdCharge
   return readAll().find((c) => c.workOrderId === workOrderId && c.kind === "work_order_charge" && c.status === "pending");
 }
 
+export function findApplicationFeeCharge(
+  residentEmail: string,
+  propertyId: string,
+  residentUserId?: string | null
+): HouseholdCharge | undefined {
+  const e = residentEmail.trim().toLowerCase();
+  return readAll().find((r) => {
+    if (r.kind !== "application_fee" || r.propertyId !== propertyId) return false;
+    if (r.residentEmail.trim().toLowerCase() === e) return true;
+    if (residentUserId && r.residentUserId === residentUserId) return true;
+    return false;
+  });
+}
+
+/** Removes a pending application-fee line (e.g. after promo waive) so managers do not see a stray unpaid fee. */
+export function removePendingApplicationFeeCharge(residentEmail: string, propertyId: string): void {
+  const e = residentEmail.trim().toLowerCase();
+  const rows = readAll();
+  const next = rows.filter(
+    (r) =>
+      !(
+        r.kind === "application_fee" &&
+        r.propertyId === propertyId &&
+        r.residentEmail.trim().toLowerCase() === e &&
+        r.status === "pending"
+      )
+  );
+  if (next.length !== rows.length) writeAll(next);
+}
+
+/**
+ * Dollar amount the listing expects for the application fee (0 = none / not required for gate).
+ * When there is no manager submission on the property, the demo stack uses $50 to match legacy billing.
+ */
+export function listingApplicationFeeAmount(propertyId: string): { amount: number; displayLabel: string } {
+  if (!propertyId.trim()) {
+    return { amount: 0, displayLabel: "—" };
+  }
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission;
+  if (!sub) {
+    return { amount: 50, displayLabel: "$50" };
+  }
+  const raw = submissionAmount(sub, "application_fee");
+  const amount = parseMoneyAmount(raw);
+  const displayLabel = raw.trim() || (amount > 0 ? `$${amount.toFixed(2)}` : "—");
+  return { amount, displayLabel };
+}
+
+/**
+ * Ensures a pending application-fee line exists when the listing requires a fee, so the applicant can pay
+ * (e.g. Zelle) and the manager can mark it paid before the wizard finalizes and shows an Application ID.
+ */
+export function ensurePendingApplicationFeeCharge(input: {
+  residentEmail: string;
+  residentName: string;
+  residentUserId: string | null;
+  propertyId: string;
+}): HouseholdCharge | null {
+  const email = input.residentEmail.trim();
+  if (!email || !email.includes("@")) return null;
+  const prop = getPropertyById(input.propertyId);
+  const sub = prop?.listingSubmission;
+  let raw = sub ? submissionAmount(sub, "application_fee") : "";
+  let amt = parseMoneyAmount(raw);
+  if (!sub && amt <= 0) {
+    raw = "$50";
+    amt = 50;
+  }
+  if (amt <= 0) return null;
+
+  const existing = findApplicationFeeCharge(email, input.propertyId, input.residentUserId);
+  if (existing) return existing;
+
+  const zelleSnap =
+    sub && sub.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
+
+  const idBase = `hc_${Date.now()}`;
+  const label = raw.trim() || `$${amt.toFixed(2)}`;
+  const charge: HouseholdCharge = {
+    id: `${idBase}_application_fee`,
+    createdAt: new Date().toISOString(),
+    residentEmail: email,
+    residentName: input.residentName.trim() || "Applicant",
+    residentUserId: input.residentUserId,
+    propertyId: input.propertyId,
+    propertyLabel: prop?.title ?? (sub ? sub.buildingName : "Listing"),
+    managerUserId: prop?.managerUserId ?? null,
+    kind: "application_fee",
+    title: chargeTitle("application_fee"),
+    amountLabel: label,
+    balanceLabel: label.includes("$") ? label : `$${amt.toFixed(2)}`,
+    status: "pending",
+    zelleContactSnapshot: zelleSnap,
+    blocksLeaseUntilPaid: false,
+  };
+  writeAll([...readAll(), charge]);
+  return charge;
+}
+
 /**
  * Bill a resident for work order cost (pass-through). Creates a pending line on manager Payments and resident Payments.
  */
@@ -188,13 +294,14 @@ export function readChargesForResident(email: string, userId: string | null): Ho
 }
 
 export function readChargesForManager(managerUserId: string | null): HouseholdCharge[] {
-  if (!managerUserId) return [];
-  return readAll().filter((r) => r.managerUserId === managerUserId);
+  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  return readAll().filter((r) => r.managerUserId === scope);
 }
 
-export function markHouseholdChargePaid(chargeId: string, managerUserId: string): boolean {
+export function markHouseholdChargePaid(chargeId: string, managerUserId: string | null): boolean {
   const rows = readAll();
-  const i = rows.findIndex((r) => r.id === chargeId && r.managerUserId === managerUserId);
+  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  const i = rows.findIndex((r) => r.id === chargeId && r.managerUserId === scope);
   if (i === -1) return false;
   if (rows[i]!.status === "paid") return true;
   const now = new Date().toISOString();
@@ -208,15 +315,25 @@ export function markHouseholdChargePaid(chargeId: string, managerUserId: string)
  * Called when an applicant completes the rental wizard (step 12).
  * Creates pending lines from the listing’s fee fields.
  */
-export function recordApplicationCharges(input: {
-  residentEmail: string;
-  residentName: string;
-  residentUserId: string | null;
-  propertyId: string;
-}): void {
+export function recordApplicationCharges(
+  input: {
+    residentEmail: string;
+    residentName: string;
+    residentUserId: string | null;
+    propertyId: string;
+  },
+  opts?: { skipApplicationFee?: boolean }
+): void {
+  const existingAppFee = findApplicationFeeCharge(
+    input.residentEmail,
+    input.propertyId,
+    input.residentUserId
+  );
+
   const prop = getPropertyById(input.propertyId);
   const sub = prop?.listingSubmission;
   if (!sub) {
+    if (opts?.skipApplicationFee || existingAppFee) return;
     /* still record a generic application fee line using defaults */
     const idBase = `hc_${Date.now()}`;
     const fallback: HouseholdCharge = {
@@ -246,6 +363,10 @@ export function recordApplicationCharges(input: {
   const idBase = `hc_${Date.now()}`;
 
   const pushLine = (kind: HouseholdChargeKind, blocksLease: boolean) => {
+    if (kind === "application_fee") {
+      if (opts?.skipApplicationFee) return;
+      if (existingAppFee) return;
+    }
     const raw = submissionAmount(sub, kind);
     const amt = parseMoneyAmount(raw);
     if (amt <= 0) return;

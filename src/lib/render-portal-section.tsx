@@ -19,6 +19,7 @@ import { AdminProfileClient } from "@/components/portal/admin-profile-client";
 import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
 import { ManagerProperties } from "@/components/portal/manager-properties";
 import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
+import { OwnerInboxPanel } from "@/components/portal/owner-inbox-panel";
 import { OwnerManagers } from "@/components/portal/owner-managers";
 import { OwnerProperties } from "@/components/portal/owner-properties";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
@@ -27,9 +28,12 @@ import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-orders-panel";
+import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
+import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
+import type { ReactNode } from "react";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { getManagerSubscriptionTier, managerSectionAllowedForTier } from "@/lib/manager-access";
@@ -38,6 +42,17 @@ import { findSection, getPortalDefinition } from "@/lib/portals";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
+
+function subscriptionGated(
+  node: ReactNode,
+  kind: PortalKind,
+  section: string,
+  tier: "free" | "paid" | null,
+): ReactNode {
+  if (kind !== "manager" && kind !== "owner") return node;
+  if (managerSectionAllowedForTier(section, tier)) return node;
+  return <PortalTierPaywall basePath={kind === "owner" ? "/owner" : "/manager"} />;
+}
 
 export async function renderPortalSection(
   kind: PortalKind,
@@ -48,15 +63,6 @@ export async function renderPortalSection(
 
   if (kind === "manager" && section === "upgrade") {
     redirect(`${def.basePath}/plan`);
-  }
-
-  if (kind === "manager") {
-    const uid = await getEffectiveUserIdForPortal("manager");
-    if (!uid) redirect("/admin/dashboard");
-    const tier = await getManagerSubscriptionTier(uid);
-    if (!managerSectionAllowedForTier(section, tier)) {
-      redirect(`${def.basePath}/dashboard`);
-    }
   }
 
   const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
@@ -70,6 +76,17 @@ export async function renderPortalSection(
       : false;
   const meta = findSection(def, section);
   if (!meta) notFound();
+
+  let managerOwnerSubscriptionTier: "free" | "paid" | null = null;
+  if (kind === "manager") {
+    const uid = await getEffectiveUserIdForPortal("manager");
+    if (!uid) redirect("/admin/dashboard");
+    managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
+  } else if (kind === "owner") {
+    const uid = await getEffectiveUserIdForPortal("owner");
+    if (!uid) redirect("/auth/sign-in");
+    managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
+  }
 
   if (kind === "admin" && section === "dashboard") {
     if (tabParts?.length) notFound();
@@ -134,13 +151,10 @@ export async function renderPortalSection(
   }
 
   if (kind === "admin" && section === "events") {
-    if (!meta.tabs.length) notFound();
-    if (!tabParts?.length) {
-      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+    if (tabParts?.length) {
+      redirect(`${def.basePath}/events`);
     }
-    const eventsTab = tabParts[0];
-    if (eventsTab !== "events" && eventsTab !== "availability") notFound();
-    return <AdminEventsClient tabId={eventsTab} />;
+    return <AdminEventsClient />;
   }
 
   if (kind === "manager") {
@@ -151,31 +165,111 @@ export async function renderPortalSection(
       }
       const inboxTab = tabParts[0]!;
       if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
-      return <ManagerInbox tabId={inboxTab} />;
+      return subscriptionGated(
+        <ManagerInbox tabId={inboxTab} />,
+        kind,
+        "inbox",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (tabParts?.length) notFound();
-    if (section === "dashboard") return <ManagerDashboard />;
-    if (section === "properties") return <ManagerProperties />;
-    if (section === "applications") return <ManagerApplications />;
-    if (section === "leases") return <ManagerLeases />;
-    if (section === "payments") return <ManagerPayments />;
-    if (section === "work-orders") return <ManagerWorkOrders />;
-    if (section === "owners") return <ManagerOwners />;
-    if (section === "calendar") return <PortalCalendar portal="manager" />;
-    if (section === "plan") return <ManagerPlan />;
-    if (section === "profile") return <ManagerProfile />;
+    if (section === "dashboard") {
+      return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
+    }
+    if (section === "properties") {
+      return subscriptionGated(<ManagerProperties />, kind, "properties", managerOwnerSubscriptionTier);
+    }
+    if (section === "applications") {
+      return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);
+    }
+    if (section === "leases") {
+      return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
+    }
+    if (section === "payments") {
+      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
+    }
+    if (section === "work-orders") {
+      return subscriptionGated(<ManagerWorkOrders />, kind, "work-orders", managerOwnerSubscriptionTier);
+    }
+    if (section === "owners") {
+      return subscriptionGated(<ManagerOwners />, kind, "owners", managerOwnerSubscriptionTier);
+    }
+    if (section === "calendar") {
+      return subscriptionGated(<PortalCalendar portal="manager" />, kind, "calendar", managerOwnerSubscriptionTier);
+    }
+    if (section === "stripe") {
+      return subscriptionGated(
+        <PortalStripeConnectPanel basePath="/manager" />,
+        kind,
+        "stripe",
+        managerOwnerSubscriptionTier,
+      );
+    }
+    if (section === "managers") {
+      return subscriptionGated(<OwnerManagers variant="manager" />, kind, "managers", managerOwnerSubscriptionTier);
+    }
+    if (section === "plan") {
+      return subscriptionGated(<ManagerPlan />, kind, "plan", managerOwnerSubscriptionTier);
+    }
+    if (section === "profile") {
+      return subscriptionGated(<ManagerProfile />, kind, "profile", managerOwnerSubscriptionTier);
+    }
   }
 
   if (kind === "owner") {
+    if (section === "inbox") {
+      if (!meta.tabs.length) notFound();
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+      }
+      const inboxTab = tabParts[0]!;
+      if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+      return subscriptionGated(
+        <OwnerInboxPanel tabId={inboxTab} />,
+        kind,
+        "inbox",
+        managerOwnerSubscriptionTier,
+      );
+    }
     if (tabParts?.length) notFound();
-    if (section === "dashboard") return <ManagerDashboard />;
-    if (section === "properties") return <OwnerProperties />;
-    if (section === "applications") return <ManagerApplications />;
-    if (section === "leases") return <ManagerLeases />;
-    if (section === "payments") return <ManagerPayments />;
-    if (section === "work-orders") return <ManagerWorkOrders />;
-    if (section === "managers") return <OwnerManagers />;
-    if (section === "profile") return <ManagerProfile />;
+    if (section === "dashboard") {
+      return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
+    }
+    if (section === "properties") {
+      return subscriptionGated(<OwnerProperties />, kind, "properties", managerOwnerSubscriptionTier);
+    }
+    if (section === "applications") {
+      return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);
+    }
+    if (section === "leases") {
+      return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
+    }
+    if (section === "payments") {
+      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
+    }
+    if (section === "work-orders") {
+      return subscriptionGated(<ManagerWorkOrders />, kind, "work-orders", managerOwnerSubscriptionTier);
+    }
+    if (section === "calendar") {
+      return subscriptionGated(<PortalCalendar portal="manager" />, kind, "calendar", managerOwnerSubscriptionTier);
+    }
+    if (section === "stripe") {
+      return subscriptionGated(
+        <PortalStripeConnectPanel basePath="/owner" />,
+        kind,
+        "stripe",
+        managerOwnerSubscriptionTier,
+      );
+    }
+    if (section === "managers") {
+      return subscriptionGated(<OwnerManagers variant="owner" />, kind, "managers", managerOwnerSubscriptionTier);
+    }
+    if (section === "plan") {
+      return subscriptionGated(<ManagerPlan />, kind, "plan", managerOwnerSubscriptionTier);
+    }
+    if (section === "profile") {
+      return subscriptionGated(<ManagerProfile />, kind, "profile", managerOwnerSubscriptionTier);
+    }
   }
 
   if (kind === "resident" && section === "dashboard") {

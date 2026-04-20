@@ -64,8 +64,11 @@ export function ListingPublicPreviewModal({
             </button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <ListingDetailSections property={property} rich={rich} />
+        <div
+          data-listing-preview-scroll
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          <ListingDetailSections property={property} rich={rich} previewModal />
         </div>
         {footer ? (
           <div className="shrink-0 border-t border-slate-200/90 bg-white px-4 py-4 sm:px-5">{footer}</div>

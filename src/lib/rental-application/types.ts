@@ -66,12 +66,17 @@ export type RentalWizardFormState = {
   criminalHistory: YesNo;
   criminalDetails: string;
   additionalNotes: string;
+  /** Applicant’s expected all-in monthly utilities (budgeting); optional. Listing may also show a landlord estimate. */
+  expectedUtilitiesMonthly: string;
   consentCredit: boolean;
   consentTruth: boolean;
   digitalSignature: string;
   dateSigned: string;
   /** Step 12 — non-refundable application processing fee acknowledgement */
   applicationFeeAcknowledged: boolean;
+  /** Step 12 — optional promo to waive the listing application fee (demo: FEEWAIVE). */
+  applicationFeePromoCode: string;
+  applicationFeeWaivedByPromo: boolean;
 };
 
 /** Field and step-level messages (string keys so consent booleans can still surface errors). */

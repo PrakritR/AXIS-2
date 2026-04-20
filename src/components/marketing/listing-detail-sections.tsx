@@ -100,14 +100,18 @@ function Sidebar({
 export function ListingDetailSections({
   property,
   rich,
+  previewModal = false,
 }: {
   property: MockProperty;
   rich: ListingRichContent;
+  /** When true (public preview dialog), section tabs sit at the top and stick within the modal scroller. */
+  previewModal?: boolean;
 }) {
   const roomCount = rich.floorPlans.reduce((n, f) => n + f.rooms.length, 0);
   return (
     <div className="bg-[#f4f7fb]">
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:py-10">
+      <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10"}`}>
+        {previewModal ? <ListingStickySubnav mode="modal" /> : null}
         <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm">
             <div className="absolute right-3 top-3 rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm sm:right-4 sm:top-4 sm:px-3 sm:text-xs">
@@ -150,10 +154,10 @@ export function ListingDetailSections({
           </div>
         </div>
 
-        <div className="mt-6">
-          <ListingStickySubnav />
+        <div className={previewModal ? "mt-4" : "mt-6"}>
+          {previewModal ? null : <ListingStickySubnav />}
 
-          <div className="relative z-0 mt-10 grid gap-10 lg:grid-cols-[1fr_minmax(280px,320px)]">
+          <div className={`relative z-0 grid gap-10 lg:grid-cols-[1fr_minmax(280px,320px)] ${previewModal ? "mt-6" : "mt-10"}`}>
             <div className="order-2 space-y-14 lg:order-1">
               <section id="floor-plans" className={sectionScroll}>
                 <div className="mb-5 flex flex-wrap items-end justify-between gap-3">

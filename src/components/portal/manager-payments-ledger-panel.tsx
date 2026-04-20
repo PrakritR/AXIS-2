@@ -46,7 +46,7 @@ export function ManagerPaymentsLedgerPanel({
   }
 
   const markPaid = (row: DemoManagerPaymentLedgerRow) => {
-    if (row.householdChargeId && managerUserId) {
+    if (row.householdChargeId) {
       if (markHouseholdChargePaid(row.householdChargeId, managerUserId)) {
         showToast("Marked as paid.");
         setExpandedId(null);

@@ -22,6 +22,7 @@ import {
   downloadAiGeneratedLeaseHtml,
   gatherLeaseGenerationContext,
 } from "@/lib/generated-lease";
+import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import {
   clearUploadedOwnLease,
   readUploadedOwnLease,
@@ -112,10 +113,10 @@ export function ResidentLeasePanel() {
       termLabel: [a.leaseTerm, a.leaseEnd && a.leaseTerm !== "Month-to-Month" ? `through ${a.leaseEnd}` : ""]
         .filter(Boolean)
         .join(" · ") || "—",
-      deposit: sub?.securityDeposit ?? demoResidentLeaseHub.deposit,
-      paymentAtSigning: sub?.paymentAtSigning ?? demoResidentLeaseHub.paymentAtSigning,
+      deposit: sub?.securityDeposit?.trim() || "—",
+      paymentAtSigning: sub ? paymentAtSigningPriceLabel(sub) : "—",
       pdfName: room ? `${room.buildingName} · ${room.unitLabel}` : "Your selected listing",
-      subtitle: "Pulled from your saved application and listing where available.",
+      subtitle: "Pulled from your saved application and published listing fees where available.",
     };
   })();
 

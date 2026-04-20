@@ -12,6 +12,7 @@ import type { MockProperty } from "@/data/types";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { loadRentalWizardDraft } from "@/lib/rental-application/drafts";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
 function escapeHtml(s: string): string {
@@ -124,8 +125,9 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   const appFee = sub?.applicationFee ?? "—";
   const secDep = sub?.securityDeposit ?? "—";
   const moveInFee = sub?.moveInFee ?? "—";
-  const paySigning = sub?.paymentAtSigning ?? "—";
+  const paySigning = sub ? paymentAtSigningPriceLabel(sub) : "—";
   const utilities = sub?.utilitiesMonthly ?? "—";
+  const applicantUtilities = (a.expectedUtilitiesMonthly ?? "").trim();
   const leaseTermsBody = sub?.leaseTermsBody?.trim() || "Standard lease lengths and renewal as posted on the listing.";
   const houseOverview = sub?.houseOverview?.trim() || list?.tagline || "Shared housing as described on the listing.";
   const sharedSpaces = sub?.sharedSpacesDescription?.trim() || "Common kitchen, bath, and living areas as shared among residents.";
@@ -175,7 +177,11 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
 <p>Application fee (if applicable): <strong>${escapeHtml(appFee)}</strong>. Security deposit: <strong>${escapeHtml(secDep)}</strong>. Move-in fee: <strong>${escapeHtml(moveInFee)}</strong>. Amount due at or before signing / move-in: <strong>${escapeHtml(paySigning)}</strong>. These amounts reflect the listing and application you selected.</p>
 
 <h2>6. Utilities & services</h2>
-<p>Estimated utilities / RUBS / house services: <strong>${escapeHtml(utilities)}</strong>. ${escapeHtml(costsDetail)}</p>
+<p>Listing estimate for utilities / RUBS / house services: <strong>${escapeHtml(utilities)}</strong>. ${escapeHtml(costsDetail)}${
+    applicantUtilities
+      ? ` <strong>Resident stated expected monthly utilities (application):</strong> ${escapeHtml(applicantUtilities)}.`
+      : ""
+  }</p>
 
 <h2>7. Use and occupancy</h2>
 <p>The Premises shall be used only as a private residence for <strong>${occupancy}</strong> named occupant(s). No unlawful use. Resident shall comply with all applicable laws, HOA rules if any, and posted house rules.</p>
