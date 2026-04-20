@@ -43,6 +43,79 @@ export function PortalSegmentedControl<T extends string>({
 /** Primary page title in portal workspaces. */
 export const PORTAL_PAGE_TITLE = "text-2xl font-bold tracking-tight text-[#0d1f4e]";
 
+/** Matches admin Managers / Properties filter row (status + tier pill groups). */
+export type PortalTierFilterId = "all" | "free" | "pro" | "business";
+
+const TIER_FILTER_OPTIONS: { id: PortalTierFilterId; label: string }[] = [
+  { id: "all", label: "All tiers" },
+  { id: "free", label: "Free" },
+  { id: "pro", label: "Pro" },
+  { id: "business", label: "Business" },
+];
+
+/** Deterministic demo tier for filter chips when rows have no tier column (admin / manager Properties). */
+export function portalDemoTierFromId(seed: string): Exclude<PortalTierFilterId, "all"> {
+  const tiers: Exclude<PortalTierFilterId, "all">[] = ["free", "pro", "business"];
+  let n = 0;
+  for (let i = 0; i < seed.length; i++) n += seed.charCodeAt(i);
+  return tiers[n % 3];
+}
+
+export function PortalStatusTierFilterBar({
+  statusTabs,
+  activeStatusId,
+  onStatusChange,
+  tierFilter,
+  onTierChange,
+}: {
+  statusTabs: { id: string; label: string; count: number }[];
+  activeStatusId: string;
+  onStatusChange: (id: string) => void;
+  tierFilter: PortalTierFilterId;
+  onTierChange: (id: PortalTierFilterId) => void;
+}) {
+  return (
+    <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+        {statusTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onStatusChange(tab.id)}
+            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+              activeStatusId === tab.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {tab.label}
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                activeStatusId === tab.id ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+              }`}
+            >
+              {tab.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+        {TIER_FILTER_OPTIONS.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => onTierChange(opt.id)}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+              tierFilter === opt.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export type PortalMetricItem = {
   value: string;
   label: string;

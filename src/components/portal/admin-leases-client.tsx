@@ -15,12 +15,7 @@ import {
   type AdminLeaseRow,
 } from "@/lib/demo-admin-leases";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import {
-  PORTAL_PAGE_TITLE,
-  PORTAL_SECTION_SURFACE,
-  PortalContentWell,
-  PortalKpiTabStrip,
-} from "@/components/portal/portal-metrics";
+import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 
 const KPI_LABELS = ["Manager review", "Admin review", "With resident", "Signed"] as const;
 
@@ -263,11 +258,6 @@ export function AdminLeasesClient() {
     [allRows, activeBucket, propertyFilter, managerFilter],
   );
 
-  const kpiItems = useMemo(
-    () => KPI_LABELS.map((label, i) => ({ value: String(kpiValues[i] ?? 0), label })),
-    [kpiValues],
-  );
-
   useEffect(() => {
     if (!detailRow) return;
     const next = readAdminLeases().find((r) => r.id === detailRow.id);
@@ -276,49 +266,79 @@ export function AdminLeasesClient() {
 
   return (
     <div className={PORTAL_SECTION_SURFACE}>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <h1 className={PORTAL_PAGE_TITLE}>Leases</h1>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3">
-          <select
-            aria-label="Managers"
-            className="w-full min-w-[10rem] rounded-full border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-auto sm:max-w-[min(100%,14rem)]"
-            value={managerFilter}
-            onChange={(e) => setManagerFilter(e.target.value)}
-          >
-            <option value="all">All managers</option>
-            {managerOptions.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Properties"
-            className="w-full min-w-[10rem] rounded-full border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-auto sm:max-w-[min(100%,14rem)]"
-            value={propertyFilter}
-            onChange={(e) => setPropertyFilter(e.target.value)}
-          >
-            <option value="all">All properties</option>
-            {propertyOptions.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-            Refresh
-          </Button>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Leases</h1>
+        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
+          Refresh
+        </Button>
+      </div>
+
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+          {KPI_LABELS.map((label, i) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setActiveBucket(i as AdminLeaseBucketIndex)}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+                activeBucket === i ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {label}
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                  activeBucket === i ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+                }`}
+              >
+                {kpiValues[i] ?? 0}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
+          <div className="inline-flex min-w-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+            <label htmlFor="admin-lease-manager-filter" className="sr-only">
+              Managers
+            </label>
+            <select
+              id="admin-lease-manager-filter"
+              aria-label="Managers"
+              className="max-w-[min(100%,14rem)] min-w-0 flex-1 rounded-full border-0 bg-transparent py-1.5 pl-3 pr-2 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-0 sm:max-w-none"
+              value={managerFilter}
+              onChange={(e) => setManagerFilter(e.target.value)}
+            >
+              <option value="all">All managers</option>
+              {managerOptions.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="inline-flex min-w-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+            <label htmlFor="admin-lease-property-filter" className="sr-only">
+              Properties
+            </label>
+            <select
+              id="admin-lease-property-filter"
+              aria-label="Properties"
+              className="max-w-[min(100%,14rem)] min-w-0 flex-1 rounded-full border-0 bg-transparent py-1.5 pl-3 pr-2 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-0 sm:max-w-none"
+              value={propertyFilter}
+              onChange={(e) => setPropertyFilter(e.target.value)}
+            >
+              <option value="all">All properties</option>
+              {propertyOptions.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      <PortalKpiTabStrip
-        items={kpiItems}
-        activeIndex={activeBucket}
-        onSelect={(i) => setActiveBucket(i as AdminLeaseBucketIndex)}
-        textAlign="left"
-      />
-
-      <PortalContentWell>
+      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
         {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
             <AxisHeaderMarkTile>
@@ -378,7 +398,7 @@ export function AdminLeasesClient() {
             </table>
           </div>
         )}
-      </PortalContentWell>
+      </div>
 
       <LeaseDetailSheet
         open={Boolean(detailRow)}

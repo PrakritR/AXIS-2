@@ -10,7 +10,6 @@ export const demoKpis = {
   workOrders: { open: "0", scheduled: "0", completed: "0" },
   managers: { current: "0", past: "0" },
   calendar: { today: "0", week: "0", month: "0", total: "0" },
-  residentCalendar: { today: "0", week: "0", month: "0", total: "0" },
 } as const;
 
 export const demoOwnerAccounts: { name: string; email: string; properties: string }[] = [];

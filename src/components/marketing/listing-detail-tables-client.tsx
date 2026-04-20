@@ -65,10 +65,24 @@ function ModalVideoBlock({ eyebrow, title, subtitle }: { eyebrow: string; title:
   );
 }
 
-function PhotoStrip({ captions }: { captions: string[] }) {
+function PhotoStrip({ captions, imageUrls }: { captions?: string[]; imageUrls?: string[] }) {
+  const imgs = imageUrls?.filter(Boolean) ?? [];
+  if (imgs.length > 0) {
+    return (
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {imgs.map((src, i) => (
+          <div key={`${src.slice(0, 48)}-${i}`} className="overflow-hidden rounded-xl bg-slate-100">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt="" className="aspect-[4/3] h-full w-full object-cover" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  const caps = captions ?? [];
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-      {captions.map((cap) => (
+      {caps.map((cap) => (
         <div
           key={cap}
           className="flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 p-2"
@@ -154,12 +168,31 @@ function ListingDetailModal({
                 </div>
               </div>
             </div>
+            {(state.room.modal.photoUrls?.length ?? 0) > 0 ? (
+              <div className="mt-6">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Photos</p>
+                <div className="mt-3">
+                  <PhotoStrip imageUrls={state.room.modal.photoUrls} />
+                </div>
+              </div>
+            ) : null}
             <div className="mt-6">
-              <ModalVideoBlock
-                eyebrow={state.room.modal.tourEyebrow}
-                title={state.room.modal.tourTitle}
-                subtitle={state.room.modal.tourSubtitle}
-              />
+              {state.room.modal.videoSrc ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-black shadow-sm">
+                  <video
+                    src={state.room.modal.videoSrc}
+                    controls
+                    playsInline
+                    className="max-h-[min(55vh,420px)] w-full"
+                  />
+                </div>
+              ) : (
+                <ModalVideoBlock
+                  eyebrow={state.room.modal.tourEyebrow}
+                  title={state.room.modal.tourTitle}
+                  subtitle={state.room.modal.tourSubtitle}
+                />
+              )}
             </div>
             <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>

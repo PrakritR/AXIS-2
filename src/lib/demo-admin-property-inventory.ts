@@ -3,7 +3,7 @@ import {
   PROPERTY_PIPELINE_EVENT,
   appendExtraListing,
   approvePendingManagerProperty,
-  buildMockPropertyFromDraft,
+  buildMockPropertyFromAdminRow,
   readExtraListings,
   readPendingManagerProperties,
   removeExtraListing,
@@ -11,6 +11,7 @@ import {
   takePendingManagerProperty,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
+import { legacyAdminFieldsToSubmission } from "@/lib/manager-listing-submission";
 
 const SIDE_KEY = "axis_admin_property_buckets_v1";
 
@@ -159,7 +160,7 @@ export function approveFromRequestChange(adminRefId: string): boolean {
   const row = side.requestChange[idx]!;
   const nextRc = [...side.requestChange.slice(0, idx), ...side.requestChange.slice(idx + 1)];
   const listingId = `mgr-${slugPart(row.buildingName)}-${slugPart(row.unitLabel)}-${adminRefId.slice(-6)}`;
-  const prop = buildMockPropertyFromDraft(row, listingId);
+  const prop = buildMockPropertyFromAdminRow(row, listingId);
   appendExtraListing(prop);
   writeSide({ ...side, requestChange: nextRc });
   return true;
@@ -182,18 +183,7 @@ export function returnRequestChangeToPending(adminRefId: string): boolean {
   if (idx === -1) return false;
   const row = side.requestChange[idx]!;
   const nextRc = [...side.requestChange.slice(0, idx), ...side.requestChange.slice(idx + 1)];
-  submitManagerPendingProperty({
-    buildingName: row.buildingName,
-    address: row.address,
-    zip: row.zip,
-    neighborhood: row.neighborhood,
-    unitLabel: row.unitLabel,
-    beds: row.beds,
-    baths: row.baths,
-    monthlyRent: row.monthlyRent,
-    petFriendly: row.petFriendly,
-    tagline: row.tagline,
-  });
+  submitManagerPendingProperty(legacyAdminFieldsToSubmission(row));
   writeSide({ ...side, requestChange: nextRc });
   return true;
 }
@@ -213,7 +203,7 @@ export function listAdminRow(row: AdminPropertyRow): string | null {
   if (idx === -1) return null;
   const listingId =
     row.listingId ?? `mgr-${slugPart(row.buildingName)}-${slugPart(row.unitLabel)}-${row.adminRefId.slice(-6)}`;
-  const prop = buildMockPropertyFromDraft(row, listingId);
+  const prop = buildMockPropertyFromAdminRow(row, listingId);
   appendExtraListing(prop);
   const nextUn = [...side.unlisted.slice(0, idx), ...side.unlisted.slice(idx + 1)];
   writeSide({ ...side, unlisted: nextUn });
@@ -255,18 +245,7 @@ export function restoreRejectedToPending(adminRefId: string): boolean {
   if (idx === -1) return false;
   const row = side.rejected[idx]!;
   const nextR = [...side.rejected.slice(0, idx), ...side.rejected.slice(idx + 1)];
-  submitManagerPendingProperty({
-    buildingName: row.buildingName,
-    address: row.address,
-    zip: row.zip,
-    neighborhood: row.neighborhood,
-    unitLabel: row.unitLabel,
-    beds: row.beds,
-    baths: row.baths,
-    monthlyRent: row.monthlyRent,
-    petFriendly: row.petFriendly,
-    tagline: row.tagline,
-  });
+  submitManagerPendingProperty(legacyAdminFieldsToSubmission(row));
   writeSide({ ...side, rejected: nextR });
   return true;
 }

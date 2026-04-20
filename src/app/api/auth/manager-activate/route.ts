@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
+import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -55,26 +57,27 @@ export async function POST(req: Request) {
       if (!isAlreadyExists) {
         return NextResponse.json({ error: cErr.message }, { status: 400 });
       }
-      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      const existing = listData?.users.find((u) => u.email?.toLowerCase() === normalEmail);
-      if (!existing) {
+      const existingId = await findAuthUserIdByEmail(supabase, normalEmail);
+      if (!existingId) {
         return NextResponse.json({ error: "Could not locate existing account." }, { status: 400 });
       }
-      userId = existing.id;
+      userId = existingId;
       await supabase.auth.admin.updateUserById(userId, { password });
     } else {
       if (!created.user) return NextResponse.json({ error: "Could not create user." }, { status: 400 });
       userId = created.user.id;
     }
 
+    const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+
     await supabase.from("profiles").upsert(
       {
         id: userId,
         email: normalEmail,
-        role: "manager",
+        role: primaryRoleWhenAddingManager(existingProfile?.role as string | undefined),
         manager_id: purchase.manager_id,
-        full_name: purchase.full_name || null,
-        application_approved: true,
+        full_name: purchase.full_name || existingProfile?.full_name || null,
+        application_approved: existingProfile?.application_approved ?? true,
       },
       { onConflict: "id" },
     );

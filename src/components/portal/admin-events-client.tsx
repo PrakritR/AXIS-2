@@ -13,7 +13,6 @@ import {
   dateSlotKey,
   declinePartnerInquiry,
   deletePlannedEvent,
-  eventKpis,
   formatRangeLabel,
   mondayBasedDayIndex,
   readAvailabilityDateSet,
@@ -527,7 +526,6 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
   const [detail, setDetail] = useState<PartnerInquiry | null>(null);
   const [inquiryInstructionsDraft, setInquiryInstructionsDraft] = useState("");
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
-  const [monthAnchor] = useState(() => new Date());
   const [viewMode, setViewMode] = useState<CalendarMode>("week");
   const [calAnchor, setCalAnchor] = useState(() => {
     const t = new Date();
@@ -551,15 +549,14 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
     };
   }, [bump]);
 
-  const { availability, planned, kpis, pendingRows } = useMemo(() => {
+  const { availability, planned, pendingRows } = useMemo(() => {
     const inq = readPartnerInquiries();
     return {
       availability: readAvailabilityDateSet(),
       planned: readPlannedEvents(),
-      kpis: eventKpis(monthAnchor),
       pendingRows: inq.filter((r) => r.status === "pending"),
     };
-  }, [tick, monthAnchor]);
+  }, [tick]);
 
   const refresh = () => {
     bump();
@@ -594,27 +591,6 @@ export function AdminEventsClient({ tabId }: { tabId: "events" | "availability" 
           <AvailabilityEditor />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-3 lg:max-h-[calc(100dvh-9rem)] lg:gap-4">
-            <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
-              {(
-                [
-                  ["Today", kpis.today],
-                  ["This week", kpis.week],
-                  ["This month", kpis.month],
-                  ["Total booked", kpis.total],
-                ] as const
-              ).map(([label, value], i) => (
-                <div
-                  key={label}
-                  className={`rounded-xl border px-3 py-2.5 sm:px-4 sm:py-3 ${
-                    i === 2 ? "border-primary/25 bg-white shadow-[0_8px_28px_-12px_rgba(15,23,42,0.14)]" : "border-slate-100 bg-slate-50/60"
-                  }`}
-                >
-                  <p className="text-xl font-semibold tabular-nums text-slate-900 sm:text-2xl">{value}</p>
-                  <p className="mt-0.5 text-[11px] font-medium text-slate-500 sm:text-xs">{label}</p>
-                </div>
-              ))}
-            </div>
-
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-12 lg:gap-5 lg:overflow-hidden">
               {/* Lists: scroll independently on small screens; fixed column on large */}
               <div className="flex min-h-0 flex-col gap-3 lg:col-span-5 lg:max-h-full lg:overflow-hidden">

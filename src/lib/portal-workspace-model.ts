@@ -751,12 +751,6 @@ export function buildPortalWorkspaceModel(
       eyebrow,
       title: "Calendar",
       subtitle: "",
-      kpis: [
-        { label: "Today", value: demoKpis.residentCalendar.today, hint: "Events" },
-        { label: "This week", value: demoKpis.residentCalendar.week, hint: "" },
-        { label: "This month", value: demoKpis.residentCalendar.month, hint: "" },
-        { label: "Total", value: demoKpis.residentCalendar.total, hint: "" },
-      ],
       showToolbar: false,
       showQuickLinks: false,
       columns: [

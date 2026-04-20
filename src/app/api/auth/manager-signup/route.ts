@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
+import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-session";
 import { isAxisIntentSessionId } from "@/lib/manager-signup-intent";
@@ -45,20 +47,38 @@ export async function POST(req: Request) {
         user_metadata: { role: "manager", manager_id: purchase.manager_id },
       });
 
-      if (cErr || !created.user) {
-        return NextResponse.json({ error: cErr?.message ?? "Could not create user." }, { status: 400 });
+      let userId: string;
+
+      if (cErr) {
+        const isAlreadyExists =
+          cErr.message.toLowerCase().includes("already") ||
+          cErr.message.toLowerCase().includes("registered");
+        if (!isAlreadyExists) {
+          return NextResponse.json({ error: cErr.message }, { status: 400 });
+        }
+        const existingId = await findAuthUserIdByEmail(supabase, email);
+        if (!existingId) {
+          return NextResponse.json({ error: "Could not locate existing account for this email." }, { status: 400 });
+        }
+        userId = existingId;
+        await supabase.auth.admin.updateUserById(userId, { password });
+      } else {
+        if (!created.user) {
+          return NextResponse.json({ error: "Could not create user." }, { status: 400 });
+        }
+        userId = created.user.id;
       }
 
-      const userId = created.user.id;
+      const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
 
       const { error: upErr } = await supabase.from("profiles").upsert(
         {
           id: userId,
           email,
-          role: "manager",
+          role: primaryRoleWhenAddingManager(existingProfile?.role as string | undefined),
           manager_id: purchase.manager_id,
-          full_name: fullName || null,
-          application_approved: true,
+          full_name: fullName || existingProfile?.full_name || null,
+          application_approved: existingProfile?.application_approved ?? true,
         },
         { onConflict: "id" },
       );
@@ -123,19 +143,11 @@ export async function POST(req: Request) {
       if (!isAlreadyExists) {
         return NextResponse.json({ error: cErr.message }, { status: 400 });
       }
-      // Email exists — find the existing user and link manager access to them.
-      const { data: listData, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      if (listErr || !listData) {
-        return NextResponse.json({ error: "Could not look up existing user." }, { status: 500 });
-      }
-      const existing = listData.users.find(
-        (u) => u.email?.toLowerCase() === email.toLowerCase(),
-      );
-      if (!existing) {
+      const existingId = await findAuthUserIdByEmail(supabase, email);
+      if (!existingId) {
         return NextResponse.json({ error: "Could not locate existing account for this email." }, { status: 400 });
       }
-      userId = existing.id;
-      // Update their password so they can use the new one if desired.
+      userId = existingId;
       await supabase.auth.admin.updateUserById(userId, { password });
     } else {
       if (!created.user) {
@@ -144,14 +156,16 @@ export async function POST(req: Request) {
       userId = created.user.id;
     }
 
+    const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+
     const { error: upErr } = await supabase.from("profiles").upsert(
       {
         id: userId,
         email,
-        role: "manager",
+        role: primaryRoleWhenAddingManager(existingProfile?.role as string | undefined),
         manager_id: purchase.manager_id,
-        full_name: fullName || null,
-        application_approved: true,
+        full_name: fullName || existingProfile?.full_name || null,
+        application_approved: existingProfile?.application_approved ?? true,
       },
       { onConflict: "id" },
     );

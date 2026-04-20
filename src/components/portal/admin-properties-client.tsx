@@ -10,12 +10,7 @@ import {
   PROPERTY_PIPELINE_EVENT,
   approvePendingManagerProperty,
 } from "@/lib/demo-property-pipeline";
-import {
-  PORTAL_PAGE_TITLE,
-  PORTAL_SECTION_SURFACE,
-  PortalContentWell,
-  PortalKpiTabStrip,
-} from "@/components/portal/portal-metrics";
+import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import {
   adminKpiCounts,
   approveFromRequestChange,
@@ -545,28 +540,40 @@ export function AdminPropertiesClient() {
   const rows = useMemo(() => readAdminPropertyRows(activeKpi), [tick, activeKpi]);
   const status = rowStatus(activeKpi);
 
-  const kpiItems = KPI_LABELS.map((label, i) => ({
-    value: String(kpiValues[i]),
-    label,
-  }));
-
   return (
     <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className={PORTAL_PAGE_TITLE}>Properties</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Properties</h1>
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
           Refresh
         </Button>
       </div>
 
-      <PortalKpiTabStrip
-        items={kpiItems}
-        activeIndex={activeKpi}
-        onSelect={(i) => setActiveKpi(i as AdminPropertyBucketIndex)}
-        textAlign="center"
-      />
+      <div className="mt-5">
+        <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+          {KPI_LABELS.map((label, i) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setActiveKpi(i as AdminPropertyBucketIndex)}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+                activeKpi === i ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {label}
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                  activeKpi === i ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+                }`}
+              >
+                {kpiValues[i]}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <PortalContentWell>
+      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
         {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
             <AxisHeaderMarkTile>
@@ -575,7 +582,7 @@ export function AdminPropertiesClient() {
             <p className="mt-4 max-w-sm text-sm font-medium text-slate-500">{EMPTY_COPY[activeKpi]}</p>
           </div>
         ) : (
-          <div className="grid gap-6 bg-slate-50/20 p-4 sm:grid-cols-2 sm:p-6 xl:grid-cols-3">
+          <div className="grid gap-6 p-4 sm:grid-cols-2 sm:p-6 xl:grid-cols-3">
             {rows.map((row) => (
               <AdminPropertyListingCard
                 key={row.adminRefId + (row.listingId ?? "")}
@@ -587,7 +594,7 @@ export function AdminPropertiesClient() {
             ))}
           </div>
         )}
-      </PortalContentWell>
+      </div>
 
       <PropertyDetailSheet
         open={Boolean(detailRow)}

@@ -23,8 +23,13 @@ export type InboxMessage = {
   read: boolean;
   /** inbox = normal mail; sent = admin composed; trash = soft-deleted */
   folder: "inbox" | "sent" | "trash";
+  /** When in trash, restore returns here */
+  trashedFrom?: "inbox" | "sent";
   senderRole: InboxSenderRole;
   thread: InboxThreadReply[];
+  /** Sent-folder only: who the admin addressed */
+  composeAudience?: "manager" | "resident" | "all";
+  composeRecipientLabel?: string;
 };
 
 function isBrowser() {
@@ -43,6 +48,9 @@ function migrateLegacyRow(m: Record<string, unknown>): InboxMessage {
     folder: "inbox",
     senderRole: "partner",
     thread: [],
+    trashedFrom: undefined,
+    composeAudience: undefined,
+    composeRecipientLabel: undefined,
   };
 }
 
@@ -118,13 +126,18 @@ export function markInboxMessageRead(id: string): boolean {
   return true;
 }
 
-export function appendInboxMessage(msg: Omit<InboxMessage, "id" | "createdAt" | "read" | "thread"> & { thread?: InboxThreadReply[] }): InboxMessage {
+export function appendInboxMessage(
+  msg: Omit<InboxMessage, "id" | "createdAt" | "read" | "thread"> & { thread?: InboxThreadReply[] },
+): InboxMessage {
   const row: InboxMessage = {
     ...msg,
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     read: msg.folder === "sent",
     thread: msg.thread ?? [],
+    trashedFrom: msg.trashedFrom,
+    composeAudience: msg.composeAudience,
+    composeRecipientLabel: msg.composeRecipientLabel,
   };
   const rows = readAll();
   rows.unshift(row);
@@ -169,6 +182,7 @@ export function appendThreadReply(messageId: string, authorLabel: string, body: 
   const idx = rows.findIndex((r) => r.id === messageId);
   if (idx === -1) return false;
   const row = rows[idx]!;
+  if (row.folder === "trash") return false;
   if (!roleAllowsThread(row.senderRole)) return false;
   const reply: InboxThreadReply = {
     id: crypto.randomUUID(),
@@ -188,8 +202,27 @@ export function moveInboxMessageToTrash(id: string): boolean {
   if (idx === -1) return false;
   const row = rows[idx]!;
   if (row.folder === "trash") return false;
+  const from = row.folder;
+  const trashedFrom: "inbox" | "sent" = from === "sent" ? "sent" : "inbox";
   const next = [...rows];
-  next[idx] = { ...row, folder: "trash" };
+  next[idx] = { ...row, folder: "trash", trashedFrom };
+  writeAll(next);
+  return true;
+}
+
+export function restoreInboxMessageFromTrash(id: string): boolean {
+  const rows = readAll();
+  const idx = rows.findIndex((r) => r.id === id);
+  if (idx === -1) return false;
+  const row = rows[idx]!;
+  if (row.folder !== "trash") return false;
+  const dest = row.trashedFrom ?? "inbox";
+  const next = [...rows];
+  if (dest === "sent") {
+    next[idx] = { ...row, folder: "sent", trashedFrom: undefined, read: true };
+  } else {
+    next[idx] = { ...row, folder: "inbox", trashedFrom: undefined, read: false };
+  }
   writeAll(next);
   return true;
 }
@@ -203,23 +236,70 @@ export function permanentlyDeleteInboxMessage(id: string): boolean {
   return true;
 }
 
-/** Demo routing labels for admin compose “To” — appears under Sent. */
-const COMPOSE_RECIPIENT_DEMO: Record<"admin" | "manager", { name: string; email: string }> = {
-  admin: { name: "Axis Admin", email: "admin@axis.demo" },
-  manager: { name: "Property manager", email: "manager@axis.demo" },
-};
+/** Demo pick lists for admin compose recipient dropdowns */
+export const ADMIN_INBOX_DEMO_MANAGERS = [
+  { id: "mgr-1", name: "Alex Chen", email: "alex.chen@axis.demo" },
+  { id: "mgr-2", name: "Morgan Blake", email: "morgan@axis.demo" },
+  { id: "mgr-3", name: "Riley Park", email: "riley@axis.demo" },
+] as const;
+
+export const ADMIN_INBOX_DEMO_RESIDENTS = [
+  { id: "res-1", name: "Sam Rivera", email: "sam.rivera@axis.demo" },
+  { id: "res-2", name: "Jordan Kim", email: "jordan.kim@axis.demo" },
+  { id: "res-3", name: "Casey Nguyen", email: "casey@axis.demo" },
+] as const;
 
 /** Admin “New message” — appears under Sent. */
-export function composeAdminSentMessage(payload: { recipient: "admin" | "manager"; topic: string; body: string }): InboxMessage {
-  const { name, email } = COMPOSE_RECIPIENT_DEMO[payload.recipient];
+export function composeAdminOutboundMessage(payload: {
+  audience: "manager" | "resident" | "all";
+  recipientId?: string | null;
+  topic: string;
+  body: string;
+}): InboxMessage | null {
+  const topic = payload.topic.trim();
+  const body = payload.body.trim();
+  if (!topic || !body) return null;
+
+  if (payload.audience === "all") {
+    return appendInboxMessage({
+      name: "All recipients",
+      email: "broadcast@axis.demo",
+      topic,
+      body,
+      folder: "sent",
+      senderRole: "admin",
+      thread: [],
+      composeAudience: "all",
+      composeRecipientLabel: "All managers & residents",
+    });
+  }
+
+  if (payload.audience === "manager") {
+    const m = ADMIN_INBOX_DEMO_MANAGERS.find((x) => x.id === payload.recipientId) ?? ADMIN_INBOX_DEMO_MANAGERS[0]!;
+    return appendInboxMessage({
+      name: m.name,
+      email: m.email,
+      topic,
+      body,
+      folder: "sent",
+      senderRole: "admin",
+      thread: [],
+      composeAudience: "manager",
+      composeRecipientLabel: `${m.name} (Manager)`,
+    });
+  }
+
+  const r = ADMIN_INBOX_DEMO_RESIDENTS.find((x) => x.id === payload.recipientId) ?? ADMIN_INBOX_DEMO_RESIDENTS[0]!;
   return appendInboxMessage({
-    name,
-    email,
-    topic: payload.topic,
-    body: payload.body,
+    name: r.name,
+    email: r.email,
+    topic,
+    body,
     folder: "sent",
     senderRole: "admin",
     thread: [],
+    composeAudience: "resident",
+    composeRecipientLabel: `${r.name} (Resident)`,
   });
 }
 
@@ -234,7 +314,13 @@ export function markPartnerInboxMessageRead(id: string): boolean {
 }
 
 export function roleAllowsThread(role: InboxSenderRole): boolean {
-  return role === "manager" || role === "resident" || role === "owner" || role === "partner";
+  return (
+    role === "manager" ||
+    role === "resident" ||
+    role === "owner" ||
+    role === "partner" ||
+    role === "admin"
+  );
 }
 
 export type PartnerInboxMessage = InboxMessage;

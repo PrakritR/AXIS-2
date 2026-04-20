@@ -138,6 +138,11 @@ export function ListingDetailSections({
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">
               {rich.heroTagline}
             </p>
+            {rich.heroOverview ? (
+              <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
+                {formatBoldSegments(rich.heroOverview)}
+              </p>
+            ) : null}
             <p className="mt-4 text-sm text-slate-500">
               {property.beds} bed{property.beds !== 1 ? "s" : ""} ·{" "}
               {property.baths} bath{property.baths !== 1 ? "s" : ""}

@@ -1,6 +1,6 @@
 import { AdminDashboard } from "@/components/portal/admin-dashboard";
 import { ManagerApplications } from "@/components/portal/manager-applications";
-import { ManagerCalendar } from "@/components/portal/manager-calendar";
+import { PortalCalendar } from "@/components/portal/portal-calendar";
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 import { ManagerInbox } from "@/components/portal/manager-inbox";
 import { ManagerUpgrade } from "@/components/portal/manager-upgrade";
@@ -82,6 +82,11 @@ export async function renderPortalSection(
     return <AdminCreateResidentClient />;
   }
 
+  if (kind === "admin" && section === "calendar") {
+    if (tabParts?.length) notFound();
+    return <PortalCalendar portal="admin" />;
+  }
+
   if (kind === "admin" && section === "properties") {
     if (tabParts?.length) notFound();
     return <AdminPropertiesClient />;
@@ -157,7 +162,7 @@ export async function renderPortalSection(
     if (section === "payments") return <ManagerPayments />;
     if (section === "work-orders") return <ManagerWorkOrders />;
     if (section === "owners") return <ManagerOwners />;
-    if (section === "calendar") return <ManagerCalendar />;
+    if (section === "calendar") return <PortalCalendar portal="manager" />;
     if (section === "upgrade") return <ManagerUpgrade />;
     if (section === "profile") return <ManagerProfile />;
   }

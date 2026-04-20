@@ -297,48 +297,6 @@ export function declinePartnerInquiry(id: string) {
   return updatePartnerInquiry(id, { status: "declined" });
 }
 
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function addDays(d: Date, n: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-
-function isoDayRange(anchor: Date, days: number) {
-  const start = startOfDay(anchor).getTime();
-  const end = addDays(startOfDay(anchor), days).getTime();
-  return { start, end };
-}
-
-export function eventKpis(anchor = new Date()) {
-  const events = readPlannedEvents();
-  const today = startOfDay(anchor).getTime();
-  const tomorrow = addDays(startOfDay(anchor), 1).getTime();
-  const week = isoDayRange(anchor, 7);
-  const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1).getTime();
-  const monthEnd = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1).getTime();
-
-  const inRange = (iso: string, a: number, b: number) => {
-    const t = new Date(iso).getTime();
-    return !Number.isNaN(t) && t >= a && t < b;
-  };
-
-  const todayN = events.filter((e) => inRange(e.start, today, tomorrow)).length;
-  const weekN = events.filter((e) => inRange(e.start, week.start, week.end)).length;
-  const monthN = events.filter((e) => inRange(e.start, monthStart, monthEnd)).length;
-  return {
-    today: String(todayN),
-    week: String(weekN),
-    month: String(monthN),
-    total: String(events.length),
-  };
-}
-
 export function formatRangeLabel(isoStart: string, isoEnd: string) {
   try {
     const a = new Date(isoStart);

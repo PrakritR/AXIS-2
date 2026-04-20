@@ -1,4 +1,20 @@
 import type { MockProperty } from "@/data/types";
+import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+
+/** Admin UI row shape (see demo-admin-property-inventory) — maps to pending row for publishing. */
+export type ManagerAdminShapeRow = {
+  adminRefId: string;
+  buildingName: string;
+  unitLabel: string;
+  address: string;
+  zip: string;
+  neighborhood: string;
+  beds: number;
+  baths: number;
+  monthlyRent: number;
+  petFriendly: boolean;
+  tagline: string;
+};
 
 const PENDING_KEY = "axis_manager_pending_properties_v1";
 const EXTRAS_KEY = "axis_public_extra_listings_v1";
@@ -18,9 +34,11 @@ export type ManagerPendingPropertyRow = {
   monthlyRent: number;
   petFriendly: boolean;
   tagline: string;
+  /** Full submission used to generate listing detail page */
+  submission?: ManagerListingSubmissionV1;
 };
 
-export type ManagerPropertyDraftInput = Omit<ManagerPendingPropertyRow, "id" | "submittedAt">;
+export type ManagerPropertyDraftInput = ManagerListingSubmissionV1;
 
 function isBrowser() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -47,6 +65,31 @@ function writeJson(key: string, value: unknown) {
   }
 }
 
+function deriveLegacyFields(sub: ManagerListingSubmissionV1): Omit<ManagerPendingPropertyRow, "id" | "submittedAt" | "submission"> {
+  const rooms = sub.rooms.filter((r) => r.name.trim().length > 0);
+  const rents = rooms.map((r) => r.monthlyRent).filter((n) => Number.isFinite(n) && n > 0);
+  const minRent = rents.length ? Math.min(...rents) : 0;
+  const unitLabel =
+    rooms.length === 0
+      ? "New listing"
+      : rooms.length === 1
+        ? rooms[0]!.name.trim()
+        : `${rooms.length} rooms`;
+
+  return {
+    buildingName: sub.buildingName.trim(),
+    address: sub.address.trim(),
+    zip: sub.zip.trim(),
+    neighborhood: sub.neighborhood.trim(),
+    unitLabel,
+    beds: Math.max(rooms.length || 1, 1),
+    baths: Math.max(sub.bathrooms.filter((b) => b.name.trim()).length || 1, 1),
+    monthlyRent: minRent,
+    petFriendly: sub.petFriendly,
+    tagline: sub.tagline.trim() || sub.houseOverview.trim().slice(0, 120) || "Manager-submitted listing",
+  };
+}
+
 export function readPendingManagerProperties(): ManagerPendingPropertyRow[] {
   return readJson<ManagerPendingPropertyRow[]>(PENDING_KEY, []);
 }
@@ -70,10 +113,12 @@ function slugPart(s: string) {
 
 export function submitManagerPendingProperty(input: ManagerPropertyDraftInput): string {
   const id = `pend-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const legacy = deriveLegacyFields(input);
   const row: ManagerPendingPropertyRow = {
-    ...input,
+    ...legacy,
     id,
     submittedAt: new Date().toISOString(),
+    submission: input,
   };
   const list = readPendingManagerProperties();
   list.push(row);
@@ -81,24 +126,31 @@ export function submitManagerPendingProperty(input: ManagerPropertyDraftInput): 
   return id;
 }
 
-export type ListingDraftFields = Pick<
-  ManagerPendingPropertyRow,
-  | "buildingName"
-  | "unitLabel"
-  | "address"
-  | "zip"
-  | "neighborhood"
-  | "beds"
-  | "baths"
-  | "monthlyRent"
-  | "petFriendly"
-  | "tagline"
->;
+/** Publish from an admin-bucket row (no stored submission — listing uses defaults until edited). */
+export function buildMockPropertyFromAdminRow(row: ManagerAdminShapeRow, listingId: string): MockProperty {
+  const pendingLike: ManagerPendingPropertyRow = {
+    id: row.adminRefId,
+    submittedAt: new Date().toISOString(),
+    buildingName: row.buildingName,
+    address: row.address,
+    zip: row.zip,
+    neighborhood: row.neighborhood,
+    unitLabel: row.unitLabel,
+    beds: row.beds,
+    baths: row.baths,
+    monthlyRent: row.monthlyRent,
+    petFriendly: row.petFriendly,
+    tagline: row.tagline,
+    submission: undefined,
+  };
+  return buildMockPropertyFromDraft(pendingLike, listingId);
+}
 
-export function buildMockPropertyFromDraft(row: ListingDraftFields, listingId: string): MockProperty {
+export function buildMockPropertyFromDraft(row: ManagerPendingPropertyRow, listingId: string): MockProperty {
+  const title = `${row.buildingName} · ${row.unitLabel}`;
   return {
     id: listingId,
-    title: `${row.buildingName} · ${row.unitLabel}`,
+    title,
     tagline: row.tagline.trim() || "Manager-submitted listing",
     address: row.address.trim(),
     zip: row.zip.trim(),
@@ -113,6 +165,7 @@ export function buildMockPropertyFromDraft(row: ListingDraftFields, listingId: s
     unitLabel: row.unitLabel.trim(),
     mapLat: 47.61405,
     mapLng: -122.31542,
+    listingSubmission: row.submission,
   };
 }
 

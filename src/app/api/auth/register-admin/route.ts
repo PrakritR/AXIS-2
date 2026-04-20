@@ -52,13 +52,16 @@ export async function POST(req: Request) {
       userId = data.user.id;
     }
 
+    const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+
     const { error: pErr } = await supabase.from("profiles").upsert(
       {
         id: userId,
         email: normalEmail,
         role: "admin",
-        full_name: fullName?.trim() || null,
-        application_approved: true,
+        manager_id: existingProfile?.manager_id ?? null,
+        full_name: fullName?.trim() || existingProfile?.full_name || null,
+        application_approved: existingProfile?.application_approved ?? true,
       },
       { onConflict: "id" },
     );

@@ -1,3 +1,4 @@
+import { listingRichFromManagerSubmission } from "@/data/listing-rich-from-submission";
 import { parseMonthlyRent } from "@/lib/listings-search";
 import type { MockProperty } from "./types";
 
@@ -7,6 +8,10 @@ export type ListingRoomModal = {
   tourTitle: string;
   tourSubtitle: string;
   includedTags: string[];
+  /** Uploaded room photos (data URLs or https) — shown in detail modal when present */
+  photoUrls?: string[];
+  /** Uploaded room video (data URL or https) — replaces placeholder when present */
+  videoSrc?: string | null;
 };
 
 export type ListingRoomRow = {
@@ -32,6 +37,7 @@ export type ListingBathroomModal = {
   includedTags: string[];
   /** Placeholder “photos” for the gallery strip (no separate video). */
   photoCaptions: string[];
+  photoUrls?: string[];
 };
 
 export type ListingBathroomRow = {
@@ -89,6 +95,8 @@ export type BundleCard = {
 
 export type ListingRichContent = {
   heroTagline: string;
+  /** Longer house overview from manager submission (demo); shown under the tagline when set. */
+  heroOverview?: string;
   priceRangeLabel: string;
   floorPlans: ListingFloorCard[];
   bathrooms: ListingBathroomRow[];
@@ -435,6 +443,9 @@ const defaultBundles: BundleCard[] = [
 ];
 
 export function getListingRichContent(property: MockProperty): ListingRichContent {
+  if (property.listingSubmission?.v === 1) {
+    return listingRichFromManagerSubmission(property, property.listingSubmission);
+  }
   const mid = parseMonthlyRent(property.rentLabel) ?? 875;
   const low = Math.max(500, mid - 125);
   const high = mid + 100;

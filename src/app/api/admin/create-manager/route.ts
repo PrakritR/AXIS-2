@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
+import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { generateManagerId } from "@/lib/manager-id";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -58,26 +60,36 @@ export async function POST(req: Request) {
       user_metadata: { role: "manager", manager_id: managerId },
     });
 
+    let userId: string;
+
     if (cErr) {
       const isAlreadyExists =
         cErr.message.toLowerCase().includes("already") ||
         cErr.message.toLowerCase().includes("registered");
-      if (isAlreadyExists) {
-        return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });
+      if (!isAlreadyExists) {
+        return NextResponse.json({ error: cErr.message }, { status: 400 });
       }
-      return NextResponse.json({ error: cErr.message }, { status: 400 });
+      const existingId = await findAuthUserIdByEmail(supabase, normalEmail);
+      if (!existingId) {
+        return NextResponse.json({ error: "Could not locate existing account for this email." }, { status: 400 });
+      }
+      userId = existingId;
+      await supabase.auth.admin.updateUserById(userId, { password });
+    } else {
+      if (!created?.user) return NextResponse.json({ error: "Could not create user." }, { status: 400 });
+      userId = created.user.id;
     }
-    if (!created?.user) return NextResponse.json({ error: "Could not create user." }, { status: 400 });
-    const userId = created.user.id;
+
+    const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
 
     await supabase.from("profiles").upsert(
       {
         id: userId,
         email: normalEmail,
-        role: "manager",
+        role: primaryRoleWhenAddingManager(existingProfile?.role as string | undefined),
         manager_id: managerId,
-        full_name: fullName.trim() || null,
-        application_approved: true,
+        full_name: fullName.trim() || existingProfile?.full_name || null,
+        application_approved: existingProfile?.application_approved ?? true,
       },
       { onConflict: "id" },
     );

@@ -1,3 +1,5 @@
+import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+
 export type MockProperty = {
   id: string;
   title: string;
@@ -18,6 +20,8 @@ export type MockProperty = {
   /** Optional map center for listing detail (demo). WGS84 */
   mapLat?: number;
   mapLng?: number;
+  /** When set, listing detail sections are generated from manager submission (demo). */
+  listingSubmission?: ManagerListingSubmissionV1;
 };
 
 export type MockRow = Record<string, string>;

@@ -1,6 +1,7 @@
 "use client";
 
 import { AxisLogoLink } from "@/components/brand/axis-logo";
+import { PublicNavbarPortalStrip } from "@/components/layout/public-navbar-portal-strip";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -59,8 +60,6 @@ export function PublicNavbar() {
   const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
   const activeRentHref = useMemo(() => pickActiveNavHref(pathname, RENT_LINKS), [pathname]);
   const activePartnerHref = useMemo(() => pickActiveNavHref(pathname, PARTNER_LINKS), [pathname]);
-  const portalHref = "/auth/sign-in";
-
   return (
     <div
       id="axis-public-navbar"
@@ -123,22 +122,9 @@ export function PublicNavbar() {
         </nav>
 
         <div className="flex items-center justify-end justify-self-end gap-2">
-          <Link
-            href={portalHref}
-            className="hidden items-center justify-center rounded-full px-5 py-2 text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] lg:inline-flex"
-            style={{
-              background: "linear-gradient(135deg, #007aff, #339cff)",
-              boxShadow: "0 4px 20px rgba(0,122,255,0.32)",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.boxShadow = "0 6px 28px rgba(0,122,255,0.45)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(0,122,255,0.32)";
-            }}
-          >
-            Portal
-          </Link>
+          <div className="hidden lg:block">
+            <PublicNavbarPortalStrip />
+          </div>
 
           {/* Mobile menu button */}
           <button
@@ -190,14 +176,9 @@ export function PublicNavbar() {
               </MobileSection>
             </div>
             <div className="pt-4">
-              <Link
-                href={portalHref}
-                onClick={() => setMobileOpen(false)}
-                className="flex min-h-[48px] w-full items-center justify-center rounded-full py-3 text-[14px] font-semibold text-white"
-                style={{ background: "linear-gradient(135deg, #007aff, #339cff)", boxShadow: "0 4px 20px rgba(0,122,255,0.3)" }}
-              >
-                Portal
-              </Link>
+              <div className="flex w-full flex-col items-stretch gap-2">
+                <PublicNavbarPortalStrip className="w-full justify-center" onInteract={() => setMobileOpen(false)} />
+              </div>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-black/[0.06] pt-3 text-xs">
               <Link href="/auth/sign-in" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
