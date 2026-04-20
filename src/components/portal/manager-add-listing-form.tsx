@@ -127,6 +127,22 @@ export function ManagerAddListingForm({
     setRoom(roomIndex, { videoDataUrl: url });
   };
 
+  const removeRoomPhoto = (roomIndex: number, photoIndex: number) => {
+    setSub((s) => {
+      const rooms = [...s.rooms];
+      const cur = rooms[roomIndex]!;
+      rooms[roomIndex] = {
+        ...cur,
+        photoDataUrls: cur.photoDataUrls.filter((_, j) => j !== photoIndex),
+      };
+      return { ...s, rooms };
+    });
+  };
+
+  const clearRoomVideo = (roomIndex: number) => {
+    setRoom(roomIndex, { videoDataUrl: null });
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const roomsOk = sub.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
@@ -350,22 +366,76 @@ export function ManagerAddListingForm({
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <FieldLabel>Photos (per room)</FieldLabel>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="text-sm text-slate-600"
-                        onChange={(e) => void onPickRoomPhotos(i, e.target.files)}
-                      />
-                      {room.photoDataUrls.length > 0 ? (
-                        <p className="mt-1 text-xs text-slate-500">{room.photoDataUrls.length} photo(s) attached</p>
-                      ) : null}
-                    </div>
-                    <div className="sm:col-span-2">
-                      <FieldLabel>Video (per room)</FieldLabel>
-                      <input type="file" accept="video/*" className="text-sm text-slate-600" onChange={(e) => void onPickRoomVideo(i, e.target.files?.[0] ?? null)} />
-                      {room.videoDataUrl ? <p className="mt-1 text-xs text-emerald-700">Video attached</p> : null}
+                      <FieldLabel hint="Shown on the public listing for this room.">{"Photos & video"}</FieldLabel>
+                      <div className="mt-2 space-y-3 rounded-xl border border-dashed border-slate-200/90 bg-white p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            id={`room-${room.id}-photos`}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="sr-only"
+                            onChange={(e) => {
+                              void onPickRoomPhotos(i, e.target.files);
+                              e.target.value = "";
+                            }}
+                          />
+                          <label
+                            htmlFor={`room-${room.id}-photos`}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                          >
+                            Add photos
+                          </label>
+                          <input
+                            id={`room-${room.id}-video`}
+                            type="file"
+                            accept="video/*"
+                            className="sr-only"
+                            onChange={(e) => {
+                              void onPickRoomVideo(i, e.target.files?.[0] ?? null);
+                              e.target.value = "";
+                            }}
+                          />
+                          <label
+                            htmlFor={`room-${room.id}-video`}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                          >
+                            Add video
+                          </label>
+                        </div>
+                        {room.photoDataUrls.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {room.photoDataUrls.map((url, pi) => (
+                              <div key={`${room.id}-p-${pi}`} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                <img src={url} alt="" className="h-full w-full object-cover" />
+                                <button
+                                  type="button"
+                                  className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-bl bg-black/55 text-xs font-bold text-white hover:bg-black/70"
+                                  onClick={() => removeRoomPhoto(i, pi)}
+                                  aria-label="Remove photo"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {room.videoDataUrl ? (
+                          <div className="flex flex-wrap items-center gap-3 text-sm">
+                            <span className="font-medium text-emerald-800">Video added</span>
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-rose-600 hover:underline"
+                              onClick={() => clearRoomVideo(i)}
+                            >
+                              Remove video
+                            </button>
+                          </div>
+                        ) : null}
+                        <p className="text-[11px] leading-relaxed text-slate-500">
+                          Up to 8 photos (~2.6 MB each). One video per room (~14 MB max).
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>

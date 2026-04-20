@@ -10,10 +10,26 @@ export type ShellAction = {
   label: string;
   variant?: "primary" | "outline";
   onClick?: () => void;
+  disabled?: boolean;
 };
 
 const selectClass =
   "h-10 rounded-full border border-slate-200/90 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25";
+
+/** Property dropdown wrapped like admin filter chips (rounded shell). */
+export function PortalPropertyFilterPill({
+  applications,
+  residents,
+}: {
+  applications?: boolean;
+  residents?: boolean;
+}) {
+  return (
+    <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+      <PortalPropertyFilter applications={applications} residents={residents} />
+    </div>
+  );
+}
 
 /** Shared property filter row for portal headers. */
 export function PortalPropertyFilter({
@@ -80,6 +96,7 @@ export function ManagerSectionShell({
                   key={a.label}
                   type="button"
                   variant={a.variant ?? "outline"}
+                  disabled={a.disabled}
                   onClick={
                     a.onClick ??
                     (() => {

@@ -118,7 +118,7 @@ export async function renderPortalSection(
       <AdminProfileClient
         fullName={dash(profile?.full_name)}
         email={dash(profile?.email ?? user?.email)}
-        phone="—"
+        phone={dash(profile?.phone)}
         adminId={dash(profile?.id ?? user?.id)}
       />
     );

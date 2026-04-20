@@ -183,6 +183,69 @@ export function PortalContentWell({ children }: { children: ReactNode }) {
   return <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">{children}</div>;
 }
 
+/** Admin portal pattern: pill strip with label + count (Managers / Leases / Applications). */
+export function ManagerPortalStatusPills({
+  tabs,
+  activeId,
+  onChange,
+}: {
+  tabs: { id: string; label: string; count: number }[];
+  activeId: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChange(tab.id)}
+          className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+            activeId === tab.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          {tab.label}
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+              activeId === tab.id ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+            }`}
+          >
+            {tab.count}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Manager sections aligned with admin portal leases / managers shell. */
+export function ManagerPortalPageShell({
+  title,
+  titleAside,
+  filterRow,
+  children,
+}: {
+  title: string;
+  titleAside?: ReactNode;
+  filterRow?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className={PORTAL_SECTION_SURFACE}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
+        {titleAside ? <div className="flex flex-wrap items-center gap-2 sm:justify-end">{titleAside}</div> : null}
+      </div>
+      {filterRow ? <div className="mt-5">{filterRow}</div> : null}
+      <div className="mt-5">{children}</div>
+    </div>
+  );
+}
+
+/** Table header cell class (admin leases / managers). */
+export const MANAGER_TABLE_TH =
+  "px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400";
+
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */
 export const PORTAL_KPI_CHIP_INACTIVE =
   "rounded-xl border border-slate-200/60 bg-slate-50/90 px-4 py-3 text-left transition-colors duration-150 hover:border-slate-200 hover:bg-white";

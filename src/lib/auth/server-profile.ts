@@ -6,6 +6,8 @@ export type ServerProfile = {
   role: string;
   manager_id: string | null;
   full_name: string | null;
+  /** Present after `profiles.phone` migration is applied. */
+  phone?: string | null;
   application_approved: boolean;
 };
 

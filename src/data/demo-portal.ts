@@ -12,11 +12,29 @@ export const demoKpis = {
   calendar: { today: "0", week: "0", month: "0", total: "0" },
 } as const;
 
-export const demoOwnerAccounts: { name: string; email: string; properties: string }[] = [];
+export type DemoOwnerAccountRow = {
+  id: string;
+  name: string;
+  email: string;
+  properties: string;
+  active: boolean;
+};
+
+export const demoOwnerAccounts: DemoOwnerAccountRow[] = [];
 
 export const demoOwnerPropertyCards: { name: string; units: string; access: string; manager: string }[] = [];
 
-export const demoApplicantRows: { name: string; property: string; stage: string; score: string }[] = [];
+export type ManagerApplicationBucket = "pending" | "approved" | "rejected";
+
+export type DemoApplicantRow = {
+  name: string;
+  property: string;
+  stage: string;
+  score: string;
+  bucket: ManagerApplicationBucket;
+};
+
+export const demoApplicantRows: DemoApplicantRow[] = [];
 
 export const demoPaymentRows: { resident: string; unit: string; amount: string; due: string; status: string }[] = [];
 
