@@ -3,6 +3,7 @@ import { ManagerApplications } from "@/components/portal/manager-applications";
 import { ManagerCalendar } from "@/components/portal/manager-calendar";
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 import { ManagerInbox } from "@/components/portal/manager-inbox";
+import { ManagerUpgrade } from "@/components/portal/manager-upgrade";
 import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerOwners } from "@/components/portal/manager-owners";
 import { ManagerPayments } from "@/components/portal/manager-payments";
@@ -157,6 +158,7 @@ export async function renderPortalSection(
     if (section === "work-orders") return <ManagerWorkOrders />;
     if (section === "owners") return <ManagerOwners />;
     if (section === "calendar") return <ManagerCalendar />;
+    if (section === "upgrade") return <ManagerUpgrade />;
     if (section === "profile") return <ManagerProfile />;
   }
 

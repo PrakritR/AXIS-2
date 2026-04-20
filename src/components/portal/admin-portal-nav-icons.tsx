@@ -31,24 +31,6 @@ export function AdminPortalNavIcon({ section }: { section: string }) {
           <path d="M10 20v-6h4v6" />
         </svg>
       );
-    case "create-manager":
-      return (
-        <svg className={cls} aria-hidden {...svgProps}>
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <line x1="19" y1="8" x2="19" y2="14" />
-          <line x1="22" y1="11" x2="16" y2="11" />
-        </svg>
-      );
-    case "create-resident":
-      return (
-        <svg className={cls} aria-hidden {...svgProps}>
-          <path d="M3 10.5 12 3l9 7.5" />
-          <path d="M5 10v10h14V10" />
-          <path d="M10 20v-6h4v6" />
-          <path d="M12 14v3" />
-        </svg>
-      );
     case "managers":
       return (
         <svg className={cls} aria-hidden {...svgProps}>

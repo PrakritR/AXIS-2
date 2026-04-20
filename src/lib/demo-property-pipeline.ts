@@ -55,6 +55,11 @@ export function readExtraListings(): MockProperty[] {
   return readJson<MockProperty[]>(EXTRAS_KEY, []);
 }
 
+/** Pending submissions + live manager listings (demo localStorage). */
+export function countManagerManagedProperties(): number {
+  return readPendingManagerProperties().length + readExtraListings().length;
+}
+
 function slugPart(s: string) {
   return s
     .toLowerCase()

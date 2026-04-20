@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/input";
 import { demoOwnerAccounts } from "@/data/demo-portal";
+import { PORTAL_SECTION_SURFACE } from "./portal-metrics";
 import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
 
 const MOCK_HOUSES = [
@@ -25,6 +26,29 @@ export function ManagerOwners() {
   const [alsoOwner, setAlsoOwner] = useState(false);
   const [ownerCount, setOwnerCount] = useState(1);
   const [slots, setSlots] = useState<OwnerSlot[]>([{ id: 1, label: "Owner 1", houseIds: [] }]);
+  const [subLoaded, setSubLoaded] = useState(false);
+  const [canAddOwners, setCanAddOwners] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/manager/subscription", { credentials: "include" });
+        const body = (await res.json()) as {
+          isBusiness?: boolean;
+          isLegacyUnlimited?: boolean;
+        };
+        if (res.ok) {
+          const legacy = body.isLegacyUnlimited === true;
+          const business = body.isBusiness === true;
+          setCanAddOwners(legacy || business);
+        }
+      } catch {
+        /* fail open so demo works if API unavailable */
+      } finally {
+        setSubLoaded(true);
+      }
+    })();
+  }, []);
 
   const count = useMemo(() => Math.min(8, Math.max(1, ownerCount)), [ownerCount]);
 
@@ -38,6 +62,56 @@ export function ManagerOwners() {
       return next;
     });
   };
+
+  if (!subLoaded) {
+    return (
+      <ManagerSectionShell
+        title="Add owner"
+        filters={<PortalPropertyFilter />}
+        actions={[
+          { label: "Save", variant: "primary" },
+          { label: "Refresh", variant: "outline" },
+        ]}
+      >
+        <p className="text-sm text-slate-500">Loading…</p>
+      </ManagerSectionShell>
+    );
+  }
+
+  if (!canAddOwners) {
+    return (
+      <ManagerSectionShell
+        title="Add owner"
+        filters={<PortalPropertyFilter />}
+        actions={[
+          { label: "Save", variant: "primary" },
+          { label: "Refresh", variant: "outline" },
+        ]}
+      >
+        <div className={`${PORTAL_SECTION_SURFACE} p-6 sm:p-8`}>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-900">Business tier required</h2>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600">
+            Linking owner accounts is not available on Free or Pro. Upgrade to Business to invite co-owners and assign
+            properties.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Link
+              href="/manager/upgrade"
+              className="inline-flex items-center justify-center rounded-full bg-[#1d1d1f] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-black"
+            >
+              View upgrade options
+            </Link>
+            <Link
+              href="/partner/pricing"
+              className="inline-flex items-center justify-center rounded-full border border-black/[0.1] bg-white px-5 py-2.5 text-sm font-semibold text-[#1d1d1f] shadow-sm transition hover:bg-slate-50"
+            >
+              Pricing
+            </Link>
+          </div>
+        </div>
+      </ManagerSectionShell>
+    );
+  }
 
   return (
     <ManagerSectionShell

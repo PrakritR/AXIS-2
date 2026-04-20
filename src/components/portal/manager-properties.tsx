@@ -1,6 +1,7 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,17 +9,45 @@ import { Input } from "@/components/ui/input";
 import { ManagerHousePropertiesPanel } from "@/components/portal/manager-house-properties-panel";
 import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PROPERTY_PIPELINE_EVENT, readPendingManagerProperties, submitManagerPendingProperty } from "@/lib/demo-property-pipeline";
+import {
+  countManagerManagedProperties,
+  PROPERTY_PIPELINE_EVENT,
+  readPendingManagerProperties,
+  submitManagerPendingProperty,
+} from "@/lib/demo-property-pipeline";
 import type { ManagerPropertyDraftInput } from "@/lib/demo-property-pipeline";
+import { PRO_MAX_PROPERTIES, proTierPropertyLimitReached } from "@/lib/manager-access";
 
 export function ManagerProperties() {
   const { showToast } = useAppUi();
   const [formOpen, setFormOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [skuLoaded, setSkuLoaded] = useState(false);
+  const [skuTier, setSkuTier] = useState<string | null>(null);
+  const [propCount, setPropCount] = useState(0);
 
   const refreshPending = useCallback(() => {
     setPendingCount(readPendingManagerProperties().length);
+    setPropCount(countManagerManagedProperties());
   }, []);
+
+  const loadSku = useCallback(async () => {
+    try {
+      const res = await fetch("/api/manager/subscription", { credentials: "include" });
+      const body = (await res.json()) as { tier?: string | null };
+      if (res.ok) {
+        setSkuTier(body.tier ?? null);
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setSkuLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSku();
+  }, [loadSku]);
 
   useEffect(() => {
     refreshPending();
@@ -27,15 +56,35 @@ export function ManagerProperties() {
     return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
   }, [refreshPending]);
 
+  const atProLimit = skuLoaded && proTierPropertyLimitReached(skuTier, propCount);
+
+  const tryOpenAdd = () => {
+    if (!skuLoaded) {
+      showToast("Loading subscription…");
+      void loadSku();
+      return;
+    }
+    if (atProLimit) {
+      showToast(
+        `Pro includes up to ${PRO_MAX_PROPERTIES} properties. Upgrade to Business to add more.`,
+      );
+      return;
+    }
+    setFormOpen(true);
+  };
+
   return (
     <>
       {formOpen ? (
         <AddHouseOverlay
           showToast={showToast}
+          skuTier={skuTier ?? null}
+          propCountBeforeSubmit={propCount}
           onClose={() => setFormOpen(false)}
           onSubmitted={() => {
             showToast("Property submitted for admin approval. It will appear on public listings after approval.");
             refreshPending();
+            void loadSku();
             setFormOpen(false);
           }}
         />
@@ -48,15 +97,27 @@ export function ManagerProperties() {
           {
             label: "+ Add property",
             variant: "primary",
-            onClick: () => setFormOpen(true),
+            onClick: tryOpenAdd,
           },
           {
             label: "Refresh",
             variant: "outline",
-            onClick: refreshPending,
+            onClick: () => {
+              void loadSku();
+              refreshPending();
+            },
           },
         ]}
       >
+        {atProLimit ? (
+          <p className="mb-4 rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950">
+            You’ve reached the Pro limit of {PRO_MAX_PROPERTIES} properties.{" "}
+            <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href="/manager/upgrade">
+              Upgrade to Business
+            </Link>{" "}
+            to add more.
+          </p>
+        ) : null}
         {pendingCount > 0 ? (
           <p className="mb-4 rounded-2xl border border-amber-200/80 bg-amber-50/60 px-4 py-3 text-sm text-amber-950">
             <span className="font-semibold">{pendingCount}</span> propert{pendingCount === 1 ? "y" : "ies"} awaiting admin
@@ -73,10 +134,14 @@ function AddHouseOverlay({
   onClose,
   onSubmitted,
   showToast,
+  skuTier,
+  propCountBeforeSubmit,
 }: {
   onClose: () => void;
   onSubmitted: () => void;
   showToast: (msg: string) => void;
+  skuTier: string | null;
+  propCountBeforeSubmit: number;
 }) {
   const [buildingName, setBuildingName] = useState("");
   const [address, setAddress] = useState("");
@@ -102,6 +167,10 @@ function AddHouseOverlay({
     }
     const b = Math.max(0, Math.min(20, Math.floor(Number(beds)) || 0));
     const ba = Math.max(0, Math.min(20, Math.floor(Number(baths)) || 0));
+    if (proTierPropertyLimitReached(skuTier, propCountBeforeSubmit)) {
+      showToast(`Pro includes up to ${PRO_MAX_PROPERTIES} properties. Upgrade to Business to add more.`);
+      return;
+    }
     const draft: ManagerPropertyDraftInput = {
       buildingName: buildingName.trim(),
       address: address.trim(),
