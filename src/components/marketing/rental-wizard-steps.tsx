@@ -1274,17 +1274,40 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   }
 
   if (step === 12) {
+    const prop = form.propertyId ? getPropertyById(form.propertyId) : undefined;
+    const sub = prop?.listingSubmission;
+    const appFeeLabel = sub?.applicationFee?.trim() || "$50";
+    const sdLabel = sub?.securityDeposit?.trim() || "—";
+    const zelleOn = Boolean(sub?.zellePaymentsEnabled && sub.zelleContact?.trim());
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Application fee</h2>
+          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Application fee & housing charges</h2>
           <StepIntro className="mt-2">
-            A non-refundable $50 processing fee applies with this application. This demo does not charge a card — connect payments in production.
+            Amounts come from this listing&apos;s manager settings. Submitting creates payment lines in your resident portal (demo — no live
+            card charge here). The property manager marks Zelle or offline payments as received.
           </StepIntro>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-5 sm:p-6">
-          <p className="text-3xl font-bold tabular-nums text-slate-900">$50.00</p>
-          <p className="mt-1 text-sm text-slate-600">Screening and administrative processing.</p>
+          <p className="text-3xl font-bold tabular-nums text-slate-900">{appFeeLabel}</p>
+          <p className="mt-1 text-sm text-slate-600">Non-refundable application fee (per this listing).</p>
+          <div className="mt-4 rounded-xl border border-slate-200/80 bg-white/80 px-4 py-3 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">Also recorded for move-in (pending until paid)</p>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-slate-600">
+              <li>Security deposit: {sdLabel}</li>
+              {sub?.moveInFee?.trim() ? <li>Move-in fee: {sub.moveInFee.trim()}</li> : null}
+              {sub?.paymentAtSigning?.trim() ? <li>Payment due at signing: {sub.paymentAtSigning.trim()}</li> : null}
+            </ul>
+          </div>
+          {zelleOn ? (
+            <div className="mt-4 rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
+              <p className="font-semibold">Zelle payment</p>
+              <p className="mt-1">
+                Send to <span className="font-mono font-semibold">{sub!.zelleContact!.trim()}</span>. Include your name and unit in the memo.
+                Your manager will mark the charge paid when funds are received.
+              </p>
+            </div>
+          ) : null}
           <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
             <input
               type="checkbox"
@@ -1293,7 +1316,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               onChange={(e) => patch({ applicationFeeAcknowledged: e.target.checked })}
             />
             <span className="text-sm font-medium leading-snug text-slate-800">
-              I understand this fee is non-refundable and agree to pay it as part of submitting my application.
+              I understand the application fee is non-refundable and agree to these housing charge amounts as stated for this listing.
             </span>
           </label>
           <FieldError msg={errors.applicationFeeAcknowledged} />

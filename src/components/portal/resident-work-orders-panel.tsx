@@ -5,10 +5,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PortalPanelTabs } from "@/components/portal/panel-tab-strip";
+import {
+  MANAGER_TABLE_TH,
+  ManagerPortalPageShell,
+  ManagerPortalStatusPills,
+} from "@/components/portal/portal-metrics";
+import {
+  PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableEmpty,
+  PORTAL_DETAIL_BTN,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TD,
+  PortalTableDetailActions,
+} from "@/components/portal/portal-data-table";
 import type { DemoResidentWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
 import { demoResidentWorkOrderRows } from "@/data/demo-portal";
-import { ManagerSectionShell } from "./manager-section-shell";
 
 const TABS: { id: ResidentWorkBucket; label: string }[] = [
   { id: "open", label: "Open" },
@@ -30,87 +46,125 @@ export function ResidentWorkOrdersPanel() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Plumbing");
   const [priority, setPriority] = useState("Medium");
+  const [createdRows, setCreatedRows] = useState<DemoResidentWorkOrderRow[]>([]);
 
-  const rows = useMemo(() => demoResidentWorkOrderRows.filter((r) => r.bucket === bucket), [bucket]);
+  const allRows = useMemo(() => [...createdRows, ...demoResidentWorkOrderRows], [createdRows]);
+
+  const rows = useMemo(() => allRows.filter((r) => r.bucket === bucket), [allRows, bucket]);
+
+  const counts = useMemo(() => {
+    const c: Record<ResidentWorkBucket, number> = { open: 0, scheduled: 0, completed: 0 };
+    for (const r of allRows) c[r.bucket] += 1;
+    return c;
+  }, [allRows]);
+
+  const statusTabs = useMemo(
+    () => TABS.map(({ id, label }) => ({ id, label, count: counts[id] })),
+    [counts],
+  );
 
   const submitNew = () => {
     if (!title.trim()) {
       showToast("Add a short title first.");
       return;
     }
-    showToast(`Work order created: ${title.trim()} · ${category} · ${priority} (demo).`);
+    const row: DemoResidentWorkOrderRow = {
+      id: `RWO-${Date.now()}`,
+      title: title.trim(),
+      category,
+      priority,
+      status: "Submitted",
+      bucket: "open",
+      description:
+        "Your request is logged. Maintenance will review and update this thread — open Details anytime for notes.",
+    };
+    setCreatedRows((prev) => [row, ...prev]);
+    setExpandedId(row.id);
+    showToast("Work order added to your open requests.");
     setTitle("");
   };
 
   return (
-    <ManagerSectionShell title="Work orders" actions={[{ label: "Refresh", variant: "outline" }]}>
-      <PortalPanelTabs ariaLabel="Work order status" tabs={TABS} active={bucket} onChange={(id) => setBucket(id as ResidentWorkBucket)} />
-
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-[640px] w-full border-collapse text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-3">ID</th>
-                <th className="px-3 py-3">Title</th>
-                <th className="px-3 py-3">Category</th>
-                <th className="px-3 py-3">Priority</th>
-                <th className="px-3 py-3">Status</th>
-                <th className="px-3 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row: DemoResidentWorkOrderRow) => (
-                <Fragment key={row.id}>
-                  <tr className="border-t border-slate-100 align-top">
-                    <td className="px-3 py-3 font-mono text-xs text-slate-600">{row.id}</td>
-                    <td className="px-3 py-3 font-medium text-slate-900">{row.title}</td>
-                    <td className="px-3 py-3 text-slate-700">{row.category}</td>
-                    <td className="px-3 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${priorityClass(row.priority)}`}>
-                        {row.priority}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-slate-700">{row.status}</td>
-                    <td className="px-3 py-3 text-right">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="rounded-full text-xs"
-                        onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                      >
-                        {expandedId === row.id ? "Hide" : "Expand"}
-                      </Button>
-                    </td>
-                  </tr>
-                  {expandedId === row.id ? (
-                    <tr className="border-t border-slate-100 bg-slate-50/50">
-                      <td colSpan={6} className="px-4 py-4 text-sm text-slate-700">
-                        <p className="font-medium text-slate-900">Description</p>
-                        <p className="mt-1">{row.description}</p>
-                        {bucket === "open" ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="mt-3 rounded-full text-xs"
-                            onClick={() => showToast("Work order removed (demo).")}
-                          >
-                            Delete request
-                          </Button>
-                        ) : null}
+    <ManagerPortalPageShell
+      title="Work orders"
+      titleAside={
+        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Refreshed work orders (demo).")}>
+          Refresh
+        </Button>
+      }
+      filterRow={
+        <ManagerPortalStatusPills tabs={statusTabs} activeId={bucket} onChange={(id) => setBucket(id as ResidentWorkBucket)} />
+      }
+    >
+      <div className={PORTAL_DATA_TABLE_WRAP}>
+        {rows.length === 0 ? (
+          <PortalDataTableEmpty
+            message={allRows.length === 0 ? "No work orders yet. Create one below." : "No work orders in this status."}
+          />
+        ) : (
+          <div className={PORTAL_DATA_TABLE_SCROLL}>
+            <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className={PORTAL_TABLE_HEAD_ROW}>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Category</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row: DemoResidentWorkOrderRow) => (
+                  <Fragment key={row.id}>
+                    <tr className={PORTAL_TABLE_TR}>
+                      <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-slate-600`}>{row.id}</td>
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
+                      <td className={PORTAL_TABLE_TD}>{row.category}</td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
+                          {row.priority}
+                        </span>
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>{row.status}</td>
+                      <td className={`${PORTAL_TABLE_TD} text-right`}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                          onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                        >
+                          {expandedId === row.id ? "Hide" : "Details"}
+                        </Button>
                       </td>
                     </tr>
-                  ) : null}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    {expandedId === row.id ? (
+                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                        <td colSpan={6} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Description</p>
+                          <p className="mt-1.5 leading-relaxed">{row.description}</p>
+                          {bucket === "open" ? (
+                            <PortalTableDetailActions>
+                              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Work order removed (demo).")}>
+                                Delete request
+                              </Button>
+                            </PortalTableDetailActions>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      <div className="mt-6 rounded-2xl border border-slate-200/80 bg-slate-50/40 p-5">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Create work order</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 rounded-xl border border-slate-200/60 bg-slate-50/30 p-4">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Create work order</p>
+        <p className="mt-1 text-xs text-slate-500">New requests appear above; open Details for notes below the row.</p>
+        <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="bg-white" />
           <Select value={category} onChange={(e) => setCategory(e.target.value)} className="bg-white">
             <option>Plumbing</option>
@@ -128,11 +182,11 @@ export function ResidentWorkOrdersPanel() {
             Submit
           </Button>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Photos attach in production; here the button only confirms intent.</p>
+        <p className="mt-2 text-xs text-slate-500">Photos attach in production; here the button confirms intent.</p>
         <Button type="button" variant="outline" className="mt-3 rounded-full text-xs" onClick={() => showToast("Photo picker (demo).")}>
           Add photos
         </Button>
       </div>
-    </ManagerSectionShell>
+    </ManagerPortalPageShell>
   );
 }

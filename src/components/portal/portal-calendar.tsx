@@ -1,19 +1,22 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
-import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
+import { PortalPropertyFilter } from "./manager-section-shell";
+import { ManagerPortalPageShell, PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
 import {
+  ADMIN_AVAILABILITY_STORAGE_KEY,
   dateHasAvailability,
   dateSlotKey,
   formatAvailabilitySlotLabel,
-  readAvailabilityDateSet,
+  managerAvailabilityStorageKey,
+  readAvailabilityDateSetForStorageKey,
   startOfWeekMonday,
   toLocalDateStr,
-  writeAvailabilityDateSet,
+  writeAvailabilityDateSetForStorageKey,
 } from "@/lib/demo-admin-scheduling";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
 
 type CalendarMode = "day" | "week" | "month";
 
@@ -73,42 +76,27 @@ type DemoMeeting = {
   color: string;
 };
 
-function demoMeetingsForWeek(weekMonday: Date): DemoMeeting[] {
-  return [
-    {
-      dateStr: toLocalDateStr(addDays(weekMonday, 0)),
-      startSlot: 4,
-      span: 4,
-      title: "Leasing sync",
-      color: "border-primary/20 bg-primary/[0.08] text-primary",
-    },
-    {
-      dateStr: toLocalDateStr(addDays(weekMonday, 2)),
-      startSlot: 10,
-      span: 6,
-      title: "Applicant review",
-      color: "bg-violet-100 text-violet-900 border-violet-200",
-    },
-    {
-      dateStr: toLocalDateStr(addDays(weekMonday, 3)),
-      startSlot: 14,
-      span: 4,
-      title: "Vendor calls",
-      color: "bg-emerald-100 text-emerald-900 border-emerald-200",
-    },
-  ];
-}
-
 const slotRowIndices = Array.from(
   { length: SLOT_ROW_END - SLOT_ROW_START + 1 },
   (_, i) => SLOT_ROW_START + i,
 );
 
 export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
+  const { userId, ready: authReady } = useManagerUserId();
+  const storageKey = useMemo(() => {
+    if (portal === "admin") return ADMIN_AVAILABILITY_STORAGE_KEY;
+    return userId ? managerAvailabilityStorageKey(userId) : null;
+  }, [portal, userId]);
+
   const [viewMode, setViewMode] = useState<CalendarMode>("week");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
-  const [activeSlots, setActiveSlots] = useState<Set<string>>(() => new Set(readAvailabilityDateSet()));
+  const [activeSlots, setActiveSlots] = useState<Set<string>>(() => new Set());
   const [dragMode, setDragMode] = useState<"add" | "remove" | null>(null);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+  }, [storageKey]);
 
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
   const workWeekDates = useMemo(
@@ -117,25 +105,31 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   );
   const workWeekDateStrs = useMemo(() => workWeekDates.map(toLocalDateStr), [workWeekDates]);
 
-  const meetings = useMemo(() => demoMeetingsForWeek(weekMonday), [weekMonday]);
+  /** Schedule blocks (day/week views); empty until wired to real events. */
+  const meetings = useMemo<DemoMeeting[]>(() => [], []);
 
   const monthYear = anchorDate.getFullYear();
   const monthIndex = anchorDate.getMonth();
   const monthCells = useMemo(() => buildMonthCells(monthYear, monthIndex), [monthYear, monthIndex]);
 
-  const applySlot = useCallback((key: string, mode: "add" | "remove") => {
-    setActiveSlots((current) => {
-      const next = new Set(current);
-      if (mode === "add") next.add(key);
-      else next.delete(key);
-      writeAvailabilityDateSet(next);
-      return next;
-    });
-  }, []);
+  const applySlot = useCallback(
+    (key: string, mode: "add" | "remove") => {
+      if (!storageKey) return;
+      setActiveSlots((current) => {
+        const next = new Set(current);
+        if (mode === "add") next.add(key);
+        else next.delete(key);
+        writeAvailabilityDateSetForStorageKey(next, storageKey);
+        return next;
+      });
+    },
+    [storageKey],
+  );
 
   const reloadAvailability = useCallback(() => {
-    setActiveSlots(new Set(readAvailabilityDateSet()));
-  }, []);
+    if (!storageKey) return;
+    setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+  }, [storageKey]);
 
   const weekSlotCount = useMemo(() => {
     let n = 0;
@@ -157,6 +151,37 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   const shiftAvailabilityWeek = useCallback((dir: -1 | 1) => {
     setAnchorDate((d) => addDays(d, dir * 7));
   }, []);
+
+  if (portal === "manager" && !authReady) {
+    return (
+      <ManagerPortalPageShell
+        title="Calendar"
+        titleAside={
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={reloadAvailability}>
+            Refresh
+          </Button>
+        }
+        filterRow={<PortalPropertyFilter />}
+      >
+        <p className="text-sm text-slate-500">Loading calendar…</p>
+      </ManagerPortalPageShell>
+    );
+  }
+  if (portal === "manager" && !userId) {
+    return (
+      <ManagerPortalPageShell
+        title="Calendar"
+        titleAside={
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={reloadAvailability}>
+            Refresh
+          </Button>
+        }
+        filterRow={<PortalPropertyFilter />}
+      >
+        <p className="text-sm text-slate-600">Sign in to manage your availability.</p>
+      </ManagerPortalPageShell>
+    );
+  }
 
   const scheduleCard = (
     <Card className="overflow-hidden p-0">
@@ -384,13 +409,14 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
           variant="outline"
           className="rounded-full"
           onClick={() => {
+            if (!storageKey) return;
             const next = new Set(activeSlots);
             for (const ds of workWeekDateStrs) {
               for (const slot of slotRowIndices) {
                 next.delete(dateSlotKey(ds, slot));
               }
             }
-            writeAvailabilityDateSet(next);
+            writeAvailabilityDateSetForStorageKey(next, storageKey);
             setActiveSlots(next);
           }}
         >
@@ -401,6 +427,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
           variant="outline"
           className="rounded-full"
           onClick={() => {
+            if (!storageKey) return;
             const next = new Set(activeSlots);
             const templateSlots = [4, 5, 6, 12, 13];
             for (const ds of workWeekDateStrs) {
@@ -410,7 +437,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
                 }
               }
             }
-            writeAvailabilityDateSet(next);
+            writeAvailabilityDateSetForStorageKey(next, storageKey);
             setActiveSlots(next);
           }}
         >
@@ -421,15 +448,19 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   );
 
   return (
-    <ManagerSectionShell
+    <ManagerPortalPageShell
       title="Calendar"
-      filters={portal === "manager" ? <PortalPropertyFilter /> : undefined}
-      actions={[{ label: "Refresh", variant: "outline", onClick: reloadAvailability }]}
+      titleAside={
+        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={reloadAvailability}>
+          Refresh
+        </Button>
+      }
+      filterRow={portal === "manager" ? <PortalPropertyFilter /> : undefined}
     >
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.95fr]">
         {scheduleCard}
         {availabilityCard}
       </div>
-    </ManagerSectionShell>
+    </ManagerPortalPageShell>
   );
 }

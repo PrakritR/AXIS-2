@@ -315,9 +315,8 @@ function CreateAccountContent() {
             <Link className="font-semibold text-primary hover:opacity-90" href="/partner/pricing">
               Partner pricing
             </Link>
-            : choose <span className="font-semibold text-slate-800">Free</span> (no payment) or a paid plan (Stripe), or
-            use the Pro monthly free-first code to skip checkout. You will return here with your Manager ID to set your
-            password.
+            : choose <span className="font-semibold text-slate-800">Free</span> (no payment) or a paid plan (checkout). You
+            will return here with your Manager ID to set your password.
           </>
         ) : role === "owner" ? (
           <>

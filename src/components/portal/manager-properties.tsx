@@ -2,19 +2,22 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerHousePropertiesPanel } from "@/components/portal/manager-house-properties-panel";
-import { ManagerSectionShell } from "./manager-section-shell";
+import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
-  countManagerManagedProperties,
+  countManagerManagedPropertiesForUser,
   PROPERTY_PIPELINE_EVENT,
-  readPendingManagerProperties,
+  readPendingManagerPropertiesForUser,
 } from "@/lib/demo-property-pipeline";
 import { PRO_MAX_PROPERTIES, proTierPropertyLimitReached } from "@/lib/manager-access";
 
 export function ManagerProperties() {
   const { showToast } = useAppUi();
+  const { userId } = useManagerUserId();
   const [formOpen, setFormOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [skuLoaded, setSkuLoaded] = useState(false);
@@ -22,9 +25,14 @@ export function ManagerProperties() {
   const [propCount, setPropCount] = useState(0);
 
   const refreshPending = useCallback(() => {
-    setPendingCount(readPendingManagerProperties().length);
-    setPropCount(countManagerManagedProperties());
-  }, []);
+    if (!userId) {
+      setPendingCount(0);
+      setPropCount(0);
+      return;
+    }
+    setPropCount(countManagerManagedPropertiesForUser(userId));
+    setPendingCount(readPendingManagerPropertiesForUser(userId).length);
+  }, [userId]);
 
   const loadSku = useCallback(async () => {
     try {
@@ -85,28 +93,31 @@ export function ManagerProperties() {
         />
       ) : null}
 
-      <ManagerSectionShell
+      <ManagerPortalPageShell
         title="Properties"
-        actions={[
-          {
-            label: "+ Add property",
-            variant: "primary",
-            onClick: tryOpenAdd,
-          },
-          {
-            label: "Refresh",
-            variant: "outline",
-            onClick: () => {
-              void loadSku();
-              refreshPending();
-            },
-          },
-        ]}
+        titleAside={
+          <>
+            <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={tryOpenAdd}>
+              + Add property
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full"
+              onClick={() => {
+                void loadSku();
+                refreshPending();
+              }}
+            >
+              Refresh
+            </Button>
+          </>
+        }
       >
         {atProLimit ? (
           <p className="mb-4 rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950">
             You’ve reached the Pro limit of {PRO_MAX_PROPERTIES} properties.{" "}
-            <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href="/manager/upgrade">
+            <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href="/manager/plan">
               Upgrade to Business
             </Link>{" "}
             to add more.
@@ -118,8 +129,8 @@ export function ManagerProperties() {
             approval before they go live on Axis listings.
           </p>
         ) : null}
-        <ManagerHousePropertiesPanel />
-      </ManagerSectionShell>
+        <ManagerHousePropertiesPanel showToast={showToast} />
+      </ManagerPortalPageShell>
     </>
   );
 }

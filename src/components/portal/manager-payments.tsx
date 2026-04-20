@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
@@ -8,6 +8,8 @@ import { PortalPropertyFilterPill } from "@/components/portal/manager-section-sh
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { demoManagerPaymentLedgerRows } from "@/data/demo-portal";
+import { householdChargeToLedgerRow, HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
@@ -15,27 +17,37 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "paid", label: "Paid" },
 ];
 
-function countPayments(rows: typeof demoManagerPaymentLedgerRows) {
-  const c: Record<ManagerPaymentBucket, number> = {
-    pending: 0,
-    overdue: 0,
-    paid: 0,
-  };
-  for (const r of rows) {
-    c[r.bucket] += 1;
-  }
-  return c;
-}
-
 export function ManagerPayments() {
   const { showToast } = useAppUi();
+  const { userId } = useManagerUserId();
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
+  const [hcTick, setHcTick] = useState(0);
 
-  const counts = useMemo(() => countPayments(demoManagerPaymentLedgerRows), []);
+  useEffect(() => {
+    const on = () => setHcTick((n) => n + 1);
+    window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+    return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+  }, []);
+
+  const mergedRows = useMemo(() => {
+    const fromHc = userId ? readChargesForManager(userId).map(householdChargeToLedgerRow) : [];
+    return [...fromHc, ...demoManagerPaymentLedgerRows];
+  }, [userId, hcTick]);
+
+  const counts = useMemo(() => {
+    const c: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
+    for (const r of mergedRows) {
+      c[r.bucket] += 1;
+    }
+    return c;
+  }, [mergedRows]);
+
   const tabs = useMemo(
     () => PAY_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),
     [counts],
   );
+
+  const rowsForBucket = useMemo(() => mergedRows.filter((r) => r.bucket === bucket), [mergedRows, bucket]);
 
   return (
     <ManagerPortalPageShell
@@ -57,7 +69,7 @@ export function ManagerPayments() {
         </div>
       }
     >
-      <ManagerPaymentsLedgerPanel bucket={bucket} />
+      <ManagerPaymentsLedgerPanel rows={rowsForBucket} managerUserId={userId ?? null} />
     </ManagerPortalPageShell>
   );
 }

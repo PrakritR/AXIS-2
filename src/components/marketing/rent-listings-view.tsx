@@ -84,9 +84,6 @@ export function RentListingsView() {
     <div className="mx-auto max-w-6xl px-4 py-12">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">Listings</p>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight">Available properties</h1>
-      <p className="mt-1 text-sm text-slate-600">
-        Each card is a building or unit on Axis. Open a listing to pick a room. Admin-approved manager submissions appear here automatically (demo).
-      </p>
 
       {hasSearch ? (
         <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
@@ -139,12 +136,6 @@ export function RentListingsView() {
             Clear search
           </Link>
         </div>
-      ) : null}
-
-      {!hasSearch ? (
-        <p className="mt-4 text-sm font-medium text-slate-700">
-          {propertyResults.length} propert{propertyResults.length === 1 ? "y" : "ies"} on Axis (demo inventory + admin-approved)
-        </p>
       ) : null}
 
       {propertyResults.length === 0 ? (

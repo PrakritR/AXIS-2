@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { ManagerSectionShell } from "./manager-section-shell";
+import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { Button } from "@/components/ui/button";
 
 export function ResidentProfilePanel() {
   const { showToast } = useAppUi();
@@ -39,15 +40,13 @@ export function ResidentProfilePanel() {
   }, []);
 
   return (
-    <ManagerSectionShell
+    <ManagerPortalPageShell
       title="Profile"
-      actions={[
-        {
-          label: "Save",
-          variant: "primary",
-          onClick: () => showToast("Profile saved."),
-        },
-      ]}
+      titleAside={
+        <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => showToast("Profile saved.")}>
+          Save
+        </Button>
+      }
     >
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="space-y-2">
@@ -74,6 +73,6 @@ export function ResidentProfilePanel() {
           </div>
         </div>
       </div>
-    </ManagerSectionShell>
+    </ManagerPortalPageShell>
   );
 }

@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   demoApplicantRows,
   demoKpis,
@@ -6,7 +10,8 @@ import {
   demoManagerPaymentLedgerRows,
   demoManagerWorkOrderRowsFull,
 } from "@/data/demo-portal";
-import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
+import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { PortalPropertyFilter } from "./manager-section-shell";
 import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "./portal-metrics";
 
 function StatLink({ label, value, href }: { label: string; value: string; href: string }) {
@@ -22,11 +27,24 @@ function StatLink({ label, value, href }: { label: string; value: string; href: 
 }
 
 export function ManagerDashboard() {
+  const { showToast } = useAppUi();
   const pendingProperties = demoManagerHouseRows.filter((p) => p.bucket === "pending").length;
-  const pendingApplications = demoApplicantRows.filter((a) => a.stage !== "Rejected" && a.stage !== "Approved").length;
+  const pendingApplications = demoApplicantRows.filter((a) => a.bucket === "pending").length;
 
   return (
-    <ManagerSectionShell title="Dashboard" filters={<PortalPropertyFilter />} actions={[{ label: "Refresh", variant: "outline" }]}>
+    <ManagerPortalPageShell
+      title="Dashboard"
+      titleAside={
+        <>
+          <div className="hidden sm:block">
+            <PortalPropertyFilter />
+          </div>
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Dashboard refreshed (demo).")}>
+            Refresh
+          </Button>
+        </>
+      }
+    >
       <div className="space-y-4">
         {Number(demoKpis.payments.overdue) > 0 ? (
           <p className="rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950">
@@ -70,6 +88,6 @@ export function ManagerDashboard() {
           <StatLink label="Inbox" value="5" href="/manager/inbox/unopened" />
         </div>
       </div>
-    </ManagerSectionShell>
+    </ManagerPortalPageShell>
   );
 }

@@ -3,7 +3,8 @@ import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 
 const AVAIL_KEY = "axis_admin_avail_slots_v1";
 /** Per calendar date (local `YYYY-MM-DD`) + half-hour slot — supports future weeks. */
-const AVAIL_V2_KEY = "axis_admin_avail_slots_v2";
+export const ADMIN_AVAILABILITY_STORAGE_KEY = "axis_admin_avail_slots_v2";
+const AVAIL_V2_KEY = ADMIN_AVAILABILITY_STORAGE_KEY;
 const INQ_KEY = "axis_admin_partner_inquiries_v1";
 const PLANNED_KEY = "axis_admin_planned_events_v1";
 
@@ -121,6 +122,36 @@ export function readAvailabilityDateSet(): Set<string> {
 
 export function writeAvailabilityDateSet(next: Set<string>) {
   writeJson(AVAIL_V2_KEY, [...next]);
+}
+
+/** Manager calendar availability — separate from admin (`AVAIL_V2_KEY`). */
+export function managerAvailabilityStorageKey(userId: string): string {
+  return `axis_mgr_avail_slots_v2_${userId}`;
+}
+
+/** Read/write availability for an arbitrary storage key (admin v2 or manager-scoped). */
+export function readAvailabilityDateSetForStorageKey(storageKey: string): Set<string> {
+  if (storageKey === AVAIL_V2_KEY) return readAvailabilityDateSet();
+  if (!isBrowser()) return new Set();
+  const rawV2 = window.localStorage.getItem(storageKey);
+  if (rawV2 === null) {
+    writeJson(storageKey, []);
+    return new Set();
+  }
+  try {
+    const arr = JSON.parse(rawV2) as string[];
+    return Array.isArray(arr) ? new Set(arr) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function writeAvailabilityDateSetForStorageKey(next: Set<string>, storageKey: string) {
+  if (storageKey === AVAIL_V2_KEY) {
+    writeAvailabilityDateSet(next);
+    return;
+  }
+  writeJson(storageKey, [...next]);
 }
 
 export function dateHasAvailability(d: Date, availability: Set<string>) {

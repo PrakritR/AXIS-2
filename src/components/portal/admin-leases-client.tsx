@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -15,7 +15,8 @@ import {
   type AdminLeaseRow,
 } from "@/lib/demo-admin-leases";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { PORTAL_DATA_TABLE_WRAP, PORTAL_DATA_TABLE_SCROLL, PORTAL_TABLE_DETAIL_ROW, PORTAL_TABLE_TR } from "@/components/portal/portal-data-table";
 
 const KPI_LABELS = ["Manager review", "Admin review", "With resident", "Signed"] as const;
 
@@ -72,16 +73,12 @@ function StatusPill({ bucket }: { bucket: AdminLeaseBucketIndex }) {
   );
 }
 
-function LeaseDetailSheet({
-  open,
-  onClose,
+function LeaseDetailInline({
   row,
   onSaved,
   showToast,
 }: {
-  open: boolean;
-  onClose: () => void;
-  row: AdminLeaseRow | null;
+  row: AdminLeaseRow;
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
@@ -89,10 +86,8 @@ function LeaseDetailSheet({
   const [comments, setComments] = useState("");
 
   useEffect(() => {
-    if (row) setComments(row.comments);
+    setComments(row.comments);
   }, [row]);
-
-  if (!open || !row) return null;
 
   const pdfSrc = row.uploadedPdfDataUrl ?? row.pdfUrl;
 
@@ -129,29 +124,7 @@ function LeaseDetailSheet({
   };
 
   return (
-    <>
-      <button
-        type="button"
-        className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-[1px]"
-        aria-label="Close details"
-        onClick={onClose}
-      />
-      <aside
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-slate-200/90 bg-white shadow-[0_0_48px_-12px_rgba(15,23,42,0.2)]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="admin-lease-detail-title"
-      >
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h2 id="admin-lease-detail-title" className="text-lg font-semibold text-slate-900">
-            Lease
-          </h2>
-          <Button type="button" variant="ghost" className="rounded-full px-3 py-1.5 text-sm" onClick={onClose}>
-            Close
-          </Button>
-        </div>
-
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+    <div className="max-h-[min(70vh,520px)] space-y-4 overflow-y-auto pr-1">
           <div>
             <p className="text-base font-semibold text-slate-900">{row.propertyLabel}</p>
             <p className="mt-0.5 text-sm text-slate-500">{row.addressLine}</p>
@@ -179,15 +152,19 @@ function LeaseDetailSheet({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <a
-              href={pdfSrc}
-              target="_blank"
-              rel="noreferrer"
-              download
-              className="inline-flex items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-5 py-2.5 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
-            >
-              Download
-            </a>
+            {pdfSrc ? (
+              <a
+                href={pdfSrc}
+                target="_blank"
+                rel="noreferrer"
+                download
+                className="inline-flex items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-5 py-2.5 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+              >
+                Download
+              </a>
+            ) : (
+              <span className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-500">No file to download</span>
+            )}
             <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={onPickFile} />
             <Button type="button" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>
               Upload new lease
@@ -204,11 +181,11 @@ function LeaseDetailSheet({
           </div>
 
           <div>
-            <label htmlFor="lease-comments" className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+            <label htmlFor={`lease-comments-${row.id}`} className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
               Comments
             </label>
             <textarea
-              id="lease-comments"
+              id={`lease-comments-${row.id}`}
               value={comments}
               onChange={(e) => setComments(e.target.value)}
               rows={4}
@@ -219,9 +196,7 @@ function LeaseDetailSheet({
               Save comments
             </Button>
           </div>
-        </div>
-      </aside>
-    </>
+    </div>
   );
 }
 
@@ -231,7 +206,7 @@ export function AdminLeasesClient() {
   const [propertyFilter, setPropertyFilter] = useState("all");
   const [managerFilter, setManagerFilter] = useState("all");
   const [tick, setTick] = useState(0);
-  const [detailRow, setDetailRow] = useState<AdminLeaseRow | null>(null);
+  const [expandedLeaseId, setExpandedLeaseId] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     setTick((t) => t + 1);
@@ -259,10 +234,10 @@ export function AdminLeasesClient() {
   );
 
   useEffect(() => {
-    if (!detailRow) return;
-    const next = readAdminLeases().find((r) => r.id === detailRow.id);
-    if (next) setDetailRow(next);
-  }, [tick, detailRow?.id]);
+    if (expandedLeaseId && !rows.some((r) => r.id === expandedLeaseId)) {
+      setExpandedLeaseId(null);
+    }
+  }, [rows, expandedLeaseId]);
 
   return (
     <div className={PORTAL_SECTION_SURFACE}>
@@ -338,7 +313,7 @@ export function AdminLeasesClient() {
         </div>
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
+      <div className={`${PORTAL_DATA_TABLE_WRAP} mt-5`}>
         {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
             <AxisHeaderMarkTile>
@@ -351,62 +326,55 @@ export function AdminLeasesClient() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-left">
+          <div className={PORTAL_DATA_TABLE_SCROLL}>
+            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200/90 bg-white">
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Lease
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Rent
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Status
-                  </th>
-                  <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Actions
-                  </th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Lease</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Rent</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-5 py-4 align-middle">
-                      <p className="font-semibold text-slate-900">{row.propertyLabel}</p>
-                      <p className="mt-0.5 text-sm text-slate-500">{row.addressLine}</p>
-                    </td>
-                    <td className="px-5 py-4 align-middle">
-                      <p className="font-semibold text-slate-900">{row.rentLabel}</p>
-                    </td>
-                    <td className="px-5 py-4 align-middle">
-                      <StatusPill bucket={row.bucket} />
-                    </td>
-                    <td className="px-5 py-4 text-right align-middle">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
-                        onClick={() => setDetailRow(row)}
-                      >
-                        Details
-                      </Button>
-                    </td>
-                  </tr>
+                  <Fragment key={row.id}>
+                    <tr className={PORTAL_TABLE_TR}>
+                      <td className="px-5 py-4 align-middle">
+                        <p className="font-semibold text-slate-900">{row.propertyLabel}</p>
+                        <p className="mt-0.5 text-sm text-slate-500">{row.addressLine}</p>
+                      </td>
+                      <td className="px-5 py-4 align-middle">
+                        <p className="font-semibold text-slate-900">{row.rentLabel}</p>
+                      </td>
+                      <td className="px-5 py-4 align-middle">
+                        <StatusPill bucket={row.bucket} />
+                      </td>
+                      <td className="px-5 py-4 text-right align-middle">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
+                          onClick={() => setExpandedLeaseId((cur) => (cur === row.id ? null : row.id))}
+                        >
+                          {expandedLeaseId === row.id ? "Hide" : "Details"}
+                        </Button>
+                      </td>
+                    </tr>
+                    {expandedLeaseId === row.id ? (
+                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                        <td colSpan={4} className="px-5 py-4">
+                          <LeaseDetailInline row={row} onSaved={() => setTick((t) => t + 1)} showToast={showToast} />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
           </div>
         )}
       </div>
-
-      <LeaseDetailSheet
-        open={Boolean(detailRow)}
-        onClose={() => setDetailRow(null)}
-        row={detailRow}
-        onSaved={() => setTick((t) => t + 1)}
-        showToast={showToast}
-      />
     </div>
   );
 }

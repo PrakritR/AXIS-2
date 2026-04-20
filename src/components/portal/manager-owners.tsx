@@ -9,6 +9,12 @@ import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { demoOwnerAccounts } from "@/data/demo-portal";
 import {
+  PORTAL_DATA_TABLE_WRAP,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TD,
+} from "@/components/portal/portal-data-table";
+import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
@@ -129,10 +135,10 @@ export function ManagerOwners() {
           </p>
           <div className="mt-6 flex flex-wrap gap-2">
             <Link
-              href="/manager/upgrade"
+href="/manager/plan"
               className="inline-flex items-center justify-center rounded-full bg-[#1d1d1f] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-black"
             >
-              View upgrade options
+              View plan options
             </Link>
             <Link
               href="/partner/pricing"
@@ -165,10 +171,10 @@ export function ManagerOwners() {
           </div>
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
+        <div className={PORTAL_DATA_TABLE_WRAP}>
           {visibleOwners.length === 0 ? (
-            <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
-              <p className="text-sm font-medium text-slate-500">
+            <div className="flex flex-col items-center justify-center bg-slate-50/20 px-4 py-14 text-center sm:py-16">
+              <p className="text-sm text-slate-500">
                 {demoOwnerAccounts.length === 0
                   ? "No owner accounts linked yet (demo)."
                   : "No owners in this status (demo)."}
@@ -176,9 +182,9 @@ export function ManagerOwners() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] border-collapse text-left">
+              <table className="w-full min-w-[640px] border-collapse text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200/90 bg-white">
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Owner</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Email</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Properties</th>
@@ -187,11 +193,11 @@ export function ManagerOwners() {
                 </thead>
                 <tbody>
                   {visibleOwners.map((o) => (
-                    <tr key={o.id} className="border-b border-slate-100 last:border-0">
-                      <td className="px-5 py-4 align-middle font-semibold text-slate-900">{o.name}</td>
-                      <td className="px-5 py-4 align-middle text-sm text-slate-600">{o.email}</td>
-                      <td className="px-5 py-4 align-middle text-sm text-slate-700">{o.properties}</td>
-                      <td className="px-5 py-4 align-middle">
+                    <tr key={o.id} className={PORTAL_TABLE_TR}>
+                      <td className={`${PORTAL_TABLE_TD} align-middle font-medium text-slate-900`}>{o.name}</td>
+                      <td className={`${PORTAL_TABLE_TD} align-middle text-slate-600`}>{o.email}</td>
+                      <td className={`${PORTAL_TABLE_TD} align-middle`}>{o.properties}</td>
+                      <td className={`${PORTAL_TABLE_TD} align-middle`}>
                         <OwnerAccountStatusPill active={o.active} />
                       </td>
                     </tr>

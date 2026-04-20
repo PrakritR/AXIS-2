@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateManagerId } from "@/lib/manager-id";
 import { normalizeProMonthlyPromoInput, PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
+import { stripePriceIdForPaidTier } from "@/lib/stripe-price-ids";
 import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -12,28 +13,13 @@ type Body = {
   tier?: string;
   billing?: string;
   email?: string;
-  /** Passed into session metadata for manager signup / profiles. */
   fullName?: string;
   phone?: string;
   userId?: string;
   /** Optional; if set to FREEFIRST (or alias), checkout must be Pro monthly. */
   promo?: string;
-  /**
-   * When true (default), returns `clientSecret` for Embedded Checkout on the same page.
-   * When false, returns hosted `url` (full-page redirect to Stripe).
-   */
   embedded?: boolean;
 };
-
-function priceIdFor(tier: Tier, billing: Billing): string | undefined {
-  if (tier === "pro") {
-    return billing === "annual" ? process.env.STRIPE_PRICE_PRO_ANNUAL : process.env.STRIPE_PRICE_PRO_MONTHLY;
-  }
-  if (tier === "business") {
-    return billing === "annual" ? process.env.STRIPE_PRICE_BUSINESS_ANNUAL : process.env.STRIPE_PRICE_BUSINESS_MONTHLY;
-  }
-  return undefined;
-}
 
 function isTier(s: string): s is Tier {
   return s === "pro" || s === "business";
@@ -63,7 +49,7 @@ export async function POST(req: Request) {
     const tier = tierRaw;
     const billing = billingRaw;
 
-    const price = priceIdFor(tier, billing)?.trim();
+    const price = stripePriceIdForPaidTier(tier, billing)?.trim();
     if (!price) {
       return NextResponse.json(
         {
@@ -106,19 +92,28 @@ export async function POST(req: Request) {
     if (userId) metadata.userId = userId;
     if (promoRaw) metadata.promo = promoRaw;
 
-    /** Stripe Checkout promo field; only offered when Pro monthly so other plans cannot use FREEFIRST at checkout. */
-    const allowPromotionCodes = isProMonthly;
+    /** Auto-apply first-month-free when configured (Dashboard promotion code id: promo_…). */
+    const promoCodeId = process.env.STRIPE_PROMOTION_CODE_ID_FIRST_MONTH_FREE?.trim();
+    const autoFirstMonthFree =
+      isProMonthly && promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE && Boolean(promoCodeId);
+
+    /** Let customers enter other codes at Checkout when not auto-applying FREEFIRST. */
+    const allowPromotionCodes = isProMonthly && !autoFirstMonthFree;
+
+    const sessionBase = {
+      mode: "subscription" as const,
+      line_items: [{ price, quantity: 1 }],
+      ...(email ? { customer_email: email } : {}),
+      metadata,
+      ...(autoFirstMonthFree && promoCodeId ? { discounts: [{ promotion_code: promoCodeId }] } : {}),
+      ...(allowPromotionCodes ? { allow_promotion_codes: true } : {}),
+    };
 
     if (useEmbedded) {
-      /** Dahlia API: `embedded` → `embedded_page` (same-tab embedded checkout). */
       const session = await stripe.checkout.sessions.create({
         ui_mode: "embedded_page",
-        mode: "subscription",
-        line_items: [{ price, quantity: 1 }],
+        ...sessionBase,
         return_url: `${appUrl}/auth/manager-id?session_id={CHECKOUT_SESSION_ID}`,
-        ...(email ? { customer_email: email } : {}),
-        ...(allowPromotionCodes ? { allow_promotion_codes: true } : {}),
-        metadata,
       } as Parameters<typeof stripe.checkout.sessions.create>[0]);
 
       const clientSecret = session.client_secret;
@@ -134,13 +129,9 @@ export async function POST(req: Request) {
 
     const session = await stripe.checkout.sessions.create({
       ui_mode: "hosted_page",
-      mode: "subscription",
-      line_items: [{ price, quantity: 1 }],
-      ...(email ? { customer_email: email } : {}),
-      ...(allowPromotionCodes ? { allow_promotion_codes: true } : {}),
+      ...sessionBase,
       success_url: `${appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/pricing`,
-      metadata,
     } as Parameters<typeof stripe.checkout.sessions.create>[0]);
 
     if (!session.url) {

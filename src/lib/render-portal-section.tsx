@@ -3,7 +3,7 @@ import { ManagerApplications } from "@/components/portal/manager-applications";
 import { PortalCalendar } from "@/components/portal/portal-calendar";
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 import { ManagerInbox } from "@/components/portal/manager-inbox";
-import { ManagerUpgrade } from "@/components/portal/manager-upgrade";
+import { ManagerPlan } from "@/components/portal/manager-plan";
 import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerOwners } from "@/components/portal/manager-owners";
 import { ManagerPayments } from "@/components/portal/manager-payments";
@@ -46,6 +46,10 @@ export async function renderPortalSection(
 ) {
   const def = await getPortalDefinition(kind);
 
+  if (kind === "manager" && section === "upgrade") {
+    redirect(`${def.basePath}/plan`);
+  }
+
   if (kind === "manager") {
     const uid = await getEffectiveUserIdForPortal("manager");
     if (!uid) redirect("/admin/dashboard");
@@ -80,11 +84,6 @@ export async function renderPortalSection(
   if (kind === "admin" && section === "create-resident") {
     if (tabParts?.length) notFound();
     return <AdminCreateResidentClient />;
-  }
-
-  if (kind === "admin" && section === "calendar") {
-    if (tabParts?.length) notFound();
-    return <PortalCalendar portal="admin" />;
   }
 
   if (kind === "admin" && section === "properties") {
@@ -163,7 +162,7 @@ export async function renderPortalSection(
     if (section === "work-orders") return <ManagerWorkOrders />;
     if (section === "owners") return <ManagerOwners />;
     if (section === "calendar") return <PortalCalendar portal="manager" />;
-    if (section === "upgrade") return <ManagerUpgrade />;
+    if (section === "plan") return <ManagerPlan />;
     if (section === "profile") return <ManagerProfile />;
   }
 

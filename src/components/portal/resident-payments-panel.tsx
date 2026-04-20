@@ -1,93 +1,221 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { demoResidentChargeRows } from "@/data/demo-portal";
-import { ManagerSectionShell } from "./manager-section-shell";
+import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import {
+  PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableEmpty,
+  PORTAL_DETAIL_BTN,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TD,
+  PortalTableDetailActions,
+} from "@/components/portal/portal-data-table";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import {
+  HOUSEHOLD_CHARGES_EVENT,
+  linkHouseholdChargesToResidentUser,
+  readChargesForResident,
+  type HouseholdCharge,
+} from "@/lib/household-charges";
+
+type PayTab = "pending" | "paid";
 
 function statusClass(label: string) {
   const l = label.toLowerCase();
   if (l.includes("paid")) return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80";
-  if (l.includes("partial")) return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
-  if (l.includes("due")) return "bg-slate-100 text-slate-800 ring-1 ring-slate-200/80";
-  return "bg-slate-100 text-slate-800 ring-1 ring-slate-200/80";
+  return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
 }
 
 export function ResidentPaymentsPanel() {
   const { showToast } = useAppUi();
+  const [tab, setTab] = useState<PayTab>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+
+  const refresh = useCallback(() => {
+    setTick((n) => n + 1);
+  }, []);
+
+  useEffect(() => {
+    const on = () => refresh();
+    window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+    return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+  }, [refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user?.id || cancelled) return;
+        const em = user.email?.trim() ?? null;
+        setUserId(user.id);
+        setEmail(em);
+        if (em) linkHouseholdChargesToResidentUser(em, user.id);
+        refresh();
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refresh]);
+
+  const charges = useMemo(() => {
+    if (!email) return [] as HouseholdCharge[];
+    return readChargesForResident(email, userId);
+  }, [email, userId, tick]);
+
+  const rows = useMemo(() => charges.filter((c) => (tab === "pending" ? c.status === "pending" : c.status === "paid")), [charges, tab]);
+
+  const counts = useMemo(() => {
+    return {
+      pending: charges.filter((c) => c.status === "pending").length,
+      paid: charges.filter((c) => c.status === "paid").length,
+    };
+  }, [charges]);
+
+  const tabs = useMemo(
+    () =>
+      [
+        { id: "pending" as const, label: "Pending", count: counts.pending },
+        { id: "paid" as const, label: "Paid", count: counts.paid },
+      ] as const,
+    [counts],
+  );
 
   return (
-    <ManagerSectionShell title="Payments" actions={[{ label: "Refresh", variant: "outline" }]}>
-      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-[720px] w-full border-collapse text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-3">Charge</th>
-                <th className="px-3 py-3">Amount due</th>
-                <th className="px-3 py-3">Balance</th>
-                <th className="px-3 py-3">Due date</th>
-                <th className="px-3 py-3">Status</th>
-                <th className="px-3 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {demoResidentChargeRows.map((row) => (
-                <Fragment key={row.id}>
-                  <tr className="border-t border-slate-100 align-top">
-                    <td className="px-3 py-3 font-medium text-slate-900">{row.title}</td>
-                    <td className="px-3 py-3 tabular-nums text-slate-800">{row.amountDue}</td>
-                    <td className="px-3 py-3 tabular-nums font-semibold text-slate-900">{row.balance}</td>
-                    <td className="px-3 py-3 text-slate-600">{row.dueDate}</td>
-                    <td className="px-3 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusClass(row.statusLabel)}`}>
-                        {row.statusLabel}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
+    <ManagerPortalPageShell
+      title="Payments"
+      titleAside={
+        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Refreshed payments.")}>
+          Refresh
+        </Button>
+      }
+      filterRow={
+        <ManagerPortalStatusPills
+          tabs={[...tabs]}
+          activeId={tab}
+          onChange={(id) => setTab(id as PayTab)}
+        />
+      }
+    >
+      {!email ? (
+        <p className="text-sm text-slate-600">Sign in to see your application fees, rent, and deposits.</p>
+      ) : rows.length === 0 ? (
+        <PortalDataTableEmpty
+          message={
+            charges.length === 0
+              ? "No charges yet. Submit a rental application to see your listing’s application fee and deposit lines here."
+              : tab === "pending"
+                ? "Nothing pending — you’re all caught up in this tab."
+                : "No paid items yet."
+          }
+        />
+      ) : (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
+          <div className={PORTAL_DATA_TABLE_SCROLL}>
+            <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className={PORTAL_TABLE_HEAD_ROW}>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Balance</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <Fragment key={row.id}>
+                    <tr className={PORTAL_TABLE_TR}>
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
+                      <td className={PORTAL_TABLE_TD}>{row.propertyLabel}</td>
+                      <td className={`${PORTAL_TABLE_TD} tabular-nums text-slate-800`}>{row.amountLabel}</td>
+                      <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-slate-900`}>{row.balanceLabel}</td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusClass(row.status === "paid" ? "Paid" : "Pending")}`}
+                        >
+                          {row.status === "paid" ? "Paid" : "Pending"}
+                        </span>
+                      </td>
+                      <td className={`${PORTAL_TABLE_TD} text-right`}>
                         <Button
                           type="button"
                           variant="outline"
-                          className="rounded-full text-xs"
+                          className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
                           onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
                         >
                           {expandedId === row.id ? "Hide" : "Details"}
                         </Button>
-                        <Button
-                          type="button"
-                          className="rounded-full text-xs"
-                          onClick={() => showToast("Redirecting to Stripe Checkout (demo).")}
-                          disabled={row.balance === "$0.00"}
-                        >
-                          Pay by card
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                  {expandedId === row.id ? (
-                    <tr className="border-t border-slate-100 bg-slate-50/50">
-                      <td colSpan={6} className="px-4 py-4 text-sm text-slate-700">
-                        <p>
-                          Line detail for <span className="font-semibold text-slate-900">{row.title}</span>. In production this row
-                          opens Stripe Checkout for the outstanding balance only.
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => showToast("Receipt emailed (demo).")}>
-                            Email receipt
-                          </Button>
-                        </div>
                       </td>
                     </tr>
-                  ) : null}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
+                    {expandedId === row.id ? (
+                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                        <td colSpan={6} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
+                          {row.zelleContactSnapshot ? (
+                            <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/50 px-3 py-2.5 text-emerald-950">
+                              <p className="text-xs font-semibold">Pay with Zelle</p>
+                              <p className="mt-1 text-sm leading-relaxed">
+                                Send to <span className="font-mono font-medium">{row.zelleContactSnapshot}</span>. Include your name and unit in
+                                the memo. Your manager marks this paid when they receive it.
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="leading-relaxed">
+                              Your manager records payment when they receive it (Zelle, check, or portal billing). This demo does not run live card
+                              charges.
+                            </p>
+                          )}
+                          {row.status === "paid" && row.paidAt ? (
+                            <p className="mt-2 text-xs text-slate-500">Marked paid {new Date(row.paidAt).toLocaleString()}</p>
+                          ) : null}
+                          {row.blocksLeaseUntilPaid && row.status === "pending" ? (
+                            <p className="mt-3 text-sm text-amber-900">
+                              Pay this before signing your lease.{" "}
+                              <Link href="/resident/lease" className="font-semibold text-primary underline underline-offset-2">
+                                Open lease tab
+                              </Link>
+                              .
+                            </p>
+                          ) : null}
+                          <PortalTableDetailActions>
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Balance copied (demo).")}>
+                              Copy balance
+                            </Button>
+                            <Link
+                              href="/resident/lease"
+                              className={`inline-flex items-center justify-center ${PORTAL_DETAIL_BTN}`}
+                            >
+                              Lease tab
+                            </Link>
+                          </PortalTableDetailActions>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-    </ManagerSectionShell>
+      )}
+    </ManagerPortalPageShell>
   );
 }

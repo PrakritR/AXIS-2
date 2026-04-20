@@ -10,7 +10,7 @@ import { managerPortal } from "./manager";
 
 export async function buildManagerPortalDefinition(): Promise<{
   definition: PortalDefinition;
-  showUpgradeBanner: boolean;
+  showPlanBanner: boolean;
   showPreviewBanner: boolean;
   previewLabel: string | null;
 }> {
@@ -56,7 +56,7 @@ export async function buildManagerPortalDefinition(): Promise<{
 
   return {
     definition: { ...managerPortal, sections },
-    showUpgradeBanner: isFree,
+    showPlanBanner: isFree,
     showPreviewBanner,
     previewLabel,
   };

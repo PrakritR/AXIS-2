@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
+import { recordApplicationCharges } from "@/lib/household-charges";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getPropertyById, getPropertySelectOptions, getRoomOptionsForProperty } from "@/lib/rental-application/data";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
@@ -184,12 +186,30 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         showToast("Confirm the application fee to submit.");
         return;
       }
+      void (async () => {
+        let residentUserId: string | null = null;
+        try {
+          const supabase = createSupabaseBrowserClient();
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          residentUserId = user?.id ?? null;
+        } catch {
+          /* ignore */
+        }
+        recordApplicationCharges({
+          residentEmail: form.email,
+          residentName: form.fullLegalName,
+          residentUserId,
+          propertyId: form.propertyId,
+        });
+      })();
       clearRentalWizardDraft();
       const nextInitial = createInitialRentalWizardState();
       setForm(nextInitial);
       setStep(1);
       setErrors({});
-      showToast("Application submitted. Fee step recorded (demo — connect Stripe for real payment).");
+      showToast("Application submitted. Pay fees in your resident portal Payments tab; your manager confirms Zelle payments.");
       return;
     }
     if (step === 11) {

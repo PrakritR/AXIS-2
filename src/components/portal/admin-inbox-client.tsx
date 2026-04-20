@@ -1,16 +1,24 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { ManagerSectionShell } from "@/components/portal/manager-section-shell";
+import { useRouter } from "next/navigation";
 import {
-  inboxTabItems,
+  INBOX_TAB_DEFS,
   PORTAL_INBOX_TABLE_WRAP,
   PortalInboxEmptyState,
 } from "@/components/portal/portal-inbox-ui";
+import {
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TD,
+} from "@/components/portal/portal-data-table";
+import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { TabNav } from "@/components/ui/tabs";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
   ADMIN_INBOX_DEMO_MANAGERS,
@@ -113,7 +121,7 @@ function ComposeModal({
         <h2 id="admin-inbox-compose-title" className="text-lg font-semibold text-slate-900">
           New message
         </h2>
-        <p className="mt-1 text-sm text-slate-500">Choose recipients and send an internal message (demo).</p>
+        <p className="mt-1 text-sm text-slate-500">Choose recipients and send an internal message.</p>
 
         <div className="mt-4 space-y-3">
           <div>
@@ -197,6 +205,7 @@ function ComposeModal({
 
 export function AdminInboxClient({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
+  const router = useRouter();
   const [tick, setTick] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
@@ -227,6 +236,20 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     return [] as InboxMessage[];
   }, [all, tabId]);
 
+  const folderCounts = useMemo(() => {
+    return {
+      unopened: all.filter((m) => m.folder === "inbox" && !m.read).length,
+      opened: all.filter((m) => m.folder === "inbox" && m.read).length,
+      sent: all.filter((m) => m.folder === "sent").length,
+      trash: all.filter((m) => m.folder === "trash").length,
+    };
+  }, [all]);
+
+  const inboxTabs = useMemo(
+    () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: folderCounts[id as keyof typeof folderCounts] })),
+    [folderCounts],
+  );
+
   useEffect(() => {
     if (expandedId && !rows.some((r) => r.id === expandedId)) {
       setExpandedId(null);
@@ -245,15 +268,6 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     }
   };
 
-  const shellActions = [
-    {
-      label: "New message",
-      variant: "primary" as const,
-      onClick: () => setComposeOpen(true),
-    },
-    { label: "Refresh", variant: "outline" as const, onClick: refresh },
-  ];
-
   const emptyCopy =
     tabId === "sent"
       ? "No sent messages yet"
@@ -263,7 +277,6 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           ? "No opened messages yet"
           : "No messages yet";
 
-  const tabs = inboxTabItems("/admin");
   const fromOrToHeader = tabId === "sent" ? "To" : "From";
 
   const expanded = expandedId ? rows.find((r) => r.id === expandedId) : null;
@@ -274,10 +287,28 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     (expanded.folder === "inbox" || expanded.folder === "sent");
 
   return (
-    <ManagerSectionShell title="Inbox" actions={shellActions}>
+    <ManagerPortalPageShell
+      title="Inbox"
+      titleAside={
+        <>
+          <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setComposeOpen(true)}>
+            New message
+          </Button>
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
+            Refresh
+          </Button>
+        </>
+      }
+      filterRow={
+        <ManagerPortalStatusPills
+          activeTone="primary"
+          tabs={inboxTabs}
+          activeId={tabId}
+          onChange={(id) => router.push(`/admin/inbox/${id}`)}
+        />
+      }
+    >
       <div className="space-y-5">
-        <TabNav items={tabs} activeId={tabId} />
-
         <ComposeModal
           open={composeOpen}
           onClose={() => setComposeOpen(false)}
@@ -296,18 +327,14 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
         ) : (
           <div className={PORTAL_INBOX_TABLE_WRAP}>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] border-collapse text-left">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200/90 bg-white">
-                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                      {fromOrToHeader}
-                    </th>
-                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Topic</th>
-                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Preview</th>
-                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">When</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                      Actions
-                    </th>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>{fromOrToHeader}</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Topic</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Preview</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
+                    <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -318,22 +345,22 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                     const primaryEmail = tabId === "sent" && row.composeAudience === "all" ? "" : row.email;
                     return (
                       <Fragment key={row.id}>
-                        <tr className={`border-b border-slate-100 ${isOpen ? "bg-slate-50/40" : ""}`}>
-                          <td className="px-5 py-4 align-middle">
-                            <p className="font-semibold text-slate-900">{primaryName}</p>
-                            {primaryEmail ? <p className="mt-0.5 text-sm text-slate-500">{primaryEmail}</p> : null}
+                        <tr className={`${PORTAL_TABLE_TR} ${isOpen ? "bg-slate-50/30" : ""}`}>
+                          <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                            <p className="font-medium text-slate-900">{primaryName}</p>
+                            {primaryEmail ? <p className="mt-0.5 text-xs text-slate-500">{primaryEmail}</p> : null}
                           </td>
-                          <td className="px-5 py-4 align-middle text-sm text-slate-800">{row.topic}</td>
-                          <td className="max-w-[220px] px-5 py-4 align-middle text-sm text-slate-600">
+                          <td className={`${PORTAL_TABLE_TD} align-middle text-slate-800`}>{row.topic}</td>
+                          <td className={`max-w-[220px] ${PORTAL_TABLE_TD} align-middle text-slate-600`}>
                             <span className="line-clamp-2">{previewSnippet(row.body)}</span>
                           </td>
-                          <td className="px-5 py-4 align-middle text-sm text-slate-500">{formatWhen(row.createdAt)}</td>
-                          <td className="px-5 py-4 text-right align-middle">
-                            <div className="flex flex-wrap justify-end gap-2">
+                          <td className={`${PORTAL_TABLE_TD} align-middle text-slate-500`}>{formatWhen(row.createdAt)}</td>
+                          <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
+                            <div className="flex flex-wrap justify-end gap-1.5">
                               <Button
                                 type="button"
                                 variant="outline"
-                                className="rounded-full border-slate-200 px-3 py-2 text-sm font-medium text-slate-800"
+                                className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
                                 onClick={() => toggleDetails(row)}
                               >
                                 {isOpen ? "Hide" : "Details"}
@@ -343,7 +370,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className="rounded-full border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-50"
+                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-emerald-200 text-emerald-900 hover:bg-emerald-50`}
                                     onClick={() => {
                                       if (restoreInboxMessageFromTrash(row.id)) {
                                         showToast("Restored.");
@@ -357,7 +384,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className="rounded-full border-rose-200 px-3 py-2 text-sm font-medium text-rose-800 hover:bg-rose-50"
+                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-rose-200 text-rose-800 hover:bg-rose-50`}
                                     onClick={() => {
                                       if (permanentlyDeleteInboxMessage(row.id)) {
                                         showToast("Deleted permanently.");
@@ -373,7 +400,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  className="rounded-full border-slate-200 px-3 py-2 text-sm font-medium text-slate-800"
+                                  className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
                                   onClick={() => {
                                     if (moveInboxMessageToTrash(row.id)) {
                                       showToast("Moved to trash.");
@@ -389,24 +416,24 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                           </td>
                         </tr>
                         {isOpen ? (
-                          <tr className="border-b border-slate-100 bg-slate-50/70">
-                            <td colSpan={5} className="px-5 py-5">
-                              <div className="space-y-4 text-left">
+                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                            <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                              <div className="space-y-3 text-left">
                                 <div>
-                                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Message</p>
-                                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{row.body}</p>
+                                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Message</p>
+                                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{row.body}</p>
                                 </div>
 
                                 {row.thread.length > 0 ? (
                                   <div>
-                                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                                       Thread
                                     </p>
-                                    <ul className="mt-2 space-y-3">
+                                    <ul className="mt-2 space-y-2">
                                       {row.thread.map((t) => (
                                         <li
                                           key={t.id}
-                                          className="rounded-xl border border-slate-200/80 bg-white px-4 py-3 text-sm shadow-sm"
+                                          className="rounded-lg border border-slate-200/60 bg-white px-3 py-2.5 text-sm"
                                         >
                                           <p className="font-semibold text-slate-900">{t.authorLabel}</p>
                                           <p className="mt-0.5 text-xs text-slate-500">{formatWhen(t.createdAt)}</p>
@@ -465,6 +492,6 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           </div>
         )}
       </div>
-    </ManagerSectionShell>
+    </ManagerPortalPageShell>
   );
 }

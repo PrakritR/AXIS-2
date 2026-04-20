@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateManagerId } from "@/lib/manager-id";
 import { newAxisIntentSessionId } from "@/lib/manager-signup-intent";
-import { normalizeProMonthlyPromoInput, PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -15,7 +14,6 @@ type Body = {
   email?: string;
   fullName?: string;
   phone?: string;
-  promo?: string;
 };
 
 function isTier(s: string): s is Tier {
@@ -27,7 +25,7 @@ function isBilling(s: string): s is Billing {
 }
 
 /**
- * Creates a manager purchase row without Stripe (free tier, or Pro monthly + FREEFIRST skip).
+ * Creates a manager purchase row without Stripe (free tier only).
  * Returns session_id used by /auth/create-account and manager-signup.
  */
 export async function POST(req: Request) {
@@ -37,9 +35,6 @@ export async function POST(req: Request) {
     const billingRaw = typeof body.billing === "string" ? body.billing.toLowerCase().trim() : "";
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
-    const promoRaw = typeof body.promo === "string" ? normalizeProMonthlyPromoInput(body.promo) : "";
-    const promoUpper = promoRaw.toUpperCase();
-
     if (!email.includes("@")) {
       return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
     }
@@ -50,26 +45,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "tier and billing are required." }, { status: 400 });
     }
 
-    const isProMonthly = tierRaw === "pro" && billingRaw === "monthly";
-    const skipStripeForPromo = isProMonthly && promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE;
     const skipStripeForFree = tierRaw === "free";
 
-    if (promoRaw && !skipStripeForFree && !skipStripeForPromo) {
-      if (promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE && !isProMonthly) {
-        return NextResponse.json(
-          { error: `${PRO_MONTHLY_FIRST_FREE_PROMO_CODE} applies only to Pro monthly billing.` },
-          { status: 400 },
-        );
-      }
+    if (!skipStripeForFree) {
       return NextResponse.json(
-        { error: "Unknown promo for instant signup. Use paid checkout or a supported skip code." },
-        { status: 400 },
-      );
-    }
-
-    if (!skipStripeForFree && !skipStripeForPromo) {
-      return NextResponse.json(
-        { error: "This tier requires Stripe checkout. Use Continue only for Free tier or Pro monthly with the free-first code." },
+        { error: "This tier requires Stripe checkout. Use Continue on the pricing page for paid plans." },
         { status: 400 },
       );
     }
@@ -94,7 +74,7 @@ export async function POST(req: Request) {
       manager_id: managerId,
       tier: tierRaw,
       billing: billingRaw,
-      promo_code: skipStripeForPromo ? promoUpper : null,
+      promo_code: null,
       paid_at: new Date().toISOString(),
       full_name: fullName,
     });

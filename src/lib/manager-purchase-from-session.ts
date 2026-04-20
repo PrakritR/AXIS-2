@@ -27,10 +27,19 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
         ? session.customer.id
         : null;
 
+  const subscriptionRaw = session.subscription;
+  const subscriptionId =
+    typeof subscriptionRaw === "string"
+      ? subscriptionRaw
+      : subscriptionRaw && typeof subscriptionRaw !== "string"
+        ? subscriptionRaw.id
+        : null;
+
   const { error } = await supabase.from("manager_purchases").upsert(
     {
       stripe_checkout_session_id: session.id,
       stripe_customer_id: customerId,
+      stripe_subscription_id: subscriptionId,
       email,
       manager_id: managerId,
       tier: session.metadata?.tier ?? null,

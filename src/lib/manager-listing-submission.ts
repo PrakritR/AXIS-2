@@ -46,6 +46,10 @@ export type ManagerListingSubmissionV1 = {
   sharedSpacesDescription: string;
   /** One amenity per line or comma-separated */
   amenitiesText: string;
+  /** When true, applicants/residents see Zelle instructions using `zelleContact`. */
+  zellePaymentsEnabled?: boolean;
+  /** Phone or email for Zelle (shown to applicants; manager marks payments paid manually). */
+  zelleContact?: string;
   rooms: ManagerRoomSubmission[];
   bathrooms: ManagerBathroomSubmission[];
 };
@@ -68,6 +72,17 @@ export function emptyRoom(index: number): ManagerRoomSubmission {
     sharesBathWith: "",
     photoDataUrls: [],
     videoDataUrl: null,
+  };
+}
+
+/** Copy a room for the add-listing form (new id so file inputs / keys stay unique). */
+export function duplicateRoomEntry(source: ManagerRoomSubmission): ManagerRoomSubmission {
+  return {
+    ...source,
+    id: rid("room"),
+    name: source.name.trim() ? `${source.name.trim()} (copy)` : "Room (copy)",
+    photoDataUrls: [...source.photoDataUrls],
+    videoDataUrl: source.videoDataUrl,
   };
 }
 
@@ -109,6 +124,8 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
       "Kitchen, laundry, living room, outdoor space, and how shared areas work.",
     amenitiesText:
       "WiFi\nIn-building laundry\nHeating\nAC",
+    zellePaymentsEnabled: false,
+    zelleContact: "",
     rooms: [emptyRoom(0), emptyRoom(1), emptyRoom(2)],
     bathrooms: [emptyBathroom(0), emptyBathroom(1)],
   };

@@ -76,6 +76,13 @@ export function AdminPortalNavIcon({ section }: { section: string }) {
           <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
         </svg>
       );
+    case "plan":
+      return (
+        <svg className={cls} aria-hidden {...svgProps}>
+          <rect x="2" y="5" width="20" height="14" rx="2" />
+          <path d="M2 10h20" />
+        </svg>
+      );
     default:
       return (
         <svg className={cls} aria-hidden {...svgProps}>

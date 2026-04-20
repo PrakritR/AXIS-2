@@ -22,6 +22,8 @@ export type MockProperty = {
   mapLng?: number;
   /** When set, listing detail sections are generated from manager submission (demo). */
   listingSubmission?: ManagerListingSubmissionV1;
+  /** Supabase user id of the owning manager (demo localStorage scoping). */
+  managerUserId?: string;
 };
 
 export type MockRow = Record<string, string>;

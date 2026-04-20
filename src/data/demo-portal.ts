@@ -27,14 +27,40 @@ export const demoOwnerPropertyCards: { name: string; units: string; access: stri
 export type ManagerApplicationBucket = "pending" | "approved" | "rejected";
 
 export type DemoApplicantRow = {
+  id: string;
   name: string;
   property: string;
   stage: string;
   score: string;
   bucket: ManagerApplicationBucket;
+  email?: string;
+  /** Full copy for expandable Details row */
+  detail: string;
 };
 
-export const demoApplicantRows: DemoApplicantRow[] = [];
+export const demoApplicantRows: DemoApplicantRow[] = [
+  {
+    id: "app_demo_1",
+    name: "Jordan Lee",
+    property: "Harbor View Lofts · Unit 4B",
+    stage: "Screening",
+    score: "82",
+    bucket: "pending",
+    email: "jordan.lee@example.com",
+    detail:
+      "Income verified at 3.2× rent. Pet deposit noted. References requested from prior landlord; credit check in progress.",
+  },
+  {
+    id: "app_demo_2",
+    name: "Sam Rivera",
+    property: "Maple Commons · Studio 12",
+    stage: "Documents",
+    score: "76",
+    bucket: "pending",
+    email: "sam.rivera@example.com",
+    detail: "ID and pay stubs uploaded. Awaiting employer verification link.",
+  },
+];
 
 export const demoPaymentRows: { resident: string; unit: string; amount: string; due: string; status: string }[] = [];
 
@@ -91,6 +117,8 @@ export type DemoManagerPaymentLedgerRow = {
   bucket: ManagerPaymentBucket;
   statusLabel: string;
   notes: string;
+  /** When set, row comes from `household-charges` and Mark paid updates that record. */
+  householdChargeId?: string;
 };
 
 export const demoManagerPaymentLedgerRows: DemoManagerPaymentLedgerRow[] = [];
@@ -108,9 +136,27 @@ export type DemoManagerWorkOrderRow = {
   description: string;
   scheduled: string;
   cost: string;
+  /** Prefill when billing resident for work order pass-through */
+  residentName?: string;
+  residentEmail?: string;
 };
 
-export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];
+export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [
+  {
+    id: "WO-9001",
+    propertyName: "Demo Building",
+    unit: "2A",
+    title: "Replace bathroom exhaust fan",
+    priority: "Medium",
+    status: "Scheduled",
+    bucket: "scheduled",
+    description: "Motor noisy; replace with quiet model.",
+    scheduled: "Apr 22, 10am",
+    cost: "—",
+    residentName: "Alex Chen",
+    residentEmail: "alex.chen@example.com",
+  },
+];
 
 export type ManagerLeaseBucket = "manager" | "admin" | "resident" | "signed";
 
@@ -151,7 +197,17 @@ export type DemoResidentWorkOrderRow = {
   description: string;
 };
 
-export const demoResidentWorkOrderRows: DemoResidentWorkOrderRow[] = [];
+export const demoResidentWorkOrderRows: DemoResidentWorkOrderRow[] = [
+  {
+    id: "RWO-1001",
+    title: "Kitchen sink slow drain",
+    category: "Plumbing",
+    priority: "Medium",
+    status: "Scheduled",
+    bucket: "scheduled",
+    description: "Technician scheduled for Tuesday 10am. Building access via office.",
+  },
+];
 
 export type DemoResidentChargeRow = {
   id: string;
@@ -162,7 +218,16 @@ export type DemoResidentChargeRow = {
   statusLabel: string;
 };
 
-export const demoResidentChargeRows: DemoResidentChargeRow[] = [];
+export const demoResidentChargeRows: DemoResidentChargeRow[] = [
+  {
+    id: "chg_demo_1",
+    title: "April rent",
+    amountDue: "$1,850.00",
+    balance: "$185.00",
+    dueDate: "May 1",
+    statusLabel: "Due soon",
+  },
+];
 
 export type DemoResidentInboxThread = {
   id: string;
@@ -175,25 +240,4 @@ export type DemoResidentInboxThread = {
   body: string;
 };
 
-export const demoResidentInboxThreads: DemoResidentInboxThread[] = [
-  {
-    id: "r1",
-    from: "Property team",
-    email: "team@axishousing.com",
-    subject: "Welcome to your portal",
-    preview: "Your application is approved. Here’s how to access lease documents…",
-    when: "Apr 12",
-    unread: true,
-    body: "Your application is approved. Lease documents will be available under Lease after countersign.",
-  },
-  {
-    id: "r2",
-    from: "Maintenance",
-    email: "maintenance@axishousing.com",
-    subject: "Quarterly HVAC filter",
-    preview: "We’ll replace filters next week. Reply if you need a different window.",
-    when: "Apr 3",
-    unread: false,
-    body: "Scheduled for Tuesday morning. No need to be home unless you prefer to escort.",
-  },
-];
+export const demoResidentInboxThreads: DemoResidentInboxThread[] = [];

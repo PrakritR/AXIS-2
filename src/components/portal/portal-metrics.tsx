@@ -257,9 +257,9 @@ export function ManagerPortalPageShell({
   );
 }
 
-/** Table header cell class (admin leases / managers). */
+/** Table header cell class (admin leases / managers / portal tabs). */
 export const MANAGER_TABLE_TH =
-  "px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400";
+  "px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400";
 
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */
 export const PORTAL_KPI_CHIP_INACTIVE =

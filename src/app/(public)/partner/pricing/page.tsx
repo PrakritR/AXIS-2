@@ -100,7 +100,7 @@ function tierById(id: TierId) {
 export default function PartnerPricingPage() {
   const router = useRouter();
   const { showToast } = useAppUi();
-  /** Default monthly so Pro shows $20/mo and FREEFIRST skip-Stripe path matches user expectations. */
+  /** Default monthly so Pro shows $20/mo and optional first-month promo applies. */
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [selectedTierId, setSelectedTierId] = useState<TierId>("pro");
   const [fullName, setFullName] = useState("");
@@ -123,7 +123,7 @@ export default function PartnerPricingPage() {
   );
 
   const startManagerSignupIntent = useCallback(
-    async (opts: { tier: TierId; billing: "monthly" | "annual"; promo?: string }) => {
+    async (opts: { tier: TierId; billing: "monthly" | "annual" }) => {
       setCheckoutBusy(true);
       try {
         const res = await fetch("/api/manager/signup-intent", {
@@ -135,7 +135,6 @@ export default function PartnerPricingPage() {
             email: typeof email === "string" ? email.trim() : "",
             fullName: typeof fullName === "string" ? fullName.trim() : "",
             phone: typeof phone === "string" ? phone.trim() : "",
-            ...(opts.promo ? { promo: opts.promo } : {}),
           }),
         });
         let payload: { sessionId?: string; error?: string };
@@ -350,16 +349,7 @@ export default function PartnerPricingPage() {
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
-              {selectedTierId === "pro" && billing === "monthly" ? (
-                <p className="mt-1.5 text-xs text-slate-500">
-                  Enter{" "}
-                  <span className="font-mono font-semibold text-slate-700">{PRO_MONTHLY_FIRST_FREE_PROMO_CODE}</span>{" "}
-                  (or <span className="font-mono font-semibold text-slate-700">FIRSTFREE</span>,{" "}
-                  <span className="font-mono font-semibold text-slate-700">FIRSTFEE</span>) to{" "}
-                  <span className="font-semibold text-slate-700">skip Stripe</span> and go straight to Manager ID +
-                  password setup. Otherwise you will pay at checkout and get a Manager ID after payment.
-                </p>
-              ) : normalizeProMonthlyPromoInput(typeof code === "string" ? code : "") === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
+              {normalizeProMonthlyPromoInput(typeof code === "string" ? code : "") === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
                 selectedTierId !== "free" &&
                 (selectedTierId !== "pro" || billing !== "monthly") ? (
                 <p className="mt-1.5 text-xs text-amber-800">
@@ -417,7 +407,6 @@ export default function PartnerPricingPage() {
                     }
                     const normalizedPromo = normalizeProMonthlyPromoInput(codeSafe);
                     const isProMonthly = selectedTierId === "pro" && billing === "monthly";
-                    const promoSkipsStripe = isProMonthly && normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE;
 
                     if (
                       normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
@@ -435,11 +424,6 @@ export default function PartnerPricingPage() {
                       return;
                     }
 
-                    if (promoSkipsStripe) {
-                      await startManagerSignupIntent({ tier: "pro", billing: "monthly", promo: normalizedPromo });
-                      return;
-                    }
-
                     setCheckoutBusy(true);
                     try {
                       const res = await fetch("/api/stripe/checkout", {
@@ -452,7 +436,7 @@ export default function PartnerPricingPage() {
                           fullName: fullNameSafe.trim(),
                           phone: typeof phone === "string" ? phone.trim() : "",
                           embedded: true,
-                          ...(codeSafe.trim() ? { promo: normalizedPromo } : {}),
+                          ...(isProMonthly && codeSafe.trim() ? { promo: normalizedPromo } : {}),
                         }),
                       });
                       const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string };
