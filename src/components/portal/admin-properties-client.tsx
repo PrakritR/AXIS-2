@@ -22,6 +22,7 @@ import {
   moveUnlistedToRejected,
   publicListingHrefForPropertyRow,
   readAdminPropertyRows,
+  removeRejectedProperty,
   resolveAdminPropertyRowPreview,
   restoreRejectedToPending,
   returnRequestChangeToPending,
@@ -302,14 +303,24 @@ function AdminPropertyPreviewModal({
         ) : null}
 
         {bucket === 4 ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full"
-            onClick={() => run("Restored to pending approval.", restoreRejectedToPending(row.adminRefId))}
-          >
-            Move to pending approval
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => run("Restored to pending approval.", restoreRejectedToPending(row.adminRefId))}
+            >
+              Move to pending approval
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              onClick={() => run("Property deleted from rejected queue.", removeRejectedProperty(row.adminRefId))}
+            >
+              Delete property
+            </Button>
+          </>
         ) : null}
       </div>
     </div>

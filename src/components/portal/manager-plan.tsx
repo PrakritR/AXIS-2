@@ -98,9 +98,10 @@ export function ManagerPlan() {
     if (!sub) return "";
     const t = pickerValue(sub);
     if (t === "free")
-      return "Core owner tools: listings, applications, payments, Stripe payouts, and inviting managers. Upgrade to Pro for leases, work orders, calendar, inbox, and full manager workflows.";
-    if (t === "pro") return "Up to 2 properties · matches $20/mo on the pricing page.";
-    return "Unlimited scale · matches $200/mo on the pricing page.";
+      return "Listings, rent collection, applications, payments, and Stripe payouts. Upgrade to Pro for lease generation, work orders, and up to 2 properties ($20/mo on the pricing page).";
+    if (t === "pro")
+      return "Everything in Free, plus lease generation and work orders — up to 2 properties · matches $20/mo on the pricing page.";
+    return "Everything in Pro — up to 20 properties and direct meetings with admins for support · matches $200/mo on the pricing page.";
   }, [sub]);
 
   return (

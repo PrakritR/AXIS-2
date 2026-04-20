@@ -12,7 +12,14 @@ export function useManagerUserId(): { userId: string | null; ready: boolean } {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
+    let supabase: ReturnType<typeof createSupabaseBrowserClient>;
+    try {
+      supabase = createSupabaseBrowserClient();
+    } catch {
+      setReady(true);
+      return;
+    }
+
     let cancelled = false;
 
     void (async () => {

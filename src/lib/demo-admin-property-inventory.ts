@@ -317,6 +317,16 @@ export function restoreRejectedToPending(adminRefId: string, forManagerUserId?: 
   return true;
 }
 
+/** Permanently removes a row from the rejected bucket (demo localStorage). */
+export function removeRejectedProperty(adminRefId: string, forManagerUserId?: string | null): boolean {
+  const side = readSide(forManagerUserId);
+  const idx = side.rejected.findIndex((r) => r.adminRefId === adminRefId);
+  if (idx === -1) return false;
+  const nextR = [...side.rejected.slice(0, idx), ...side.rejected.slice(idx + 1)];
+  writeSideStorage({ ...side, rejected: nextR }, forManagerUserId);
+  return true;
+}
+
 /** One-time demo rows for request-change / unlisted / rejected buckets when all are empty. */
 export function ensureDemoManagerSideBucketsSeed(forManagerUserId: string | null): void {
   if (!forManagerUserId || !isBrowser()) return;

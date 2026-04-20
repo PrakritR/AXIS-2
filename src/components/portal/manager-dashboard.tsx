@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -35,27 +35,20 @@ function StatLink({ label, value, href }: { label: string; value: string; href: 
   );
 }
 
-function subscribeManagerApplications(cb: () => void) {
-  if (typeof window === "undefined") return () => {};
-  window.addEventListener(MANAGER_APPLICATIONS_EVENT, cb);
-  return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, cb);
-}
-
-function subscribePipeline(cb: () => void) {
-  if (typeof window === "undefined") return () => {};
-  window.addEventListener(PROPERTY_PIPELINE_EVENT, cb);
-  window.addEventListener("storage", cb);
-  return () => {
-    window.removeEventListener(PROPERTY_PIPELINE_EVENT, cb);
-    window.removeEventListener("storage", cb);
-  };
-}
-
 export function ManagerDashboard() {
   const { showToast } = useAppUi();
-  const { userId } = useManagerUserId();
+  const { userId, ready } = useManagerUserId();
 
-  const pipelineTick = useSyncExternalStore(subscribePipeline, () => null, () => null);
+  const [pipelineTick, setPipelineTick] = useState(0);
+  useEffect(() => {
+    const on = () => setPipelineTick((n) => n + 1);
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
+    window.addEventListener("storage", on);
+    return () => {
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+      window.removeEventListener("storage", on);
+    };
+  }, []);
 
   const pipelineSummary = useMemo(() => {
     void pipelineTick;
@@ -81,22 +74,28 @@ export function ManagerDashboard() {
 
   const paymentLineCount = useMemo(() => {
     void hcTick;
-    const fromHc = userId ? readChargesForManager(userId).length : 0;
+    if (!ready) return demoManagerPaymentLedgerRows.length;
+    const fromHc = userId ? readChargesForManager(userId).length : readChargesForManager(null).length;
     return fromHc + demoManagerPaymentLedgerRows.length;
-  }, [userId, hcTick]);
+  }, [userId, hcTick, ready]);
 
-  const applicationRows = useSyncExternalStore(
-    subscribeManagerApplications,
-    () => readManagerApplicationRows(demoApplicantRows),
-    () => demoApplicantRows,
-  );
+  const [applicationRows, setApplicationRows] = useState(demoApplicantRows);
+  useEffect(() => {
+    const sync = () => setApplicationRows(readManagerApplicationRows(demoApplicantRows));
+    sync();
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
+    return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
+  }, []);
+
   const pendingApplications = applicationRows.filter((a) => a.bucket === "pending").length;
 
-  const workOrderRows = useSyncExternalStore(
-    subscribeManagerWorkOrders,
-    () => readManagerWorkOrderRows(demoManagerWorkOrderRowsFull),
-    () => demoManagerWorkOrderRowsFull,
-  );
+  const [workOrderRows, setWorkOrderRows] = useState(demoManagerWorkOrderRowsFull);
+  useEffect(() => {
+    const sync = () => setWorkOrderRows(readManagerWorkOrderRows(demoManagerWorkOrderRowsFull));
+    sync();
+    const sub = subscribeManagerWorkOrders(sync);
+    return () => sub();
+  }, []);
 
   return (
     <ManagerPortalPageShell

@@ -33,18 +33,19 @@ const TIERS: {
     monthly: {
       headline: "Free",
       period: null,
-      sub: "House posting only.",
+      sub: "List properties, collect rent, and run applications.",
     },
     annual: {
       headline: "Free",
       period: null,
-      sub: "House posting only.",
+      sub: "List properties, collect rent, and run applications.",
     },
     features: [
-      { text: "House posting only", included: true },
-      { text: "No rent collection access", included: false },
-      { text: "No lease generation access", included: false },
-      { text: "No work order system", included: false },
+      { text: "Property listings", included: true },
+      { text: "Rent collection access", included: true },
+      { text: "Application process", included: true },
+      { text: "Lease generation access", included: false },
+      { text: "Work order system", included: false },
     ],
   },
   {
@@ -55,18 +56,20 @@ const TIERS: {
     monthly: {
       headline: "$20",
       period: "/ month",
-      sub: "For 1-2 houses.",
+      sub: "Everything in Free, plus leases & work orders — up to 2 properties.",
     },
     annual: {
       headline: "$192",
       period: "/ year",
-      sub: "For 1-2 houses, 20% off annual billing.",
+      sub: "Everything in Free, plus leases & work orders — up to 2 properties, 20% off annual billing.",
     },
     features: [
-      { text: "1-2 houses", included: true },
+      { text: "Property listings", included: true },
       { text: "Rent collection access", included: true },
+      { text: "Application process", included: true },
       { text: "Lease generation access", included: true },
-      { text: "Work order system access", included: true },
+      { text: "Work order system", included: true },
+      { text: "Manage up to 2 properties", included: true },
     ],
   },
   {
@@ -77,18 +80,21 @@ const TIERS: {
     monthly: {
       headline: "$200",
       period: "/ month",
-      sub: "For 10+ houses.",
+      sub: "Everything in Pro — up to 20 properties & admin support.",
     },
     annual: {
       headline: "$1,920",
       period: "/ year",
-      sub: "For 10+ houses, 20% off annual billing.",
+      sub: "Everything in Pro — up to 20 properties & admin support, 20% off annual billing.",
     },
     features: [
-      { text: "10+ houses", included: true },
+      { text: "Property listings", included: true },
       { text: "Rent collection access", included: true },
+      { text: "Application process", included: true },
       { text: "Lease generation access", included: true },
-      { text: "Work order system access", included: true },
+      { text: "Work order system", included: true },
+      { text: "Manage up to 20 properties", included: true },
+      { text: "Direct meetings with admins for support", included: true },
     ],
   },
 ];
