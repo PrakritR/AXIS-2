@@ -124,9 +124,15 @@ export function writeAvailabilityDateSet(next: Set<string>) {
   writeJson(AVAIL_V2_KEY, [...next]);
 }
 
-/** Manager calendar availability — separate from admin (`AVAIL_V2_KEY`). */
+/** Manager calendar availability — separate from admin (`AVAIL_V2_KEY`). Portfolio default when no property selected. */
 export function managerAvailabilityStorageKey(userId: string): string {
   return `axis_mgr_avail_slots_v2_${userId}`;
+}
+
+/** Per-property tour availability (manager calendar) — scoped to a demo property / house row id. */
+export function managerPropertyAvailabilityStorageKey(userId: string, propertyId: string): string {
+  const safe = propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+  return `axis_mgr_avail_slots_v2_${userId}_prop_${safe}`;
 }
 
 /** Read/write availability for an arbitrary storage key (admin v2 or manager-scoped). */

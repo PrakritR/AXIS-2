@@ -17,6 +17,7 @@ import {
 } from "@/lib/lease-pipeline-storage";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
+import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { PORTAL_DATA_TABLE_WRAP, PORTAL_DATA_TABLE_SCROLL, PORTAL_TABLE_DETAIL_ROW, PORTAL_TABLE_TR } from "@/components/portal/portal-data-table";
 
@@ -97,8 +98,6 @@ function LeasePipelineAdminDetail({
   const fileRef = useRef<HTMLInputElement>(null);
   const [reply, setReply] = useState("");
 
-  const pdfSrc = row.managerUploadedPdf?.dataUrl ?? null;
-
   const onPickFile: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -133,25 +132,10 @@ function LeasePipelineAdminDetail({
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50">
-        <p className="border-b border-slate-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-          Lease preview
-        </p>
-        {pdfSrc ? (
-          <iframe title="Lease PDF preview" src={pdfSrc} className="h-[min(52vh,420px)] w-full bg-white" />
-        ) : row.generatedHtml ? (
-          <iframe
-            title="Generated lease HTML"
-            srcDoc={row.generatedHtml}
-            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-            className="h-[min(52vh,420px)] w-full bg-white"
-          />
-        ) : (
-          <div className="flex h-[min(52vh,420px)] items-center justify-center px-4 text-center text-sm text-slate-500">
-            No generated lease yet — managers generate from application data.
-          </div>
-        )}
-      </div>
+      <LeaseDocumentPreview
+        row={row}
+        emptyHint="No generated lease yet — managers generate from application data."
+      />
 
       <div className="flex flex-wrap gap-2">
         <Button
@@ -196,21 +180,12 @@ function LeasePipelineAdminDetail({
         >
           Send to manager
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="rounded-full"
-          onClick={() => {
-            appendLeaseThreadMessage(row.id, "admin", "Approved — releasing to resident.");
-            if (updateLeasePipelineRow(row.id, { bucket: "resident" })) {
-              showToast("Lease moved to resident.");
-              onSaved();
-            }
-          }}
-        >
-          Send to resident
-        </Button>
       </div>
+
+      <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">
+        Residents receive the lease from the manager portal. Post notes above if needed, then send the draft back to the manager — they release
+        it to residents when ready.
+      </p>
 
       <div>
         <label htmlFor={`admin-reply-${row.id}`} className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">

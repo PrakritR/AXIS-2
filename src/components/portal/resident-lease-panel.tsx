@@ -10,6 +10,7 @@ import {
   demoResidentLeaseHub,
   demoResidentLeaseVersions,
 } from "@/data/demo-portal";
+import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
@@ -292,6 +293,16 @@ export function ResidentLeasePanel() {
         </div>
       ) : null}
 
+      {pipelineRow ? (
+        <div className="mb-6">
+          <LeaseDocumentPreview
+            className="mt-0"
+            row={pipelineRow}
+            emptyHint="Your manager will generate or upload your lease here. When it's ready, the full agreement appears in this preview."
+          />
+        </div>
+      ) : null}
+
       {pipelineRow?.thread?.length ? (
         <Card className="border-slate-200/80 p-5">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Messages</p>
@@ -403,11 +414,13 @@ export function ResidentLeasePanel() {
         </Card>
       </div>
 
-      {(aiPreviewUrl || ownLease) && (
+      {((aiPreviewUrl && !pipelineRow?.generatedHtml) || ownLease) && (
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {aiPreviewUrl ? (
+          {aiPreviewUrl && !pipelineRow?.generatedHtml ? (
             <Card className="overflow-hidden border-slate-200/80 p-0">
-              <p className="border-b border-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">AI lease preview</p>
+              <p className="border-b border-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                AI lease preview (from your application draft)
+              </p>
               <iframe title="AI-generated lease preview" src={aiPreviewUrl} className="h-[min(520px,55vh)] w-full bg-white" />
             </Card>
           ) : null}

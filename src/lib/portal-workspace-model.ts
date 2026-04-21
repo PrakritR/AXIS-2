@@ -141,42 +141,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         },
         ...common,
       ];
-    if (section === "managers") {
-      return [
-        {
-          label: portal === "owner" ? "Contact manager" : "Invite manager",
-          kind: "toast",
-          message:
-            portal === "owner"
-              ? "Demo — verified messaging will appear here."
-              : "Demo — invite links for delegated managers will appear here.",
-        },
-        {
-          label: "View agreement",
-          kind: "modal",
-          message: "Management agreements will be stored per property.",
-        },
-        ...common,
-      ];
-    }
-    if (section === "people") {
-      return [
-        {
-          label: portal === "owner" ? "Contact manager" : "Invite manager",
-          kind: "toast",
-          message:
-            portal === "owner"
-              ? "Demo — verified messaging will appear here."
-              : "Invite owners or delegated managers from this workspace.",
-        },
-        {
-          label: "View agreement",
-          kind: "modal",
-          message: "Management agreements will be stored per property.",
-        },
-        ...common,
-      ];
-    }
   }
 
   if (portal === "resident") {

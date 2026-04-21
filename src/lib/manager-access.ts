@@ -14,15 +14,14 @@ export const MANAGER_TIER_MONTHLY_USD: Record<ManagerSkuTier, number> = {
 
 /**
  * Sections available on Free / “owner starter” subscription for managers and owners:
- * listings, applications, rent collection (including Stripe payouts under Payments), team invites, account & upgrade.
- * Everything else (leases, work orders, calendar, inbox, owner-directory invites, etc.) requires Pro+.
+ * listings, applications, rent collection (including Stripe payouts under Payments), account & upgrade.
+ * Everything else (leases, work orders, calendar, inbox, etc.) requires Pro+.
  */
 export const FREE_SUBSCRIPTION_SECTIONS = new Set([
   "dashboard",
   "properties",
   "applications",
   "payments",
-  "managers",
   "profile",
   "plan",
 ]);

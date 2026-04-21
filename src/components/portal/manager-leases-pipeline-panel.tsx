@@ -19,6 +19,7 @@ import {
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
+import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import {
   appendLeaseThreadMessage,
   downloadLeaseFromRow,
@@ -38,7 +39,14 @@ function ThreadView({ row }: { row: LeasePipelineRow }) {
       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Thread</p>
       <ul className="space-y-2">
         {row.thread.map((m) => (
-          <li key={m.id} className="rounded-lg bg-white px-2.5 py-1.5 text-xs shadow-sm ring-1 ring-slate-100">
+          <li
+            key={m.id}
+            className={`rounded-lg px-2.5 py-1.5 text-xs shadow-sm ring-1 ${
+              m.role === "admin"
+                ? "bg-sky-50/90 ring-sky-200/90"
+                : "bg-white ring-slate-100"
+            }`}
+          >
             <span className="font-semibold capitalize text-slate-700">{m.role}</span>
             <span className="text-slate-400"> · {new Date(m.at).toLocaleString()}</span>
             <p className="mt-1 whitespace-pre-wrap text-slate-700">{m.body}</p>
@@ -59,7 +67,6 @@ export function ManagerLeasesPipelinePanel({
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [adminNoteById, setAdminNoteById] = useState<Record<string, string>>({});
-  const [adminReplyById, setAdminReplyById] = useState<Record<string, string>>({});
   const uploadRef = useRef<HTMLInputElement>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
 
@@ -91,34 +98,6 @@ export function ManagerLeasesPipelinePanel({
       })
     ) {
       showToast("Lease moved to With resident.");
-      setExpandedId(null);
-    } else showToast("Could not update.");
-  };
-
-  const onAdminReply = (row: LeasePipelineRow) => {
-    const text = adminReplyById[row.id]?.trim();
-    if (!text) {
-      showToast("Enter a reply.");
-      return;
-    }
-    if (appendLeaseThreadMessage(row.id, "admin", text)) {
-      setAdminReplyById((s) => ({ ...s, [row.id]: "" }));
-      showToast("Reply posted.");
-    } else showToast("Could not post.");
-  };
-
-  const onReturnToManager = (row: LeasePipelineRow) => {
-    appendLeaseThreadMessage(row.id, "admin", "Returned to manager for updates.");
-    if (updateLeasePipelineRow(row.id, { bucket: "manager" })) {
-      showToast("Moved back to manager review.");
-      setExpandedId(null);
-    } else showToast("Could not update.");
-  };
-
-  const onReleaseToResident = (row: LeasePipelineRow) => {
-    appendLeaseThreadMessage(row.id, "admin", "Approved — sending to resident.");
-    if (updateLeasePipelineRow(row.id, { bucket: "resident" })) {
-      showToast("Sent to resident.");
       setExpandedId(null);
     } else showToast("Could not update.");
   };
@@ -211,7 +190,37 @@ export function ManagerLeasesPipelinePanel({
                     <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                       <p className="text-sm leading-relaxed text-slate-600">{row.notes}</p>
                       <p className="mt-1.5 text-xs text-slate-500">PDF version v{row.pdfVersion}</p>
-                      <ThreadView row={row} />
+
+                      {bucket === "admin" ? (
+                        <>
+                          <LeaseDocumentPreview
+                            row={row}
+                            emptyHint="No lease PDF yet — generate from application data or upload when this lease is back in Manager review."
+                          />
+                          <div className="mt-4">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                              Internal comments (read-only)
+                            </p>
+                            <ThreadView row={row} />
+                          </div>
+                          <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">
+                            Admin review is read-only here — you can view the lease and comments only. Messaging and routing happen in the
+                            Axis admin portal. When this returns to Manager review, you&apos;ll see admin feedback above and can reply or send
+                            the lease onward.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <LeaseDocumentPreview row={row} />
+                          <ThreadView row={row} />
+                          {bucket === "manager" && row.thread.some((m) => m.role === "admin") ? (
+                            <p className="mt-2 text-xs font-medium text-sky-900/90">
+                              Admin feedback appears in the thread above — address it before sending to the resident or requesting another
+                              admin pass.
+                            </p>
+                          ) : null}
+                        </>
+                      )}
 
                       {bucket === "manager" ? (
                         <div className="mt-3 space-y-3">
@@ -230,97 +239,71 @@ export function ManagerLeasesPipelinePanel({
                         </div>
                       ) : null}
 
-                      {bucket === "admin" ? (
-                        <div className="mt-3 space-y-2">
-                          <Textarea
-                            rows={2}
-                            placeholder="Reply to manager & resident (thread)…"
-                            value={adminReplyById[row.id] ?? ""}
-                            onChange={(e) =>
-                              setAdminReplyById((s) => ({
-                                ...s,
-                                [row.id]: e.target.value,
-                              }))
-                            }
-                            className="max-w-xl rounded-xl border border-slate-200 bg-white text-sm"
-                          />
-                        </div>
-                      ) : null}
-
                       <PortalTableDetailActions>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={PORTAL_DETAIL_BTN}
-                          onClick={() => onGeneratePdf(row)}
-                        >
-                          Generate lease
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={PORTAL_DETAIL_BTN}
-                          onClick={() => onDownload(row)}
-                        >
-                          Download lease
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={PORTAL_DETAIL_BTN}
-                          onClick={() => {
-                            setPendingRowId(row.id);
-                            uploadRef.current?.click();
-                          }}
-                          disabled={pendingRowId === row.id}
-                        >
-                          Upload PDF
-                        </Button>
-
-                        {bucket === "manager" ? (
-                          <>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => onSendToResident(row)}
-                            >
-                              Send to resident
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => onRequestAdminEdits(row)}
-                            >
-                              Request edits (admin)
-                            </Button>
-                          </>
-                        ) : null}
-
                         {bucket === "admin" ? (
                           <>
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onAdminReply(row)}>
-                              Post admin reply
-                            </Button>
                             <Button
                               type="button"
                               variant="outline"
                               className={PORTAL_DETAIL_BTN}
-                              onClick={() => onReturnToManager(row)}
+                              onClick={() => onDownload(row)}
                             >
-                              Return to manager
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => onReleaseToResident(row)}
-                            >
-                              Send to resident
+                              Download lease
                             </Button>
                           </>
-                        ) : null}
+                        ) : (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              onClick={() => onGeneratePdf(row)}
+                            >
+                              Generate lease
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              onClick={() => onDownload(row)}
+                            >
+                              Download lease
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              onClick={() => {
+                                setPendingRowId(row.id);
+                                uploadRef.current?.click();
+                              }}
+                              disabled={pendingRowId === row.id}
+                            >
+                              Upload PDF
+                            </Button>
+
+                            {bucket === "manager" ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={PORTAL_DETAIL_BTN}
+                                  onClick={() => onSendToResident(row)}
+                                >
+                                  Send to resident
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={PORTAL_DETAIL_BTN}
+                                  onClick={() => onRequestAdminEdits(row)}
+                                >
+                                  Request edits (admin)
+                                </Button>
+                              </>
+                            ) : null}
+                          </>
+                        )}
                       </PortalTableDetailActions>
                     </td>
                   </tr>

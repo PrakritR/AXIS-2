@@ -94,6 +94,7 @@ export function PortalCalendarPanels({
   calendarRefreshSignal,
   defaultViewMode = "week",
   pinMonthSchedule = false,
+  tourScopeLabel,
 }: {
   storageKey: string | null;
   /** Increment from parent to reload slot state from storage (e.g. admin page Refresh). */
@@ -102,6 +103,8 @@ export function PortalCalendarPanels({
   defaultViewMode?: CalendarMode;
   /** When true, month grid stays visible: day clicks choose a range + sync week without jumping to Day view (admin Calendar). */
   pinMonthSchedule?: boolean;
+  /** Manager portal: which property / portfolio scope tour slots apply to */
+  tourScopeLabel?: string;
 }) {
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
   /** yyyy-mm-dd inclusive range highlights in month view when `pinMonthSchedule`. */
@@ -356,6 +359,9 @@ export function PortalCalendarPanels({
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Availability editor</p>
           <h2 className="mt-2 text-xl font-semibold text-slate-950">Public booking windows</h2>
+          {tourScopeLabel ? (
+            <p className="mt-1 text-sm font-medium text-primary">{tourScopeLabel}</p>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
               type="button"

@@ -2,19 +2,85 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PortalPropertyFilter } from "./manager-section-shell";
 import { ManagerPortalPageShell } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
-import { ADMIN_AVAILABILITY_STORAGE_KEY, managerAvailabilityStorageKey } from "@/lib/demo-admin-scheduling";
+import { demoManagerHouseRows } from "@/data/demo-portal";
+import {
+  ADMIN_AVAILABILITY_STORAGE_KEY,
+  managerAvailabilityStorageKey,
+  managerPropertyAvailabilityStorageKey,
+} from "@/lib/demo-admin-scheduling";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+
+const selectClassName =
+  "h-10 min-w-[12rem] max-w-full rounded-full border border-slate-200/90 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25";
+
+function ManagerCalendarPropertyFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (propertyId: string) => void;
+}) {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+      <div className="min-w-0 sm:shrink-0">
+        <label htmlFor="portal-calendar-property" className="sr-only">
+          Property
+        </label>
+        <select
+          id="portal-calendar-property"
+          className={selectClassName}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <option value="all">All your properties (shared default)</option>
+          {demoManagerHouseRows.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="min-w-0 text-xs leading-snug text-slate-500">
+        {value === "all" ? (
+          <>
+            Tour windows apply as a <span className="font-medium text-slate-700">portfolio default</span> in this demo. Choose a building to
+            set availability just for tours at that property.
+          </>
+        ) : (
+          <>
+            Editing tour slots for{" "}
+            <span className="font-semibold text-slate-800">
+              {demoManagerHouseRows.find((p) => p.id === value)?.name ?? "property"}
+            </span>
+            . Paint half-hour cells in the availability editor below.
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
 
 export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   const { userId, ready: authReady } = useManagerUserId();
   const [calendarRefreshSignal, setCalendarRefreshSignal] = useState(0);
+  /** `all` = portfolio-wide demo key; else demo house row id */
+  const [calendarPropertyId, setCalendarPropertyId] = useState<string>("all");
+
   const storageKey = useMemo(() => {
     if (portal === "admin") return ADMIN_AVAILABILITY_STORAGE_KEY;
-    return userId ? managerAvailabilityStorageKey(userId) : null;
-  }, [portal, userId]);
+    if (!userId) return null;
+    if (calendarPropertyId === "all") return managerAvailabilityStorageKey(userId);
+    return managerPropertyAvailabilityStorageKey(userId, calendarPropertyId);
+  }, [portal, userId, calendarPropertyId]);
+
+  const tourScopeLabel = useMemo(() => {
+    if (portal !== "manager") return undefined;
+    if (calendarPropertyId === "all") return "Portfolio default (all properties)";
+    const name = demoManagerHouseRows.find((p) => p.id === calendarPropertyId)?.name;
+    return name ? `Tours · ${name}` : undefined;
+  }, [portal, calendarPropertyId]);
 
   const reloadAvailability = () => setCalendarRefreshSignal((n) => n + 1);
 
@@ -27,7 +93,9 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
             Refresh
           </Button>
         }
-        filterRow={<PortalPropertyFilter />}
+        filterRow={
+          <ManagerCalendarPropertyFilter value={calendarPropertyId} onChange={setCalendarPropertyId} />
+        }
       >
         <p className="text-sm text-slate-500">Loading calendar…</p>
       </ManagerPortalPageShell>
@@ -42,7 +110,9 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
             Refresh
           </Button>
         }
-        filterRow={<PortalPropertyFilter />}
+        filterRow={
+          <ManagerCalendarPropertyFilter value={calendarPropertyId} onChange={setCalendarPropertyId} />
+        }
       >
         <p className="text-sm text-slate-600">Sign in to manage your availability.</p>
       </ManagerPortalPageShell>
@@ -57,9 +127,17 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
           Refresh
         </Button>
       }
-      filterRow={portal === "manager" ? <PortalPropertyFilter /> : undefined}
+      filterRow={
+        portal === "manager" ? (
+          <ManagerCalendarPropertyFilter value={calendarPropertyId} onChange={setCalendarPropertyId} />
+        ) : undefined
+      }
     >
-      <PortalCalendarPanels storageKey={storageKey} calendarRefreshSignal={calendarRefreshSignal} />
+      <PortalCalendarPanels
+        storageKey={storageKey}
+        calendarRefreshSignal={calendarRefreshSignal}
+        tourScopeLabel={tourScopeLabel}
+      />
     </ManagerPortalPageShell>
   );
 }

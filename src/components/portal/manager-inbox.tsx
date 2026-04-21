@@ -1,14 +1,18 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
-import type { DemoManagerInboxThreadSeed } from "@/data/demo-portal";
 import { demoManagerInboxThreads } from "@/data/demo-portal";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
+import {
+  MANAGER_INBOX_STORAGE_KEY,
+  loadPersistedInbox,
+  persistInbox,
+} from "@/lib/portal-inbox-storage";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
 
 type InboxThread = {
@@ -50,12 +54,37 @@ function countThreads(threads: InboxThread[]) {
   };
 }
 
+function seedThreads(): InboxThread[] {
+  return demoManagerInboxThreads.map((t) => ({
+    id: t.id,
+    folder: t.folder,
+    from: t.from,
+    email: t.email,
+    subject: t.subject,
+    preview: t.preview,
+    body: t.body,
+    time: t.time,
+    unread: t.unread,
+  }));
+}
+
 export function ManagerInbox({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
-  const [local, setLocal] = useState<InboxThread[]>(() => [...demoManagerInboxThreads]);
+  const [local, setLocal] = useState<InboxThread[]>(() => seedThreads());
+  const [persistReady, setPersistReady] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+
+  useEffect(() => {
+    setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, seedThreads()) as InboxThread[]);
+    setPersistReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!persistReady) return;
+    persistInbox(MANAGER_INBOX_STORAGE_KEY, local);
+  }, [local, persistReady]);
 
   const counts = useMemo(() => countThreads(local), [local]);
   const tabs = useMemo(
@@ -73,6 +102,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
+    setExpandedId((e) => (e === id ? null : e));
     showToast("Marked as read.");
   };
 
@@ -145,6 +175,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   );
 
   const refreshInbox = () => {
+    setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, seedThreads()) as InboxThread[]);
     showToast("Inbox refreshed.");
   };
 

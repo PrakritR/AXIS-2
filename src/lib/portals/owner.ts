@@ -1,9 +1,6 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 
-/**
- * Owner portal: same primary navigation as the manager portal where it applies.
- * Owners invite property managers from the Managers tab under People.
- */
+/** Owner portal: same primary navigation as the manager portal where it applies. */
 export const ownerPortal: PortalDefinition = {
   kind: "owner",
   basePath: "/owner",
@@ -24,11 +21,6 @@ export const ownerPortal: PortalDefinition = {
     { section: "leases", label: "Leases", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },
-    {
-      section: "people",
-      label: "Managers",
-      tabs: [{ id: "managers", label: "Managers" }],
-    },
     { section: "plan", label: "Plan", tabs: [] },
     {
       section: "inbox",

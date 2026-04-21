@@ -200,8 +200,8 @@ export function PortalInboxMessageTable({
           </thead>
           <tbody>
             {rows.map((row) => {
-              const detail = getDetailBody?.(row);
-              const showDetails = Boolean(detail && onToggleExpand);
+              const detailText = getDetailBody?.(row);
+              const showDetails = Boolean(onToggleExpand);
               const hasMarkRead = Boolean(!row.read && onMarkRead);
               const extra = renderExtraActions?.(row);
               const hasActionCell = hasMarkRead || showDetails || extra;
@@ -248,11 +248,13 @@ export function PortalInboxMessageTable({
                       )}
                     </td>
                   </tr>
-                  {expandedId === row.id && detail ? (
+                  {expandedId === row.id && showDetails ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
                       <td colSpan={5} className={`${PORTAL_TABLE_DETAIL_CELL} text-left`}>
                         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Message</p>
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{detail}</p>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
+                          {(detailText ?? "").trim() ? detailText : "—"}
+                        </p>
                         <PortalTableDetailActions>
                           <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Reply (demo).")}>
                             Reply

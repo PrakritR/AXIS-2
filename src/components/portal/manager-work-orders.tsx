@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
@@ -10,8 +10,8 @@ import type { ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { demoManagerWorkOrderRowsFull } from "@/data/demo-portal";
 import {
   MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
+  MANAGER_WORK_ORDERS_EVENT,
   readManagerWorkOrderRows,
-  subscribeManagerWorkOrders,
 } from "@/lib/manager-work-orders-storage";
 
 const WO_LABELS: { id: ManagerWorkOrderBucket; label: string }[] = [
@@ -37,13 +37,25 @@ export function ManagerWorkOrders() {
   const [bucket, setBucket] = useState<ManagerWorkOrderBucket>("open");
   /** Avoid SSR / hydration mismatch: server and first client paint must not read localStorage yet. */
   const [storageReady, setStorageReady] = useState(false);
+  /** Bumps when work orders or cross-tab storage changes — avoid useSyncExternalStore with unstable array snapshots. */
+  const [storeTick, setStoreTick] = useState(0);
+
   useEffect(() => setStorageReady(true), []);
 
-  const allRows = useSyncExternalStore(
-    subscribeManagerWorkOrders,
+  useEffect(() => {
+    const bump = () => setStoreTick((t) => t + 1);
+    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+      window.removeEventListener("storage", bump);
+    };
+  }, []);
+
+  const allRows = useMemo(
     () =>
       storageReady ? readManagerWorkOrderRows(demoManagerWorkOrderRowsFull) : MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
-    () => MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
+    [storageReady, storeTick],
   );
 
   const counts = useMemo(() => countWorkOrders(allRows), [allRows]);

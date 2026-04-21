@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -13,6 +13,11 @@ import {
 } from "@/components/portal/portal-inbox-ui";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
+import {
+  OWNER_INBOX_STORAGE_KEY,
+  loadPersistedInbox,
+  persistInbox,
+} from "@/lib/portal-inbox-storage";
 
 type InboxThread = {
   id: string;
@@ -57,8 +62,19 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
   const [local, setLocal] = useState<InboxThread[]>([]);
+  const [persistReady, setPersistReady] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+
+  useEffect(() => {
+    setLocal(loadPersistedInbox(OWNER_INBOX_STORAGE_KEY, []) as InboxThread[]);
+    setPersistReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!persistReady) return;
+    persistInbox(OWNER_INBOX_STORAGE_KEY, local);
+  }, [local, persistReady]);
 
   const counts = useMemo(() => countThreads(local), [local]);
   const tabs = useMemo(
@@ -76,6 +92,7 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
 
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
+    setExpandedId((e) => (e === id ? null : e));
     showToast("Marked as read.");
   };
 
@@ -148,6 +165,7 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
   );
 
   const refreshInbox = () => {
+    setLocal(loadPersistedInbox(OWNER_INBOX_STORAGE_KEY, []) as InboxThread[]);
     showToast("Inbox refreshed.");
   };
 
