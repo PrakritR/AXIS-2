@@ -4,7 +4,7 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea, Select } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import {
   submitManagerPendingProperty,
   updateExtraListingFromSubmission,
@@ -15,25 +15,34 @@ import {
   createDefaultListingSubmission,
   duplicateRoomEntry,
   emptyBathroom,
+  emptyBundleRow,
+  emptyQuickFactRow,
   emptyRoom,
+  emptySharedSpace,
+  PAYMENT_AT_SIGNING_OPTIONS,
   type ManagerBathroomSubmission,
+  type ManagerBundleRow,
   type ManagerListingSubmissionV1,
+  type ManagerQuickFactRow,
   type ManagerRoomSubmission,
+  type ManagerSharedSpaceSubmission,
+  type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
+
+function togglePaymentAtSigning(
+  current: PaymentAtSigningOptionId[],
+  id: PaymentAtSigningOptionId,
+  on: boolean,
+): PaymentAtSigningOptionId[] {
+  const set = new Set(current);
+  if (on) set.add(id);
+  else set.delete(id);
+  return PAYMENT_AT_SIGNING_OPTIONS.map((o) => o.id).filter((k) => set.has(k));
+}
 
 const MAX_IMG_BYTES = 2.6 * 1024 * 1024;
 const MAX_VID_BYTES = 14 * 1024 * 1024;
 
-const STEP_LABELS = [
-  "Building & listing",
-  "Lease basics",
-  "Zelle & payments",
-  "House costs",
-  "Rooms",
-  "Bathrooms",
-  "Shared spaces",
-  "Amenities",
-] as const;
 
 async function fileToDataUrl(file: File, maxBytes: number): Promise<string | null> {
   if (file.size > maxBytes) return null;
@@ -75,10 +84,8 @@ export function ManagerAddListingForm({
 }) {
   const [sub, setSub] = useState<ManagerListingSubmissionV1>(() => initialSubmission ?? createDefaultListingSubmission());
   const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState(0);
   const { userId, ready: authReady } = useManagerUserId();
 
-  const lastStep = STEP_LABELS.length - 1;
   const isEditMode = Boolean(editPendingId ?? editListingId);
 
   const setRoom = (i: number, patch: Partial<ManagerRoomSubmission>) => {
@@ -97,6 +104,14 @@ export function ManagerAddListingForm({
     });
   };
 
+  const setSharedSpace = (i: number, patch: Partial<ManagerSharedSpaceSubmission>) => {
+    setSub((s) => {
+      const sharedSpaces = [...s.sharedSpaces];
+      sharedSpaces[i] = { ...sharedSpaces[i]!, ...patch };
+      return { ...s, sharedSpaces };
+    });
+  };
+
   const addRoom = () => {
     if (sub.rooms.length >= 8) return;
     setSub((s) => ({ ...s, rooms: [...s.rooms, emptyRoom(s.rooms.length)] }));
@@ -104,7 +119,37 @@ export function ManagerAddListingForm({
 
   const removeRoom = (i: number) => {
     if (sub.rooms.length <= 1) return;
-    setSub((s) => ({ ...s, rooms: s.rooms.filter((_, j) => j !== i) }));
+    const removedId = sub.rooms[i]!.id;
+    setSub((s) => ({
+      ...s,
+      rooms: s.rooms.filter((_, j) => j !== i),
+      bathrooms: s.bathrooms.map((b) => ({
+        ...b,
+        assignedRoomIds: (b.assignedRoomIds ?? []).filter((id) => id !== removedId),
+      })),
+      sharedSpaces: s.sharedSpaces.map((ss) => ({
+        ...ss,
+        roomAccessIds: (ss.roomAccessIds ?? []).filter((id) => id !== removedId),
+      })),
+    }));
+  };
+
+  const toggleBathroomRoom = (bathIndex: number, roomId: string, on: boolean) => {
+    setSub((s) => {
+      const nextBathrooms = s.bathrooms.map((b, bi) => {
+        if (bi === bathIndex) {
+          const set = new Set(b.assignedRoomIds ?? []);
+          if (on) set.add(roomId);
+          else set.delete(roomId);
+          return { ...b, assignedRoomIds: s.rooms.map((r) => r.id).filter((id) => set.has(id)) };
+        }
+        if (on) {
+          return { ...b, assignedRoomIds: (b.assignedRoomIds ?? []).filter((id) => id !== roomId) };
+        }
+        return b;
+      });
+      return { ...s, bathrooms: nextBathrooms };
+    });
   };
 
   const duplicateRoom = (i: number) => {
@@ -126,8 +171,67 @@ export function ManagerAddListingForm({
   };
 
   const removeBathroom = (i: number) => {
-    if (sub.bathrooms.length <= 1) return;
     setSub((s) => ({ ...s, bathrooms: s.bathrooms.filter((_, j) => j !== i) }));
+  };
+
+  const addSharedSpace = () => {
+    if (sub.sharedSpaces.length >= 24) return;
+    setSub((s) => ({ ...s, sharedSpaces: [...s.sharedSpaces, emptySharedSpace(s.sharedSpaces.length)] }));
+  };
+
+  const removeSharedSpace = (i: number) => {
+    setSub((s) => ({ ...s, sharedSpaces: s.sharedSpaces.filter((_, j) => j !== i) }));
+  };
+
+  const toggleSharedSpaceRoom = (spaceIndex: number, roomId: string, on: boolean) => {
+    setSub((s) => {
+      const sharedSpaces = s.sharedSpaces.map((ss, si) => {
+        if (si !== spaceIndex) return ss;
+        const set = new Set(ss.roomAccessIds ?? []);
+        if (on) set.add(roomId);
+        else set.delete(roomId);
+        return { ...ss, roomAccessIds: s.rooms.map((r) => r.id).filter((id) => set.has(id)) };
+      });
+      return { ...s, sharedSpaces };
+    });
+  };
+
+  const setBundle = (i: number, patch: Partial<ManagerBundleRow>) => {
+    setSub((s) => {
+      const bundles = [...(s.bundles ?? [])];
+      bundles[i] = { ...bundles[i]!, ...patch };
+      return { ...s, bundles };
+    });
+  };
+
+  const addBundle = () => {
+    setSub((s) => ({ ...s, bundles: [...(s.bundles ?? []), emptyBundleRow()] }));
+  };
+
+  const removeBundle = (i: number) => {
+    setSub((s) => {
+      const bundles = (s.bundles ?? []).filter((_, j) => j !== i);
+      return { ...s, bundles };
+    });
+  };
+
+  const setQuickFact = (i: number, patch: Partial<ManagerQuickFactRow>) => {
+    setSub((s) => {
+      const quickFacts = [...(s.quickFacts ?? [])];
+      quickFacts[i] = { ...quickFacts[i]!, ...patch };
+      return { ...s, quickFacts };
+    });
+  };
+
+  const addQuickFact = () => {
+    setSub((s) => ({ ...s, quickFacts: [...(s.quickFacts ?? []), emptyQuickFactRow()] }));
+  };
+
+  const removeQuickFact = (i: number) => {
+    setSub((s) => ({
+      ...s,
+      quickFacts: (s.quickFacts ?? []).filter((_, j) => j !== i),
+    }));
   };
 
   const onPickRoomPhotos = async (roomIndex: number, files: FileList | null) => {
@@ -186,21 +290,17 @@ export function ManagerAddListingForm({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (step !== lastStep) return;
     const roomsOk = sub.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
     if (!sub.buildingName.trim() || !sub.address.trim() || !sub.zip.trim() || !sub.neighborhood.trim()) {
       showToast("Fill in building name, address, ZIP, and neighborhood.");
-      setStep(0);
       return;
     }
     if (!roomsOk) {
       showToast("Add at least one room with a name and monthly rent.");
-      setStep(4);
       return;
     }
-    if (sub.bathrooms.every((b) => !b.name.trim())) {
-      showToast("Add at least one bathroom name.");
-      setStep(5);
+    if (sub.bathrooms.length > 0 && sub.bathrooms.every((b) => !b.name.trim())) {
+      showToast("Name each bathroom or remove empty bathroom rows.");
       return;
     }
 
@@ -243,22 +343,18 @@ export function ManagerAddListingForm({
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-900/50 p-3 sm:items-center sm:p-6">
       <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Close" />
       <form
+        id="manager-add-listing-form"
         onSubmit={handleSubmit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && step !== lastStep && (e.target as HTMLElement).tagName !== "TEXTAREA") {
-            e.preventDefault();
-          }
-        }}
-        className="relative z-10 flex max-h-[min(94vh,880px)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        className="relative z-10 flex max-h-[min(96vh,1080px)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
       >
         <div className="shrink-0 border-b border-slate-100 p-6 pb-4 sm:p-8 sm:pb-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "Add a house"}</h2>
+              <h2 className="text-xl font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "Create listing"}</h2>
               <p className="mt-1 text-sm text-slate-600">
                 {isEditMode
-                  ? "Update your listing details below. Saves apply to your portfolio and public listing."
-                  : "Step through each section. Everything you enter is used to build the public listing."}
+                  ? "Update any field below. Save when you are done — your public listing updates from this data."
+                  : "All sections are on one page. Start mostly blank and add rooms, bathrooms, amenities, and more whenever you are ready."}
               </p>
             </div>
             <button
@@ -270,26 +366,10 @@ export function ManagerAddListingForm({
               ×
             </button>
           </div>
-
-          <div className="mt-5">
-            <div className="flex justify-between text-xs font-medium text-slate-500">
-              <span>
-                Step {step + 1} of {STEP_LABELS.length}
-              </span>
-              <span className="text-slate-700">{STEP_LABELS[step]}</span>
-            </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-                style={{ width: `${((step + 1) / STEP_LABELS.length) * 100}%` }}
-              />
-            </div>
-          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
-          {step === 0 ? (
-            <section className="space-y-0">
+          <section className="border-b border-slate-100 py-8 first:pt-0" id="edit-building"><div className="mb-4"><h3 className="text-base font-bold tracking-tight text-slate-900">Building &amp; listing</h3></div><div className="space-y-0">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <FieldLabel>Building name *</FieldLabel>
@@ -311,15 +391,6 @@ export function ManagerAddListingForm({
                   <FieldLabel>Listing tagline</FieldLabel>
                   <Input value={sub.tagline} onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))} placeholder="Short headline for search cards" />
                 </div>
-                <label className="flex cursor-pointer items-center gap-2 sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={sub.petFriendly}
-                    onChange={(e) => setSub((s) => ({ ...s, petFriendly: e.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300"
-                  />
-                  <span className="text-sm font-medium text-slate-800">Pet-friendly (subject to approval)</span>
-                </label>
                 <div className="sm:col-span-2">
                   <FieldLabel hint="Shown on the listing — describe the home, culture, and who it is good for.">House overview</FieldLabel>
                   <Textarea
@@ -330,11 +401,10 @@ export function ManagerAddListingForm({
                   />
                 </div>
               </div>
-            </section>
-          ) : null}
+          </div>
+          </section>
 
-          {step === 1 ? (
-            <section>
+            <section className="border-b border-slate-100 py-8" id="edit-lease"><h3 className="mb-4 text-base font-bold tracking-tight text-slate-900">Lease basics</h3><div className="space-y-6">
               <div className="space-y-3">
                 <div>
                   <FieldLabel>Lease terms & lengths</FieldLabel>
@@ -353,27 +423,91 @@ export function ManagerAddListingForm({
                     <FieldLabel>Move-in fee</FieldLabel>
                     <Input value={sub.moveInFee} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} />
                   </div>
-                  <div>
-                    <FieldLabel hint="Leave blank to show applicants deposit + move-in total automatically on the listing.">
+                  <div className="sm:col-span-2">
+                    <FieldLabel hint="Select every charge collected when the lease is signed. Totals use your amounts below and per-room rent / utilities.">
                       Payment due at signing
                     </FieldLabel>
-                    <Input
-                      value={sub.paymentAtSigning}
-                      onChange={(e) => setSub((s) => ({ ...s, paymentAtSigning: e.target.value }))}
-                      placeholder="Optional override, e.g. $650"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <FieldLabel>Utilities (estimate)</FieldLabel>
-                    <Input value={sub.utilitiesMonthly} onChange={(e) => setSub((s) => ({ ...s, utilitiesMonthly: e.target.value }))} />
+                    <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                      {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
+                        <label key={opt.id} className="flex cursor-pointer items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300"
+                            checked={sub.paymentAtSigningIncludes.includes(opt.id)}
+                            onChange={(e) =>
+                              setSub((s) => ({
+                                ...s,
+                                paymentAtSigningIncludes: togglePaymentAtSigning(
+                                  s.paymentAtSigningIncludes,
+                                  opt.id,
+                                  e.target.checked,
+                                ),
+                              }))
+                            }
+                          />
+                          <span className="text-sm font-medium text-slate-800">{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </section>
-          ) : null}
 
-          {step === 2 ? (
-            <section>
+              <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Bundles (public listing)</p>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Optional rows for the “Bundles & leasing” table. Leave this empty and the listing will auto-build one summary from the{" "}
+                    <span className="font-medium">Rooms</span> section, with per-room rent and utilities on the detail line.
+                  </p>
+                </div>
+                {(sub.bundles ?? []).map((bundle, i) => (
+                  <div key={bundle.id} className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-900">Bundle row {i + 1}</p>
+                      <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBundle(i)}>
+                        Remove
+                      </button>
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="Shown in the Bundle column.">Bundle name</FieldLabel>
+                        <Input value={bundle.label} onChange={(e) => setBundle(i, { label: e.target.value })} placeholder="e.g. Standard lease package" />
+                      </div>
+                      <div>
+                        <FieldLabel hint="e.g. from $899/mo">Price line</FieldLabel>
+                        <Input value={bundle.price} onChange={(e) => setBundle(i, { price: e.target.value })} placeholder="from $899/mo" />
+                      </div>
+                      <div>
+                        <FieldLabel>Optional compare-at price</FieldLabel>
+                        <Input value={bundle.strikethrough} onChange={(e) => setBundle(i, { strikethrough: e.target.value })} placeholder="$999/mo" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="Shown as the Offer column when set.">Offer / promo</FieldLabel>
+                        <Input value={bundle.promo} onChange={(e) => setBundle(i, { promo: e.target.value })} placeholder="First month concession, etc." />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="Secondary line under the bundle name — scope, rooms, or notes.">
+                          Scope / rooms line
+                        </FieldLabel>
+                        <Textarea
+                          className="min-h-[56px]"
+                          value={bundle.roomsLine}
+                          onChange={(e) => setBundle(i, { roomsLine: e.target.value })}
+                          placeholder="Which rooms or what is included. Leave blank to pull text from each room’s rent, utilities, and furnishing."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addBundle}>
+                  + Add bundle row
+                </Button>
+              </div>
+            </div>
+          </section>
+
+            <section className="border-b border-slate-100 py-8" id="edit-zelle"><h3 className="mb-4 text-base font-bold tracking-tight text-slate-900">Zelle &amp; payments</h3>
               <p className="text-sm text-slate-600">
                 Applicants and residents can pay via Zelle using the contact you provide. You mark payments in the manager Payments tab.
               </p>
@@ -398,10 +532,8 @@ export function ManagerAddListingForm({
                 </div>
               </div>
             </section>
-          ) : null}
 
-          {step === 3 ? (
-            <section>
+            <section className="border-b border-slate-100 py-8" id="edit-costs"><h3 className="mb-4 text-base font-bold tracking-tight text-slate-900">House costs</h3>
               <div className="space-y-3">
                 <div>
                   <FieldLabel hint="Explain all recurring and one-time housing costs.">Cost summary</FieldLabel>
@@ -423,12 +555,15 @@ export function ManagerAddListingForm({
                 </div>
               </div>
             </section>
-          ) : null}
 
-          {step === 4 ? (
-            <section>
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-                <p className="text-sm text-slate-600">Each room can include photos and one optional video for the listing.</p>
+            <section className="border-b border-slate-100 py-8" id="edit-rooms"><div className="space-y-2">
+              <h3 className="text-sm font-bold tracking-tight text-slate-900">Rooms</h3>
+              <p className="text-sm text-slate-600">
+                Add each rentable room, <span className="font-medium">monthly rent</span>, and <span className="font-medium">utilities estimate</span> (per
+                room). Which bathroom each room uses is set in the <span className="font-medium">Bathrooms</span> section below — no need to repeat that here.
+              </p>
+              <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+                <p className="text-sm text-slate-500">Each room can include photos and one optional video for the listing.</p>
                 <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addRoom}>
                   + Add room
                 </Button>
@@ -471,28 +606,27 @@ export function ManagerAddListingForm({
                         <FieldLabel>Availability</FieldLabel>
                         <Input value={room.availability} onChange={(e) => setRoom(i, { availability: e.target.value })} />
                       </div>
+                      <div>
+                        <FieldLabel hint="Monthly estimate for this room (used on the listing and in signing totals).">
+                          Utilities (estimate)
+                        </FieldLabel>
+                        <Input
+                          value={room.utilitiesEstimate}
+                          onChange={(e) => setRoom(i, { utilitiesEstimate: e.target.value })}
+                          placeholder="e.g. $175/mo"
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel hint="Furnished, semi-furnished, or what is included in this room.">Furnishing</FieldLabel>
+                        <Input
+                          value={room.furnishing}
+                          onChange={(e) => setRoom(i, { furnishing: e.target.value })}
+                          placeholder="e.g. Queen bed, desk, unfurnished"
+                        />
+                      </div>
                       <div className="sm:col-span-2">
                         <FieldLabel hint="Furniture, light, closet, desk, notes for listing card.">Room details</FieldLabel>
                         <Textarea className="min-h-[72px]" value={room.detail} onChange={(e) => setRoom(i, { detail: e.target.value })} />
-                      </div>
-                      <div>
-                        <FieldLabel>Bathroom</FieldLabel>
-                        <Select
-                          value={room.bathroomSetup}
-                          onChange={(e) => setRoom(i, { bathroomSetup: e.target.value as ManagerRoomSubmission["bathroomSetup"] })}
-                        >
-                          <option value="private">Private / en-suite</option>
-                          <option value="shared">Shared with other rooms</option>
-                        </Select>
-                      </div>
-                      <div>
-                        <FieldLabel hint="If shared, list which rooms share the same bath.">Shares bath with</FieldLabel>
-                        <Input
-                          value={room.sharesBathWith}
-                          onChange={(e) => setRoom(i, { sharesBathWith: e.target.value })}
-                          placeholder="e.g. Room 2, Room 3"
-                          disabled={room.bathroomSetup === "private"}
-                        />
                       </div>
 
                       <div className="sm:col-span-2">
@@ -583,27 +717,35 @@ export function ManagerAddListingForm({
                   </div>
                 ))}
               </div>
-            </section>
-          ) : null}
+            </div>
+          </section>
 
-          {step === 5 ? (
-            <section>
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-                <p className="text-sm text-slate-600">Shown in the Bathrooms table on the listing.</p>
+            <section className="border-b border-slate-100 py-8" id="edit-bath"><div className="space-y-2">
+              <h3 className="text-sm font-bold tracking-tight text-slate-900">Bathrooms</h3>
+              <p className="text-sm text-slate-600">
+                For each bathroom, select which rooms use it. A room can only be on one bathroom; a single room on a bath means a private / en-suite
+                bath. This replaces typing the same info twice.
+              </p>
+              <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+                <p className="text-sm text-slate-500">Shown in the Bathrooms section on the public listing.</p>
                 <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addBathroom}>
                   + Add bathroom
                 </Button>
               </div>
+              {sub.bathrooms.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center text-sm text-slate-600">
+                  No bathrooms yet. Click <span className="font-semibold">Add bathroom</span> when you are ready — or leave empty and the public page
+                  will show a placeholder until you add details.
+                </p>
+              ) : (
               <div className="space-y-6">
                 {sub.bathrooms.map((b, i) => (
                   <div key={b.id} className="rounded-2xl border border-slate-200 bg-white p-4">
                     <div className="flex justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900">Bathroom {i + 1}</p>
-                      {sub.bathrooms.length > 1 ? (
-                        <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBathroom(i)}>
-                          Remove
-                        </button>
-                      ) : null}
+                      <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBathroom(i)}>
+                        Remove
+                      </button>
                     </div>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <div className="sm:col-span-2">
@@ -627,60 +769,160 @@ export function ManagerAddListingForm({
                         Bathtub
                       </label>
                       <div className="sm:col-span-2">
-                        <FieldLabel>Shared by which rooms?</FieldLabel>
-                        <Input
-                          value={b.sharedByRooms}
-                          onChange={(e) => setBath(i, { sharedByRooms: e.target.value })}
-                          placeholder="e.g. Room 1, Room 2"
-                        />
+                        <FieldLabel hint="Selecting a room here unchecks it from other bathrooms. One room alone means private / en-suite.">
+                          Used by these rooms
+                        </FieldLabel>
+                        <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                          {sub.rooms.map((room) => (
+                            <label key={`${b.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300"
+                                checked={(b.assignedRoomIds ?? []).includes(room.id)}
+                                onChange={(e) => toggleBathroomRoom(i, room.id, e.target.checked)}
+                              />
+                              <span className="font-medium text-slate-800">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
-            </section>
-          ) : null}
+              )}
+            </div>
+          </section>
 
-          {step === 6 ? (
-            <section>
-              <FieldLabel>Shared spaces</FieldLabel>
-              <Textarea
-                className="mt-2 min-h-[120px]"
-                value={sub.sharedSpacesDescription}
-                onChange={(e) => setSub((s) => ({ ...s, sharedSpacesDescription: e.target.value }))}
-                placeholder="Kitchen, laundry, living room, yard, theater, etc."
-              />
-            </section>
-          ) : null}
+            <section className="border-b border-slate-100 py-8" id="edit-shared"><div className="space-y-2">
+              <h3 className="text-sm font-bold tracking-tight text-slate-900">Shared spaces</h3>
+              <p className="text-sm text-slate-600">
+                Add each common area (kitchen, laundry, yard, etc.), then choose which bedrooms have access. A room can access multiple spaces
+                (unlike bathrooms, where each room is assigned to one bath).
+              </p>
+              <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+                <p className="text-sm text-slate-500">Shown as separate rows on the public listing.</p>
+                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addSharedSpace}>
+                  + Add shared space
+                </Button>
+              </div>
+              {sub.sharedSpaces.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center text-sm text-slate-600">
+                  No shared spaces yet. Click <span className="font-semibold">Add shared space</span> to list kitchens, laundry, living room, yard,
+                  etc.
+                </p>
+              ) : (
+                <div className="space-y-6">
+                  {sub.sharedSpaces.map((sp, i) => (
+                    <div key={sp.id} className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                      <div className="flex justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-900">Shared space {i + 1}</p>
+                        <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeSharedSpace(i)}>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div className="sm:col-span-2">
+                          <FieldLabel>Name *</FieldLabel>
+                          <Input
+                            value={sp.name}
+                            onChange={(e) => setSharedSpace(i, { name: e.target.value })}
+                            placeholder="e.g. Kitchen & dining, Laundry, Backyard"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <FieldLabel hint="Rules, hours, equipment, parking for guests, etc.">Details</FieldLabel>
+                          <Textarea
+                            className="min-h-[72px]"
+                            value={sp.detail}
+                            onChange={(e) => setSharedSpace(i, { detail: e.target.value })}
+                            placeholder="How the space works, what’s included, any house rules."
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <FieldLabel hint="Rooms that may use this space (same room can be checked on multiple spaces).">Room access</FieldLabel>
+                          <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                            {sub.rooms.map((room) => (
+                              <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-slate-300"
+                                  checked={(sp.roomAccessIds ?? []).includes(room.id)}
+                                  onChange={(e) => toggleSharedSpaceRoom(i, room.id, e.target.checked)}
+                                />
+                                <span className="font-medium text-slate-800">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
 
-          {step === 7 ? (
-            <section>
-              <p className="text-xs text-slate-500">One per line or comma-separated — matches the amenities grid on the listing.</p>
-              <Textarea className="mt-3 min-h-[140px]" value={sub.amenitiesText} onChange={(e) => setSub((s) => ({ ...s, amenitiesText: e.target.value }))} />
-            </section>
-          ) : null}
+            <section className="border-b border-slate-100 py-8" id="edit-quick-facts"><div className="space-y-4">
+              <div>
+                <h3 className="text-base font-bold tracking-tight text-slate-900">Quick facts (sidebar)</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Optional. When you add rows here, they replace the auto-generated sidebar facts on the public listing. Leave empty to derive from your
+                  building and room data.
+                </p>
+              </div>
+              {(sub.quickFacts ?? []).map((qf, i) => (
+                <div key={qf.id} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                  <div>
+                    <FieldLabel>Label</FieldLabel>
+                    <Input value={qf.label} onChange={(e) => setQuickFact(i, { label: e.target.value })} placeholder="e.g. Neighborhood" />
+                  </div>
+                  <div>
+                    <FieldLabel>Value</FieldLabel>
+                    <Input value={qf.value} onChange={(e) => setQuickFact(i, { value: e.target.value })} placeholder="—" />
+                  </div>
+                  <button type="button" className="text-xs font-semibold text-rose-600 hover:underline sm:pb-2" onClick={() => removeQuickFact(i)}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addQuickFact}>
+                + Add quick fact
+              </Button>
+            </div></section>
+
+            <section className="py-8" id="edit-amenities"><div className="space-y-5">
+              <div>
+                <h3 className="text-lg font-bold tracking-tight text-slate-900">Amenities</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  House-wide amenities for the listing grid. Per-room furnishing belongs in the <span className="font-medium">Rooms</span> section above.
+                </p>
+              </div>
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                <input
+                  type="checkbox"
+                  checked={sub.petFriendly}
+                  onChange={(e) => setSub((s) => ({ ...s, petFriendly: e.target.checked }))}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300"
+                />
+                <span className="text-sm font-medium text-slate-800">Pet-friendly (subject to approval)</span>
+              </label>
+              <div>
+                <FieldLabel hint="One per line or comma-separated — drives the Amenities section on the public listing.">
+                  Amenities list
+                </FieldLabel>
+                <Textarea className="mt-3 min-h-[140px]" value={sub.amenitiesText} onChange={(e) => setSub((s) => ({ ...s, amenitiesText: e.target.value }))} />
+              </div>
+            </div></section>
         </div>
 
-        <div className="shrink-0 flex flex-col-reverse gap-2 border-t border-slate-100 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <div className="sticky bottom-0 z-20 flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-10px_28px_-12px_rgba(15,23,42,0.14)] sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
-            Cancel
+            Close
           </Button>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2">
-            {step > 0 ? (
-              <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={() => setStep((s) => Math.max(0, s - 1))}>
-                Back
-              </Button>
-            ) : null}
-            {step < lastStep ? (
-              <Button type="button" className="rounded-full" disabled={busy} onClick={() => setStep((s) => Math.min(lastStep, s + 1))}>
-                Next
-              </Button>
-            ) : (
-              <Button type="submit" className="rounded-full" disabled={busy}>
-                {busy ? (isEditMode ? "Saving…" : "Submitting…") : isEditMode ? "Save changes" : "Submit for approval"}
-              </Button>
-            )}
-          </div>
+          <Button type="submit" form="manager-add-listing-form" className="rounded-full" disabled={busy}>
+            {busy ? (isEditMode ? "Saving…" : "Submitting…") : isEditMode ? "Save listing" : "Submit for approval"}
+          </Button>
         </div>
       </form>
     </div>

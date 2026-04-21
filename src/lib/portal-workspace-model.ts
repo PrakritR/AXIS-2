@@ -49,7 +49,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         ];
       }
       return [
-        { label: "Add property", kind: "toast", message: "Opening add flow…" },
+        { label: "Create listing", kind: "toast", message: "Opening listing editor…" },
         {
           label: "Export CSV",
           kind: "modal",
@@ -93,7 +93,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "View payment",
           kind: "modal",
-          message: "Stripe wiring is intentionally disabled in this shell.",
+          message: "Live payment processing is disabled in this shell.",
         },
         { label: "Send reminder", kind: "toast", message: "Reminder queued…" },
         ...common,
@@ -101,9 +101,9 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
     if (section === "stripe")
       return [
         {
-          label: "Stripe Dashboard",
+          label: "Payout dashboard",
           kind: "modal",
-          message: "Use the Stripe payouts page in this portal to start Connect onboarding, or open dashboard.stripe.com.",
+          message: "Use the Payouts tab in Payments to finish onboarding, or open your provider dashboard.",
         },
         ...common,
       ];
@@ -255,9 +255,9 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           message: "Airtable sync is a placeholder in this build.",
         },
         {
-          label: "Open Stripe dashboard",
+          label: "Open billing dashboard",
           kind: "modal",
-          message: "Stripe is intentionally not connected.",
+          message: "External billing tools are not connected in this build.",
         },
         ...common,
       ];
@@ -489,12 +489,11 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Applicants",
-      subtitle: "Pipeline view with screening labels.",
+      subtitle: "Pipeline view.",
       columns: [
         { key: "name", label: "Applicant" },
         { key: "property", label: "Property" },
         { key: "stage", label: "Stage" },
-        { key: "score", label: "Score" },
       ],
       rows: applicantRows as unknown as Record<string, string>[],
       actions: actionsFor(portal, section),
@@ -577,7 +576,6 @@ export function buildPortalWorkspaceModel(
         { key: "name", label: "Applicant" },
         { key: "property", label: "Property" },
         { key: "stage", label: "Stage" },
-        { key: "score", label: "Score" },
       ],
       rows: applicantRows as unknown as Record<string, string>[],
     };
@@ -688,7 +686,6 @@ export function buildPortalWorkspaceModel(
         { key: "name", label: "Applicant" },
         { key: "property", label: "Property" },
         { key: "stage", label: "Stage" },
-        { key: "score", label: "Score" },
       ],
       rows: applicantRows as unknown as Record<string, string>[],
     };

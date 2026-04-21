@@ -14,7 +14,7 @@ export const MANAGER_TIER_MONTHLY_USD: Record<ManagerSkuTier, number> = {
 
 /**
  * Sections available on Free / “owner starter” subscription for managers and owners:
- * listings, applications, rent collection (including Stripe payouts under Payments), account & upgrade.
+ * listings, applications, rent collection (including payouts under Payments), account & upgrade.
  * Everything else (leases, work orders, calendar, inbox, etc.) requires Pro+.
  */
 export const FREE_SUBSCRIPTION_SECTIONS = new Set([
@@ -160,7 +160,7 @@ export async function setManagerPurchaseTier(
 
 /**
  * Sets this account to Business in `manager_purchases` (service role).
- * Used for self-serve upgrade from the manager portal; billing is marked `portal` (integrate Stripe when ready).
+ * Used for self-serve upgrade from the manager portal; billing is marked `portal` until live checkout is wired.
  */
 export async function upgradeManagerAccountToBusiness(
   userId: string,

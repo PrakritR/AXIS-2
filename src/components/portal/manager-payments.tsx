@@ -78,11 +78,11 @@ export function ManagerPayments() {
       filterRow={
         <div className="flex flex-col gap-4">
           <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
-            <span className="font-semibold text-slate-900">Receiving rent & fees:</span> connect a Stripe Express account on the{" "}
+            <span className="font-semibold text-slate-900">Receiving rent & fees:</span> complete payout setup on the{" "}
             <Link href="/manager/payments/stripe" className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90">
-              Stripe payouts
+              Payouts
             </Link>{" "}
-            tab so payouts can route to your bank once charges go live.
+            tab so funds can route to your bank when billing goes live.
           </div>
           <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
         </div>

@@ -24,6 +24,12 @@ function sideKey(forManagerUserId?: string | null): string {
   return SIDE_KEY_GLOBAL;
 }
 
+/** Admin-only moves (reject / decline). Managers must not invoke these from the portal UI. */
+function adminListingRejectAllowed(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.location.pathname.startsWith("/admin");
+}
+
 export type AdminPropertyBucketIndex = 0 | 1 | 2 | 3 | 4;
 
 export type AdminPropertyRow = {
@@ -205,6 +211,7 @@ export function movePendingToRequestChange(
 }
 
 export function movePendingToRejected(pendingId: string, forManagerUserId?: string | null): boolean {
+  if (!adminListingRejectAllowed()) return false;
   const row = takePendingManagerProperty(pendingId);
   if (!row) return false;
   const side = readSide(forManagerUserId);
@@ -228,6 +235,7 @@ export function approveFromRequestChange(adminRefId: string, forManagerUserId?: 
 }
 
 export function declineFromRequestChange(adminRefId: string, forManagerUserId?: string | null): boolean {
+  if (!adminListingRejectAllowed()) return false;
   const side = readSide(forManagerUserId);
   const idx = side.requestChange.findIndex((r) => r.adminRefId === adminRefId);
   if (idx === -1) return false;
@@ -291,6 +299,7 @@ export function moveListedToRequestChange(
 }
 
 export function moveListedToRejected(listingId: string, forManagerUserId?: string | null): boolean {
+  if (!adminListingRejectAllowed()) return false;
   const removed = removeExtraListing(listingId);
   if (!removed) return false;
   const side = readSide(forManagerUserId);
@@ -300,6 +309,7 @@ export function moveListedToRejected(listingId: string, forManagerUserId?: strin
 }
 
 export function moveUnlistedToRejected(adminRefId: string, forManagerUserId?: string | null): boolean {
+  if (!adminListingRejectAllowed()) return false;
   const side = readSide(forManagerUserId);
   const idx = side.unlisted.findIndex((r) => r.adminRefId === adminRefId);
   if (idx === -1) return false;

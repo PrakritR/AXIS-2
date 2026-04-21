@@ -162,7 +162,7 @@ function ManagerPropertyPreviewModal({
       {bucket === 0 ? (
         <>
           <p className="text-xs text-slate-500">
-            Managers cannot approve their own listing. Axis admin reviews and publishes approved properties.
+            Listing approval is handled by Axis admin. You can edit your submission; only admin can approve, request changes, or reject a listing.
           </p>
           <Button
             type="button"

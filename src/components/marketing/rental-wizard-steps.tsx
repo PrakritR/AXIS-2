@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { APPLICATION_FEE_PROMO_WAIVE_CODE, removePendingApplicationFeeCharge } from "@/lib/household-charges";
 import { LEASE_TERM_OPTIONS, getPropertyById, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
-import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
+import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
 
@@ -1220,7 +1220,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <Row k="Security deposit" v={displayOrDash(prop.listingSubmission.securityDeposit)} />
               <Row k="Move-in fee" v={displayOrDash(prop.listingSubmission.moveInFee)} />
               <Row k="Payment due at signing" v={displayOrDash(paymentAtSigningPriceLabel(prop.listingSubmission))} />
-              <Row k="Utilities (listing estimate)" v={displayOrDash(prop.listingSubmission.utilitiesMonthly)} />
+              <Row k="Utilities (estimate, by room)" v={displayOrDash(utilitiesListingEstimateLabel(prop.listingSubmission))} />
               {form.expectedUtilitiesMonthly.trim() ? (
                 <Row k="Your expected utilities / mo" v={displayOrDash(form.expectedUtilitiesMonthly)} />
               ) : null}
@@ -1327,6 +1327,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const appFeeLabel = sub?.applicationFee?.trim() || (applicationFeeGate.needsFee ? applicationFeeGate.displayLabel : "—");
     const sdLabel = sub?.securityDeposit?.trim() || "—";
     const signingLabel = sub ? paymentAtSigningPriceLabel(sub) : "—";
+    const utilLabel = sub ? utilitiesListingEstimateLabel(sub) : "—";
     const zelleOn = Boolean(sub?.zellePaymentsEnabled && sub.zelleContact?.trim());
     const gate = applicationFeeGate;
     return (
@@ -1382,7 +1383,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <li>Security deposit: {sdLabel}</li>
               {sub?.moveInFee?.trim() ? <li>Move-in fee: {sub.moveInFee.trim()}</li> : null}
               <li>Payment due at signing: {signingLabel}</li>
-              {sub?.utilitiesMonthly?.trim() ? <li>Utilities (listing estimate): {sub.utilitiesMonthly.trim()}</li> : null}
+              {utilLabel.trim() && utilLabel !== "—" ? <li>Utilities (estimate, by room): {utilLabel}</li> : null}
               {form.expectedUtilitiesMonthly.trim() ? (
                 <li>Your expected utilities / mo (from application): {form.expectedUtilitiesMonthly.trim()}</li>
               ) : null}

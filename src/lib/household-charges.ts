@@ -4,6 +4,8 @@
  */
 
 import { getPropertyById } from "@/lib/rental-application/data";
+import { parseMoneyAmount } from "@/lib/parse-money";
+import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
 
@@ -78,10 +80,7 @@ function writeAll(rows: HouseholdCharge[]) {
   }
 }
 
-export function parseMoneyAmount(label: string): number {
-  const n = Number.parseFloat(String(label).replace(/[^0-9.]/g, ""));
-  return Number.isFinite(n) ? n : 0;
-}
+export { parseMoneyAmount } from "@/lib/parse-money";
 
 function chargeTitle(kind: HouseholdChargeKind): string {
   switch (kind) {
@@ -109,7 +108,7 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
     case "move_in_fee":
       return sub.moveInFee;
     case "payment_at_signing":
-      return sub.paymentAtSigning;
+      return paymentAtSigningPriceLabel(sub);
     case "work_order_charge":
       return "$0";
     default:
@@ -119,6 +118,21 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
 
 export function findPendingWorkOrderCharge(workOrderId: string): HouseholdCharge | undefined {
   return readAll().find((c) => c.workOrderId === workOrderId && c.kind === "work_order_charge" && c.status === "pending");
+}
+
+/** Removes pending pass-through lines tied to a work order (e.g. when the manager deletes the work order). */
+export function removePendingWorkOrderChargesForWorkOrder(workOrderId: string): void {
+  if (!isBrowser() || !workOrderId.trim()) return;
+  const rows = readAll();
+  const next = rows.filter(
+    (r) =>
+      !(
+        r.workOrderId === workOrderId &&
+        r.kind === "work_order_charge" &&
+        r.status === "pending"
+      ),
+  );
+  if (next.length !== rows.length) writeAll(next);
 }
 
 export function findApplicationFeeCharge(

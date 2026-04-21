@@ -112,20 +112,19 @@ export function ManagerApplications() {
     >
       <div className={PORTAL_DATA_TABLE_WRAP}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Stage</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Score</th>
                 <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {rowsForBucket.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-slate-500">
                     {rows.length === 0 ? "No applications yet." : "No applications in this bucket."}
                   </td>
                 </tr>
@@ -139,7 +138,6 @@ export function ManagerApplications() {
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.stage}</td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle tabular-nums text-slate-800`}>{row.score}</td>
                       <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
                         <Button
                           type="button"
@@ -153,7 +151,7 @@ export function ManagerApplications() {
                     </tr>
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                           <PortalTableDetailActions>
                             {row.bucket === "pending" ? (
                               <>

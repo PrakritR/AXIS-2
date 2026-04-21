@@ -14,7 +14,7 @@ export const managerPortal: PortalDefinition = {
       label: "Payments",
       tabs: [
         { id: "ledger", label: "Rent & collections" },
-        { id: "stripe", label: "Stripe payouts" },
+        { id: "stripe", label: "Payouts" },
       ],
     },
     { section: "leases", label: "Leases", tabs: [] },

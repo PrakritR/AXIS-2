@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { getPropertyById } from "@/lib/rental-application/data";
-import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
+import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { digitsOnly } from "@/lib/rental-application/masks";
@@ -74,7 +74,7 @@ export function ManagerApplicationReadonlyReview({ partial }: { partial: Partial
           <Row k="Security deposit" v={displayOrDash(prop.listingSubmission.securityDeposit)} />
           <Row k="Move-in fee" v={displayOrDash(prop.listingSubmission.moveInFee)} />
           <Row k="Payment due at signing" v={displayOrDash(paymentAtSigningPriceLabel(prop.listingSubmission))} />
-          <Row k="Utilities (listing estimate)" v={displayOrDash(prop.listingSubmission.utilitiesMonthly)} />
+          <Row k="Utilities (estimate, by room)" v={displayOrDash(utilitiesListingEstimateLabel(prop.listingSubmission))} />
         </ReviewSection>
       ) : null}
       <ReviewSection title="Personal information">

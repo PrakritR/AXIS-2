@@ -22,6 +22,7 @@ import type { ManagerLeaseBucket } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import {
   appendLeaseThreadMessage,
+  deleteLeasePipelineRow,
   downloadLeaseFromRow,
   generateLeaseHtmlForRow,
   managerUploadLeasePdf,
@@ -100,6 +101,14 @@ export function ManagerLeasesPipelinePanel({
       showToast("Lease moved to With resident.");
       setExpandedId(null);
     } else showToast("Could not update.");
+  };
+
+  const onDeleteLease = (row: LeasePipelineRow) => {
+    if (!window.confirm(`Delete lease for ${row.residentName} (${row.unit})? This cannot be undone.`)) return;
+    if (deleteLeasePipelineRow(row.id)) {
+      showToast("Lease removed from pipeline.");
+      setExpandedId(null);
+    } else showToast("Could not delete lease.");
   };
 
   const onRequestAdminEdits = (row: LeasePipelineRow) => {
@@ -219,6 +228,14 @@ export function ManagerLeasesPipelinePanel({
                             >
                               Download lease
                             </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                              onClick={() => onDeleteLease(row)}
+                            >
+                              Delete lease
+                            </Button>
                           </>
                         ) : (
                           <>
@@ -271,6 +288,14 @@ export function ManagerLeasesPipelinePanel({
                                 </Button>
                               </>
                             ) : null}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                              onClick={() => onDeleteLease(row)}
+                            >
+                              Delete lease
+                            </Button>
                           </>
                         )}
                       </PortalTableDetailActions>

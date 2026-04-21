@@ -447,7 +447,7 @@ export default function PartnerPricingPage() {
                       });
                       const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string };
                       if (!res.ok) {
-                        showToast(payload.error ?? "Could not start checkout. Configure Stripe env vars.");
+                        showToast(payload.error ?? "Could not start checkout. Ask your admin to configure billing.");
                         return;
                       }
                       if (payload.clientSecret) {

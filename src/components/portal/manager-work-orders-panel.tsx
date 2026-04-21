@@ -26,7 +26,7 @@ import {
   parseMoneyAmount,
   recordWorkOrderResidentCharge,
 } from "@/lib/household-charges";
-import { updateManagerWorkOrder } from "@/lib/manager-work-orders-storage";
+import { deleteManagerWorkOrderRow, updateManagerWorkOrder } from "@/lib/manager-work-orders-storage";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 
 function priorityClass(p: string) {
@@ -224,6 +224,15 @@ export function ManagerWorkOrdersPanel({
     setExpandedId(null);
   };
 
+  const onDeleteWorkOrder = (row: DemoManagerWorkOrderRow) => {
+    if (!window.confirm(`Delete work order ${row.id} (${row.title})? This cannot be undone.`)) return;
+    if (deleteManagerWorkOrderRow(row.id)) {
+      showToast("Work order removed.");
+      setExpandedId(null);
+      setHcTick((n) => n + 1);
+    } else showToast("Could not delete work order.");
+  };
+
   if (rows.length === 0) {
     return (
       <PortalDataTableEmpty
@@ -269,14 +278,24 @@ export function ManagerWorkOrdersPanel({
                     </td>
                     <td className={PORTAL_TABLE_TD}>{row.status}</td>
                     <td className={`${PORTAL_TABLE_TD} text-right`}>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                        onClick={() => (expandedId === row.id ? setExpandedId(null) : openExpand(row))}
-                      >
-                        {expandedId === row.id ? "Hide" : "Details"}
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                          onClick={() => (expandedId === row.id ? setExpandedId(null) : openExpand(row))}
+                        >
+                          {expandedId === row.id ? "Hide" : "Details"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                          onClick={() => onDeleteWorkOrder(row)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                   {expandedId === row.id ? (
@@ -427,6 +446,14 @@ export function ManagerWorkOrdersPanel({
                               </Button>
                             </>
                           ) : null}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                            onClick={() => onDeleteWorkOrder(row)}
+                          >
+                            Delete work order
+                          </Button>
                         </PortalTableDetailActions>
                       </td>
                     </tr>

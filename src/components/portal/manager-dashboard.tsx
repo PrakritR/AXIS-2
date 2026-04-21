@@ -27,7 +27,6 @@ import {
   type PersistedInboxThread,
 } from "@/lib/portal-inbox-storage";
 import { readManagerWorkOrderRows, subscribeManagerWorkOrders } from "@/lib/manager-work-orders-storage";
-import { OwnerManagerAccountSwitch } from "@/components/portal/owner-manager-account-switch";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilter } from "./manager-section-shell";
 import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "./portal-metrics";
@@ -172,7 +171,6 @@ export function ManagerDashboard() {
       title="Dashboard"
       titleAside={
         <>
-          <OwnerManagerAccountSwitch />
           <div className="hidden sm:block">
             <PortalPropertyFilter />
           </div>

@@ -19,28 +19,30 @@ import {
 } from "@/lib/demo-property-pipeline";
 import { PRO_MAX_PROPERTIES, proTierPropertyLimitReached } from "@/lib/manager-access";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { legacyAdminFieldsToSubmission } from "@/lib/manager-listing-submission";
+import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
-  if (row.submission) return row.submission;
-  return legacyAdminFieldsToSubmission(row);
+  const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
+  return normalizeManagerListingSubmissionV1(raw);
 }
 
 function submissionForListedEdit(p: MockProperty): ManagerListingSubmissionV1 {
-  if (p.listingSubmission) return p.listingSubmission;
+  if (p.listingSubmission) return normalizeManagerListingSubmissionV1(p.listingSubmission);
   const rentNum = Number.parseFloat(String(p.rentLabel).replace(/[^\d.]/g, "")) || 0;
-  return legacyAdminFieldsToSubmission({
-    buildingName: p.buildingName,
-    address: p.address,
-    zip: p.zip,
-    neighborhood: p.neighborhood,
-    unitLabel: p.unitLabel,
-    beds: p.beds,
-    baths: p.baths,
-    monthlyRent: rentNum,
-    petFriendly: p.petFriendly,
-    tagline: p.tagline,
-  });
+  return normalizeManagerListingSubmissionV1(
+    legacyAdminFieldsToSubmission({
+      buildingName: p.buildingName,
+      address: p.address,
+      zip: p.zip,
+      neighborhood: p.neighborhood,
+      unitLabel: p.unitLabel,
+      beds: p.beds,
+      baths: p.baths,
+      monthlyRent: rentNum,
+      petFriendly: p.petFriendly,
+      tagline: p.tagline,
+    }),
+  );
 }
 
 type EditListingContext =
@@ -160,7 +162,7 @@ export function ManagerProperties() {
           }}
           onSubmitted={() => {
             showToast(
-              editListingContext ? "Listing saved." : "Property submitted for admin approval. It will appear on public listings after approval.",
+              editListingContext ? "Listing saved." : "Listing submitted for admin approval. It will appear on public search after approval.",
             );
             refreshPending();
             void loadSku();
@@ -175,7 +177,7 @@ export function ManagerProperties() {
         titleAside={
           <>
             <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={tryOpenAdd}>
-              + Add property
+              + Create listing
             </Button>
             <Button
               type="button"

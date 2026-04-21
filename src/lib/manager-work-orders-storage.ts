@@ -1,6 +1,7 @@
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { removePendingWorkOrderChargesForWorkOrder } from "@/lib/household-charges";
 
-const KEY = "axis_manager_work_orders_v2";
+const KEY = "axis_manager_work_orders_v3";
 export const MANAGER_WORK_ORDERS_EVENT = "axis:manager-work-orders";
 
 const EMPTY_FALLBACK: DemoManagerWorkOrderRow[] = [];
@@ -66,6 +67,15 @@ export function updateManagerWorkOrder(
   const next = [...rows];
   next[idx] = updater(next[idx]!);
   writeManagerWorkOrderRows(next);
+}
+
+export function deleteManagerWorkOrderRow(id: string): boolean {
+  if (!canUseStorage()) return false;
+  const rows = readManagerWorkOrderRows();
+  if (!rows.some((r) => r.id === id)) return false;
+  removePendingWorkOrderChargesForWorkOrder(id);
+  writeManagerWorkOrderRows(rows.filter((r) => r.id !== id));
+  return true;
 }
 
 export function resetManagerWorkOrderRows(): void {

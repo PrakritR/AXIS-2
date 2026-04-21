@@ -32,7 +32,6 @@ export type DemoApplicantRow = {
   name: string;
   property: string;
   stage: string;
-  score: string;
   bucket: ManagerApplicationBucket;
   email?: string;
   detail: string;

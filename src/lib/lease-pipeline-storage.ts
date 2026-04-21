@@ -11,11 +11,12 @@ import {
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
-import { readUploadedOwnLease, saveUploadedOwnLease } from "@/lib/resident-lease-upload";
+import { clearUploadedOwnLease, readUploadedOwnLease, saveUploadedOwnLease } from "@/lib/resident-lease-upload";
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
 
-const STORAGE_KEY = "axis_lease_pipeline_v2";
+/** Bumped to drop legacy demo-seeded rows from localStorage; pipeline now starts empty until apps sync. */
+const STORAGE_KEY = "axis_lease_pipeline_v3";
 
 /** Demo-only email map so residents can load their lease row. */
 const DEMO_RESIDENT_EMAIL: Record<string, string> = {
@@ -223,6 +224,19 @@ function makeMsg(role: LeaseThreadRole, body: string): LeaseThreadMessage {
     role,
     body: body.trim(),
   };
+}
+
+/** Removes a lease row and clears any resident-uploaded PDF keyed by that row’s email (demo storage). */
+export function deleteLeasePipelineRow(id: string): boolean {
+  const rows = readLeasePipeline();
+  const row = rows.find((r) => r.id === id);
+  if (!row) return false;
+  if (row.residentEmail.trim()) {
+    clearUploadedOwnLease(row.residentEmail);
+  }
+  const next = rows.filter((r) => r.id !== id);
+  write(next);
+  return true;
 }
 
 export function updateLeasePipelineRow(id: string, patch: Partial<LeasePipelineRow>): boolean {

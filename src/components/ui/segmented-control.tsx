@@ -18,6 +18,8 @@ type SegmentedThreeProps<T extends string> = {
   second: { id: T; label: string };
   third: { id: T; label: string };
   className?: string;
+  /** When true, segments are non-interactive (e.g. while saving). Highlight still follows `value`. */
+  disabled?: boolean;
 };
 
 /** Three equal segments (Day / Week / Month style). */
@@ -28,6 +30,7 @@ export function SegmentedThree<T extends string>({
   second,
   third,
   className = "",
+  disabled = false,
 }: SegmentedThreeProps<T>) {
   const opts = [first, second, third];
   return (
@@ -40,10 +43,11 @@ export function SegmentedThree<T extends string>({
           <button
             key={opt.id}
             type="button"
+            disabled={disabled}
             onClick={() => onChange(opt.id)}
-            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors duration-150 ease-out ${
+            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-60 ${
               active
-                ? "bg-gradient-to-br from-[#007aff] to-[#339cff] text-white"
+                ? "bg-gradient-to-br from-[#007aff] to-[#339cff] text-white shadow-[0_2px_10px_-2px_rgba(0,122,255,0.45)]"
                 : "text-slate-500 hover:bg-white/60 hover:text-slate-800"
             }`}
           >

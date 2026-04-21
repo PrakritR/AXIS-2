@@ -5,7 +5,7 @@ import { startTransition, useCallback, useEffect, useMemo, useState } from "reac
 import { Button } from "@/components/ui/button";
 import { SegmentedThree } from "@/components/ui/segmented-control";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import type { ManagerSkuTier } from "@/lib/manager-access";
+import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 type SubPayload = {
@@ -14,17 +14,29 @@ type SubPayload = {
   isBusiness: boolean;
   isFree: boolean;
   isLegacyUnlimited: boolean;
-  /** When true, plan changes go through Stripe (prorated). */
+  /** When true, plan changes use the active billing subscription (prorated upgrades). */
   stripeManaged?: boolean;
 };
 
-/** Value for the plan picker; legacy accounts default to Pro until they choose. */
+/** Committed plan from server; prefer normalized `tier` so the highlight matches DB. */
 function pickerValue(sub: SubPayload | null): ManagerSkuTier {
   if (!sub) return "free";
-  if (sub.isBusiness) return "business";
-  if (sub.isPro) return "pro";
-  if (sub.isFree) return "free";
+  const fromTier = normalizeManagerSkuTier(sub.tier);
+  if (fromTier) return fromTier;
+  if (sub.isLegacyUnlimited) return "pro";
   return "pro";
+}
+
+function tierRank(t: ManagerSkuTier): number {
+  if (t === "free") return 0;
+  if (t === "pro") return 1;
+  return 2;
+}
+
+function tierLabel(t: ManagerSkuTier): string {
+  if (t === "free") return "Free";
+  if (t === "pro") return "Pro";
+  return "Business";
 }
 
 export function ManagerPlan() {
@@ -34,7 +46,8 @@ export function ManagerPlan() {
   const { showToast } = useAppUi();
   const [sub, setSub] = useState<SubPayload | null>(null);
   const [busy, setBusy] = useState(false);
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  /** Shown immediately on segment click so the blue pill tracks the selection while the API runs. */
+  const [pickerOverride, setPickerOverride] = useState<ManagerSkuTier | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -54,7 +67,14 @@ export function ManagerPlan() {
     void load();
   }, [load]);
 
-  const selectedTier = useMemo(() => pickerValue(sub), [sub]);
+  const committedTier = useMemo(() => pickerValue(sub), [sub]);
+  const displayTier = pickerOverride ?? committedTier;
+
+  useEffect(() => {
+    if (pickerOverride != null && pickerOverride === committedTier) {
+      setPickerOverride(null);
+    }
+  }, [committedTier, pickerOverride]);
 
   const openBillingPortal = async () => {
     if (!sub?.stripeManaged || busy) return;
@@ -81,7 +101,7 @@ export function ManagerPlan() {
 
   const setTier = async (tier: ManagerSkuTier) => {
     if (!sub || busy) return;
-    if (tier === selectedTier && !sub.isLegacyUnlimited) return;
+    if (tier === pickerValue(sub) && !sub.isLegacyUnlimited) return;
     setBusy(true);
     try {
       const res = await fetch("/api/stripe/subscription/update-tier", {
@@ -93,41 +113,60 @@ export function ManagerPlan() {
       const body = (await res.json()) as { error?: string };
       if (!res.ok) {
         showToast(body.error ?? "Could not update plan.");
+        setPickerOverride(null);
         return;
       }
-      const label = tier === "free" ? "Free" : tier === "pro" ? "Pro" : "Business";
-      showToast(sub?.stripeManaged ? `Plan updated (${label}).` : `Plan updated to ${label}.`);
+      const label = tierLabel(tier);
+      showToast(`Plan updated to ${label}.`);
       await load();
       startTransition(() => {
         router.refresh();
       });
     } catch {
       showToast("Network error.");
+      setPickerOverride(null);
     } finally {
       setBusy(false);
     }
   };
 
-  const cancelToFreeClick = () => {
-    if (!sub || busy || sub.isFree) return;
-    setShowCancelConfirm(true);
-  };
+  const applyTierChange = (tier: ManagerSkuTier) => {
+    if (!sub || busy) return;
+    if (tier === committedTier && !sub.isLegacyUnlimited) return;
 
-  const confirmCancelToFree = () => {
-    setShowCancelConfirm(false);
-    requestAnimationFrame(() => {
-      void setTier("free");
-    });
+    const from = committedTier;
+
+    if (tier === "free" && !sub.isFree) {
+      if (!window.confirm("Switch to the Free plan? Paid features may be limited after you change.")) return;
+    }
+
+    if (tierRank(tier) > tierRank(from)) {
+      if (sub.stripeManaged) {
+        if (
+          !window.confirm(
+            "Your saved payment method will be charged a prorated amount for this upgrade. Continue?",
+          )
+        ) {
+          return;
+        }
+      } else if (!window.confirm(`Upgrade to ${tierLabel(tier)}?`)) {
+        return;
+      }
+    }
+
+    setPickerOverride(tier);
+    void setTier(tier);
   };
 
   return (
     <ManagerPortalPageShell title="Plan">
       <div className="max-w-lg space-y-8 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
-        <div className={`space-y-4 ${busy || !sub ? "pointer-events-none opacity-60" : ""}`}>
+        <div className="space-y-4">
           {sub ? (
             <SegmentedThree<ManagerSkuTier>
-              value={selectedTier}
-              onChange={(tier) => void setTier(tier)}
+              value={displayTier}
+              onChange={applyTierChange}
+              disabled={busy}
               first={{ id: "free", label: "Free" }}
               second={{ id: "pro", label: "Pro" }}
               third={{ id: "business", label: "Business" }}
@@ -137,7 +176,7 @@ export function ManagerPlan() {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className={`flex flex-wrap gap-2 ${busy || !sub ? "pointer-events-none opacity-60" : ""}`}>
           <Button
             type="button"
             variant="primary"
@@ -145,44 +184,14 @@ export function ManagerPlan() {
             disabled={busy || !sub?.stripeManaged}
             title={
               sub && !sub.stripeManaged && !sub.isFree
-                ? "Requires an active Stripe subscription on this account."
+                ? "Requires an active paid plan with billing on file."
                 : undefined
             }
             onClick={() => void openBillingPortal()}
           >
             Update payment method
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full border-rose-200 text-rose-900 hover:bg-rose-50"
-            disabled={busy || !sub || sub.isFree}
-            onClick={cancelToFreeClick}
-          >
-            Cancel to Free
-          </Button>
         </div>
-
-        {showCancelConfirm ? (
-          <div
-            className="rounded-xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="cancel-free-title"
-          >
-            <p id="cancel-free-title" className="font-medium">
-              Switch to the Free plan?
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button type="button" variant="primary" className="rounded-full text-sm" disabled={busy} onClick={confirmCancelToFree}>
-                Yes, switch to Free
-              </Button>
-              <Button type="button" variant="outline" className="rounded-full text-sm" disabled={busy} onClick={() => setShowCancelConfirm(false)}>
-                Keep current plan
-              </Button>
-            </div>
-          </div>
-        ) : null}
 
       </div>
     </ManagerPortalPageShell>

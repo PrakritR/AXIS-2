@@ -58,11 +58,11 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
     if (typeof window === "undefined") return;
     const q = new URLSearchParams(window.location.search).get("connect");
     if (q === "done") {
-      showToast("Returned from Stripe. Connection status updated below.");
+      showToast("Returned from onboarding. Connection status updated below.");
       void loadStatus();
       window.history.replaceState({}, "", `${basePath}/payments/stripe`);
     } else if (q === "refresh") {
-      showToast("Stripe link expired — starting a fresh connection step.");
+      showToast("Setup link expired — starting a fresh connection step.");
       void loadStatus();
       window.history.replaceState({}, "", `${basePath}/payments/stripe`);
     }
@@ -79,7 +79,7 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
       });
       const body = (await res.json()) as OnboardResponse & { error?: string };
       if (!res.ok) {
-        showToast(body.error ?? "Could not start Stripe onboarding.");
+        showToast(body.error ?? "Could not start payout onboarding.");
         return;
       }
       if ("demo" in body && body.demo) {
@@ -110,21 +110,19 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
     !(status.chargesEnabled && status.payoutsEnabled);
 
   const primaryLabel = !status?.connected
-    ? "Connect with Stripe"
+    ? "Connect payout account"
     : ready
-      ? "Open Stripe Express"
-      : "Continue Stripe setup";
+      ? "Open payout dashboard"
+      : "Continue payout setup";
 
   return (
-    <ManagerPortalPageShell title="Stripe payouts">
+    <ManagerPortalPageShell title="Payouts">
       <div className="max-w-2xl space-y-5 text-sm leading-relaxed text-slate-700">
         <div className="rounded-2xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">How payouts work</p>
           <p className="mt-2">
-            Link a <span className="font-semibold text-slate-900">Stripe Express</span> account so residents can pay application fees and rent
-            into your connected account. Axis uses{" "}
-            <span className="font-semibold text-slate-900">Stripe Connect</span>; you finish identity and bank details in Stripe&apos;s hosted
-            onboarding.
+            Link a verified payout account so residents can pay application fees and rent into your connected balance. You finish identity and
+            bank details in the provider&apos;s hosted onboarding flow.
           </p>
           <ul className="mt-3 list-inside list-disc space-y-1 text-slate-600">
             <li>
@@ -140,13 +138,13 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
         {status?.demo ? (
           <p className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
             {status.message ??
-              "Stripe keys are not configured on the server — Connect status cannot be verified live. Add STRIPE_SECRET_KEY for production."}
+              "Live payout connection is not configured on the server — status here is demo-only until production keys are added."}
           </p>
         ) : null}
 
         {status?.stripeError ? (
           <p className="rounded-xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-xs text-rose-900">
-            Stripe returned an error while loading your account: {status.stripeError}
+            Payout provider returned an error while loading your account: {status.stripeError}
           </p>
         ) : null}
 
@@ -169,8 +167,8 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
 
         {inProgress ? (
           <p className="text-xs text-slate-600">
-            Stripe is still verifying this account or needs more information. Use <span className="font-medium">Continue Stripe setup</span> to
-            finish in their flow.
+            Your provider is still verifying this account or needs more information. Use <span className="font-medium">Continue payout setup</span>{" "}
+            to finish in their flow.
           </p>
         ) : null}
 
@@ -184,7 +182,7 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
             rel="noreferrer"
             className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-5 text-sm font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-px hover:bg-white hover:shadow-md"
           >
-            Open Stripe Dashboard
+            Open provider dashboard
           </a>
           <Button type="button" variant="outline" className="min-h-[44px] rounded-full px-5" onClick={() => void loadStatus()}>
             Refresh status
@@ -192,17 +190,15 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
         </div>
 
         <p className="text-xs text-slate-500">
-          Server requires <span className="font-mono">STRIPE_SECRET_KEY</span> for live onboarding and status.{" "}
-          <span className="font-mono">STRIPE_WEBHOOK_SECRET</span> should be configured for Connect events (
-          <span className="font-mono">account.updated</span>) in production.
+          Production payout onboarding and live status checks require server billing keys and webhooks to be configured by your engineering
+          team.
         </p>
 
         <div className="border-t border-slate-200 pt-5">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Next (product)</p>
           <p className="mt-2 text-xs text-slate-600">
-            Charges on the ledger will create <span className="font-medium text-slate-800">PaymentIntents</span> with{" "}
-            <span className="font-medium text-slate-800">transfer_data.destination</span> set to this Connect account (or separate charges
-            + transfers), with an application fee for Axis where applicable.
+            Ledger charges will route to this connected account when online payments are wired, including transfers and platform fees where
+            applicable.
           </p>
           <p className="mt-3 text-xs">
             <Link href={paymentsLedgerHref} className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90">

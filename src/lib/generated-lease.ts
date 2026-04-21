@@ -11,8 +11,8 @@
 import type { MockProperty } from "@/data/types";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { loadRentalWizardDraft } from "@/lib/rental-application/drafts";
-import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
+import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
 function escapeHtml(s: string): string {
@@ -48,6 +48,26 @@ export function resolveApplicationListing(app: Partial<RentalWizardFormState>): 
 
 function submissionFor(prop: MockProperty | undefined): ManagerListingSubmissionV1 | undefined {
   return prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+}
+
+function sharedSpacesLeaseParagraph(raw: ManagerListingSubmissionV1 | undefined): string {
+  if (!raw?.v) return "Common kitchen, bath, and living areas as shared among residents.";
+  const sub = normalizeManagerListingSubmissionV1(raw);
+  const entries = sub.sharedSpaces?.filter((s) => s.name.trim()) ?? [];
+  if (!entries.length) return "Common kitchen, bath, and living areas as shared among residents.";
+  return entries
+    .map((s) => {
+      const names = (s.roomAccessIds ?? [])
+        .map((id) => sub.rooms.find((r) => r.id === id)?.name?.trim())
+        .filter(Boolean)
+        .join(", ");
+      const head = names.length
+        ? `${s.name.trim()} — access includes: ${names}.`
+        : `${s.name.trim()}.`;
+      const d = s.detail.trim();
+      return d ? `${head} ${d}` : head;
+    })
+    .join(" ");
 }
 
 function findSubmissionRoomRent(sub: ManagerListingSubmissionV1 | undefined, unitLabel: string): string | undefined {
@@ -147,11 +167,11 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   const secDep = sub?.securityDeposit ?? "—";
   const moveInFee = sub?.moveInFee ?? "—";
   const paySigning = sub ? paymentAtSigningPriceLabel(sub) : "—";
-  const utilities = sub?.utilitiesMonthly ?? "—";
+  const utilities = sub ? utilitiesListingEstimateLabel(sub) : "—";
   const applicantUtilities = (a.expectedUtilitiesMonthly ?? "").trim();
   const leaseTermsBody = sub?.leaseTermsBody?.trim() || "Standard lease lengths and renewal as posted on the listing.";
   const houseOverview = sub?.houseOverview?.trim() || list?.tagline || "Shared housing as described on the listing.";
-  const sharedSpaces = sub?.sharedSpacesDescription?.trim() || "Common kitchen, bath, and living areas as shared among residents.";
+  const sharedSpaces = sharedSpacesLeaseParagraph(sub);
   const amenities = sub?.amenitiesText?.trim() || "See listing amenities.";
   const costsDetail = sub?.houseCostsDetail?.trim() || "Recurring housing costs as summarized on the listing.";
   const petPolicy = (room?.petFriendly ?? list?.petFriendly)
