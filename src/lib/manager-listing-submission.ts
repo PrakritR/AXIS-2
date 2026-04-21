@@ -22,6 +22,8 @@ export type ManagerRoomSubmission = {
   detail: string;
   /** Furnishing level or what is included (shown on listing). */
   furnishing: string;
+  /** Room-level amenities (lines or comma-separated), shown as chips on the listing. */
+  roomAmenitiesText: string;
   photoDataUrls: string[];
   videoDataUrl: string | null;
   /** Estimated monthly utilities for this room (shown on listing). */
@@ -79,6 +81,8 @@ export type ManagerListingSubmissionV1 = {
   petFriendly: boolean;
   /** Long-form house / coliving description shown on listing */
   houseOverview: string;
+  /** Quiet hours, guests, smoking, shared spaces — shown on House rules tab */
+  houseRulesText: string;
   leaseTermsBody: string;
   applicationFee: string;
   securityDeposit: string;
@@ -169,6 +173,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
           ? legacyRoom.utilitiesEstimate
           : fallbackUtil,
       furnishing: typeof legacyRoom.furnishing === "string" ? legacyRoom.furnishing : "",
+      roomAmenitiesText:
+        typeof (legacyRoom as ManagerRoomSubmission & { roomAmenitiesText?: unknown }).roomAmenitiesText === "string"
+          ? (legacyRoom as ManagerRoomSubmission & { roomAmenitiesText: string }).roomAmenitiesText
+          : "",
     };
   });
 
@@ -232,6 +240,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   const next = {
     ...sub,
+    houseRulesText: typeof sub.houseRulesText === "string" ? sub.houseRulesText : "",
     paymentAtSigningIncludes,
     rooms,
     bathrooms,
@@ -254,6 +263,7 @@ export function emptyRoom(index: number): ManagerRoomSubmission {
     availability: "Available now",
     detail: "",
     furnishing: "",
+    roomAmenitiesText: "",
     photoDataUrls: [],
     videoDataUrl: null,
     utilitiesEstimate: "",
@@ -289,6 +299,7 @@ export function duplicateRoomEntry(source: ManagerRoomSubmission): ManagerRoomSu
     videoDataUrl: source.videoDataUrl,
     utilitiesEstimate: source.utilitiesEstimate ?? "",
     furnishing: source.furnishing ?? "",
+    roomAmenitiesText: source.roomAmenitiesText ?? "",
   };
 }
 
@@ -323,6 +334,7 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     tagline: "",
     petFriendly: false,
     houseOverview: "",
+    houseRulesText: "",
     leaseTermsBody: "",
     applicationFee: "",
     securityDeposit: "",

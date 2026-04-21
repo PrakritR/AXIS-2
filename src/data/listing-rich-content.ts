@@ -8,6 +8,10 @@ export type ListingRoomModal = {
   tourTitle: string;
   tourSubtitle: string;
   includedTags: string[];
+  /** Manager-provided furnishing summary (shown in room detail modal). */
+  furnishingDetail?: string;
+  /** Extra labels from room amenities field (beyond includedTags). */
+  roomAmenityLabels?: string[];
   /** Uploaded room photos (data URLs or https) — shown in detail modal when present */
   photoUrls?: string[];
   /** Uploaded room video (data URL or https) — replaces placeholder when present */
@@ -97,6 +101,8 @@ export type ListingRichContent = {
   heroTagline: string;
   /** Longer house overview from manager submission; shown under the tagline when set. */
   heroOverview?: string;
+  /** House rules / community guidelines for the listing (House rules tab). */
+  houseRulesBody?: string;
   priceRangeLabel: string;
   floorPlans: ListingFloorCard[];
   bathrooms: ListingBathroomRow[];
@@ -421,7 +427,23 @@ const defaultAmenities: AmenityItem[] = [
   { id: "amen-bed", icon: "🛏️", label: "Bed" },
   { id: "amen-heat", icon: "🌡️", label: "Heating" },
   { id: "amen-ac", icon: "🎛️", label: "AC" },
+  { id: "amen-dish", icon: "🍽️", label: "Dishwasher" },
+  { id: "amen-disposal", icon: "♻️", label: "Garbage disposal" },
+  { id: "amen-eq", icon: "🏋️", label: "Fitness center / gym access" },
+  { id: "amen-pool", icon: "🏊", label: "Pool / spa" },
+  { id: "amen-roof", icon: "🌇", label: "Rooftop / terrace" },
+  { id: "amen-pet", icon: "🐕", label: "Pet washing station" },
+  { id: "amen-package", icon: "📬", label: "Package lockers" },
+  { id: "amen-bike", icon: "🚲", label: "Bike storage" },
+  { id: "amen-ev", icon: "🔌", label: "EV charging" },
+  { id: "amen-elev", icon: "🛗", label: "Elevator" },
+  { id: "amen-security", icon: "🔒", label: "Controlled access / smart locks" },
+  { id: "amen-smoke", icon: "💨", label: "Smoke-free building" },
 ];
+
+/** Shown when the listing uses generated demo content (no manager submission). */
+export const DEFAULT_LISTING_HOUSE_RULES_FALLBACK =
+  "Quiet hours typically 10pm–8am; confirm with the property manager. No smoking indoors unless posted otherwise. Guests and overnight visitors may require notice — ask before your tour. Shared spaces stay tidy; label food in shared refrigerators.";
 
 const defaultBundles: BundleCard[] = [
   {
@@ -451,6 +473,7 @@ export function getListingRichContent(property: MockProperty): ListingRichConten
   const high = mid + 100;
   return {
     heroTagline: property.tagline,
+    houseRulesBody: DEFAULT_LISTING_HOUSE_RULES_FALLBACK,
     priceRangeLabel: `from $${low}–$${high}/mo`,
     floorPlans: defaultFloors,
     bathrooms: defaultBathrooms,

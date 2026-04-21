@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
@@ -30,8 +29,6 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<ConnectStatus | null>(null);
-
-  const paymentsLedgerHref = `${basePath}/payments/ledger`;
 
   const loadStatus = useCallback(async () => {
     try {
@@ -126,11 +123,11 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
           </p>
           <ul className="mt-3 list-inside list-disc space-y-1 text-slate-600">
             <li>
-              <span className="font-medium text-slate-800">Free:</span> same Connect account for charges you record under Payments (ledger).
+              <span className="font-medium text-slate-800">Free:</span> can connect only one account.
             </li>
             <li>
-              <span className="font-medium text-slate-800">Pro / Business:</span> one Express account covers all payout-eligible charges in
-              this portal (future live wiring may segment by property).
+              <span className="font-medium text-slate-800">Pro / Business:</span> can connect multiple accounts and choose how much percentage
+              goes to each account.
             </li>
           </ul>
         </div>
@@ -187,24 +184,6 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
           <Button type="button" variant="outline" className="min-h-[44px] rounded-full px-5" onClick={() => void loadStatus()}>
             Refresh status
           </Button>
-        </div>
-
-        <p className="text-xs text-slate-500">
-          Production payout onboarding and live status checks require server billing keys and webhooks to be configured by your engineering
-          team.
-        </p>
-
-        <div className="border-t border-slate-200 pt-5">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Next (product)</p>
-          <p className="mt-2 text-xs text-slate-600">
-            Ledger charges will route to this connected account when online payments are wired, including transfers and platform fees where
-            applicable.
-          </p>
-          <p className="mt-3 text-xs">
-            <Link href={paymentsLedgerHref} className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90">
-              Back to rent & collections
-            </Link>
-          </p>
         </div>
       </div>
     </ManagerPortalPageShell>

@@ -102,6 +102,15 @@ export async function POST(req: Request) {
             "Stripe is not configured (missing STRIPE_SECRET_KEY). Add keys in your environment to enable live Connect onboarding.",
         });
       }
+      if (msg.includes("signed up for Connect")) {
+        return NextResponse.json(
+          {
+            error:
+              "Stripe Connect is not activated for your platform account yet. In the Stripe Dashboard, open Connect and complete setup (Get started): https://dashboard.stripe.com/connect/account/onboarding — then return here and try again.",
+          },
+          { status: 400 },
+        );
+      }
       return NextResponse.json({
         demo: true,
         message: `Stripe Connect could not start: ${msg}. Check API version and Connect settings in Stripe Dashboard.`,

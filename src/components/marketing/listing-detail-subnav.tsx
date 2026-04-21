@@ -10,6 +10,7 @@ const nav = [
   { id: "lease-basics", label: "Lease basics" },
   { id: "amenities", label: "Amenities" },
   { id: "bundles", label: "Bundles & leasing" },
+  { id: "house-rules", label: "House rules" },
   { id: "location", label: "Location" },
 ] as const;
 

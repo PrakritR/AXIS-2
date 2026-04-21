@@ -205,6 +205,24 @@ function ListingDetailModal({
                 ))}
               </div>
             </div>
+            {state.room.modal.furnishingDetail ? (
+              <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/70 p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-950/90">Furnishing</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{state.room.modal.furnishingDetail}</p>
+              </div>
+            ) : null}
+            {state.room.modal.roomAmenityLabels?.length ? (
+              <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/50 p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-950/90">Room amenities</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {state.room.modal.roomAmenityLabels.map((t) => (
+                    <span key={t} className="rounded-full border border-violet-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
               <Link
                 href={buildRentalApplyHref({

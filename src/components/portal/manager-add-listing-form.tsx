@@ -400,6 +400,17 @@ export function ManagerAddListingForm({
                     placeholder="Full description of the house, co-living setup, and what applicants should know."
                   />
                 </div>
+                <div className="sm:col-span-2">
+                  <FieldLabel hint="Shown on the public listing under the House rules tab (quiet hours, guests, smoking, shared spaces).">
+                    House rules
+                  </FieldLabel>
+                  <Textarea
+                    className="min-h-[88px]"
+                    value={sub.houseRulesText}
+                    onChange={(e) => setSub((s) => ({ ...s, houseRulesText: e.target.value }))}
+                    placeholder="e.g. Quiet hours 10pm–8am · No smoking indoors · Label your food in shared refrigerators"
+                  />
+                </div>
               </div>
           </div>
           </section>
@@ -622,6 +633,17 @@ export function ManagerAddListingForm({
                           value={room.furnishing}
                           onChange={(e) => setRoom(i, { furnishing: e.target.value })}
                           placeholder="e.g. Queen bed, desk, unfurnished"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="Extra room features as their own chips on the listing (one per line or comma-separated).">
+                          Room amenities
+                        </FieldLabel>
+                        <Textarea
+                          className="min-h-[72px]"
+                          value={room.roomAmenitiesText}
+                          onChange={(e) => setRoom(i, { roomAmenitiesText: e.target.value })}
+                          placeholder="Walk-in closet, USB outlets, blackout shades, mini fridge, ceiling fan…"
                         />
                       </div>
                       <div className="sm:col-span-2">

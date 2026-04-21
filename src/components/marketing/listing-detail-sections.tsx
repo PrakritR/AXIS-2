@@ -17,7 +17,7 @@ import {
 import { listingFallbackMapCenter } from "@/lib/listing-map";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import type { MockProperty } from "@/data/types";
-import type { ListingRichContent } from "@/data/listing-rich-content";
+import { DEFAULT_LISTING_HOUSE_RULES_FALLBACK, type ListingRichContent } from "@/data/listing-rich-content";
 
 const sectionScroll =
   "scroll-mt-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+8.75rem))]";
@@ -108,6 +108,9 @@ export function ListingDetailSections({
   previewModal?: boolean;
 }) {
   const roomCount = rich.floorPlans.reduce((n, f) => n + f.rooms.length, 0);
+  const houseRulesDisplay =
+    rich.houseRulesBody?.trim() ||
+    (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
   return (
     <div className="bg-[#f4f7fb]">
       <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10"}`}>
@@ -297,6 +300,22 @@ export function ListingDetailSections({
                   <p className="mt-3 text-sm leading-relaxed text-slate-700">
                     {formatBoldSegments(rich.bundlesText)}
                   </p>
+                </div>
+              </section>
+
+              <section id="house-rules" className={sectionScroll}>
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+                  <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">House rules</h2>
+                  <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Community guidelines
+                  </p>
+                  {houseRulesDisplay ? (
+                    <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{houseRulesDisplay}</p>
+                  ) : (
+                    <p className="mt-4 text-sm leading-relaxed text-slate-500">
+                      No house rules were added to this listing yet. Ask the property manager during your tour or application.
+                    </p>
+                  )}
                 </div>
               </section>
 

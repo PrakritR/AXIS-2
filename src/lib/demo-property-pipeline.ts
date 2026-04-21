@@ -170,9 +170,14 @@ export function readAllExtraListings(): MockProperty[] {
   return flat;
 }
 
-/** Public Rent with Axis catalog merges all manager-published listings. */
+/** Properties visible on `/rent/listings` and hero search — admin-approved live listings only. */
+export function isRentCatalogPublished(p: Pick<MockProperty, "adminPublishLive">): boolean {
+  return p.adminPublishLive === true;
+}
+
+/** Public Rent with Axis catalog: extras that are approved for live search (demo localStorage). */
 export function readExtraListingsPublic(): MockProperty[] {
-  return readAllExtraListings();
+  return readAllExtraListings().filter(isRentCatalogPublished);
 }
 
 /** Listed properties for one manager (portal). */
@@ -358,6 +363,21 @@ export function appendExtraListing(prop: MockProperty, ownerUserId: string) {
   list.push({ ...prop, managerUserId: uid });
   map[uid] = list;
   writeExtrasMap(map);
+}
+
+/** Deletes a pending submission from the signed-in manager’s queue only (does not approve or publish). */
+export function deletePendingSubmissionForManager(pendingId: string, managerUserId: string | null): boolean {
+  if (!managerUserId?.trim()) return false;
+  const uid = managerUserId.trim();
+  migrateLegacyGlobalIntoUser(uid);
+  const map = readPendingMap();
+  const list = map[uid] ?? [];
+  const idx = list.findIndex((p) => p.id === pendingId);
+  if (idx === -1) return false;
+  map[uid] = [...list.slice(0, idx), ...list.slice(idx + 1)];
+  writePendingMap(map);
+  window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+  return true;
 }
 
 /** Removes a pending row from whichever account owns it. */

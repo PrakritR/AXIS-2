@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
+import type { MockProperty } from "@/data/types";
 import { ListingPublicPreviewModal } from "@/components/portal/listing-public-preview-modal";
+import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
@@ -30,7 +32,43 @@ import {
   type AdminPropertyBucketIndex,
   type AdminPropertyRow,
 } from "@/lib/demo-admin-property-inventory";
-import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
+import {
+  PROPERTY_PIPELINE_EVENT,
+  countManagerManagedPropertiesForUser,
+  deletePendingSubmissionForManager,
+  readExtraListingsForUser,
+  readPendingManagerPropertiesForUser,
+  type ManagerPendingPropertyRow,
+} from "@/lib/demo-property-pipeline";
+import {
+  legacyAdminFieldsToSubmission,
+  normalizeManagerListingSubmissionV1,
+  type ManagerListingSubmissionV1,
+} from "@/lib/manager-listing-submission";
+
+function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
+  const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
+  return normalizeManagerListingSubmissionV1(raw);
+}
+
+function submissionForListedEdit(p: MockProperty): ManagerListingSubmissionV1 {
+  if (p.listingSubmission) return normalizeManagerListingSubmissionV1(p.listingSubmission);
+  const rentNum = Number.parseFloat(String(p.rentLabel).replace(/[^\d.]/g, "")) || 0;
+  return normalizeManagerListingSubmissionV1(
+    legacyAdminFieldsToSubmission({
+      buildingName: p.buildingName,
+      address: p.address,
+      zip: p.zip,
+      neighborhood: p.neighborhood,
+      unitLabel: p.unitLabel,
+      beds: p.beds,
+      baths: p.baths,
+      monthlyRent: rentNum,
+      petFriendly: p.petFriendly,
+      tagline: p.tagline,
+    }),
+  );
+}
 
 /** Matches manager-facing stages: bucket 1 is admin “request change” / pre-list work (shown as Approved). */
 const MANAGER_TAB_LABELS = ["Pending", "Approved", "Listed", "Unlisted", "Rejected"] as const;
@@ -135,6 +173,41 @@ function ManagerPropertyPreviewModal({
   const router = useRouter();
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
   const listingId = row?.listingId;
+  const [listingEditorOpen, setListingEditorOpen] = useState(false);
+  const [skuTier, setSkuTier] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setListingEditorOpen(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/manager/subscription", { credentials: "include" });
+        const body = (await res.json()) as { tier?: string | null };
+        if (!cancelled && res.ok) setSkuTier(body.tier ?? null);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const editorInitial = useMemo(() => {
+    if (!listingEditorOpen || !managerUserId || !row) return null;
+    if (bucket === 0) {
+      const p = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
+      return p ? submissionForPendingEdit(p) : null;
+    }
+    if (bucket === 2 && row.listingId) {
+      const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.listingId);
+      return p ? submissionForListedEdit(p) : null;
+    }
+    return null;
+  }, [listingEditorOpen, managerUserId, row, bucket]);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
@@ -147,6 +220,28 @@ function ManagerPropertyPreviewModal({
   };
 
   if (!open || !row || !mock) return null;
+
+  const openInlineEditor = () => {
+    if (!managerUserId) {
+      showToast("Sign in to edit.");
+      return;
+    }
+    if (bucket === 0) {
+      const hit = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
+      if (!hit) {
+        showToast("Could not load this submission.");
+        return;
+      }
+    }
+    if (bucket === 2 && row.listingId) {
+      const hit = readExtraListingsForUser(managerUserId).find((x) => x.id === row.listingId);
+      if (!hit) {
+        showToast("Could not load this listing.");
+        return;
+      }
+    }
+    setListingEditorOpen(true);
+  };
 
   const footer = (
     <div className="flex flex-col gap-2">
@@ -162,19 +257,24 @@ function ManagerPropertyPreviewModal({
       {bucket === 0 ? (
         <>
           <p className="text-xs text-slate-500">
-            Listing approval is handled by Axis admin. You can edit your submission; only admin can approve, request changes, or reject a listing.
+            Listing approval is handled by Axis admin. Edit below without leaving this preview; only admin can approve, request changes, or reject a listing.
           </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full"
-            onClick={() => {
-              onClose();
-              router.push(`/manager/properties?editPending=${encodeURIComponent(row.adminRefId)}`);
-            }}
-          >
-            Edit submission
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={openInlineEditor}>
+              Edit submission
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              onClick={() => {
+                if (!window.confirm("Delete this pending submission? You can create a new listing later.")) return;
+                run("Submission deleted.", deletePendingSubmissionForManager(row.adminRefId, managerUserId));
+              }}
+            >
+              Delete submission
+            </Button>
+          </div>
         </>
       ) : null}
 
@@ -215,15 +315,7 @@ function ManagerPropertyPreviewModal({
           >
             Delete listing
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full"
-            onClick={() => {
-              onClose();
-              router.push(`/manager/properties?editListing=${encodeURIComponent(listingId)}`);
-            }}
-          >
+          <Button type="button" variant="outline" className="rounded-full" onClick={openInlineEditor}>
             Edit listing
           </Button>
         </>
@@ -286,13 +378,32 @@ function ManagerPropertyPreviewModal({
   );
 
   return (
-    <ListingPublicPreviewModal
-      open={open}
-      onClose={onClose}
-      property={mock}
-      publicHref={publicListingHrefForPropertyRow(row)}
-      footer={footer}
-    />
+    <>
+      <ListingPublicPreviewModal
+        open={open}
+        onClose={onClose}
+        property={mock}
+        publicHref={publicListingHrefForPropertyRow(row)}
+        footer={footer}
+      />
+      {listingEditorOpen && editorInitial && managerUserId ? (
+        <ManagerAddListingForm
+          key={`preview-edit-${bucket}-${row.adminRefId}-${row.listingId ?? "pending"}`}
+          showToast={showToast}
+          skuTier={skuTier}
+          propCountBeforeSubmit={countManagerManagedPropertiesForUser(managerUserId)}
+          editPendingId={bucket === 0 ? row.adminRefId : null}
+          editListingId={bucket === 2 && row.listingId ? row.listingId : null}
+          initialSubmission={editorInitial}
+          onClose={() => setListingEditorOpen(false)}
+          onSubmitted={() => {
+            setListingEditorOpen(false);
+            showToast("Listing saved.");
+            onUpdated();
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 

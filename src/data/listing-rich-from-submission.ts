@@ -36,6 +36,14 @@ function splitAmenities(text: string): AmenityItem[] {
   }));
 }
 
+function splitRoomAmenityLines(text: string): string[] {
+  return text
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 24);
+}
+
 function roomHasPrivateBath(roomId: string, sub: ManagerListingSubmissionV1): boolean {
   return sub.bathrooms.some((b) => b.assignedRoomIds?.length === 1 && b.assignedRoomIds[0] === roomId);
 }
@@ -168,10 +176,13 @@ export function listingRichFromManagerSubmission(
     const roomRows: ListingRoomRow[] = rs.map((r) => {
       const setup = roomSetupLine(r, sub);
       const furnish = r.furnishing?.trim();
+      const amenityLabels = splitRoomAmenityLines(r.roomAmenitiesText ?? "");
+      const utilNote = r.utilitiesEstimate?.trim() ? ` · Utilities ~ ${r.utilitiesEstimate.trim()}` : "";
+      const baseTags = roomTags(r, sub);
       return {
         id: r.id,
         name: r.name.trim(),
-        detail: `${r.floor.trim() || "—"} · ${r.detail.trim() || "See room details below."}${furnish ? ` · Furnishing: ${furnish}` : ""}${r.utilitiesEstimate?.trim() ? ` · Utilities ~ ${r.utilitiesEstimate.trim()}` : ""}`,
+        detail: `${r.floor.trim() || "—"} · ${r.detail.trim() || "See room details below."}${utilNote}`,
         price: `$${r.monthlyRent}/month`,
         availability: r.availability.trim() || "Available now",
         modal: {
@@ -181,7 +192,9 @@ export function listingRichFromManagerSubmission(
           tourSubtitle: r.videoDataUrl
             ? "Video submitted with property application."
             : "Add a video in the manager form to replace this placeholder.",
-          includedTags: roomTags(r, sub),
+          includedTags: baseTags,
+          furnishingDetail: furnish || undefined,
+          roomAmenityLabels: amenityLabels.length ? amenityLabels : undefined,
           photoUrls: r.photoDataUrls.length ? r.photoDataUrls : undefined,
           videoSrc: r.videoDataUrl,
         },
@@ -403,9 +416,11 @@ export function listingRichFromManagerSubmission(
       : deriveQuickFacts(sub, rooms, property);
 
   const overview = sub.houseOverview.trim();
+  const rules = sub.houseRulesText.trim();
   return {
     heroTagline: sub.tagline.trim() || property.tagline || "New listing",
     heroOverview: overview || undefined,
+    houseRulesBody: rules || undefined,
     priceRangeLabel: mids.length ? `from $${low}–$${high}/mo` : "—",
     floorPlans:
       floorPlans.length > 0

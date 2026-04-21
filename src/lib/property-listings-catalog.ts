@@ -5,7 +5,7 @@ import { roomMatchesBathroomFilter } from "@/lib/room-listings-catalog";
 
 /**
  * Public catalog: one card per **property** if any room matches geo, budget, and bath filters.
- * Manager → admin approvals append to extras via `readExtraListings()` and appear here automatically.
+ * Manager listings appear after admin approval (`adminPublishLive`); `readExtraListings()` returns only those.
  */
 export function filterPropertiesForCatalog(
   properties: MockProperty[],
