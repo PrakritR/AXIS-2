@@ -78,7 +78,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Your account needs an email before subscribing." }, { status: 400 });
     }
     if (!managerId) {
-      return NextResponse.json({ error: "Your profile is missing a manager ID. Contact support." }, { status: 400 });
+      return NextResponse.json({ error: "Your profile is missing an Axis ID. Contact support." }, { status: 400 });
     }
 
     const stripe = getStripe();

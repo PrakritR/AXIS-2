@@ -11,6 +11,7 @@ import {
   type ManagerSkuTier,
 } from "@/lib/manager-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { reconcileManagerPurchaseWithStripe } from "@/lib/manager-stripe-subscription-sync";
 
 export const runtime = "nodejs";
 
@@ -44,10 +45,23 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
+    try {
+      await reconcileManagerPurchaseWithStripe(user.id);
+    } catch {
+      /* Stripe not configured or transient error — serve last known DB state */
+    }
+
     const { tier, billing, stripeSubscriptionId } = await getManagerPurchaseSku(user.id);
+    const stripeManaged = Boolean(stripeSubscriptionId);
+    const base = subscriptionJson(tier, billing);
+    const missingTier = tier == null || String(tier).trim() === "";
+    /** Treat missing tier row as Free in the plan UI when there is no paid Stripe subscription. */
+    const isFree = base.isFree || (missingTier && !stripeManaged);
+
     return NextResponse.json({
-      ...subscriptionJson(tier, billing),
-      stripeManaged: Boolean(stripeSubscriptionId),
+      ...base,
+      isFree,
+      stripeManaged,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

@@ -10,9 +10,9 @@ import { Suspense, useEffect, useState } from "react";
 
 const LABELS: Record<AuthRole, string> = {
   admin: "Admin portal",
-  manager: "Manager portal",
+  manager: "Axis Pro Portal (management)",
   resident: "Resident portal",
-  owner: "Owner portal",
+  owner: "Axis Pro Portal (ownership)",
 };
 
 function ChoosePortalForm() {

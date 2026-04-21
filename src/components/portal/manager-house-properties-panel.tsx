@@ -45,6 +45,7 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
@@ -433,6 +434,7 @@ function ManagerPropertyPreviewModal({
 }
 
 export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: string) => void }) {
+  const portalBase = usePaidPortalBasePath();
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const [detailRow, setDetailRow] = useState<AdminPropertyRow | null>(null);
@@ -540,7 +542,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
                           {activeBucket === 0 ? (
                             <Link
-                              href={`/manager/properties?editPending=${encodeURIComponent(row.adminRefId)}`}
+                              href={`${portalBase}/properties?editPending=${encodeURIComponent(row.adminRefId)}`}
                               className={`inline-flex items-center justify-center ${PORTAL_TABLE_ROW_TOGGLE_CLASS}`}
                             >
                               Edit

@@ -3,7 +3,7 @@ import type { PortalDefinition } from "@/lib/portal-types";
 export const managerPortal: PortalDefinition = {
   kind: "manager",
   basePath: "/manager",
-  title: "Manager portal",
+  title: "Axis Pro Portal",
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },

@@ -5,8 +5,8 @@ export type AuthRole = "resident" | "manager" | "owner" | "admin";
 /** Default dashboard route after sign-in / create-account. */
 export function portalDashboardPath(role: AuthRole): string {
   if (role === "resident") return "/resident/dashboard";
-  if (role === "manager") return "/manager/dashboard";
-  if (role === "owner") return "/owner/dashboard";
+  if (role === "manager") return "/pro/dashboard";
+  if (role === "owner") return "/pro/dashboard";
   return "/admin/dashboard";
 }
 

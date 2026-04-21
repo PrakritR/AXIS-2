@@ -20,6 +20,7 @@ import {
 import { PRO_MAX_PROPERTIES, proTierPropertyLimitReached } from "@/lib/manager-access";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
@@ -53,6 +54,7 @@ export function ManagerProperties() {
   const { showToast } = useAppUi();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const portalBase = usePaidPortalBasePath();
   const { userId } = useManagerUserId();
   const [formOpen, setFormOpen] = useState(false);
   const [editListingContext, setEditListingContext] = useState<EditListingContext | null>(null);
@@ -107,11 +109,11 @@ export function ManagerProperties() {
       if (row) {
         setEditListingContext({ mode: "pending", id: editPending, submission: submissionForPendingEdit(row) });
         setFormOpen(true);
-        router.replace("/manager/properties", { scroll: false });
+        router.replace(`${portalBase}/properties`, { scroll: false });
         return;
       }
       showToast("Could not load that listing for editing.");
-      router.replace("/manager/properties", { scroll: false });
+      router.replace(`${portalBase}/properties`, { scroll: false });
       return;
     }
 
@@ -120,13 +122,13 @@ export function ManagerProperties() {
       if (hit) {
         setEditListingContext({ mode: "listed", id: editListing, submission: submissionForListedEdit(hit) });
         setFormOpen(true);
-        router.replace("/manager/properties", { scroll: false });
+        router.replace(`${portalBase}/properties`, { scroll: false });
         return;
       }
       showToast("Could not load that listing for editing.");
-      router.replace("/manager/properties", { scroll: false });
+      router.replace(`${portalBase}/properties`, { scroll: false });
     }
-  }, [userId, searchParams, router, showToast]);
+  }, [userId, searchParams, router, showToast, portalBase]);
 
   const atProLimit = skuLoaded && proTierPropertyLimitReached(skuTier, propCount);
 
@@ -196,7 +198,7 @@ export function ManagerProperties() {
         {atProLimit ? (
           <p className="mb-4 rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950">
             You’ve reached the Pro limit of {PRO_MAX_PROPERTIES} properties.{" "}
-            <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href="/manager/plan">
+            <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={`${portalBase}/plan`}>
               Upgrade to Business
             </Link>{" "}
             to add more.

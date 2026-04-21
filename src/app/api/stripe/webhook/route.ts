@@ -2,7 +2,12 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
+import {
+  reconcileManagerPurchaseByStripeSubscriptionId,
+  reconcileManagerPurchaseWithStripe,
+} from "@/lib/manager-stripe-subscription-sync";
 import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-session";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
@@ -66,9 +71,35 @@ export async function POST(req: Request) {
       logCheckoutCompleted(session);
       try {
         await recordPaidManagerCheckoutSession(session);
+        const uid = session.metadata?.userId?.trim();
+        if (uid) {
+          try {
+            await reconcileManagerPurchaseWithStripe(uid);
+          } catch (reconcileErr) {
+            // eslint-disable-next-line no-console -- webhook persistence
+            console.error("[stripe webhook] reconcileManagerPurchaseWithStripe", reconcileErr);
+          }
+        }
       } catch (e) {
         // eslint-disable-next-line no-console -- webhook persistence
         console.error("[stripe webhook] recordPaidManagerCheckoutSession", e);
+      }
+    }
+    if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+      const sub = event.data.object as Stripe.Subscription;
+      try {
+        if (event.type === "customer.subscription.deleted") {
+          const supabase = createSupabaseServiceRoleClient();
+          await supabase
+            .from("manager_purchases")
+            .update({ tier: "free", billing: "free", stripe_subscription_id: null })
+            .eq("stripe_subscription_id", sub.id);
+        } else {
+          await reconcileManagerPurchaseByStripeSubscriptionId(sub.id);
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console -- webhook persistence
+        console.error("[stripe webhook] subscription event", e);
       }
     }
   } catch (e) {

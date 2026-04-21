@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 
-export default function ManagerPortalError({
+export default function ProPortalError({
   error,
   reset,
 }: {

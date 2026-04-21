@@ -15,7 +15,7 @@ export async function ManagerProfile() {
       initialFullName={dash(profile?.full_name)}
       initialEmail={dash(profile?.email ?? user?.email)}
       initialPhone={dash(profile?.phone)}
-      idLabel="Manager ID"
+      idLabel="Axis ID"
       idValue={dash(profile?.manager_id)}
     />
   );

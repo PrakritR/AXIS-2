@@ -26,7 +26,7 @@ type OnboardResponse =
     }
   | { demo: true; message: string; url?: undefined };
 
-export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | "/owner" }) {
+export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | "/owner" | "/pro" }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<ConnectStatus | null>(null);

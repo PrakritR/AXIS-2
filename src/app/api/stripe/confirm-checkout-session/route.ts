@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { reconcileManagerPurchaseWithStripe } from "@/lib/manager-stripe-subscription-sync";
 import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
@@ -37,6 +38,11 @@ export async function POST(req: Request) {
     }
 
     await recordPaidManagerCheckoutSession(session);
+    try {
+      await reconcileManagerPurchaseWithStripe(user.id);
+    } catch {
+      /* best-effort; GET /subscription will retry sync */
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to confirm checkout";

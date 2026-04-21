@@ -1,9 +1,9 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 
-/** Owner portal: same primary navigation as the manager portal where it applies. */
-export const ownerPortal: PortalDefinition = {
-  kind: "owner",
-  basePath: "/owner",
+/** Unified premium workspace — managers and owners share the same navigation and tools. */
+export const proPortal: PortalDefinition = {
+  kind: "pro",
+  basePath: "/pro",
   title: "Axis Pro Portal",
   accent: "blue",
   sections: [
@@ -16,6 +16,14 @@ export const ownerPortal: PortalDefinition = {
       tabs: [
         { id: "ledger", label: "Rent & collections" },
         { id: "stripe", label: "Payouts" },
+      ],
+    },
+    {
+      section: "relationships",
+      label: "Account links",
+      tabs: [
+        { id: "owner", label: "Owner" },
+        { id: "manager", label: "Manager" },
       ],
     },
     { section: "leases", label: "Leases", tabs: [] },

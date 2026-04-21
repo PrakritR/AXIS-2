@@ -19,12 +19,12 @@ type SubPayload = {
   stripeManaged?: boolean;
 };
 
+/** Effective plan for UI selection — unknown / missing tier row defaults to Free (not Pro). */
 function pickerValue(sub: SubPayload | null): ManagerSkuTier {
   if (!sub) return "free";
   const fromTier = normalizeManagerSkuTier(sub.tier);
   if (fromTier) return fromTier;
-  if (sub.isLegacyUnlimited) return "pro";
-  return "pro";
+  return "free";
 }
 
 function tierRank(t: ManagerSkuTier): number {
@@ -50,7 +50,11 @@ function CheckIcon() {
 export function ManagerPlan() {
   const router = useRouter();
   const pathname = usePathname();
-  const planBasePath = pathname.startsWith("/owner") ? "/owner" : "/manager";
+  const planBasePath = pathname.startsWith("/owner")
+    ? "/owner"
+    : pathname.startsWith("/pro")
+      ? "/pro"
+      : "/manager";
   const { showToast } = useAppUi();
   const [sub, setSub] = useState<SubPayload | null>(null);
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
@@ -216,9 +220,7 @@ export function ManagerPlan() {
   const handleTierAction = (target: ManagerSkuTier) => {
     if (!sub || busyTier !== null || billingSyncBusy || billingPortalBusy) return;
 
-    const from = committedTier;
-
-    if (target === from && !sub.isLegacyUnlimited) return;
+    if (target === committedTier) return;
 
     if (target === "free" && !sub.isFree) {
       if (!window.confirm("Switch to the Free plan? Paid features may be limited after you change.")) return;
@@ -252,8 +254,7 @@ export function ManagerPlan() {
     void setTierViaApi(committedTier, { billingInterval: next, billingOnly: true });
   };
 
-  const isCurrent = (id: ManagerSkuTier) =>
-    id === committedTier || (sub?.isLegacyUnlimited && id === "pro" && committedTier === "pro");
+  const isCurrent = (id: ManagerSkuTier) => id === committedTier;
 
   return (
     <ManagerPortalPageShell title="Plan">
@@ -317,8 +318,14 @@ export function ManagerPlan() {
                   ctaLabel = "Switch to Free";
                   showPrimary = false;
                 }
-              } else if (current && sub.stripeManaged) {
-                ctaLabel = billing === "monthly" ? "Current plan (monthly)" : "Current plan (annual)";
+              } else if (current) {
+                const bill = sub.billing?.toLowerCase();
+                const hasInterval = sub.stripeManaged && (bill === "monthly" || bill === "annual");
+                if (hasInterval) {
+                  ctaLabel = bill === "annual" ? "Current plan (annual)" : "Current plan (monthly)";
+                } else {
+                  ctaLabel = `Current plan · ${tierLabel(tierId)}`;
+                }
                 showPrimary = false;
                 ctaDisabled = true;
               } else if (!sub.stripeManaged && (tierId === "pro" || tierId === "business")) {
@@ -333,7 +340,7 @@ export function ManagerPlan() {
                   ctaDisabled = true;
                 }
               } else {
-                ctaLabel = `Choose ${tierLabel(tierId)}`;
+                ctaLabel = `Subscribe · ${tierLabel(tierId)}`;
               }
 
               return (

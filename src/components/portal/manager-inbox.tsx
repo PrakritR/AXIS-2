@@ -7,6 +7,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { demoManagerInboxThreads } from "@/data/demo-portal";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
   MANAGER_INBOX_STORAGE_KEY,
@@ -71,6 +72,7 @@ function seedThreads(): InboxThread[] {
 export function ManagerInbox({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
+  const portalBase = usePaidPortalBasePath();
   const [local, setLocal] = useState<InboxThread[]>(() => seedThreads());
   const [persistReady, setPersistReady] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -168,10 +170,10 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       setLocal((prev) => [row, ...prev]);
       setComposeOpen(false);
       showToast(p.kind === "admin" ? "Message sent to the admin team." : "Message sent.");
-      router.push("/manager/inbox/sent");
+      router.push(`${portalBase}/inbox/sent`);
       router.refresh();
     },
-    [router, showToast],
+    [router, showToast, portalBase],
   );
 
   const refreshInbox = () => {
@@ -208,7 +210,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           activeTone="primary"
           tabs={tabs}
           activeId={tabId}
-          onChange={(id) => router.push(`/manager/inbox/${id}`)}
+          onChange={(id) => router.push(`${portalBase}/inbox/${id}`)}
         />
       }
     >

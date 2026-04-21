@@ -118,7 +118,7 @@ function CreateAccountContent() {
           showToast(body.error ?? "Could not create account.");
           return;
         }
-        showToast(`Account ready. Manager ID ${body.managerId ?? checkoutPreview.managerId}. Sign in with your email.`);
+        showToast(`Account ready. Axis ID ${body.managerId ?? checkoutPreview.managerId}. Sign in with your email.`);
         router.push("/auth/sign-in");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Sign up failed";
@@ -134,10 +134,10 @@ function CreateAccountContent() {
       return;
     }
 
-    // Manager activating via Manager ID (no session)
+    // Paid Axis Pro signup: activate via Axis ID (no checkout session)
     if (role === "manager" && !sessionIdFromUrl) {
       if (!managerIdInput.trim() || !email.trim()) {
-        showToast("Enter your Manager ID and email.");
+        showToast("Enter your Axis ID and email.");
         return;
       }
       if (password.length < 8) {
@@ -157,7 +157,7 @@ function CreateAccountContent() {
         });
         const body = (await res.json()) as { error?: string; managerId?: string };
         if (!res.ok) { showToast(body.error ?? "Could not activate account."); return; }
-        showToast(`Account activated. Manager ID: ${body.managerId ?? managerIdInput}. Sign in with your email.`);
+        showToast(`Account activated. Axis ID: ${body.managerId ?? managerIdInput}. Sign in with your email.`);
         router.push("/auth/sign-in");
       } catch { showToast("Network error."); }
       finally { setBusy(false); }
@@ -293,13 +293,13 @@ function CreateAccountContent() {
           <>
             {isAxisIntentSignup ? (
               <>
-                Your <span className="font-semibold text-slate-800">Manager ID</span> is reserved for this signup—use it
-                like an Application ID when you need support. Set a password below to finish your manager account.
+                Your <span className="font-semibold text-slate-800">Axis ID</span> is reserved for this signup—use it
+                like an Application ID when you need support. Set a password below to finish your Axis Pro account.
               </>
             ) : (
               <>
-                Payment confirmed. Your <span className="font-semibold text-slate-800">Manager ID</span> is tied to this
-                checkout—use it like an Application ID when you need support. Set a password below to finish your manager
+                Payment confirmed. Your <span className="font-semibold text-slate-800">Axis ID</span> is tied to this
+                checkout—use it like an Application ID when you need support. Set a password below to finish your Axis Pro
                 account.
               </>
             )}
@@ -316,7 +316,7 @@ function CreateAccountContent() {
               Partner pricing
             </Link>
             : choose <span className="font-semibold text-slate-800">Free</span> (no payment) or a paid plan (checkout). You
-            will return here with your Manager ID to set your password.
+            will return here with your Axis ID to set your password.
           </>
         ) : role === "owner" ? (
           <>
@@ -346,7 +346,7 @@ function CreateAccountContent() {
           <>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="manager-id">
-                Manager ID
+                Axis ID
               </label>
               <Input
                 id="manager-id"
@@ -410,7 +410,7 @@ function CreateAccountContent() {
           <>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-id-input">
-                Manager ID
+                Axis ID
               </label>
               <Input
                 id="mgr-id-input"
@@ -420,7 +420,7 @@ function CreateAccountContent() {
                 onChange={(e) => setManagerIdInput(e.target.value)}
               />
               <p className="mt-1 text-xs text-slate-400">
-                From your account setup email or the Manager ID page after checkout.
+                From your account setup email or the Axis ID confirmation page after checkout.
               </p>
             </div>
             <div>

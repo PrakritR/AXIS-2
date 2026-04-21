@@ -18,6 +18,7 @@ import {
   loadPersistedInbox,
   persistInbox,
 } from "@/lib/portal-inbox-storage";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 type InboxThread = {
   id: string;
@@ -61,6 +62,7 @@ function countThreads(threads: InboxThread[]) {
 export function OwnerInboxPanel({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
+  const portalBase = usePaidPortalBasePath();
   const [local, setLocal] = useState<InboxThread[]>([]);
   const [persistReady, setPersistReady] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -158,10 +160,10 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
       setLocal((prev) => [row, ...prev]);
       setComposeOpen(false);
       showToast(p.kind === "admin" ? "Message sent to the admin team." : "Message sent.");
-      router.push("/owner/inbox/sent");
+      router.push(`${portalBase}/inbox/sent`);
       router.refresh();
     },
-    [router, showToast],
+    [router, showToast, portalBase],
   );
 
   const refreshInbox = () => {
@@ -198,7 +200,7 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
           activeTone="primary"
           tabs={tabs}
           activeId={tabId}
-          onChange={(id) => router.push(`/owner/inbox/${id}`)}
+          onChange={(id) => router.push(`${portalBase}/inbox/${id}`)}
         />
       }
     >

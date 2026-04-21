@@ -2,9 +2,11 @@ import type { PortalDefinition, PortalKind } from "@/lib/portal-types";
 import { adminPortal } from "./admin";
 import { managerPortal } from "./manager";
 import { ownerPortal } from "./owner";
+import { proPortal } from "./pro";
 import { getResidentPortalDefinition } from "./resident";
 
 const portalsByKind: Record<Exclude<PortalKind, "resident">, PortalDefinition> = {
+  pro: proPortal,
   manager: managerPortal,
   owner: ownerPortal,
   admin: adminPortal,

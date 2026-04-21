@@ -5,7 +5,7 @@ const primaryCta =
   "inline-flex min-h-[44px] items-center justify-center rounded-full bg-primary px-8 text-sm font-semibold text-primary-foreground shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:brightness-[1.04]";
 
 /** Shown when a manager/owner on the Free plan opens a section that requires Pro or Business. */
-export function PortalTierPaywall({ basePath }: { basePath: "/manager" | "/owner" }) {
+export function PortalTierPaywall({ basePath }: { basePath: "/manager" | "/owner" | "/pro" }) {
   return (
     <ManagerPortalPageShell title="Upgrade to Pro">
       <div className="mx-auto max-w-lg space-y-4 text-center">

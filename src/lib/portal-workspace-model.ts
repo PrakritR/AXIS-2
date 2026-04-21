@@ -36,7 +36,17 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
     },
   ];
 
-  if (portal === "manager" || portal === "owner") {
+  if (portal === "manager" || portal === "owner" || portal === "pro") {
+    if (section === "relationships") {
+      return [
+        {
+          label: "Refresh links",
+          kind: "toast",
+          message: "Relationship list refreshed.",
+        },
+        ...common,
+      ];
+    }
     if (section === "properties") {
       if (portal === "owner") {
         return [
@@ -287,7 +297,7 @@ export function buildPortalWorkspaceModel(
   section: string,
   tabId: string,
 ): WorkspaceModel {
-  const eyebrow = `${portal === "manager" ? "Manager" : portal === "owner" ? "Owner" : portal === "resident" ? "Resident" : "Admin"} workspace`;
+  const eyebrow = `${portal === "pro" ? "Axis Pro" : portal === "manager" ? "Manager" : portal === "owner" ? "Owner" : portal === "resident" ? "Resident" : "Admin"} workspace`;
 
   if (section === "dashboard") {
     return {

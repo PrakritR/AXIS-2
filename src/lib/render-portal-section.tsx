@@ -30,9 +30,12 @@ import { PortalSectionSubtabs } from "@/components/portal/portal-section-subtabs
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
+import { ProAccountLinksPanelLoader } from "@/components/portal/pro-account-links-panel";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
 import type { ReactNode } from "react";
+import type { PreviewPortal } from "@/lib/auth/preview-types";
+import { getPortalAccessContext } from "@/lib/auth/portal-access";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { getManagerSubscriptionTier, managerSectionAllowedForTier } from "@/lib/manager-access";
@@ -48,9 +51,11 @@ function subscriptionGated(
   section: string,
   tier: "free" | "paid" | null,
 ): ReactNode {
-  if (kind !== "manager" && kind !== "owner") return node;
+  if (kind !== "manager" && kind !== "owner" && kind !== "pro") return node;
   if (managerSectionAllowedForTier(section, tier)) return node;
-  return <PortalTierPaywall basePath={kind === "owner" ? "/owner" : "/manager"} />;
+  const basePath: "/manager" | "/owner" | "/pro" =
+    kind === "owner" ? "/owner" : kind === "pro" ? "/pro" : "/manager";
+  return <PortalTierPaywall basePath={basePath} />;
 }
 
 export async function renderPortalSection(
@@ -60,11 +65,11 @@ export async function renderPortalSection(
 ) {
   const def = await getPortalDefinition(kind);
 
-  if (kind === "manager" && section === "upgrade") {
+  if ((kind === "manager" || kind === "pro") && section === "upgrade") {
     redirect(`${def.basePath}/plan`);
   }
 
-  if (kind === "manager") {
+  if (kind === "manager" || kind === "pro") {
     if (section === "stripe") redirect(`${def.basePath}/payments/stripe`);
   }
   if (kind === "owner") {
@@ -90,6 +95,12 @@ export async function renderPortalSection(
     managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
   } else if (kind === "owner") {
     const uid = await getEffectiveUserIdForPortal("owner");
+    if (!uid) redirect("/auth/sign-in");
+    managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
+  } else if (kind === "pro") {
+    const proCtx = await getPortalAccessContext();
+    const portalKey: PreviewPortal = proCtx.effectiveRole === "owner" ? "owner" : "manager";
+    const uid = await getEffectiveUserIdForPortal(portalKey);
     if (!uid) redirect("/auth/sign-in");
     managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
   }
@@ -212,6 +223,115 @@ export async function renderPortalSection(
     }
     if (section === "properties") {
       return subscriptionGated(<ManagerProperties />, kind, "properties", managerOwnerSubscriptionTier);
+    }
+    if (section === "applications") {
+      return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);
+    }
+    if (section === "leases") {
+      return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
+    }
+    if (section === "work-orders") {
+      return subscriptionGated(<ManagerWorkOrders />, kind, "work-orders", managerOwnerSubscriptionTier);
+    }
+    if (section === "calendar") {
+      return subscriptionGated(<PortalCalendar portal="manager" />, kind, "calendar", managerOwnerSubscriptionTier);
+    }
+    if (section === "plan") {
+      return subscriptionGated(<ManagerPlan />, kind, "plan", managerOwnerSubscriptionTier);
+    }
+    if (section === "profile") {
+      return subscriptionGated(<ManagerProfile />, kind, "profile", managerOwnerSubscriptionTier);
+    }
+  }
+
+  if (kind === "pro") {
+    const proCtx = await getPortalAccessContext();
+    const useOwnerUi = proCtx.effectiveRole === "owner";
+
+    if (section === "relationships") {
+      if (!meta.tabs.length) notFound();
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+      }
+      const relTab = tabParts[0]!;
+      if (!["owner", "manager"].includes(relTab)) notFound();
+      const relTabs: TabItem[] = meta.tabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        href: `${def.basePath}/${section}/${t.id}`,
+      }));
+      return subscriptionGated(
+        <>
+          <PortalSectionSubtabs tabs={relTabs} activeId={relTab} />
+          <ProAccountLinksPanelLoader mode={relTab === "owner" ? "owner" : "manager"} />
+        </>,
+        kind,
+        "relationships",
+        managerOwnerSubscriptionTier,
+      );
+    }
+
+    if (section === "inbox") {
+      if (!meta.tabs.length) notFound();
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+      }
+      const inboxTab = tabParts[0]!;
+      if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+      return subscriptionGated(
+        useOwnerUi ? (
+          <OwnerInboxPanel tabId={inboxTab} />
+        ) : (
+          <ManagerInbox tabId={inboxTab} />
+        ),
+        kind,
+        "inbox",
+        managerOwnerSubscriptionTier,
+      );
+    }
+    if (section === "payments") {
+      if (!meta.tabs.length) notFound();
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/payments/${meta.tabs[0]!.id}`);
+      }
+      const payTab = tabParts[0]!;
+      if (!["ledger", "stripe"].includes(payTab)) notFound();
+      const paymentTabs: TabItem[] = meta.tabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        href: `${def.basePath}/payments/${t.id}`,
+      }));
+      const inner =
+        payTab === "ledger" ? (
+          <ManagerPayments />
+        ) : (
+          <PortalStripeConnectPanel basePath="/pro" />
+        );
+      return subscriptionGated(
+        <>
+          <PortalSectionSubtabs tabs={paymentTabs} activeId={payTab} />
+          {inner}
+        </>,
+        kind,
+        "payments",
+        managerOwnerSubscriptionTier,
+      );
+    }
+    if (tabParts?.length) notFound();
+    if (section === "dashboard") {
+      return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
+    }
+    if (section === "properties") {
+      return subscriptionGated(
+        useOwnerUi ? (
+          <OwnerProperties />
+        ) : (
+          <ManagerProperties />
+        ),
+        kind,
+        "properties",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (section === "applications") {
       return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);

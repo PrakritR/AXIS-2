@@ -88,15 +88,15 @@ function ManagerIdContent() {
             <circle cx="12" cy="7" r="4" />
           </svg>
         </span>
-        <h1 className="mt-4 text-[22px] font-bold tracking-tight text-[#0f172a]">Manager account reserved</h1>
+        <h1 className="mt-4 text-[22px] font-bold tracking-tight text-[#0f172a]">Axis Pro account reserved</h1>
         {preview.fullName ? (
           <p className="mt-1 text-sm text-slate-500">Welcome, {preview.fullName}</p>
         ) : null}
       </div>
 
-      {/* Manager ID display */}
+      {/* Axis ID display */}
       <div className="mt-7 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Your Manager ID</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Your Axis ID</p>
         <div className="mt-2 flex items-center justify-between gap-3">
           <p className="font-mono text-2xl font-bold tracking-wide text-[#0d1f4e]">{preview.managerId}</p>
           <button
@@ -113,9 +113,9 @@ function ManagerIdContent() {
       {/* Steps */}
       <div className="mt-7 space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400 mb-4">Account setup steps</p>
-        <Step n={1} label="Reserve your Manager ID" done />
+        <Step n={1} label="Reserve your Axis ID" done />
         <Step n={2} label="Set a password to activate your portal" />
-        <Step n={3} label="Sign in to your manager portal" />
+        <Step n={3} label="Sign in to Axis Pro Portal" />
       </div>
 
       <button

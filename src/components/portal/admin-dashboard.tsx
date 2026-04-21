@@ -64,8 +64,7 @@ export function AdminDashboard() {
           showToast(body.error ?? "Could not start preview.");
           return;
         }
-        const path =
-          portal === "manager" ? "/manager/dashboard" : portal === "resident" ? "/resident/dashboard" : "/owner/dashboard";
+        const path = portal === "resident" ? "/resident/dashboard" : "/pro/dashboard";
         router.push(path);
         router.refresh();
       } catch {
@@ -136,7 +135,7 @@ export function AdminDashboard() {
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
         <div className="mt-6 grid gap-8 lg:grid-cols-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Manager portal</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Axis Pro Portal</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <select
                 aria-label="Manager preview"

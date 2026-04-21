@@ -12,6 +12,7 @@ import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import { householdChargeToLedgerRow, HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
@@ -22,6 +23,7 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
 export function ManagerPayments() {
   const { showToast } = useAppUi();
   const { userId } = useManagerUserId();
+  const portalBase = usePaidPortalBasePath();
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [hcTick, setHcTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
@@ -79,7 +81,7 @@ export function ManagerPayments() {
         <div className="flex flex-col gap-4">
           <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
             <span className="font-semibold text-slate-900">Receiving rent & fees:</span> complete payout setup on the{" "}
-            <Link href="/manager/payments/stripe" className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90">
+            <Link href={`${portalBase}/payments/stripe`} className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90">
               Payouts
             </Link>{" "}
             tab so funds can route to your bank when billing goes live.

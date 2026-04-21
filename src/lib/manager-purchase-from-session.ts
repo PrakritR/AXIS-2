@@ -51,12 +51,15 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
         ? subscriptionRaw.id
         : null;
 
+  const tierMeta = session.metadata?.tier?.trim().toLowerCase() || null;
+  const billingMeta = session.metadata?.billing?.trim().toLowerCase() || null;
+
   const patch = {
     stripe_checkout_session_id: session.id,
     stripe_customer_id: customerId,
     stripe_subscription_id: subscriptionId,
-    tier: session.metadata?.tier ?? null,
-    billing: session.metadata?.billing ?? null,
+    tier: tierMeta,
+    billing: billingMeta,
     promo_code: session.metadata?.promo ?? null,
     paid_at: new Date().toISOString(),
     full_name: session.metadata?.full_name?.trim() || null,
@@ -101,8 +104,8 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
         stripe_subscription_id: subscriptionId,
         email,
         manager_id: managerId,
-        tier: session.metadata?.tier ?? null,
-        billing: session.metadata?.billing ?? null,
+        tier: tierMeta,
+        billing: billingMeta,
         promo_code: session.metadata?.promo ?? null,
         paid_at: new Date().toISOString(),
         full_name: session.metadata?.full_name?.trim() || null,
