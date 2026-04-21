@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useState } from "react";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,45 @@ import {
   type ManagerSharedSpaceSubmission,
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
+import {
+  LISTING_AMENITY_PRESETS,
+  ROOM_AMENITY_PRESETS,
+  ROOM_AVAILABILITY_OPTIONS,
+  ROOM_FURNISHING_OPTIONS,
+  furnishingSelectState,
+  mergeToggleLine,
+  splitLineList,
+} from "@/data/manager-listing-presets";
+
+const selectInputCls =
+  "min-h-[44px] w-full rounded-xl border border-black/[0.08] bg-black/[0.04] px-3.5 py-2.5 text-[14px] text-[#1d1d1f] outline-none transition focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/20";
+
+const LISTING_AMENITY_LABEL_SET = new Set(LISTING_AMENITY_PRESETS.map((p) => p.label));
+const ROOM_AMENITY_LABEL_SET = new Set(ROOM_AMENITY_PRESETS.map((p) => p.label));
+
+/** Lines in `fullText` that are not preset labels (free-form additions). */
+function extraLinesOutsidePresetSet(fullText: string, presetSet: Set<string>): string {
+  return splitLineList(fullText)
+    .filter((l) => !presetSet.has(l))
+    .join("\n");
+}
+
+/** Replace non-preset lines while keeping preset lines exactly as they appear in `fullText`. */
+function setExtraLinesPreservingPresets(fullText: string, extraRaw: string, presetSet: Set<string>): string {
+  const presetLines = splitLineList(fullText).filter((l) => presetSet.has(l));
+  const extraLines = splitLineList(extraRaw);
+  return [...new Set([...presetLines, ...extraLines])].join("\n");
+}
+
+function FormSection({ id, title, description, children }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode }) {
+  return (
+    <section id={id} className="mb-6 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm sm:p-6">
+      <h3 className="text-base font-bold tracking-tight text-slate-900">{title}</h3>
+      {description ? <div className="mt-1 text-sm text-slate-600">{description}</div> : null}
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
 
 function togglePaymentAtSigning(
   current: PaymentAtSigningOptionId[],
@@ -193,6 +232,20 @@ export function ManagerAddListingForm({
         return { ...ss, roomAccessIds: s.rooms.map((r) => r.id).filter((id) => set.has(id)) };
       });
       return { ...s, sharedSpaces };
+    });
+  };
+
+  const toggleBundleRoom = (bundleIndex: number, roomId: string, on: boolean) => {
+    setSub((s) => {
+      const bundles = [...(s.bundles ?? [])];
+      const cur = bundles[bundleIndex];
+      if (!cur) return s;
+      const nextSet = new Set(cur.includedRoomIds ?? []);
+      if (on) nextSet.add(roomId);
+      else nextSet.delete(roomId);
+      const includedRoomIds = s.rooms.map((r) => r.id).filter((id) => nextSet.has(id));
+      bundles[bundleIndex] = { ...cur, includedRoomIds };
+      return { ...s, bundles };
     });
   };
 
@@ -369,218 +422,263 @@ export function ManagerAddListingForm({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
-          <section className="border-b border-slate-100 py-8 first:pt-0" id="edit-building"><div className="mb-4"><h3 className="text-base font-bold tracking-tight text-slate-900">Building &amp; listing</h3></div><div className="space-y-0">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <FieldLabel>Building name *</FieldLabel>
-                  <Input value={sub.buildingName} onChange={(e) => setSub((s) => ({ ...s, buildingName: e.target.value }))} placeholder="e.g. Pioneer Collective" />
-                </div>
-                <div className="sm:col-span-2">
-                  <FieldLabel>Street address *</FieldLabel>
-                  <Input value={sub.address} onChange={(e) => setSub((s) => ({ ...s, address: e.target.value }))} />
-                </div>
-                <div>
-                  <FieldLabel>ZIP *</FieldLabel>
-                  <Input value={sub.zip} onChange={(e) => setSub((s) => ({ ...s, zip: e.target.value }))} maxLength={10} />
-                </div>
-                <div>
-                  <FieldLabel>Neighborhood *</FieldLabel>
-                  <Input value={sub.neighborhood} onChange={(e) => setSub((s) => ({ ...s, neighborhood: e.target.value }))} />
-                </div>
-                <div className="sm:col-span-2">
-                  <FieldLabel>Listing tagline</FieldLabel>
-                  <Input value={sub.tagline} onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))} placeholder="Short headline for search cards" />
-                </div>
-                <div className="sm:col-span-2">
-                  <FieldLabel hint="Shown on the listing — describe the home, culture, and who it is good for.">House overview</FieldLabel>
-                  <Textarea
-                    className="min-h-[100px]"
-                    value={sub.houseOverview}
-                    onChange={(e) => setSub((s) => ({ ...s, houseOverview: e.target.value }))}
-                    placeholder="Full description of the house, co-living setup, and what applicants should know."
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <FieldLabel hint="Shown on the public listing under the House rules tab (quiet hours, guests, smoking, shared spaces).">
-                    House rules
-                  </FieldLabel>
-                  <Textarea
-                    className="min-h-[88px]"
-                    value={sub.houseRulesText}
-                    onChange={(e) => setSub((s) => ({ ...s, houseRulesText: e.target.value }))}
-                    placeholder="e.g. Quiet hours 10pm–8am · No smoking indoors · Label your food in shared refrigerators"
-                  />
-                </div>
+          <FormSection
+            id="edit-building"
+            title="Building & listing"
+            description="Legal address and marketing copy for search and the listing page."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <FieldLabel>Building name *</FieldLabel>
+                <Input value={sub.buildingName} onChange={(e) => setSub((s) => ({ ...s, buildingName: e.target.value }))} placeholder="e.g. Pioneer Collective" />
               </div>
-          </div>
-          </section>
-
-            <section className="border-b border-slate-100 py-8" id="edit-lease"><h3 className="mb-4 text-base font-bold tracking-tight text-slate-900">Lease basics</h3><div className="space-y-6">
-              <div className="space-y-3">
-                <div>
-                  <FieldLabel>Lease terms & lengths</FieldLabel>
-                  <Textarea className="min-h-[72px]" value={sub.leaseTermsBody} onChange={(e) => setSub((s) => ({ ...s, leaseTermsBody: e.target.value }))} />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <FieldLabel>Application fee</FieldLabel>
-                    <Input value={sub.applicationFee} onChange={(e) => setSub((s) => ({ ...s, applicationFee: e.target.value }))} />
-                  </div>
-                  <div>
-                    <FieldLabel>Security deposit</FieldLabel>
-                    <Input value={sub.securityDeposit} onChange={(e) => setSub((s) => ({ ...s, securityDeposit: e.target.value }))} />
-                  </div>
-                  <div>
-                    <FieldLabel>Move-in fee</FieldLabel>
-                    <Input value={sub.moveInFee} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <FieldLabel hint="Select every charge collected when the lease is signed. Totals use your amounts below and per-room rent / utilities.">
-                      Payment due at signing
-                    </FieldLabel>
-                    <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-                      {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
-                        <label key={opt.id} className="flex cursor-pointer items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-slate-300"
-                            checked={sub.paymentAtSigningIncludes.includes(opt.id)}
-                            onChange={(e) =>
-                              setSub((s) => ({
-                                ...s,
-                                paymentAtSigningIncludes: togglePaymentAtSigning(
-                                  s.paymentAtSigningIncludes,
-                                  opt.id,
-                                  e.target.checked,
-                                ),
-                              }))
-                            }
-                          />
-                          <span className="text-sm font-medium text-slate-800">{opt.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+              <div className="sm:col-span-2">
+                <FieldLabel>Street address *</FieldLabel>
+                <Input value={sub.address} onChange={(e) => setSub((s) => ({ ...s, address: e.target.value }))} />
               </div>
-
-              <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Bundles (public listing)</p>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Optional rows for the “Bundles & leasing” table. Leave this empty and the listing will auto-build one summary from the{" "}
-                    <span className="font-medium">Rooms</span> section, with per-room rent and utilities on the detail line.
-                  </p>
-                </div>
-                {(sub.bundles ?? []).map((bundle, i) => (
-                  <div key={bundle.id} className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-slate-900">Bundle row {i + 1}</p>
-                      <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBundle(i)}>
-                        Remove
-                      </button>
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Shown in the Bundle column.">Bundle name</FieldLabel>
-                        <Input value={bundle.label} onChange={(e) => setBundle(i, { label: e.target.value })} placeholder="e.g. Standard lease package" />
-                      </div>
-                      <div>
-                        <FieldLabel hint="e.g. from $899/mo">Price line</FieldLabel>
-                        <Input value={bundle.price} onChange={(e) => setBundle(i, { price: e.target.value })} placeholder="from $899/mo" />
-                      </div>
-                      <div>
-                        <FieldLabel>Optional compare-at price</FieldLabel>
-                        <Input value={bundle.strikethrough} onChange={(e) => setBundle(i, { strikethrough: e.target.value })} placeholder="$999/mo" />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Shown as the Offer column when set.">Offer / promo</FieldLabel>
-                        <Input value={bundle.promo} onChange={(e) => setBundle(i, { promo: e.target.value })} placeholder="First month concession, etc." />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Secondary line under the bundle name — scope, rooms, or notes.">
-                          Scope / rooms line
-                        </FieldLabel>
-                        <Textarea
-                          className="min-h-[56px]"
-                          value={bundle.roomsLine}
-                          onChange={(e) => setBundle(i, { roomsLine: e.target.value })}
-                          placeholder="Which rooms or what is included. Leave blank to pull text from each room’s rent, utilities, and furnishing."
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addBundle}>
-                  + Add bundle row
-                </Button>
+              <div>
+                <FieldLabel>ZIP *</FieldLabel>
+                <Input value={sub.zip} onChange={(e) => setSub((s) => ({ ...s, zip: e.target.value }))} maxLength={10} />
+              </div>
+              <div>
+                <FieldLabel>Neighborhood *</FieldLabel>
+                <Input value={sub.neighborhood} onChange={(e) => setSub((s) => ({ ...s, neighborhood: e.target.value }))} />
+              </div>
+              <div className="sm:col-span-2">
+                <FieldLabel>Listing tagline</FieldLabel>
+                <Input value={sub.tagline} onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))} placeholder="Short headline for search cards" />
+              </div>
+              <div className="sm:col-span-2">
+                <FieldLabel hint="Shown on the listing — describe the home, culture, and who it is good for.">House overview</FieldLabel>
+                <Textarea
+                  className="min-h-[100px]"
+                  value={sub.houseOverview}
+                  onChange={(e) => setSub((s) => ({ ...s, houseOverview: e.target.value }))}
+                  placeholder="Full description of the house, co-living setup, and what applicants should know."
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <FieldLabel hint="Shown on the public listing under the House rules tab (quiet hours, guests, smoking, shared spaces).">
+                  House rules
+                </FieldLabel>
+                <Textarea
+                  className="min-h-[88px]"
+                  value={sub.houseRulesText}
+                  onChange={(e) => setSub((s) => ({ ...s, houseRulesText: e.target.value }))}
+                  placeholder="e.g. Quiet hours 10pm–8am · No smoking indoors · Label your food in shared refrigerators"
+                />
               </div>
             </div>
-          </section>
+          </FormSection>
 
-            <section className="border-b border-slate-100 py-8" id="edit-zelle"><h3 className="mb-4 text-base font-bold tracking-tight text-slate-900">Zelle &amp; payments</h3>
-              <p className="text-sm text-slate-600">
-                Applicants and residents can pay via Zelle using the contact you provide. You mark payments in the manager Payments tab.
-              </p>
-              <div className="mt-4 space-y-3">
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-4 w-4 rounded border-slate-300"
-                    checked={sub.zellePaymentsEnabled ?? false}
-                    onChange={(e) => setSub((s) => ({ ...s, zellePaymentsEnabled: e.target.checked }))}
-                  />
-                  <span className="text-sm font-medium text-slate-800">Accept application fees and rent through Zelle</span>
-                </label>
+          <FormSection
+            id="edit-lease"
+            title="Lease, fees & signing"
+            description={
+              <>
+                Application, deposit, and signing-day charges. <span className="font-medium text-slate-700">Leave a money field blank or $0 if it does not apply</span> — those
+                lines stay off the public “Lease basics” table.
+              </>
+            }
+          >
+            <div className="space-y-6">
+              <div>
+                <FieldLabel>Lease terms & lengths</FieldLabel>
+                <Textarea className="min-h-[72px]" value={sub.leaseTermsBody} onChange={(e) => setSub((s) => ({ ...s, leaseTermsBody: e.target.value }))} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <FieldLabel hint="Phone number or email for your Zelle account.">Zelle phone or email</FieldLabel>
-                  <Input
-                    value={sub.zelleContact ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, zelleContact: e.target.value }))}
-                    placeholder="+1 555 010 8899 or name@email.com"
-                    disabled={!(sub.zellePaymentsEnabled ?? false)}
-                  />
+                  <FieldLabel hint='e.g. "$50" or "Waived"'>Application fee</FieldLabel>
+                  <Input value={sub.applicationFee} onChange={(e) => setSub((s) => ({ ...s, applicationFee: e.target.value }))} placeholder="$50 or Waived" />
                 </div>
-              </div>
-            </section>
-
-            <section className="border-b border-slate-100 py-8" id="edit-costs"><h3 className="mb-4 text-base font-bold tracking-tight text-slate-900">House costs</h3>
-              <div className="space-y-3">
                 <div>
-                  <FieldLabel hint="Explain all recurring and one-time housing costs.">Cost summary</FieldLabel>
-                  <Textarea className="min-h-[80px]" value={sub.houseCostsDetail} onChange={(e) => setSub((s) => ({ ...s, houseCostsDetail: e.target.value }))} />
+                  <FieldLabel>Security deposit</FieldLabel>
+                  <Input value={sub.securityDeposit} onChange={(e) => setSub((s) => ({ ...s, securityDeposit: e.target.value }))} placeholder="$500" />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <FieldLabel>Parking (monthly)</FieldLabel>
-                    <Input value={sub.parkingMonthly} onChange={(e) => setSub((s) => ({ ...s, parkingMonthly: e.target.value }))} placeholder="— or $ amount" />
-                  </div>
-                  <div>
-                    <FieldLabel>HOA / community</FieldLabel>
-                    <Input value={sub.hoaMonthly} onChange={(e) => setSub((s) => ({ ...s, hoaMonthly: e.target.value }))} />
-                  </div>
-                  <div>
-                    <FieldLabel>Other fees</FieldLabel>
-                    <Input value={sub.otherMonthlyFees} onChange={(e) => setSub((s) => ({ ...s, otherMonthlyFees: e.target.value }))} />
+                <div>
+                  <FieldLabel>Move-in fee</FieldLabel>
+                  <Input value={sub.moveInFee} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} placeholder="$100 or —" />
+                </div>
+                <div className="sm:col-span-2">
+                  <FieldLabel hint="Select every charge collected when the lease is signed. Totals use your amounts below and per-room rent / utilities.">
+                    Payment due at signing
+                  </FieldLabel>
+                  <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                    {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
+                      <label key={opt.id} className="flex cursor-pointer items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={sub.paymentAtSigningIncludes.includes(opt.id)}
+                          onChange={(e) =>
+                            setSub((s) => ({
+                              ...s,
+                              paymentAtSigningIncludes: togglePaymentAtSigning(s.paymentAtSigningIncludes, opt.id, e.target.checked),
+                            }))
+                          }
+                        />
+                        <span className="text-sm font-medium text-slate-800">{opt.label}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
               </div>
-            </section>
+            </div>
+          </FormSection>
 
-            <section className="border-b border-slate-100 py-8" id="edit-rooms"><div className="space-y-2">
-              <h3 className="text-sm font-bold tracking-tight text-slate-900">Rooms</h3>
-              <p className="text-sm text-slate-600">
-                Add each rentable room, <span className="font-medium">monthly rent</span>, and <span className="font-medium">utilities estimate</span> (per
-                room). Which bathroom each room uses is set in the <span className="font-medium">Bathrooms</span> section below — no need to repeat that here.
-              </p>
-              <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-                <p className="text-sm text-slate-500">Each room can include photos and one optional video for the listing.</p>
-                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addRoom}>
-                  + Add room
-                </Button>
+          <FormSection
+            id="edit-bundles"
+            title="Bundles & leasing"
+            description={
+              <>
+                Optional packages on the public “Bundles & leasing” section. Choose rooms per bundle below. Leave everything empty to auto-build one summary from{" "}
+                <span className="font-medium text-slate-800">Rooms</span>.
+              </>
+            }
+          >
+            <div className="space-y-4">
+              {(sub.bundles ?? []).map((bundle, i) => (
+                <div key={bundle.id} className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <p className="text-sm font-semibold text-slate-900">Bundle {i + 1}</p>
+                    <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBundle(i)}>
+                      Remove
+                    </button>
+                  </div>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <FieldLabel hint="Shown in the Bundle column.">Bundle name</FieldLabel>
+                      <Input value={bundle.label} onChange={(e) => setBundle(i, { label: e.target.value })} placeholder="e.g. Standard lease package" />
+                    </div>
+                    <div>
+                      <FieldLabel hint="e.g. from $899/mo">Price line</FieldLabel>
+                      <Input value={bundle.price} onChange={(e) => setBundle(i, { price: e.target.value })} placeholder="from $899/mo" />
+                    </div>
+                    <div>
+                      <FieldLabel>Optional compare-at price</FieldLabel>
+                      <Input value={bundle.strikethrough} onChange={(e) => setBundle(i, { strikethrough: e.target.value })} placeholder="$999/mo" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <FieldLabel hint="Shown as the Offer column when set.">Offer / promo</FieldLabel>
+                      <Input value={bundle.promo} onChange={(e) => setBundle(i, { promo: e.target.value })} placeholder="First month concession, etc." />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <FieldLabel hint="Checked rooms appear under this bundle on the listing. Add rooms in the Rooms section first.">
+                        Rooms in this bundle
+                      </FieldLabel>
+                      {sub.rooms.filter((r) => r.name.trim()).length === 0 ? (
+                        <p className="mt-2 rounded-lg border border-dashed border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-950">
+                          Name at least one room below (Rooms section) to pick it here.
+                        </p>
+                      ) : (
+                        <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
+                          {sub.rooms.map((room) => (
+                            <label key={`${bundle.id}-br-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300"
+                                checked={(bundle.includedRoomIds ?? []).includes(room.id)}
+                                onChange={(e) => toggleBundleRoom(i, room.id, e.target.checked)}
+                              />
+                              <span className="font-medium text-slate-800">{room.name.trim()}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="sm:col-span-2">
+                      <FieldLabel hint="Overrides auto-generated room names only when you need extra wording.">Scope notes (optional)</FieldLabel>
+                      <Textarea
+                        className="min-h-[56px]"
+                        value={bundle.roomsLine}
+                        onChange={(e) => setBundle(i, { roomsLine: e.target.value })}
+                        placeholder="Optional · e.g. Flexible dates · Combine with Room B only"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addBundle}>
+                + Add bundle
+              </Button>
+            </div>
+          </FormSection>
+
+          <FormSection
+            id="edit-zelle"
+            title="Zelle & payments"
+            description="Applicants and residents can pay via Zelle using the contact you provide. You mark payments in the manager Payments tab."
+          >
+            <div className="space-y-3">
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                  checked={sub.zellePaymentsEnabled ?? false}
+                  onChange={(e) => setSub((s) => ({ ...s, zellePaymentsEnabled: e.target.checked }))}
+                />
+                <span className="text-sm font-medium text-slate-800">Accept application fees and rent through Zelle</span>
+              </label>
+              <div>
+                <FieldLabel hint="Phone number or email for your Zelle account.">Zelle phone or email</FieldLabel>
+                <Input
+                  value={sub.zelleContact ?? ""}
+                  onChange={(e) => setSub((s) => ({ ...s, zelleContact: e.target.value }))}
+                  placeholder="+1 555 010 8899 or name@email.com"
+                  disabled={!(sub.zellePaymentsEnabled ?? false)}
+                />
               </div>
-              <div className="space-y-6">
-                {sub.rooms.map((room, i) => (
+            </div>
+          </FormSection>
+
+          <FormSection
+            id="edit-costs"
+            title="House costs"
+            description="Recurring fees. Leave blank or $0 for items that do not apply — they are hidden on the public lease summary."
+          >
+            <div className="space-y-3">
+              <div>
+                <FieldLabel hint="Explain all recurring and one-time housing costs.">Cost summary</FieldLabel>
+                <Textarea className="min-h-[80px]" value={sub.houseCostsDetail} onChange={(e) => setSub((s) => ({ ...s, houseCostsDetail: e.target.value }))} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <FieldLabel>Parking (monthly)</FieldLabel>
+                  <Input value={sub.parkingMonthly} onChange={(e) => setSub((s) => ({ ...s, parkingMonthly: e.target.value }))} placeholder="$150 or —" />
+                </div>
+                <div>
+                  <FieldLabel>HOA / community</FieldLabel>
+                  <Input value={sub.hoaMonthly} onChange={(e) => setSub((s) => ({ ...s, hoaMonthly: e.target.value }))} placeholder="$0 = not shown on listing" />
+                </div>
+                <div>
+                  <FieldLabel>Other fees</FieldLabel>
+                  <Input value={sub.otherMonthlyFees} onChange={(e) => setSub((s) => ({ ...s, otherMonthlyFees: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+          </FormSection>
+
+          <FormSection
+            id="edit-rooms"
+            title="Rooms"
+            description={
+              <>
+                Add each rentable room, <span className="font-medium text-slate-800">monthly rent</span>, and{" "}
+                <span className="font-medium text-slate-800">utilities estimate</span> (per room). Bathroom assignment is in{" "}
+                <span className="font-medium text-slate-800">Bathrooms</span> below — no need to repeat it here.
+              </>
+            }
+          >
+            <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+              <p className="text-sm text-slate-500">Each room can include photos and one optional video for the listing.</p>
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addRoom}>
+                + Add room
+              </Button>
+            </div>
+            <div className="space-y-6">
+              {sub.rooms.map((room, i) => {
+                const furnishState = furnishingSelectState(room.furnishing);
+                return (
                   <div key={room.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-bold text-slate-900">Room {i + 1}</p>
@@ -614,8 +712,18 @@ export function ManagerAddListingForm({
                         />
                       </div>
                       <div>
-                        <FieldLabel>Availability</FieldLabel>
-                        <Input value={room.availability} onChange={(e) => setRoom(i, { availability: e.target.value })} />
+                        <FieldLabel hint="Pick a preset or type your own.">Availability</FieldLabel>
+                        <Input
+                          value={room.availability}
+                          onChange={(e) => setRoom(i, { availability: e.target.value })}
+                          list={`room-avail-${room.id}`}
+                          placeholder="Available now"
+                        />
+                        <datalist id={`room-avail-${room.id}`}>
+                          {ROOM_AVAILABILITY_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt} />
+                          ))}
+                        </datalist>
                       </div>
                       <div>
                         <FieldLabel hint="Monthly estimate for this room (used on the listing and in signing totals).">
@@ -628,22 +736,68 @@ export function ManagerAddListingForm({
                         />
                       </div>
                       <div>
-                        <FieldLabel hint="Furnished, semi-furnished, or what is included in this room.">Furnishing</FieldLabel>
-                        <Input
-                          value={room.furnishing}
-                          onChange={(e) => setRoom(i, { furnishing: e.target.value })}
-                          placeholder="e.g. Queen bed, desk, unfurnished"
-                        />
+                        <FieldLabel hint="Preset or describe what is included in this room.">Furnishing</FieldLabel>
+                        <select
+                          className={selectInputCls}
+                          value={furnishState.select}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === "__custom__") setRoom(i, { furnishing: furnishState.custom });
+                            else setRoom(i, { furnishing: v });
+                          }}
+                        >
+                          {ROOM_FURNISHING_OPTIONS.map((o) => (
+                            <option key={o.value || "blank"} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {furnishState.select === "__custom__" ? (
+                        <div className="sm:col-span-2">
+                          <FieldLabel hint="Shown on the listing when furnishing is not a simple preset.">Custom furnishing details</FieldLabel>
+                          <Textarea
+                            className="min-h-[56px]"
+                            value={room.furnishing}
+                            onChange={(e) => setRoom(i, { furnishing: e.target.value })}
+                            placeholder="e.g. Queen bed, desk, dresser — tenant brings linens"
+                          />
+                        </div>
+                      ) : null}
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="Toggle common items; add anything else on the lines below.">Room amenities</FieldLabel>
+                        <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
+                          {ROOM_AMENITY_PRESETS.map((p) => {
+                            const on = splitLineList(room.roomAmenitiesText).includes(p.label);
+                            return (
+                              <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-slate-300"
+                                  checked={on}
+                                  onChange={(e) =>
+                                    setRoom(i, {
+                                      roomAmenitiesText: mergeToggleLine(room.roomAmenitiesText, p.label, e.target.checked),
+                                    })
+                                  }
+                                />
+                                <span className="font-medium text-slate-800">{p.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Extra room features as their own chips on the listing (one per line or comma-separated).">
-                          Room amenities
-                        </FieldLabel>
+                        <FieldLabel hint="One per line — merged with the checkboxes above on the public listing.">Additional amenities</FieldLabel>
                         <Textarea
-                          className="min-h-[72px]"
-                          value={room.roomAmenitiesText}
-                          onChange={(e) => setRoom(i, { roomAmenitiesText: e.target.value })}
-                          placeholder="Walk-in closet, USB outlets, blackout shades, mini fridge, ceiling fan…"
+                          className="min-h-[56px]"
+                          value={extraLinesOutsidePresetSet(room.roomAmenitiesText, ROOM_AMENITY_LABEL_SET)}
+                          onChange={(e) =>
+                            setRoom(i, {
+                              roomAmenitiesText: setExtraLinesPreservingPresets(room.roomAmenitiesText, e.target.value, ROOM_AMENITY_LABEL_SET),
+                            })
+                          }
+                          placeholder="Anything not in the list — e.g. Window AC unit, Murphy bed…"
                         />
                       </div>
                       <div className="sm:col-span-2">
@@ -737,17 +891,16 @@ export function ManagerAddListingForm({
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          </section>
+          </FormSection>
 
-            <section className="border-b border-slate-100 py-8" id="edit-bath"><div className="space-y-2">
-              <h3 className="text-sm font-bold tracking-tight text-slate-900">Bathrooms</h3>
-              <p className="text-sm text-slate-600">
-                For each bathroom, select which rooms use it. A room can only be on one bathroom; a single room on a bath means a private / en-suite
-                bath. This replaces typing the same info twice.
-              </p>
+          <FormSection
+            id="edit-bath"
+            title="Bathrooms"
+            description="For each bathroom, select which rooms use it. One room per bathroom means a private / en-suite bath — you do not need to repeat that in the room block."
+          >
               <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                 <p className="text-sm text-slate-500">Shown in the Bathrooms section on the public listing.</p>
                 <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addBathroom}>
@@ -813,15 +966,13 @@ export function ManagerAddListingForm({
                 ))}
               </div>
               )}
-            </div>
-          </section>
+          </FormSection>
 
-            <section className="border-b border-slate-100 py-8" id="edit-shared"><div className="space-y-2">
-              <h3 className="text-sm font-bold tracking-tight text-slate-900">Shared spaces</h3>
-              <p className="text-sm text-slate-600">
-                Add each common area (kitchen, laundry, yard, etc.), then choose which bedrooms have access. A room can access multiple spaces
-                (unlike bathrooms, where each room is assigned to one bath).
-              </p>
+          <FormSection
+            id="edit-shared"
+            title="Shared spaces"
+            description="Add each common area (kitchen, laundry, yard, etc.), then choose which bedrooms have access. A room can access multiple spaces."
+          >
               <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                 <p className="text-sm text-slate-500">Shown as separate rows on the public listing.</p>
                 <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addSharedSpace}>
@@ -882,17 +1033,14 @@ export function ManagerAddListingForm({
                   ))}
                 </div>
               )}
-            </div>
-          </section>
+          </FormSection>
 
-            <section className="border-b border-slate-100 py-8" id="edit-quick-facts"><div className="space-y-4">
-              <div>
-                <h3 className="text-base font-bold tracking-tight text-slate-900">Quick facts (sidebar)</h3>
-                <p className="mt-1 text-sm text-slate-600">
-                  Optional. When you add rows here, they replace the auto-generated sidebar facts on the public listing. Leave empty to derive from your
-                  building and room data.
-                </p>
-              </div>
+          <FormSection
+            id="edit-quick-facts"
+            title="Quick facts (sidebar)"
+            description="Optional. Rows here replace the auto-generated sidebar on the public listing. Leave empty to derive from building and room data."
+          >
+            <div className="space-y-4">
               {(sub.quickFacts ?? []).map((qf, i) => (
                 <div key={qf.id} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
                   <div>
@@ -911,15 +1059,20 @@ export function ManagerAddListingForm({
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addQuickFact}>
                 + Add quick fact
               </Button>
-            </div></section>
+            </div>
+          </FormSection>
 
-            <section className="py-8" id="edit-amenities"><div className="space-y-5">
-              <div>
-                <h3 className="text-lg font-bold tracking-tight text-slate-900">Amenities</h3>
-                <p className="mt-1 text-sm text-slate-600">
-                  House-wide amenities for the listing grid. Per-room furnishing belongs in the <span className="font-medium">Rooms</span> section above.
-                </p>
-              </div>
+          <FormSection
+            id="edit-amenities"
+            title="Amenities"
+            description={
+              <>
+                House-wide amenities for the listing grid. Per-room features and furnishing belong in{" "}
+                <span className="font-medium text-slate-800">Rooms</span> above.
+              </>
+            }
+          >
+            <div className="space-y-4">
               <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
                 <input
                   type="checkbox"
@@ -930,12 +1083,45 @@ export function ManagerAddListingForm({
                 <span className="text-sm font-medium text-slate-800">Pet-friendly (subject to approval)</span>
               </label>
               <div>
-                <FieldLabel hint="One per line or comma-separated — drives the Amenities section on the public listing.">
-                  Amenities list
-                </FieldLabel>
-                <Textarea className="mt-3 min-h-[140px]" value={sub.amenitiesText} onChange={(e) => setSub((s) => ({ ...s, amenitiesText: e.target.value }))} />
+                <FieldLabel hint="Tap to add common amenities; anything else goes in the box below.">Common amenities</FieldLabel>
+                <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {LISTING_AMENITY_PRESETS.map((p) => {
+                    const on = splitLineList(sub.amenitiesText).includes(p.label);
+                    return (
+                      <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={on}
+                          onChange={(e) =>
+                            setSub((s) => ({
+                              ...s,
+                              amenitiesText: mergeToggleLine(s.amenitiesText, p.label, e.target.checked),
+                            }))
+                          }
+                        />
+                        <span className="font-medium text-slate-800">{p.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
-            </div></section>
+              <div>
+                <FieldLabel hint="One per line — merged with the checkboxes above on the public listing.">Additional amenities</FieldLabel>
+                <Textarea
+                  className="mt-2 min-h-[100px]"
+                  value={extraLinesOutsidePresetSet(sub.amenitiesText, LISTING_AMENITY_LABEL_SET)}
+                  onChange={(e) =>
+                    setSub((s) => ({
+                      ...s,
+                      amenitiesText: setExtraLinesPreservingPresets(s.amenitiesText, e.target.value, LISTING_AMENITY_LABEL_SET),
+                    }))
+                  }
+                  placeholder="Anything not in the list above — community room, sauna, piano, etc."
+                />
+              </div>
+            </div>
+          </FormSection>
         </div>
 
         <div className="sticky bottom-0 z-20 flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-10px_28px_-12px_rgba(15,23,42,0.14)] sm:flex-row sm:items-center sm:justify-between sm:px-8">

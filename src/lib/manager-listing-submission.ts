@@ -46,8 +46,10 @@ export type ManagerBundleRow = {
   strikethrough: string;
   /** Shown as “offer” / promo line when set */
   promo: string;
-  /** Secondary line under the bundle name (scope, which rooms, notes). */
+  /** Secondary line under the bundle name — optional manual override when rooms are picked. */
   roomsLine: string;
+  /** Rooms included in this bundle (scope line auto-built from names when set). */
+  includedRoomIds?: string[];
 };
 
 export type ManagerBathroomSubmission = {
@@ -278,6 +280,7 @@ export function emptyBundleRow(): ManagerBundleRow {
     strikethrough: "",
     promo: "",
     roomsLine: "",
+    includedRoomIds: [],
   };
 }
 

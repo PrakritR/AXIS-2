@@ -61,6 +61,46 @@ export type LeasePipelineRow = {
   thread: LeaseThreadMessage[];
 };
 
+/** Coerce partial rows from localStorage so UI never reads undefined thread / notes / bucket. */
+export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Partial<LeasePipelineRow>;
+  const b = r.bucket;
+  const bucket: ManagerLeaseBucket =
+    b === "manager" || b === "admin" || b === "resident" || b === "signed" ? b : "manager";
+  const threads = Array.isArray(r.thread) ? r.thread : [];
+  const safeThread: LeaseThreadMessage[] = threads.filter(
+    (m): m is LeaseThreadMessage =>
+      !!m &&
+      typeof m === "object" &&
+      typeof (m as LeaseThreadMessage).id === "string" &&
+      typeof (m as LeaseThreadMessage).body === "string" &&
+      typeof (m as LeaseThreadMessage).role === "string",
+  );
+  const id =
+    typeof r.id === "string" && r.id.trim().length > 0
+      ? r.id.trim()
+      : `lease_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const isoFallback = new Date().toISOString();
+  return {
+    id,
+    residentName: String(r.residentName ?? "").trim() || "—",
+    residentEmail: String(r.residentEmail ?? "").trim(),
+    unit: String(r.unit ?? "").trim() || "—",
+    stageLabel: String(r.stageLabel ?? "").trim() || stageLabelForBucket(bucket),
+    updated: String(r.updated ?? "").trim() || "—",
+    bucket,
+    pdfVersion: typeof r.pdfVersion === "number" && Number.isFinite(r.pdfVersion) ? Math.max(0, Math.floor(r.pdfVersion)) : 1,
+    notes: typeof r.notes === "string" ? r.notes : String(r.notes ?? ""),
+    updatedAtIso: typeof r.updatedAtIso === "string" && r.updatedAtIso.trim() ? r.updatedAtIso : isoFallback,
+    applicationId: typeof r.applicationId === "string" ? r.applicationId : undefined,
+    application: r.application,
+    generatedHtml: r.generatedHtml ?? null,
+    generatedAtIso: r.generatedAtIso ?? null,
+    managerUploadedPdf: r.managerUploadedPdf ?? null,
+    thread: safeThread,
+  };
+}
+
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
@@ -100,7 +140,7 @@ function demoRowToPipeline(seed: DemoManagerLeaseDraftRow): LeasePipelineRow {
   const appRow = appId ? apps.find((a) => a.id === appId) : apps.find((a) => a.email?.toLowerCase() === email.toLowerCase());
   const application = appRow?.application;
 
-  return {
+  return normalizeLeasePipelineRow({
     id: seed.id,
     residentName: seed.resident,
     residentEmail: email,
@@ -109,7 +149,7 @@ function demoRowToPipeline(seed: DemoManagerLeaseDraftRow): LeasePipelineRow {
     updated: seed.updated,
     bucket: seed.bucket,
     pdfVersion: Number.parseInt(String(seed.pdfVersion).replace(/\D/g, ""), 10) || 1,
-    notes: seed.notes,
+    notes: String(seed.notes ?? ""),
     updatedAtIso: new Date().toISOString(),
     applicationId: appRow?.id,
     application,
@@ -117,7 +157,7 @@ function demoRowToPipeline(seed: DemoManagerLeaseDraftRow): LeasePipelineRow {
     generatedAtIso: null,
     managerUploadedPdf: null,
     thread: [],
-  };
+  });
 }
 
 function readRaw(): LeasePipelineRow[] | null {
@@ -153,24 +193,26 @@ function syncApprovedApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] 
     if (exists) continue;
     const unit = app.property?.trim() || "—";
     const iso = new Date().toISOString();
-    next.push({
-      id: `lease_app_${app.id}`,
-      residentName: app.name.trim(),
-      residentEmail: email,
-      unit,
-      stageLabel: stageLabelForBucket("manager"),
-      updated: formatUpdatedLabel(iso),
-      bucket: "manager",
-      pdfVersion: 1,
-      notes: "Created from approved application.",
-      updatedAtIso: iso,
-      applicationId: app.id,
-      application: app.application,
-      generatedHtml: null,
-      generatedAtIso: null,
-      managerUploadedPdf: null,
-      thread: [],
-    });
+    next.push(
+      normalizeLeasePipelineRow({
+        id: `lease_app_${app.id}`,
+        residentName: String(app.name ?? "").trim() || "Applicant",
+        residentEmail: email,
+        unit,
+        stageLabel: stageLabelForBucket("manager"),
+        updated: formatUpdatedLabel(iso),
+        bucket: "manager",
+        pdfVersion: 1,
+        notes: "Created from approved application.",
+        updatedAtIso: iso,
+        applicationId: app.id,
+        application: app.application,
+        generatedHtml: null,
+        generatedAtIso: null,
+        managerUploadedPdf: null,
+        thread: [],
+      }),
+    );
   }
   return next;
 }
@@ -187,18 +229,29 @@ function enrichFromApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] {
 }
 
 export function readLeasePipeline(): LeasePipelineRow[] {
-  let stored = readRaw() ?? [];
-  if (stored.length === 0) {
-    stored = demoManagerLeaseDraftRows.map(demoRowToPipeline);
-    write(stored);
+  try {
+    let stored = readRaw() ?? [];
+    stored = stored.map(normalizeLeasePipelineRow);
+    if (stored.length === 0) {
+      stored = demoManagerLeaseDraftRows.map(demoRowToPipeline);
+      write(stored);
+    }
+    const rows = enrichFromApplications(stored);
+    const merged = syncApprovedApplications(rows);
+    if (merged.length > stored.length) {
+      write(merged);
+      return merged;
+    }
+    return rows;
+  } catch {
+    /* Corrupt lease pipeline JSON or unexpected shape — reset to empty pipeline. */
+    try {
+      if (canUseStorage()) window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    return [];
   }
-  const rows = enrichFromApplications(stored);
-  const merged = syncApprovedApplications(rows);
-  if (merged.length > stored.length) {
-    write(merged);
-    return merged;
-  }
-  return rows;
 }
 
 export function leasePipelineBucketCounts(): [number, number, number, number] {
@@ -231,7 +284,7 @@ export function deleteLeasePipelineRow(id: string): boolean {
   const rows = readLeasePipeline();
   const row = rows.find((r) => r.id === id);
   if (!row) return false;
-  if (row.residentEmail.trim()) {
+  if (String(row.residentEmail ?? "").trim()) {
     clearUploadedOwnLease(row.residentEmail);
   }
   const next = rows.filter((r) => r.id !== id);
@@ -270,7 +323,7 @@ export function appendLeaseThreadMessage(id: string, role: LeaseThreadRole, body
   const iso = new Date().toISOString();
   const nextRow: LeasePipelineRow = {
     ...cur,
-    thread: [...cur.thread, msg],
+    thread: [...(cur.thread ?? []), msg],
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
   };
@@ -288,8 +341,13 @@ export function generateLeaseHtmlForRow(rowId: string): { ok: true; version: num
   if (!app || !Object.keys(app).length) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
-  const ctx = leaseContextFromApplication(app as RentalWizardFormState);
-  const html = buildAiGeneratedLeaseHtml(ctx);
+  let html: string;
+  try {
+    const ctx = leaseContextFromApplication(app as RentalWizardFormState);
+    html = buildAiGeneratedLeaseHtml(ctx);
+  } catch {
+    return { ok: false, error: "Could not build lease from saved application — check answers or regenerate after fixing data." };
+  }
   const version = row.pdfVersion + 1;
   const ok = updateLeasePipelineRow(rowId, {
     generatedHtml: html,
@@ -352,7 +410,7 @@ export function managerUploadLeasePdf(rowId: string, file: File): Promise<{ ok: 
     }
     const rows = readLeasePipeline();
     const row = rows.find((r) => r.id === rowId);
-    if (!row?.residentEmail) {
+    if (!row || !String(row.residentEmail ?? "").trim()) {
       resolve({ ok: false, error: "Missing resident email on lease row." });
       return;
     }
@@ -387,7 +445,7 @@ export function residentSignLease(email: string): boolean {
   const row = rows[idx]!;
   if (row.bucket !== "resident") return false;
   const iso = new Date().toISOString();
-  const thread = [...row.thread, makeMsg("resident", "Signed electronically.")];
+  const thread = [...(row.thread ?? []), makeMsg("resident", "Signed electronically.")];
   rows[idx] = {
     ...row,
     bucket: "signed",
@@ -409,7 +467,7 @@ export function residentRequestEdits(email: string, message: string): boolean {
   if (row.bucket !== "resident") return false;
   if (!message.trim()) return false;
   const iso = new Date().toISOString();
-  const thread = [...row.thread, makeMsg("resident", message)];
+  const thread = [...(row.thread ?? []), makeMsg("resident", message)];
   rows[idx] = {
     ...row,
     bucket: "manager",

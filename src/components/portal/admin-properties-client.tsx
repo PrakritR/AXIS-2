@@ -358,6 +358,10 @@ export function AdminPropertiesClient() {
     };
   }, []);
 
+  useEffect(() => {
+    setDetailRow(null);
+  }, [activeKpi]);
+
   const kpiValues = useMemo(() => adminKpiCounts(), [tick]);
   const rows = useMemo(() => readAdminPropertyRows(activeKpi), [tick, activeKpi]);
   const status = rowStatus(activeKpi);
@@ -433,7 +437,9 @@ export function AdminPropertiesClient() {
                           <span className="font-semibold text-slate-800">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths} ba ·{" "}
                           {row.neighborhood}
                         </p>
-                        {row.tagline.trim() ? <p className="mt-2 line-clamp-2 text-xs text-slate-500">{row.tagline}</p> : null}
+                        {String(row.tagline ?? "").trim() ? (
+                          <p className="mt-2 line-clamp-2 text-xs text-slate-500">{row.tagline}</p>
+                        ) : null}
                       </td>
                       <td className="px-5 py-4">
                         <StatusPill label={status.label} variant={status.variant} />

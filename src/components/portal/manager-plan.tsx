@@ -10,6 +10,8 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 
 type SubPayload = {
   tier: string | null;
+  /** `monthly` | `annual` when Stripe-managed; may be legacy values otherwise. */
+  billing: string | null;
   isPro: boolean;
   isBusiness: boolean;
   isFree: boolean;
@@ -54,6 +56,7 @@ export function ManagerPlan() {
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   /** Paid-tier checkout / subscription API — never reuse for billing portal (avoid clobbering Free card). */
   const [busyTier, setBusyTier] = useState<ManagerSkuTier | null>(null);
+  const [billingSyncBusy, setBillingSyncBusy] = useState(false);
   const [billingPortalBusy, setBillingPortalBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -73,6 +76,12 @@ export function ManagerPlan() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!sub?.billing) return;
+    const b = sub.billing.toLowerCase();
+    if (b === "monthly" || b === "annual") setBilling(b);
+  }, [sub?.billing]);
 
   const committedTier = useMemo(() => pickerValue(sub), [sub]);
 
@@ -102,7 +111,7 @@ export function ManagerPlan() {
   }, [pathname, load, showToast]);
 
   const openBillingPortal = async () => {
-    if (!sub?.stripeManaged || busyTier !== null || billingPortalBusy) return;
+    if (!sub?.stripeManaged || busyTier !== null || billingSyncBusy || billingPortalBusy) return;
     setBillingPortalBusy(true);
     try {
       const res = await fetch("/api/stripe/billing-portal", {
@@ -150,32 +159,42 @@ export function ManagerPlan() {
     }
   };
 
-  const setTierViaApi = async (tier: ManagerSkuTier) => {
-    setBusyTier(tier);
+  const setTierViaApi = async (tier: ManagerSkuTier, opts?: { billingInterval?: "monthly" | "annual"; billingOnly?: boolean }) => {
+    if (opts?.billingOnly) setBillingSyncBusy(true);
+    else setBusyTier(tier);
     try {
       const res = await fetch("/api/stripe/subscription/update-tier", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({
+          tier,
+          ...(tier !== "free" && sub?.stripeManaged ? { billing: opts?.billingInterval ?? billing } : {}),
+        }),
       });
       const body = (await res.json()) as { error?: string };
       if (!res.ok) {
         showToast(body.error ?? "Could not update plan.");
         return;
       }
-      showToast(`Plan updated to ${tierLabel(tier)}.`);
+      if (opts?.billingOnly) {
+        const lab = opts.billingInterval === "annual" ? "annual" : "monthly";
+        showToast(`Billing switched to ${lab} — charged to your saved card with proration.`);
+      } else {
+        showToast(`Plan updated to ${tierLabel(tier)}.`);
+      }
       await load();
       startTransition(() => router.refresh());
     } catch {
       showToast("Network error.");
     } finally {
       setBusyTier(null);
+      setBillingSyncBusy(false);
     }
   };
 
   const handleTierAction = (target: ManagerSkuTier) => {
-    if (!sub || busyTier !== null || billingPortalBusy) return;
+    if (!sub || busyTier !== null || billingSyncBusy || billingPortalBusy) return;
 
     const from = committedTier;
 
@@ -196,16 +215,21 @@ export function ManagerPlan() {
       return;
     }
 
-    if (tierRank(paidTarget) > tierRank(from)) {
-      if (
-        !window.confirm(
-          "Your saved payment method will be charged a prorated amount for this upgrade. Continue?",
-        )
-      ) {
-        return;
-      }
-    }
+    /** Upgrades/downgrades between Pro and Business bill the payment method already on file — no Checkout. */
     void setTierViaApi(paidTarget);
+  };
+
+  const changeBillingInterval = (next: "monthly" | "annual") => {
+    setBilling(next);
+    if (!sub?.stripeManaged || billingSyncBusy || busyTier !== null || billingPortalBusy) return;
+    if (committedTier !== "pro" && committedTier !== "business") return;
+
+    const server = sub.billing?.toLowerCase();
+    const serverNorm = server === "monthly" || server === "annual" ? server : null;
+    const baseline = serverNorm ?? billing;
+    if (baseline === next) return;
+
+    void setTierViaApi(committedTier, { billingInterval: next, billingOnly: true });
   };
 
   const isCurrent = (id: ManagerSkuTier) =>
@@ -214,17 +238,12 @@ export function ManagerPlan() {
   return (
     <ManagerPortalPageShell title="Plan">
       <div className="mx-auto max-w-6xl space-y-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-sm text-slate-600">
-              Compare plans and subscribe securely through Stripe Checkout. Changes to an active subscription use your card on file with
-              proration.
-            </p>
-          </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
           <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-sm">
             <button
               type="button"
-              onClick={() => setBilling("monthly")}
+              disabled={billingSyncBusy}
+              onClick={() => changeBillingInterval("monthly")}
               className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
                 billing === "monthly" ? "bg-primary text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
@@ -233,7 +252,8 @@ export function ManagerPlan() {
             </button>
             <button
               type="button"
-              onClick={() => setBilling("annual")}
+              disabled={billingSyncBusy}
+              onClick={() => changeBillingInterval("annual")}
               className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
                 billing === "annual" ? "bg-primary text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
@@ -265,7 +285,7 @@ export function ManagerPlan() {
               const busyHere = busyTier === tierId;
 
               let ctaLabel = "";
-              let ctaDisabled = busyTier !== null && !busyHere;
+              let ctaDisabled = (busyTier !== null || billingSyncBusy) && !busyHere;
               let showPrimary = true;
 
               if (tierId === "free") {
@@ -299,10 +319,10 @@ export function ManagerPlan() {
               return (
                 <div
                   key={t.id}
-                  className={`relative flex flex-col rounded-3xl border bg-white p-7 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.08)] transition-shadow ${
+                  className={`relative flex flex-col rounded-3xl border p-7 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.08)] transition-shadow ${
                     current
-                      ? "border-primary ring-2 ring-primary/25 shadow-[0_8px_32px_-8px_rgba(0,122,255,0.22)]"
-                      : "border-slate-200/90 hover:border-slate-300"
+                      ? "border-2 border-primary bg-primary/[0.07] shadow-[0_8px_28px_-10px_rgba(0,122,255,0.35)] ring-1 ring-primary/20"
+                      : "border border-slate-200 bg-white hover:border-slate-300"
                   }`}
                 >
                   {tierId === "pro" ? (
@@ -313,9 +333,11 @@ export function ManagerPlan() {
 
                   <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{t.label}</p>
 
-                  <div className="mt-4 flex flex-wrap items-baseline gap-x-1">
-                    <span className="text-4xl font-black tracking-tight text-[#0d1f4e]">{pb.headline}</span>
-                    {pb.period ? <span className="text-sm font-medium text-slate-400">{pb.period}</span> : null}
+                  <div className="mt-4 flex flex-nowrap items-baseline gap-x-1">
+                    <span className="shrink-0 text-4xl font-black tracking-tight text-[#0d1f4e]">{pb.headline}</span>
+                    {pb.period ? (
+                      <span className="whitespace-nowrap text-sm font-medium leading-none text-slate-400">{pb.period}</span>
+                    ) : null}
                   </div>
                   <p className="mt-2 min-h-[40px] text-sm text-slate-500">{pb.sub}</p>
 
@@ -348,13 +370,24 @@ export function ManagerPlan() {
         )}
 
         <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-5 py-4 text-sm text-slate-600">
-          <span className="font-semibold text-slate-900">Payment method & invoices: </span>
-          Available after you have an active Stripe subscription.
+          <span className="font-semibold text-slate-900">Billing: </span>
+          {sub?.stripeManaged ? (
+            <>
+              Plan changes and switching between monthly and annual use your{" "}
+              <span className="font-medium text-slate-800">saved card on file</span> — no checkout. Open Stripe to replace the card or download
+              invoices.
+            </>
+          ) : (
+            <>
+              After you subscribe to Pro or Business, payment method and invoices are managed in Stripe (same card is reused when you upgrade or
+              change billing interval).
+            </>
+          )}
           <Button
             type="button"
             variant="outline"
-            className="ml-3 rounded-full px-4 py-2 text-[13px]"
-            disabled={billingPortalBusy || busyTier !== null || !sub?.stripeManaged}
+            className="ml-3 mt-2 inline-flex rounded-full px-4 py-2 text-[13px] sm:mt-0"
+            disabled={billingPortalBusy || busyTier !== null || billingSyncBusy || !sub?.stripeManaged}
             title={
               sub && !sub.stripeManaged && !sub.isFree
                 ? "Subscribe to a paid plan first to manage billing."
@@ -362,7 +395,7 @@ export function ManagerPlan() {
             }
             onClick={() => void openBillingPortal()}
           >
-            Update payment method
+            Manage payment method & invoices
           </Button>
         </div>
       </div>

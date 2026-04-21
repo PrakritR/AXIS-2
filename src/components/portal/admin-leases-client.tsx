@@ -44,7 +44,7 @@ function DocIcon({ className }: { className?: string }) {
 }
 
 function StatusPill({ bucket }: { bucket: AdminLeaseBucketIndex }) {
-  const map: Record<AdminLeaseBucketIndex, { label: string; cls: string; dot: string }> = {
+  const map: Record<number, { label: string; cls: string; dot: string }> = {
     0: {
       label: "Manager review",
       cls: "border-amber-200/90 bg-amber-50 text-amber-950",
@@ -66,7 +66,7 @@ function StatusPill({ bucket }: { bucket: AdminLeaseBucketIndex }) {
       dot: "bg-emerald-500",
     },
   };
-  const s = map[bucket];
+  const s = map[bucket] ?? map[0]!;
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${s.cls}`}
@@ -115,18 +115,18 @@ function LeasePipelineAdminDetail({
 
   return (
     <div className="max-h-[min(70vh,520px)] space-y-4 overflow-y-auto pr-1">
-      {row.notes.trim() ? (
+      {(row.notes ?? "").trim() ? (
         <p className="text-sm text-slate-700">
           <span className="font-semibold text-slate-800">Internal notes: </span>
-          {row.notes.trim()}
+          {(row.notes ?? "").trim()}
         </p>
       ) : null}
 
-      {row.thread.length ? (
+      {(row.thread ?? []).length ? (
         <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 px-3 py-2">
           <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Thread</p>
           <ul className="mt-2 max-h-36 space-y-2 overflow-y-auto text-sm">
-            {row.thread.map((m) => (
+            {(row.thread ?? []).map((m) => (
               <li key={m.id} className="rounded-lg bg-white px-2 py-1.5 shadow-sm ring-1 ring-slate-100">
                 <span className="font-semibold capitalize">{m.role}</span>
                 <span className="text-xs text-slate-400"> · {new Date(m.at).toLocaleString()}</span>

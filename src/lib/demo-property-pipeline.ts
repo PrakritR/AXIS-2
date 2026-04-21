@@ -125,19 +125,10 @@ function migrateLegacyGlobalIntoUser(userId: string) {
   window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
 }
 
-/** All pending rows (admin queue). */
+/** All pending rows (admin queue). Legacy global pending key is no longer merged — only per-account storage. */
 export function readAllPendingManagerProperties(): ManagerPendingPropertyRow[] {
   const map = readPendingMap();
-  const flat = Object.values(map).flat();
-  const legacy = readJson<ManagerPendingPropertyRow[]>(LEGACY_PENDING_KEY, []);
-  const seen = new Set(flat.map((r) => r.id));
-  for (const r of legacy) {
-    if (!seen.has(r.id)) {
-      flat.push(r);
-      seen.add(r.id);
-    }
-  }
-  return flat;
+  return Object.values(map).flat();
 }
 
 /** Pending submissions for one manager account only. */
@@ -155,19 +146,10 @@ export function readPendingManagerProperties(): ManagerPendingPropertyRow[] {
   return readAllPendingManagerProperties();
 }
 
-/** All extra listings across accounts (admin + public catalog). */
+/** All extra listings across accounts (admin + public catalog). Legacy global extras key is no longer merged. */
 export function readAllExtraListings(): MockProperty[] {
   const map = readExtrasMap();
-  const flat = Object.values(map).flat();
-  const legacy = readJson<MockProperty[]>(LEGACY_EXTRAS_KEY, []);
-  const seen = new Set(flat.map((p) => p.id));
-  for (const p of legacy) {
-    if (!seen.has(p.id)) {
-      flat.push(p);
-      seen.add(p.id);
-    }
-  }
-  return flat;
+  return Object.values(map).flat();
 }
 
 /** Properties visible on `/rent/listings` and hero search — admin-approved live listings only. */
@@ -206,8 +188,8 @@ export function countManagerManagedProperties(): number {
   return readAllPendingManagerProperties().length + readAllExtraListings().length;
 }
 
-function slugPart(s: string) {
-  return s
+function slugPart(s: string | undefined | null) {
+  return String(s ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
@@ -332,23 +314,33 @@ export function buildMockPropertyFromAdminRow(row: ManagerAdminShapeRow, listing
 }
 
 export function buildMockPropertyFromDraft(row: ManagerPendingPropertyRow, listingId: string): MockProperty {
-  const title = `${row.buildingName} · ${row.unitLabel}`;
+  const str = (v: unknown) => String(v ?? "").trim();
+  const num = (v: unknown, fallback = 0) => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const buildingName = str(row.buildingName);
+  const unitLabel = str(row.unitLabel);
+  const title = `${buildingName || "Property"} · ${unitLabel || "Unit"}`;
   const owner = row.submittedByUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
+  const monthlyRent = num(row.monthlyRent, 0);
+  const beds = Math.max(0, Math.floor(num(row.beds, 1)));
+  const baths = Math.max(0, num(row.baths, 1));
   return {
     id: listingId,
     title,
-    tagline: row.tagline.trim() || "Manager-submitted listing",
-    address: row.address.trim(),
-    zip: row.zip.trim(),
-    neighborhood: row.neighborhood.trim(),
-    beds: row.beds,
-    baths: row.baths,
-    rentLabel: `$${row.monthlyRent} / mo`,
+    tagline: str(row.tagline) || "Manager-submitted listing",
+    address: str(row.address),
+    zip: str(row.zip),
+    neighborhood: str(row.neighborhood),
+    beds,
+    baths,
+    rentLabel: `$${monthlyRent} / mo`,
     available: "Now",
-    petFriendly: row.petFriendly,
-    buildingId: `mgr-bld-${slugPart(row.buildingName)}`,
-    buildingName: row.buildingName.trim(),
-    unitLabel: row.unitLabel.trim(),
+    petFriendly: Boolean(row.petFriendly),
+    buildingId: `mgr-bld-${slugPart(buildingName)}`,
+    buildingName,
+    unitLabel,
     mapLat: 47.61405,
     mapLng: -122.31542,
     listingSubmission: row.submission,

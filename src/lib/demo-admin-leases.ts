@@ -111,12 +111,10 @@ export function filterAdminLeases(
     if (propertyFilter !== "all" && r.propertyGroup !== propertyFilter) return false;
     if (managerFilter !== "all" && r.managerName !== managerFilter) return false;
     if (!needle) return true;
-    return (
-      r.propertyLabel.toLowerCase().includes(needle) ||
-      r.addressLine.toLowerCase().includes(needle) ||
-      r.residentName.toLowerCase().includes(needle) ||
-      r.managerName.toLowerCase().includes(needle)
+    const hay = [r.propertyLabel, r.addressLine, r.residentName, r.managerName].map((s) =>
+      typeof s === "string" ? s.toLowerCase() : "",
     );
+    return hay.some((h) => h.includes(needle));
   });
 }
 

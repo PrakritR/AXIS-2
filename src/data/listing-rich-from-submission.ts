@@ -7,12 +7,39 @@ import type {
 } from "@/lib/manager-listing-submission";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { parseMonthlyRent } from "@/lib/listings-search";
+import { parseMoneyAmount } from "@/lib/parse-money";
 import {
   paymentAtSigningDetailBody,
   paymentAtSigningPriceLabel,
   utilitiesListingEstimateDetail,
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
+
+function filterLeaseBasicsRows(
+  rows: LeaseBasicRow[],
+  sub: ManagerListingSubmissionV1,
+  rooms: ManagerRoomSubmission[],
+): LeaseBasicRow[] {
+  return rows.filter((row) => {
+    switch (row.id) {
+      case "lease-terms":
+        return Boolean(sub.leaseTermsBody.trim());
+      case "lease-application":
+        return feeMeaningfulForListing(sub.applicationFee);
+      case "lease-deposit":
+        return feeMeaningfulForListing(sub.securityDeposit);
+      case "lease-movein":
+        return feeMeaningfulForListing(sub.moveInFee);
+      case "lease-signing":
+        return (sub.paymentAtSigningIncludes?.length ?? 0) > 0;
+      case "lease-utilities":
+        if (utilitiesListingEstimateLabel(sub) !== "—") return true;
+        return rooms.some((r) => r.name.trim() && Boolean((r.utilitiesEstimate ?? "").trim()));
+      default:
+        return true;
+    }
+  });
+}
 import type {
   AmenityItem,
   BundleCard,
@@ -84,7 +111,33 @@ function sharedSpaceAccessLine(ids: string[], sub: ManagerListingSubmissionV1): 
 }
 
 function bundleRowHasContent(b: ManagerBundleRow): boolean {
-  return Boolean(b.label.trim() || b.price.trim() || b.roomsLine.trim() || b.promo.trim() || b.strikethrough.trim());
+  return Boolean(
+    b.label.trim() ||
+      b.price.trim() ||
+      b.roomsLine.trim() ||
+      b.promo.trim() ||
+      b.strikethrough.trim() ||
+      (b.includedRoomIds?.length ?? 0) > 0,
+  );
+}
+
+/** Hide fee rows when blank or dollar amount parses to zero (e.g. HOA $0). Text like “Waived” still shows. */
+function feeMeaningfulForListing(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  const n = parseMoneyAmount(t);
+  if (n > 0) return true;
+  if (n === 0 && /^[\s$0.,\-–—]*$/i.test(t)) return false;
+  return true;
+}
+
+function bundleScopeLineFromRow(b: ManagerBundleRow, rooms: ManagerRoomSubmission[]): string {
+  const ids = b.includedRoomIds ?? [];
+  if (ids.length > 0) {
+    const names = ids.map((id) => rooms.find((r) => r.id === id)?.name?.trim()).filter(Boolean);
+    if (names.length) return names.join(" · ");
+  }
+  return b.roomsLine.trim();
 }
 
 function perRoomBundleSummaryLine(r: ManagerRoomSubmission): string {
@@ -118,17 +171,17 @@ function deriveQuickFacts(
 function buildBundleCards(sub: ManagerListingSubmissionV1, rooms: ManagerRoomSubmission[], property: MockProperty): BundleCard[] {
   const custom = (sub.bundles ?? []).filter(bundleRowHasContent);
   if (custom.length > 0) {
-    return custom.map((b) => ({
-      id: b.id,
-      label: b.label.trim() || "Package",
-      price: b.price.trim() || "—",
-      strikethrough: b.strikethrough.trim() || undefined,
-      promo: b.promo.trim() || undefined,
-      roomsLine:
-        b.roomsLine.trim() ||
-        rooms.map(perRoomBundleSummaryLine).join(" | ") ||
-        "—",
-    }));
+    return custom.map((b) => {
+      const scope = bundleScopeLineFromRow(b, rooms);
+      return {
+        id: b.id,
+        label: b.label.trim() || "Package",
+        price: b.price.trim() || "—",
+        strikethrough: b.strikethrough.trim() || undefined,
+        promo: b.promo.trim() || undefined,
+        roomsLine: scope || rooms.map(perRoomBundleSummaryLine).join(" | ") || "—",
+      };
+    });
   }
 
   const mids = rooms.map((r) => r.monthlyRent).filter((n) => n > 0);
@@ -363,7 +416,7 @@ export function listingRichFromManagerSubmission(
       body: sub.houseCostsDetail.trim(),
     });
   }
-  if (sub.parkingMonthly.trim()) {
+  if (feeMeaningfulForListing(sub.parkingMonthly)) {
     houseCostRows.push({
       id: "parking",
       icon: "🅿️",
@@ -374,7 +427,7 @@ export function listingRichFromManagerSubmission(
       body: `Parking: ${sub.parkingMonthly.trim()} per month.`,
     });
   }
-  if (sub.hoaMonthly.trim()) {
+  if (feeMeaningfulForListing(sub.hoaMonthly)) {
     houseCostRows.push({
       id: "hoa",
       icon: "🏛️",
@@ -385,7 +438,7 @@ export function listingRichFromManagerSubmission(
       body: `HOA or community fee: ${sub.hoaMonthly.trim()}.`,
     });
   }
-  if (sub.otherMonthlyFees.trim()) {
+  if (feeMeaningfulForListing(sub.otherMonthlyFees)) {
     houseCostRows.push({
       id: "other-fees",
       icon: "➕",
@@ -450,7 +503,7 @@ export function listingRichFromManagerSubmission(
           ],
     bathrooms: bathrooms.length ? bathrooms : [],
     sharedSpaces,
-    leaseBasics: [...leaseBasics, ...houseCostRows],
+    leaseBasics: [...filterLeaseBasicsRows(leaseBasics, sub, rooms), ...houseCostRows],
     amenities,
     bundlesText:
       sub.leaseTermsBody.trim() ||

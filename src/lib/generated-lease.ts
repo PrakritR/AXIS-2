@@ -71,9 +71,13 @@ function sharedSpacesLeaseParagraph(raw: ManagerListingSubmissionV1 | undefined)
 }
 
 function findSubmissionRoomRent(sub: ManagerListingSubmissionV1 | undefined, unitLabel: string): string | undefined {
-  if (!sub) return undefined;
+  if (!sub?.rooms?.length) return undefined;
   const u = unitLabel.trim().toLowerCase();
-  const hit = sub.rooms.find((r) => r.name.toLowerCase().includes(u) || u.includes(r.name.trim().toLowerCase()));
+  const hit = sub.rooms.find((r) => {
+    const rn = (r.name ?? "").trim().toLowerCase();
+    if (!rn) return false;
+    return rn.includes(u) || u.includes(rn);
+  });
   if (hit && hit.monthlyRent > 0) return `$${hit.monthlyRent.toFixed(2)} / month`;
   return undefined;
 }
@@ -102,18 +106,22 @@ export function leaseContextFromApplication(application: Partial<RentalWizardFor
 /** Rent line for lease tables — from application + listing when available. */
 export function rentSummaryFromApplication(application: Partial<RentalWizardFormState> | undefined | null): string | null {
   if (!application || !Object.keys(application).length) return null;
-  const ctx = leaseContextFromApplication(application as RentalWizardFormState);
-  const room = ctx.leasedRoom;
-  const list = ctx.listingProperty;
-  const monthlyRent =
-    (room && findSubmissionRoomRent(ctx.submission, room.unitLabel)) ??
-    room?.rentLabel ??
-    list?.rentLabel ??
-    null;
-  if (!monthlyRent) return null;
-  const s = typeof monthlyRent === "string" ? monthlyRent : String(monthlyRent);
-  if (s.includes("As set forth")) return null;
-  return s;
+  try {
+    const ctx = leaseContextFromApplication(application as RentalWizardFormState);
+    const room = ctx.leasedRoom;
+    const list = ctx.listingProperty;
+    const monthlyRent =
+      (room && findSubmissionRoomRent(ctx.submission, room.unitLabel)) ??
+      room?.rentLabel ??
+      list?.rentLabel ??
+      null;
+    if (!monthlyRent) return null;
+    const s = typeof monthlyRent === "string" ? monthlyRent : String(monthlyRent);
+    if (s.includes("As set forth")) return null;
+    return s;
+  } catch {
+    return null;
+  }
 }
 
 export function gatherLeaseGenerationContext(): LeaseGenerationContext {

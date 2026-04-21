@@ -125,9 +125,8 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
             <li>
               <span className="font-medium text-slate-800">Free:</span> can connect only one account.
             </li>
-            <li>
-              <span className="font-medium text-slate-800">Pro / Business:</span> can connect multiple accounts and choose how much percentage
-              goes to each account.
+            <li className="whitespace-nowrap overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
+              <span className="font-medium text-slate-800">Pro / Business:</span> can connect multiple accounts and choose how much percentage goes to each account.
             </li>
           </ul>
         </div>
@@ -181,9 +180,6 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
           >
             Open provider dashboard
           </a>
-          <Button type="button" variant="outline" className="min-h-[44px] rounded-full px-5" onClick={() => void loadStatus()}>
-            Refresh status
-          </Button>
         </div>
       </div>
     </ManagerPortalPageShell>

@@ -98,8 +98,34 @@ function newAdminRefId() {
   return `adm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function pendingToAdminRow(row: ManagerPendingPropertyRow): AdminPropertyRow {
+/** Coerce partial / legacy localStorage rows so UI never calls `.trim()` on undefined. */
+export function normalizeAdminPropertyRow(row: Partial<AdminPropertyRow> & { adminRefId?: string }): AdminPropertyRow {
+  const str = (v: unknown) => String(v ?? "").trim();
+  const n = (v: unknown, fallback = 0) => {
+    const x = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(x) ? x : fallback;
+  };
+  const id = str(row.adminRefId);
   return {
+    adminRefId: id || `adm-${Date.now()}`,
+    buildingName: str(row.buildingName),
+    unitLabel: str(row.unitLabel),
+    address: str(row.address),
+    zip: str(row.zip),
+    neighborhood: str(row.neighborhood),
+    beds: Math.max(0, Math.floor(n(row.beds, 1))),
+    baths: Math.max(0, n(row.baths, 1)),
+    monthlyRent: Math.max(0, n(row.monthlyRent, 0)),
+    petFriendly: Boolean(row.petFriendly),
+    tagline: str(row.tagline),
+    listingId: row.listingId,
+    managerUserId: row.managerUserId,
+    editRequestNote: row.editRequestNote,
+  };
+}
+
+export function pendingToAdminRow(row: ManagerPendingPropertyRow): AdminPropertyRow {
+  return normalizeAdminPropertyRow({
     adminRefId: row.id,
     buildingName: row.buildingName,
     unitLabel: row.unitLabel,
@@ -110,9 +136,9 @@ export function pendingToAdminRow(row: ManagerPendingPropertyRow): AdminProperty
     baths: row.baths,
     monthlyRent: row.monthlyRent,
     petFriendly: row.petFriendly,
-    tagline: row.tagline,
+    tagline: row.tagline ?? "",
     managerUserId: row.submittedByUserId,
-  };
+  });
 }
 
 /** Preview mock for portal “More details” — same shape as public listing page. */
@@ -136,8 +162,8 @@ export function publicListingHrefForPropertyRow(row: AdminPropertyRow): string |
 }
 
 export function mockToAdminRow(prop: MockProperty, listingId: string): AdminPropertyRow {
-  const rentNum = Number(String(prop.rentLabel).replace(/[^\d.]/g, "")) || 0;
-  return {
+  const rentNum = Number(String(prop.rentLabel ?? "").replace(/[^\d.]/g, "")) || 0;
+  return normalizeAdminPropertyRow({
     adminRefId: listingId,
     buildingName: prop.buildingName,
     unitLabel: prop.unitLabel,
@@ -148,10 +174,10 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
     baths: prop.baths,
     monthlyRent: rentNum,
     petFriendly: prop.petFriendly,
-    tagline: prop.tagline,
+    tagline: prop.tagline ?? "",
     listingId,
     managerUserId: prop.managerUserId,
-  };
+  });
 }
 
 /** When `forManagerUserId` is set, counts only that manager’s pipeline + side buckets (manager portal). */
@@ -181,7 +207,7 @@ export function readAdminPropertyRows(
       : readAllPendingManagerProperties();
     return pendingSource.map(pendingToAdminRow);
   }
-  if (bucket === 1) return side.requestChange;
+  if (bucket === 1) return side.requestChange.map((r) => normalizeAdminPropertyRow(r));
   if (bucket === 2) {
     const extras = forManagerUserId ? readExtraListingsForUser(forManagerUserId) : readAllExtraListings();
     const live = forManagerUserId
@@ -189,8 +215,8 @@ export function readAdminPropertyRows(
       : extras.filter((p) => p.id.startsWith("mgr-"));
     return live.map((p) => mockToAdminRow(p, p.id));
   }
-  if (bucket === 3) return side.unlisted;
-  return side.rejected;
+  if (bucket === 3) return side.unlisted.map((r) => normalizeAdminPropertyRow(r));
+  return side.rejected.map((r) => normalizeAdminPropertyRow(r));
 }
 
 export function movePendingToRequestChange(

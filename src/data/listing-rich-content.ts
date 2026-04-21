@@ -466,7 +466,11 @@ const defaultBundles: BundleCard[] = [
 
 export function getListingRichContent(property: MockProperty): ListingRichContent {
   if (property.listingSubmission?.v === 1) {
-    return listingRichFromManagerSubmission(property, property.listingSubmission);
+    try {
+      return listingRichFromManagerSubmission(property, property.listingSubmission);
+    } catch {
+      /* Corrupt or partial submission in localStorage — fall back to generic layout. */
+    }
   }
   const mid = parseMonthlyRent(property.rentLabel) ?? 875;
   const low = Math.max(500, mid - 125);

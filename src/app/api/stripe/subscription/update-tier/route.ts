@@ -26,11 +26,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => null)) as { tier?: string } | null;
+    const body = (await req.json().catch(() => null)) as { tier?: string; billing?: string } | null;
     const tierRaw = typeof body?.tier === "string" ? body.tier.toLowerCase().trim() : "";
     if (!isSku(tierRaw)) {
       return NextResponse.json({ error: "tier must be free, pro, or business." }, { status: 400 });
     }
+
+    const billingBody = typeof body?.billing === "string" ? body.billing.toLowerCase().trim() : "";
+    const billingRequested: StripeBilling | null =
+      billingBody === "monthly" || billingBody === "annual" ? billingBody : null;
 
     const targetTier = tierRaw;
     const { stripeSubscriptionId } = await getManagerPurchaseSku(user.id);
@@ -66,39 +70,50 @@ export async function POST(req: Request) {
 
     const currentPriceId = typeof item.price === "string" ? item.price : item.price?.id;
     const billingGuess = inferBillingFromStripePriceId(currentPriceId) ?? "monthly";
-    const billing: StripeBilling = billingGuess === "annual" ? "annual" : "monthly";
+    const currentBilling: StripeBilling = billingGuess === "annual" ? "annual" : "monthly";
 
     const targetPaid: PaidTier = targetTier === "business" ? "business" : "pro";
-    const newPriceId = stripePriceIdForPaidTier(targetPaid, billing)?.trim();
+    /** Explicit billing from client (monthly/annual toggle); otherwise keep Stripe subscription interval. */
+    const targetBilling: StripeBilling = billingRequested ?? currentBilling;
+
+    const newPriceId = stripePriceIdForPaidTier(targetPaid, targetBilling)?.trim();
     if (!newPriceId) {
       return NextResponse.json(
         {
-          error: `Missing Stripe price for ${targetPaid} ${billing}. Set STRIPE_PRICE_* env vars.`,
+          error: `Missing Stripe price for ${targetPaid} ${targetBilling}. Set STRIPE_PRICE_* env vars.`,
         },
         { status: 500 },
       );
     }
 
     if (currentPriceId === newPriceId) {
-      await supabase.from("manager_purchases").update({ tier: targetPaid, billing }).eq("user_id", user.id);
-      return NextResponse.json({ ok: true, stripeManaged: true, tier: targetPaid, billing });
+      await supabase.from("manager_purchases").update({ tier: targetPaid, billing: targetBilling }).eq("user_id", user.id);
+      return NextResponse.json({ ok: true, stripeManaged: true, tier: targetPaid, billing: targetBilling });
     }
+
+    const switchingMonthlyToAnnual = currentBilling === "monthly" && targetBilling === "annual";
+    /** Optional Stripe Coupon ID (e.g. $20 off) applied when moving from monthly to annual — create in Dashboard with desired rules. */
+    const annualSwitchCoupon = process.env.STRIPE_COUPON_SWITCH_TO_ANNUAL?.trim();
 
     await stripe.subscriptions.update(stripeSubscriptionId, {
       items: [{ id: item.id, price: newPriceId }],
+      /** Credits unused monthly time toward the annual invoice; invoice lines show the breakdown. */
       proration_behavior: "create_prorations",
+      ...(switchingMonthlyToAnnual && annualSwitchCoupon
+        ? { discounts: [{ coupon: annualSwitchCoupon }] }
+        : {}),
     });
 
     const { error: upErr } = await supabase
       .from("manager_purchases")
-      .update({ tier: targetPaid, billing })
+      .update({ tier: targetPaid, billing: targetBilling })
       .eq("user_id", user.id);
 
     if (upErr) {
       return NextResponse.json({ error: upErr.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, stripeManaged: true, tier: targetPaid, billing });
+    return NextResponse.json({ ok: true, stripeManaged: true, tier: targetPaid, billing: targetBilling });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });

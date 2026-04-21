@@ -70,6 +70,13 @@ function submissionForListedEdit(p: MockProperty): ManagerListingSubmissionV1 {
   );
 }
 
+/** Lets the browser paint after click before heavy localStorage writes (better INP on delete/unlist). */
+function deferCatalogMutation(fn: () => void) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(fn);
+  });
+}
+
 /** Matches manager-facing stages: bucket 1 is admin “request change” / pre-list work (shown as Approved). */
 const MANAGER_TAB_LABELS = ["Pending", "Approved", "Listed", "Unlisted", "Rejected"] as const;
 
@@ -269,7 +276,9 @@ function ManagerPropertyPreviewModal({
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
               onClick={() => {
                 if (!window.confirm("Delete this pending submission? You can create a new listing later.")) return;
-                run("Submission deleted.", deletePendingSubmissionForManager(row.adminRefId, managerUserId));
+                deferCatalogMutation(() =>
+                  run("Submission deleted.", deletePendingSubmissionForManager(row.adminRefId, managerUserId)),
+                );
               }}
             >
               Delete submission
@@ -287,7 +296,11 @@ function ManagerPropertyPreviewModal({
             type="button"
             variant="outline"
             className="rounded-full"
-            onClick={() => run("Returned to pending — you can edit and resubmit.", returnRequestChangeToPending(row.adminRefId, managerUserId))}
+            onClick={() =>
+              deferCatalogMutation(() =>
+                run("Returned to pending — you can edit and resubmit.", returnRequestChangeToPending(row.adminRefId, managerUserId)),
+              )
+            }
           >
             Move to pending & revise
           </Button>
@@ -300,7 +313,9 @@ function ManagerPropertyPreviewModal({
             type="button"
             variant="outline"
             className="rounded-full"
-            onClick={() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId))}
+            onClick={() =>
+              deferCatalogMutation(() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId)))
+            }
           >
             Unlist
           </Button>
@@ -310,7 +325,7 @@ function ManagerPropertyPreviewModal({
             className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
             onClick={() => {
               if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
-              run("Listing deleted.", deleteManagerLiveListing(listingId, managerUserId));
+              deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(listingId, managerUserId)));
             }}
           >
             Delete listing
@@ -328,14 +343,16 @@ function ManagerPropertyPreviewModal({
             variant="outline"
             className="rounded-full"
             onClick={() => {
-              const id = listAdminRow(row, managerUserId);
-              if (!id) {
-                showToast("Could not relist.");
-                return;
-              }
-              showToast("Listing is live again.");
-              onUpdated();
-              onClose();
+              deferCatalogMutation(() => {
+                const id = listAdminRow(row, managerUserId);
+                if (!id) {
+                  showToast("Could not relist.");
+                  return;
+                }
+                showToast("Listing is live again.");
+                onUpdated();
+                onClose();
+              });
             }}
           >
             Relist on Rent with Axis
@@ -346,7 +363,9 @@ function ManagerPropertyPreviewModal({
             className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
             onClick={() => {
               if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
-              run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId));
+              deferCatalogMutation(() =>
+                run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId)),
+              );
             }}
           >
             Delete from queue
@@ -360,7 +379,11 @@ function ManagerPropertyPreviewModal({
             type="button"
             variant="outline"
             className="rounded-full"
-            onClick={() => run("Restored to pending approval.", restoreRejectedToPending(row.adminRefId, managerUserId))}
+            onClick={() =>
+              deferCatalogMutation(() =>
+                run("Restored to pending approval.", restoreRejectedToPending(row.adminRefId, managerUserId)),
+              )
+            }
           >
             Move to pending approval
           </Button>
@@ -368,7 +391,9 @@ function ManagerPropertyPreviewModal({
             type="button"
             variant="outline"
             className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
-            onClick={() => run("Property removed.", removeRejectedProperty(row.adminRefId, managerUserId))}
+            onClick={() =>
+              deferCatalogMutation(() => run("Property removed.", removeRejectedProperty(row.adminRefId, managerUserId)))
+            }
           >
             Delete property
           </Button>
@@ -528,9 +553,10 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                                 variant="outline"
                                 className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
                                 onClick={() => {
-                                  const ok = unlistManagerListing(listingId, managerUserId);
-                                  showToast(ok ? "Listing unlisted." : "Could not unlist.");
-                                  if (ok) setTick((t) => t + 1);
+                                  deferCatalogMutation(() => {
+                                    const ok = unlistManagerListing(listingId, managerUserId);
+                                    showToast(ok ? "Listing unlisted." : "Could not unlist.");
+                                  });
                                 }}
                               >
                                 Unlist
@@ -541,9 +567,10 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                                 className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-rose-200 text-rose-800 hover:bg-rose-50`}
                                 onClick={() => {
                                   if (!window.confirm("Permanently delete this listing from your catalog?")) return;
-                                  const ok = deleteManagerLiveListing(listingId, managerUserId);
-                                  showToast(ok ? "Listing deleted." : "Could not delete.");
-                                  if (ok) setTick((t) => t + 1);
+                                  deferCatalogMutation(() => {
+                                    const ok = deleteManagerLiveListing(listingId, managerUserId);
+                                    showToast(ok ? "Listing deleted." : "Could not delete.");
+                                  });
                                 }}
                               >
                                 Delete
