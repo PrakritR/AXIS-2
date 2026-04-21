@@ -40,6 +40,10 @@ export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
   try {
     window.localStorage.setItem(KEY, JSON.stringify(rows));
     emit();
+    /** Approved applications → lease pipeline rows (async to avoid circular imports). */
+    void import("@/lib/lease-pipeline-storage").then(({ readLeasePipeline }) => {
+      readLeasePipeline();
+    });
   } catch {
     /* quota */
   }

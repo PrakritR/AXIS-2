@@ -7,6 +7,7 @@ import { readPartnerInboxMessages } from "@/lib/demo-admin-partner-inbox";
 import { pendingInquiryCount } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
+import { LEASE_PIPELINE_EVENT } from "@/lib/lease-pipeline-storage";
 
 export function AdminNotificationBanners() {
   const [tick, setTick] = useState(0);
@@ -15,10 +16,12 @@ export function AdminNotificationBanners() {
     const bump = () => setTick((t) => t + 1);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
     window.addEventListener(ADMIN_UI_EVENT, bump);
+    window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
       window.removeEventListener(ADMIN_UI_EVENT, bump);
+      window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
   }, []);

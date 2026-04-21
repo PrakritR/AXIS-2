@@ -153,7 +153,9 @@ export function adminKpiCounts(forManagerUserId?: string | null): [number, numbe
   if (forManagerUserId) {
     const pending = readPendingManagerPropertiesForUser(forManagerUserId).length;
     const side = readSide(forManagerUserId);
-    const listed = readExtraListingsForUser(forManagerUserId).filter((p) => p.id.startsWith("mgr-")).length;
+    const listed = readExtraListingsForUser(forManagerUserId).filter(
+      (p) => p.id.startsWith("mgr-") && p.adminPublishLive === true,
+    ).length;
     return [pending, side.requestChange.length, listed, side.unlisted.length, side.rejected.length];
   }
   const pending = readAllPendingManagerProperties().length;
@@ -176,7 +178,10 @@ export function readAdminPropertyRows(
   if (bucket === 1) return side.requestChange;
   if (bucket === 2) {
     const extras = forManagerUserId ? readExtraListingsForUser(forManagerUserId) : readAllExtraListings();
-    return extras.filter((p) => p.id.startsWith("mgr-")).map((p) => mockToAdminRow(p, p.id));
+    const live = forManagerUserId
+      ? extras.filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive === true)
+      : extras.filter((p) => p.id.startsWith("mgr-"));
+    return live.map((p) => mockToAdminRow(p, p.id));
   }
   if (bucket === 3) return side.unlisted;
   return side.rejected;
@@ -217,7 +222,7 @@ export function approveFromRequestChange(adminRefId: string, forManagerUserId?: 
   const listingId = `mgr-${slugPart(row.buildingName)}-${slugPart(row.unitLabel)}-${adminRefId.slice(-6)}`;
   const prop = buildMockPropertyFromAdminRow(row, listingId);
   const owner = row.managerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
-  appendExtraListing({ ...prop, managerUserId: owner }, owner);
+  appendExtraListing({ ...prop, managerUserId: owner, adminPublishLive: true }, owner);
   writeSideStorage({ ...side, requestChange: nextRc }, forManagerUserId);
   return true;
 }
@@ -262,7 +267,7 @@ export function listAdminRow(row: AdminPropertyRow, forManagerUserId?: string | 
     row.listingId ?? `mgr-${slugPart(row.buildingName)}-${slugPart(row.unitLabel)}-${row.adminRefId.slice(-6)}`;
   const prop = buildMockPropertyFromAdminRow(row, listingId);
   const owner = row.managerUserId ?? forManagerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
-  appendExtraListing({ ...prop, managerUserId: owner }, owner);
+  appendExtraListing({ ...prop, managerUserId: owner, adminPublishLive: true }, owner);
   const nextUn = [...side.unlisted.slice(0, idx), ...side.unlisted.slice(idx + 1)];
   writeSideStorage({ ...side, unlisted: nextUn }, forManagerUserId);
   return listingId;
@@ -327,55 +332,7 @@ export function removeRejectedProperty(adminRefId: string, forManagerUserId?: st
   return true;
 }
 
-/** One-time demo rows for request-change / unlisted / rejected buckets when all are empty. */
-export function ensureDemoManagerSideBucketsSeed(forManagerUserId: string | null): void {
-  if (!forManagerUserId || !isBrowser()) return;
-  const side = readSide(forManagerUserId);
-  if (side.requestChange.length + side.unlisted.length + side.rejected.length > 0) return;
-
-  const tag = forManagerUserId.slice(0, 10);
-  side.requestChange.push({
-    adminRefId: `demo-rc-${tag}`,
-    buildingName: "Harbor Studios",
-    unitLabel: "Studio A",
-    address: "88 Embarcadero",
-    zip: "94105",
-    neighborhood: "Embarcadero",
-    beds: 1,
-    baths: 1,
-    monthlyRent: 2100,
-    petFriendly: false,
-    tagline: "Water views — demo request-change row.",
-    managerUserId: forManagerUserId,
-    editRequestNote: "Please upload brighter kitchen photos and confirm parking availability.",
-  });
-  side.unlisted.push({
-    adminRefId: `demo-unl-${tag}`,
-    buildingName: "Lakeview Lofts",
-    unitLabel: "Micro-studio",
-    address: "3000 19th St",
-    zip: "94110",
-    neighborhood: "Mission",
-    beds: 1,
-    baths: 1,
-    monthlyRent: 1795,
-    petFriendly: true,
-    tagline: "Demo unlisted — relist when photos are refreshed.",
-    managerUserId: forManagerUserId,
-  });
-  side.rejected.push({
-    adminRefId: `demo-rej-${tag}`,
-    buildingName: "Fillmore Flats",
-    unitLabel: "Unit 2",
-    address: "900 Fillmore St",
-    zip: "94117",
-    neighborhood: "Lower Haight",
-    beds: 2,
-    baths: 1,
-    monthlyRent: 2650,
-    petFriendly: false,
-    tagline: "Demo rejected submission — insufficient detail.",
-    managerUserId: forManagerUserId,
-  });
-  writeSideStorage(side, forManagerUserId);
+/** Previously seeded demo rows for manager side-buckets; disabled until the real flow ships. */
+export function ensureDemoManagerSideBucketsSeed(_forManagerUserId: string | null): void {
+  /* no-op */
 }

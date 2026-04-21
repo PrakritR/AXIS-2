@@ -26,7 +26,11 @@ import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-ap
 import type { ManagerApplicationBucket } from "@/data/demo-portal";
 import { demoApplicantRows } from "@/data/demo-portal";
 import type { DemoApplicantRow } from "@/data/demo-portal";
-import { readManagerApplicationRows, writeManagerApplicationRows } from "@/lib/manager-applications-storage";
+import {
+  MANAGER_APPLICATIONS_EVENT,
+  readManagerApplicationRows,
+  writeManagerApplicationRows,
+} from "@/lib/manager-applications-storage";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -43,7 +47,14 @@ export function ManagerApplications() {
   const [rows, setRows] = useState<DemoApplicantRow[]>(demoApplicantRows);
 
   useEffect(() => {
-    setRows(readManagerApplicationRows(demoApplicantRows));
+    const sync = () => setRows(readManagerApplicationRows(demoApplicantRows));
+    sync();
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
   }, []);
 
   const persist = useCallback((next: DemoApplicantRow[]) => {

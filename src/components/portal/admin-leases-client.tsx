@@ -17,6 +17,7 @@ import {
 } from "@/lib/lease-pipeline-storage";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
+import { rentSummaryFromApplication } from "@/lib/generated-lease";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { PORTAL_DATA_TABLE_WRAP, PORTAL_DATA_TABLE_SCROLL, PORTAL_TABLE_DETAIL_ROW, PORTAL_TABLE_TR } from "@/components/portal/portal-data-table";
@@ -111,11 +112,12 @@ function LeasePipelineAdminDetail({
 
   return (
     <div className="max-h-[min(70vh,520px)] space-y-4 overflow-y-auto pr-1">
-      <div>
-        <p className="text-base font-semibold text-slate-900">{row.unit}</p>
-        <p className="mt-0.5 text-sm text-slate-500">{row.residentName}</p>
-        <p className="mt-2 text-sm text-slate-700">{row.notes}</p>
-      </div>
+      {row.notes.trim() ? (
+        <p className="text-sm text-slate-700">
+          <span className="font-semibold text-slate-800">Internal notes: </span>
+          {row.notes.trim()}
+        </p>
+      ) : null}
 
       {row.thread.length ? (
         <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 px-3 py-2">
@@ -134,7 +136,7 @@ function LeasePipelineAdminDetail({
 
       <LeaseDocumentPreview
         row={row}
-        emptyHint="No generated lease yet — managers generate from application data."
+        emptyHint="No application answers on file to build a preview — managers must link an approved application."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -323,7 +325,9 @@ export function AdminLeasesClient() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {rows.map((row) => {
+                  const rentLabel = rentSummaryFromApplication(row.application);
+                  return (
                   <Fragment key={row.id}>
                     <tr className={PORTAL_TABLE_TR}>
                       <td className="px-5 py-4 align-middle">
@@ -331,7 +335,7 @@ export function AdminLeasesClient() {
                         <p className="mt-0.5 text-sm text-slate-500">{row.residentName}</p>
                       </td>
                       <td className="px-5 py-4 align-middle">
-                        <p className="font-semibold text-slate-900">—</p>
+                        <p className="font-semibold text-slate-900">{rentLabel ?? "—"}</p>
                         <p className="text-xs text-slate-500">From application / listing</p>
                       </td>
                       <td className="px-5 py-4 align-middle">
@@ -360,7 +364,8 @@ export function AdminLeasesClient() {
                       </tr>
                     ) : null}
                   </Fragment>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

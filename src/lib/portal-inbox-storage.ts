@@ -15,6 +15,9 @@ export type PersistedInboxThread = {
 export const MANAGER_INBOX_STORAGE_KEY = "axis_portal_inbox_manager_v1";
 export const OWNER_INBOX_STORAGE_KEY = "axis_portal_inbox_owner_v1";
 
+/** Fired after `persistInbox` writes (same tab). `detail.key` is the storage key. */
+export const PORTAL_INBOX_CHANGED_EVENT = "axis-portal-inbox-changed";
+
 function canUse(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
@@ -23,6 +26,11 @@ function looksLikeThread(row: unknown): row is PersistedInboxThread {
   if (!row || typeof row !== "object") return false;
   const r = row as Record<string, unknown>;
   return typeof r.id === "string" && typeof r.folder === "string";
+}
+
+/** Unopened count for KPIs / badges (matches inbox tab filters). */
+export function countUnopenedPersistedInbox(key: string, fallback: PersistedInboxThread[]): number {
+  return loadPersistedInbox(key, fallback).filter((t) => t.folder === "inbox" && t.unread).length;
 }
 
 /** Load inbox JSON or return fallback when missing / invalid. */
@@ -44,6 +52,7 @@ export function persistInbox(key: string, threads: PersistedInboxThread[]): void
   if (!canUse()) return;
   try {
     localStorage.setItem(key, JSON.stringify(threads));
+    window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
   } catch {
     /* quota */
   }

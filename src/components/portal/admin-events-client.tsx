@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalCalendarPanels } from "@/components/portal/portal-calendar-panels";
-import { PortalPropertyFilter } from "@/components/portal/manager-section-shell";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   acceptPartnerInquiry,
@@ -161,23 +160,9 @@ export function AdminEventsClient() {
     <ManagerPortalPageShell
       title="Calendar"
       titleAside={
-        <>
-          <div className="hidden min-w-0 max-w-full shrink sm:block">
-            <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-              <PortalPropertyFilter />
-            </div>
-          </div>
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-            Refresh
-          </Button>
-        </>
-      }
-      filterRow={
-        <div className="sm:hidden">
-          <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-            <PortalPropertyFilter />
-          </div>
-        </div>
+        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
+          Refresh
+        </Button>
       }
     >
       <div className="flex flex-col gap-6">

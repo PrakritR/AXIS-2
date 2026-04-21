@@ -79,6 +79,23 @@ export function leaseContextFromApplication(application: Partial<RentalWizardFor
   };
 }
 
+/** Rent line for lease tables — from application + listing when available. */
+export function rentSummaryFromApplication(application: Partial<RentalWizardFormState> | undefined | null): string | null {
+  if (!application || !Object.keys(application).length) return null;
+  const ctx = leaseContextFromApplication(application as RentalWizardFormState);
+  const room = ctx.leasedRoom;
+  const list = ctx.listingProperty;
+  const monthlyRent =
+    (room && findSubmissionRoomRent(ctx.submission, room.unitLabel)) ??
+    room?.rentLabel ??
+    list?.rentLabel ??
+    null;
+  if (!monthlyRent) return null;
+  const s = typeof monthlyRent === "string" ? monthlyRent : String(monthlyRent);
+  if (s.includes("As set forth")) return null;
+  return s;
+}
+
 export function gatherLeaseGenerationContext(): LeaseGenerationContext {
   const application = loadRentalWizardDraft() ?? {};
   return leaseContextFromApplication(application);
