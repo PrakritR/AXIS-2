@@ -31,6 +31,32 @@ import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilter } from "./manager-section-shell";
 import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "./portal-metrics";
 
+function safeLeasePipelineCount(): number {
+  try {
+    return readLeasePipeline().length;
+  } catch {
+    return 0;
+  }
+}
+
+function safePaymentLineCount(userId: string | null, ready: boolean): number {
+  try {
+    if (!ready) return demoManagerPaymentLedgerRows.length;
+    const fromHc = userId ? readChargesForManager(userId).length : readChargesForManager(null).length;
+    return fromHc + demoManagerPaymentLedgerRows.length;
+  } catch {
+    return demoManagerPaymentLedgerRows.length;
+  }
+}
+
+function safeInboxUnopened(key: string, fallback: PersistedInboxThread[]): number {
+  try {
+    return countUnopenedPersistedInbox(key, fallback);
+  } catch {
+    return 0;
+  }
+}
+
 function managerInboxFallback(): PersistedInboxThread[] {
   return demoManagerInboxThreads.map((t) => ({
     id: t.id,
@@ -76,17 +102,21 @@ export function ManagerDashboard() {
 
   const pipelineSummary = useMemo(() => {
     void pipelineTick;
-    if (!userId) {
+    try {
+      if (!userId) {
+        return {
+          pendingProperties: demoManagerHouseRows.filter((p) => p.bucket === "pending").length,
+          totalProperties: demoManagerHouseRows.length,
+        };
+      }
+      const [p0, p1, p2, p3, p4] = adminKpiCounts(userId);
       return {
-        pendingProperties: demoManagerHouseRows.filter((p) => p.bucket === "pending").length,
-        totalProperties: demoManagerHouseRows.length,
+        pendingProperties: p0,
+        totalProperties: p0 + p1 + p2 + p3 + p4,
       };
+    } catch {
+      return { pendingProperties: 0, totalProperties: 0 };
     }
-    const [p0, p1, p2, p3, p4] = adminKpiCounts(userId);
-    return {
-      pendingProperties: p0,
-      totalProperties: p0 + p1 + p2 + p3 + p4,
-    };
   }, [userId, pipelineTick]);
 
   const [hcTick, setHcTick] = useState(0);
@@ -98,9 +128,7 @@ export function ManagerDashboard() {
 
   const paymentLineCount = useMemo(() => {
     void hcTick;
-    if (!ready) return demoManagerPaymentLedgerRows.length;
-    const fromHc = userId ? readChargesForManager(userId).length : readChargesForManager(null).length;
-    return fromHc + demoManagerPaymentLedgerRows.length;
+    return safePaymentLineCount(userId, ready);
   }, [userId, hcTick, ready]);
 
   const [applicationRows, setApplicationRows] = useState(demoApplicantRows);
@@ -132,7 +160,7 @@ export function ManagerDashboard() {
 
   const leasePipelineCount = useMemo(() => {
     void leaseTick;
-    return readLeasePipeline().length;
+    return safeLeasePipelineCount();
   }, [leaseTick]);
 
   const [inboxTick, setInboxTick] = useState(0);
@@ -155,7 +183,7 @@ export function ManagerDashboard() {
     void inboxTick;
     const key = pathname.startsWith("/owner") ? OWNER_INBOX_STORAGE_KEY : MANAGER_INBOX_STORAGE_KEY;
     const fallback = pathname.startsWith("/owner") ? [] : managerInboxFallback();
-    return countUnopenedPersistedInbox(key, fallback);
+    return safeInboxUnopened(key, fallback);
   }, [pathname, inboxTick]);
 
   const [workOrderRows, setWorkOrderRows] = useState(demoManagerWorkOrderRowsFull);

@@ -83,11 +83,19 @@ function writeSideStorage(side: SideBuckets, forManagerUserId?: string | null) {
 }
 
 function readSide(forManagerUserId?: string | null): SideBuckets {
-  return readJson<SideBuckets>(sideKey(forManagerUserId), { requestChange: [], unlisted: [], rejected: [] });
+  const raw = readJson<Partial<SideBuckets> | null>(sideKey(forManagerUserId), null);
+  if (!raw || typeof raw !== "object") {
+    return { requestChange: [], unlisted: [], rejected: [] };
+  }
+  return {
+    requestChange: Array.isArray(raw.requestChange) ? raw.requestChange : [],
+    unlisted: Array.isArray(raw.unlisted) ? raw.unlisted : [],
+    rejected: Array.isArray(raw.rejected) ? raw.rejected : [],
+  };
 }
 
-function slugPart(s: string) {
-  return s
+function slugPart(s: string | undefined | null) {
+  return String(s ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
@@ -182,18 +190,22 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
 
 /** When `forManagerUserId` is set, counts only that manager’s pipeline + side buckets (manager portal). */
 export function adminKpiCounts(forManagerUserId?: string | null): [number, number, number, number, number] {
-  if (forManagerUserId) {
-    const pending = readPendingManagerPropertiesForUser(forManagerUserId).length;
-    const side = readSide(forManagerUserId);
-    const listed = readExtraListingsForUser(forManagerUserId).filter(
-      (p) => p.id.startsWith("mgr-") && p.adminPublishLive === true,
-    ).length;
+  try {
+    if (forManagerUserId) {
+      const pending = readPendingManagerPropertiesForUser(forManagerUserId).length;
+      const side = readSide(forManagerUserId);
+      const listed = readExtraListingsForUser(forManagerUserId).filter(
+        (p) => p?.id?.startsWith("mgr-") && p.adminPublishLive === true,
+      ).length;
+      return [pending, side.requestChange.length, listed, side.unlisted.length, side.rejected.length];
+    }
+    const pending = readAllPendingManagerProperties().length;
+    const side = readSide();
+    const listed = readAllExtraListings().filter((p) => p?.id?.startsWith("mgr-")).length;
     return [pending, side.requestChange.length, listed, side.unlisted.length, side.rejected.length];
+  } catch {
+    return [0, 0, 0, 0, 0];
   }
-  const pending = readAllPendingManagerProperties().length;
-  const side = readSide();
-  const listed = readAllExtraListings().filter((p) => p.id.startsWith("mgr-")).length;
-  return [pending, side.requestChange.length, listed, side.unlisted.length, side.rejected.length];
 }
 
 export function readAdminPropertyRows(

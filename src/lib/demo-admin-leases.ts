@@ -48,30 +48,68 @@ function write(rows: AdminLeaseRow[]) {
   }
 }
 
+function normalizeAdminLeaseRow(raw: Partial<AdminLeaseRow> & { id?: string }): AdminLeaseRow | null {
+  const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : null;
+  if (!id) return null;
+  const bucketNum = typeof raw.bucket === "number" && raw.bucket >= 0 && raw.bucket <= 3 ? raw.bucket : 0;
+  return {
+    id,
+    propertyLabel: typeof raw.propertyLabel === "string" ? raw.propertyLabel : "",
+    addressLine: typeof raw.addressLine === "string" ? raw.addressLine : "",
+    rentLabel: typeof raw.rentLabel === "string" ? raw.rentLabel : "",
+    bucket: bucketNum as AdminLeaseBucketIndex,
+    managerName: typeof raw.managerName === "string" ? raw.managerName : "",
+    propertyGroup: typeof raw.propertyGroup === "string" ? raw.propertyGroup : "",
+    residentName: typeof raw.residentName === "string" ? raw.residentName : "",
+    pdfUrl: typeof raw.pdfUrl === "string" ? raw.pdfUrl : DEMO_LEASE_PDF_URL,
+    uploadedPdfDataUrl: raw.uploadedPdfDataUrl ?? null,
+    comments: typeof raw.comments === "string" ? raw.comments : "",
+  };
+}
+
 export function readAdminLeases(): AdminLeaseRow[] {
-  const rows = readJson<AdminLeaseRow[] | null>(KEY, null);
-  if (rows === null) {
+  const raw = readJson<unknown>(KEY, null);
+  if (raw === null) {
     write([]);
     return [];
   }
-  return rows;
+  if (!Array.isArray(raw)) {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem(KEY);
+      } catch {
+        /* ignore */
+      }
+    }
+    return [];
+  }
+  const out: AdminLeaseRow[] = [];
+  for (const item of raw) {
+    const row = normalizeAdminLeaseRow((item ?? {}) as Partial<AdminLeaseRow>);
+    if (row) out.push(row);
+  }
+  return out;
 }
 
 export function adminLeaseKpiCounts(): [number, number, number, number] {
-  if (typeof window !== "undefined") {
-    try {
-      return leasePipelineBucketCounts();
-    } catch {
-      /* fall through */
+  try {
+    if (typeof window !== "undefined") {
+      try {
+        return leasePipelineBucketCounts();
+      } catch {
+        /* fall through to legacy admin lease rows */
+      }
     }
+    const rows = readAdminLeases();
+    return [
+      rows.filter((r) => r.bucket === 0).length,
+      rows.filter((r) => r.bucket === 1).length,
+      rows.filter((r) => r.bucket === 2).length,
+      rows.filter((r) => r.bucket === 3).length,
+    ];
+  } catch {
+    return [0, 0, 0, 0];
   }
-  const rows = readAdminLeases();
-  return [
-    rows.filter((r) => r.bucket === 0).length,
-    rows.filter((r) => r.bucket === 1).length,
-    rows.filter((r) => r.bucket === 2).length,
-    rows.filter((r) => r.bucket === 3).length,
-  ];
 }
 
 export function updateAdminLease(id: string, patch: Partial<AdminLeaseRow>): boolean {

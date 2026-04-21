@@ -1,5 +1,6 @@
 import type { MockProperty } from "@/data/types";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { parseJsonArray, parseLocalStorageJson, parseRecordOfArrays } from "@/lib/safe-local-storage";
 
 /** Admin-only / legacy listings not tied to a real manager auth user (demo localStorage bucket). */
 export const LEGACY_MANAGER_SCOPE_USER_ID = "__axis_legacy__";
@@ -78,7 +79,7 @@ function writeJson(key: string, value: unknown) {
 }
 
 function readPendingMap(): PendingMap {
-  return readJson<PendingMap>(PENDING_BY_USER_KEY, {});
+  return parseRecordOfArrays<ManagerPendingPropertyRow>(parseLocalStorageJson(PENDING_BY_USER_KEY));
 }
 
 function writePendingMap(m: PendingMap) {
@@ -86,7 +87,7 @@ function writePendingMap(m: PendingMap) {
 }
 
 function readExtrasMap(): ExtrasMap {
-  return readJson<ExtrasMap>(EXTRAS_BY_USER_KEY, {});
+  return parseRecordOfArrays<MockProperty>(parseLocalStorageJson(EXTRAS_BY_USER_KEY));
 }
 
 function writeExtrasMap(m: ExtrasMap) {
@@ -102,8 +103,8 @@ function migrateLegacyGlobalIntoUser(userId: string) {
   const em = readExtrasMap();
   if (map[userId]?.length || em[userId]?.length) return;
 
-  const legacyP = readJson<ManagerPendingPropertyRow[]>(LEGACY_PENDING_KEY, []);
-  const legacyE = readJson<MockProperty[]>(LEGACY_EXTRAS_KEY, []);
+  const legacyP = parseJsonArray<ManagerPendingPropertyRow>(parseLocalStorageJson(LEGACY_PENDING_KEY));
+  const legacyE = parseJsonArray<MockProperty>(parseLocalStorageJson(LEGACY_EXTRAS_KEY));
   if (legacyP.length === 0 && legacyE.length === 0) return;
 
   map[userId] = legacyP.map((r) => ({
@@ -385,7 +386,7 @@ export function takePendingManagerProperty(pendingId: string): ManagerPendingPro
       return row;
     }
   }
-  const legacy = readJson<ManagerPendingPropertyRow[]>(LEGACY_PENDING_KEY, []);
+  const legacy = parseJsonArray<ManagerPendingPropertyRow>(parseLocalStorageJson(LEGACY_PENDING_KEY));
   const idx = legacy.findIndex((p) => p.id === pendingId);
   if (idx === -1) return null;
   const row = legacy[idx]!;
@@ -408,7 +409,7 @@ export function removeExtraListing(listingId: string): MockProperty | null {
       return row;
     }
   }
-  const legacy = readJson<MockProperty[]>(LEGACY_EXTRAS_KEY, []);
+  const legacy = parseJsonArray<MockProperty>(parseLocalStorageJson(LEGACY_EXTRAS_KEY));
   const idx = legacy.findIndex((p) => p.id === listingId);
   if (idx === -1) return null;
   const row = legacy[idx]!;

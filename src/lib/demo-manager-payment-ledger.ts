@@ -1,5 +1,6 @@
 import { type DemoManagerPaymentLedgerRow, type ManagerPaymentBucket } from "@/data/demo-portal";
 import { HOUSEHOLD_CHARGES_EVENT } from "@/lib/household-charges";
+import { parseJsonArray, parseLocalStorageJson } from "@/lib/safe-local-storage";
 
 const PAID_KEY = "axis_demo_manager_ledger_marked_paid_v1";
 const DELETED_KEY = "axis_demo_manager_ledger_deleted_v1";
@@ -10,20 +11,9 @@ function emitChargesRefresh() {
   window.dispatchEvent(new Event(HOUSEHOLD_CHARGES_EVENT));
 }
 
-function readJson<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 function readPaidIds(): Set<string> {
-  const arr = readJson<string[]>(PAID_KEY, []);
-  return new Set(arr);
+  const arr = parseJsonArray<string>(parseLocalStorageJson(PAID_KEY));
+  return new Set(arr.filter((id) => typeof id === "string"));
 }
 
 function writePaidIds(s: Set<string>) {
@@ -36,8 +26,8 @@ function writePaidIds(s: Set<string>) {
 }
 
 function readDeletedIds(): Set<string> {
-  const arr = readJson<string[]>(DELETED_KEY, []);
-  return new Set(arr);
+  const arr = parseJsonArray<string>(parseLocalStorageJson(DELETED_KEY));
+  return new Set(arr.filter((id) => typeof id === "string"));
 }
 
 function writeDeletedIds(s: Set<string>) {
@@ -50,7 +40,7 @@ function writeDeletedIds(s: Set<string>) {
 }
 
 function readCustomPaymentLines(): DemoManagerPaymentLedgerRow[] {
-  return readJson<DemoManagerPaymentLedgerRow[]>(CUSTOM_KEY, []);
+  return parseJsonArray<DemoManagerPaymentLedgerRow>(parseLocalStorageJson(CUSTOM_KEY));
 }
 
 function writeCustom(lines: DemoManagerPaymentLedgerRow[]) {

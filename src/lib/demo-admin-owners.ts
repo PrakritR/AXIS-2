@@ -35,12 +35,16 @@ function write(rows: AdminOwnerRow[]) {
 }
 
 export function readAdminOwners(): AdminOwnerRow[] {
-  const rows = readJson<AdminOwnerRow[] | null>(KEY, null);
-  if (rows === null) {
+  const raw = readJson<unknown>(KEY, null);
+  if (raw === null) {
     write([]);
     return [];
   }
-  return rows;
+  if (!Array.isArray(raw)) {
+    write([]);
+    return [];
+  }
+  return raw as AdminOwnerRow[];
 }
 
 export function adminOwnerCounts() {

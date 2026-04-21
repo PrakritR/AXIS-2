@@ -77,14 +77,35 @@ function StatusPill({ bucket }: { bucket: AdminLeaseBucketIndex }) {
   );
 }
 
-function bucketToPillIndex(b: ManagerLeaseBucket): AdminLeaseBucketIndex {
-  const m: Record<ManagerLeaseBucket, AdminLeaseBucketIndex> = {
-    manager: 0,
-    admin: 1,
-    resident: 2,
-    signed: 3,
-  };
-  return m[b];
+function bucketToPillIndex(b: LeasePipelineRow["bucket"]): AdminLeaseBucketIndex {
+  switch (b) {
+    case "manager":
+      return 0;
+    case "admin":
+      return 1;
+    case "resident":
+      return 2;
+    case "signed":
+      return 3;
+    default:
+      return 0;
+  }
+}
+
+function safeReadLeasePipeline(): LeasePipelineRow[] {
+  try {
+    return readLeasePipeline();
+  } catch {
+    return [];
+  }
+}
+
+function safeAdminLeaseKpiCounts(): [number, number, number, number] {
+  try {
+    return adminLeaseKpiCounts();
+  } catch {
+    return [0, 0, 0, 0];
+  }
 }
 
 function LeasePipelineAdminDetail({
@@ -278,8 +299,8 @@ export function AdminLeasesClient() {
     3: "signed",
   };
 
-  const allRows = useMemo(() => readLeasePipeline(), [tick]);
-  const kpiValues = useMemo(() => adminLeaseKpiCounts(), [tick]);
+  const allRows = useMemo(() => safeReadLeasePipeline(), [tick]);
+  const kpiValues = useMemo(() => safeAdminLeaseKpiCounts(), [tick]);
 
   const rows = useMemo(() => {
     const want = ADMIN_INDEX_TO_PIPELINE[activeBucket];
@@ -354,8 +375,8 @@ export function AdminLeasesClient() {
                   <Fragment key={row.id}>
                     <tr className={PORTAL_TABLE_TR}>
                       <td className="px-5 py-4 align-middle">
-                        <p className="font-semibold text-slate-900">{row.unit}</p>
-                        <p className="mt-0.5 text-sm text-slate-500">{row.residentName}</p>
+                        <p className="font-semibold text-slate-900">{row.unit || "—"}</p>
+                        <p className="mt-0.5 text-sm text-slate-500">{row.residentName || "—"}</p>
                       </td>
                       <td className="px-5 py-4 align-middle">
                         <p className="font-semibold text-slate-900">{rentLabel ?? "—"}</p>

@@ -38,12 +38,16 @@ function write(rows: AdminManagerRow[]) {
 }
 
 export function readAdminManagers(): AdminManagerRow[] {
-  const rows = readJson<AdminManagerRow[] | null>(KEY, null);
-  if (rows === null) {
+  const raw = readJson<unknown>(KEY, null);
+  if (raw === null) {
     write([]);
     return [];
   }
-  return rows;
+  if (!Array.isArray(raw)) {
+    write([]);
+    return [];
+  }
+  return raw as AdminManagerRow[];
 }
 
 export function adminManagerCounts() {
@@ -68,9 +72,9 @@ export function filterManagers(rows: AdminManagerRow[], q: string, propertyFilte
     if (propertyFilter !== "all" && r.propertyGroup !== propertyFilter) return false;
     if (!needle) return true;
     return (
-      r.name.toLowerCase().includes(needle) ||
-      r.email.toLowerCase().includes(needle) ||
-      r.accountType.toLowerCase().includes(needle)
+      String(r.name ?? "").toLowerCase().includes(needle) ||
+      String(r.email ?? "").toLowerCase().includes(needle) ||
+      String(r.accountType ?? "").toLowerCase().includes(needle)
     );
   });
 }
