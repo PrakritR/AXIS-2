@@ -27,15 +27,6 @@ function logCheckoutCompleted(session: Stripe.Checkout.Session) {
     userId,
   });
 
-  /*
-   * TODO: Persist subscription to your database (e.g. Supabase):
-   * - Link Stripe customer id + subscription id to user (userId from metadata when present)
-   * - Store tier + billing for entitlements
-   * - Idempotent upsert on session.id or subscription.id
-   *
-   * Optional: call existing helpers such as recordPaidManagerCheckoutSession(session)
-   * if you rely on manager_purchases rows for manager signup.
-   */
 }
 
 export async function POST(req: Request) {
@@ -70,7 +61,7 @@ export async function POST(req: Request) {
       });
       /* Optional: upsert payout readiness into Supabase (e.g. profiles) using service role. */
     }
-    if (event.type === "checkout.session.completed") {
+    if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
       const session = event.data.object as Stripe.Checkout.Session;
       logCheckoutCompleted(session);
       try {

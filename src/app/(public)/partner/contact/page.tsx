@@ -119,9 +119,9 @@ function PartnerMessageForm({ showToast }: { showToast: (m: string) => void }) {
 
       <Field label="Message *">
         <textarea
-          rows={4}
+          rows={10}
           placeholder="What can we help you with?"
-          className={`${inputCls} resize-none`}
+          className={`${inputCls} min-h-[220px] resize-y leading-relaxed`}
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />

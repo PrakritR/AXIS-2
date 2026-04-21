@@ -93,19 +93,39 @@ export function ManagerPlan() {
     if (!checkout || checkoutHandledRef.current) return;
     checkoutHandledRef.current = true;
 
-    window.history.replaceState({}, "", pathname);
-
-    if (checkout === "cancelled") {
-      showToast("Checkout was cancelled.");
-      return;
-    }
-
-    showToast("Payment received. Activating your plan…");
+    const sessionId = q.get("session_id");
 
     void (async () => {
-      for (let i = 0; i < 6; i++) {
-        await load();
-        if (i < 5) await new Promise((r) => setTimeout(r, 1400));
+      if (checkout === "success" && sessionId) {
+        try {
+          const res = await fetch("/api/stripe/confirm-checkout-session", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId }),
+          });
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            showToast(body.error ?? "Could not activate your plan from checkout.");
+          }
+        } catch {
+          showToast("Could not activate your plan from checkout.");
+        }
+      }
+
+      window.history.replaceState({}, "", pathname);
+
+      if (checkout === "cancelled") {
+        showToast("Checkout was cancelled.");
+        return;
+      }
+
+      if (checkout === "success") {
+        showToast("Payment received. Activating your plan…");
+        for (let i = 0; i < 6; i++) {
+          await load();
+          if (i < 5) await new Promise((r) => setTimeout(r, 1400));
+        }
       }
     })();
   }, [pathname, load, showToast]);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ManagerPayoutSplitsForm } from "@/components/portal/manager-payout-splits-form";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
@@ -114,19 +115,20 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
 
   return (
     <ManagerPortalPageShell title="Payouts">
-      <div className="max-w-2xl space-y-5 text-sm leading-relaxed text-slate-700">
+      <div className="max-w-4xl space-y-6 text-sm leading-relaxed text-slate-700">
         <div className="rounded-2xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">How payouts work</p>
           <p className="mt-2">
             Link a verified payout account so residents can pay application fees and rent into your connected balance. You finish identity and
             bank details in the provider&apos;s hosted onboarding flow.
           </p>
-          <ul className="mt-3 list-inside list-disc space-y-1 text-slate-600">
-            <li>
-              <span className="font-medium text-slate-800">Free:</span> can connect only one account.
+          <ul className="mt-3 list-outside space-y-2 pl-5 text-slate-600 marker:text-slate-400">
+            <li className="pl-1 leading-relaxed">
+              <span className="font-medium text-slate-800">Free:</span> one connected payout account.
             </li>
-            <li className="whitespace-nowrap overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
-              <span className="font-medium text-slate-800">Pro / Business:</span> can connect multiple accounts and choose how much percentage goes to each account.
+            <li className="pl-1 leading-relaxed">
+              <span className="font-medium text-slate-800">Pro / Business:</span> multiple connected accounts in Stripe when you scale; use the
+              owner split table below to record what share of fees and rent each owner receives after platform fees.
             </li>
           </ul>
         </div>
@@ -181,6 +183,8 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
             Open provider dashboard
           </a>
         </div>
+
+        <ManagerPayoutSplitsForm />
       </div>
     </ManagerPortalPageShell>
   );
