@@ -1,12 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ManagerSectionShell } from "@/components/portal/manager-section-shell";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 function dashToEmpty(v: string) {
@@ -56,18 +54,22 @@ export function PortalProfileClient({
   idLabel: string;
   idValue: string;
 }) {
-  const router = useRouter();
   const { showToast } = useAppUi();
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(dashToEmpty(initialFullName));
   const [phone, setPhone] = useState(dashToEmpty(initialPhone));
   const [saving, setSaving] = useState(false);
+  /** Skip one sync from server props after save so we don't overwrite local state before RSC catches up. */
+  const skipNextServerPropsSync = useRef(false);
 
   useEffect(() => {
-    if (!editing) {
-      setFullName(dashToEmpty(initialFullName));
-      setPhone(dashToEmpty(initialPhone));
+    if (editing) return;
+    if (skipNextServerPropsSync.current) {
+      skipNextServerPropsSync.current = false;
+      return;
     }
+    setFullName(dashToEmpty(initialFullName));
+    setPhone(dashToEmpty(initialPhone));
   }, [initialFullName, initialPhone, editing]);
 
   const save = useCallback(async () => {
@@ -79,20 +81,28 @@ export function PortalProfileClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fullName, phone }),
       });
-      const body = (await res.json()) as { error?: string };
+      const raw = await res.text();
+      let body: { error?: string; ok?: boolean } = {};
+      try {
+        body = raw ? (JSON.parse(raw) as { error?: string; ok?: boolean }) : {};
+      } catch {
+        showToast("Save failed (invalid response).");
+        return;
+      }
       if (!res.ok) {
         showToast(body.error ?? "Could not save profile.");
         return;
       }
       showToast("Profile saved.");
+      skipNextServerPropsSync.current = true;
       setEditing(false);
-      router.refresh();
+      // Full RSC refresh can 500 on some hosts; next navigation will re-sync from server. Local state is already correct.
     } catch {
       showToast("Network error.");
     } finally {
       setSaving(false);
     }
-  }, [fullName, phone, router, showToast]);
+  }, [fullName, phone, showToast]);
 
   const cancel = useCallback(() => {
     setFullName(dashToEmpty(initialFullName));
@@ -163,9 +173,27 @@ export function PortalProfileClient({
 
   if (variant === "manager") {
     return (
-      <ManagerSectionShell title="Profile" actions={headerActions} bodyClassName="mt-4">
+      <ManagerPortalPageShell
+        title="Profile"
+        titleAside={
+          <div className="flex flex-wrap gap-2">
+            {headerActions.map((a) => (
+              <Button
+                key={a.label}
+                type="button"
+                variant={a.variant === "primary" ? "primary" : "outline"}
+                className="shrink-0 rounded-full border-slate-200/90 px-5 py-2.5 text-sm font-semibold"
+                disabled={(saving && a.label !== "Cancel") || Boolean((a as { disabled?: boolean }).disabled)}
+                onClick={a.onClick}
+              >
+                {a.label}
+              </Button>
+            ))}
+          </div>
+        }
+      >
         <Card className="rounded-3xl border border-slate-200/80 p-6 sm:p-8">{inner}</Card>
-      </ManagerSectionShell>
+      </ManagerPortalPageShell>
     );
   }
 

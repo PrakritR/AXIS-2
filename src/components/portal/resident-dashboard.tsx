@@ -3,8 +3,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
-import { demoResidentChargeRows, demoResidentInboxThreads } from "@/data/demo-portal";
-
 function StatCard({
   label,
   children,
@@ -38,8 +36,8 @@ export function ResidentDashboard({
   showTestAccessNote?: boolean;
   displayName?: string;
 }) {
-  const inboxUnread = demoResidentInboxThreads.filter((t) => t.unread).length;
-  const balanceDue = demoResidentChargeRows.find((c) => c.balance !== "$0.00")?.balance ?? "—";
+  const inboxUnread = 0;
+  const balanceDue = "—";
   const openWorkOrders = 0;
 
   if (applicationApproved) {

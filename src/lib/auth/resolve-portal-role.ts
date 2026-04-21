@@ -1,7 +1,7 @@
 import type { AuthRole } from "@/components/auth/portal-switcher";
 
 /**
- * Demo routing until real auth: local part `role` or `anything+role` before @ selects the portal.
+ * Development routing: local part `role` or `anything+role` before @ selects the portal until full auth wiring.
  * Examples: admin@…, you+manager@gmail.com, owner@….
  */
 export function resolvePortalRoleFromEmail(email: string): AuthRole {
@@ -17,8 +17,8 @@ export function resolvePortalRoleFromEmail(email: string): AuthRole {
   return "resident";
 }
 
-/** Expected key when creating an admin account (demo). Override with NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY. */
+/** Expected key when creating an admin account. Override with NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY. */
 export function isValidAdminRegisterKey(key: string): boolean {
-  const expected = process.env.NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY ?? "axis-demo-admin";
+  const expected = process.env.NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY ?? "axis-admin-register";
   return key.trim() === expected;
 }

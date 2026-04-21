@@ -155,6 +155,8 @@ export function ResidentLeasePanel() {
   const leaseLocked = leaseBlockers.length > 0;
 
   const canSignElectronically = Boolean(pipelineRow?.bucket === "resident" && !leaseLocked);
+  /** Request edits, upload your copy, extension — only after manager sends lease to resident. */
+  const residentLeaseActions = Boolean(pipelineRow?.bucket === "resident");
 
   const onDownloadAiLease = useCallback(() => {
     downloadAiGeneratedLeaseHtml(leaseCtx);
@@ -239,7 +241,7 @@ export function ResidentLeasePanel() {
       saveUploadedOwnLease(email, payload);
       setOwnLease(payload);
       window.dispatchEvent(new Event(LEASE_PIPELINE_EVENT));
-      showToast("Your lease PDF is saved in this browser (demo).");
+      showToast("Your lease PDF is saved in this browser.");
     };
     reader.onerror = () => showToast("Could not read that file.");
     reader.readAsDataURL(f);
@@ -258,9 +260,11 @@ export function ResidentLeasePanel() {
       title="Lease"
       titleAside={
         <>
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Request extension (demo).")}>
-            Request extension
-          </Button>
+          {residentLeaseActions ? (
+            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Extension request sent.")}>
+              Request extension
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
             Download lease
           </Button>
@@ -276,6 +280,16 @@ export function ResidentLeasePanel() {
         </>
       }
     >
+      {pipelineRow && !residentLeaseActions ? (
+        <div className="mb-5 rounded-2xl border border-sky-200/90 bg-sky-50/80 px-4 py-3 text-sm text-sky-950">
+          <p className="font-semibold">Lease not yet in your signing queue</p>
+          <p className="mt-1 text-sky-900/90">
+            Current stage: <strong>{pipelineRow.stageLabel}</strong>. Request edits, upload your countersigned PDF, e-sign, and extension
+            requests are available only in the <strong>With resident</strong> stage — after your manager sends the lease to you.
+          </p>
+        </div>
+      ) : null}
+
       {leaseLocked ? (
         <div className="mb-5 rounded-2xl border border-amber-200/90 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
           <p className="font-semibold">Lease signing is blocked until required payments are confirmed</p>
@@ -321,10 +335,7 @@ export function ResidentLeasePanel() {
         </Card>
       ) : null}
 
-      {(pipelineRow?.bucket === "resident" ||
-        pipelineRow?.bucket === "manager" ||
-        pipelineRow?.bucket === "admin") &&
-      email ? (
+      {residentLeaseActions && email ? (
         <Card className="border-slate-200/80 p-5">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Request edits</p>
           <p className="mt-1 text-sm text-slate-600">Send a note to your property manager. Your lease moves back to manager review.</p>
@@ -378,43 +389,56 @@ export function ResidentLeasePanel() {
             available. Covers parties, premises, term, rent, deposit, utilities, shared spaces, pets, maintenance, access, default, notices,
             governing law, disclosures, application summary, exhibits, and signature blocks — aligned with a standard room rental agreement.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="rounded-full text-xs" onClick={buildPreviewBlobUrl}>
-              Preview AI lease
-            </Button>
-            <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onDownloadLeasePackage}>
-              Download lease
-            </Button>
-          </div>
+          {residentLeaseActions ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={buildPreviewBlobUrl}>
+                Preview AI lease
+              </Button>
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onDownloadLeasePackage}>
+                Download lease
+              </Button>
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-slate-600">
+              Preview and package downloads for your official lease unlock when your manager sends it to you (<strong>With resident</strong>
+              ).
+            </p>
+          )}
 
           <p className="mt-6 text-sm font-semibold text-slate-900">Your own lease (PDF)</p>
-          <p className="mt-1 text-sm text-slate-600">Upload a countersigned or attorney-provided PDF. Stored locally for this account in the demo.</p>
-          <input
-            ref={uploadInputRef}
-            type="file"
-            accept="application/pdf"
-            className="sr-only"
-            id="resident-upload-own-lease"
-            onChange={(e) => void onPickOwnLeasePdf(e.target.files)}
-          />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <label
-              htmlFor="resident-upload-own-lease"
-              className="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
-            >
-              Upload PDF
-            </label>
-            {ownLease ? (
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onRemoveOwnLease}>
-                Remove upload
-              </Button>
-            ) : null}
-          </div>
-          {ownLease ? <p className="mt-2 text-xs text-slate-500">{ownLease.fileName}</p> : null}
+          <p className="mt-1 text-sm text-slate-600">Upload a countersigned or attorney-provided PDF. Stored locally for this browser session.</p>
+          {residentLeaseActions ? (
+            <>
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept="application/pdf"
+                className="sr-only"
+                id="resident-upload-own-lease"
+                onChange={(e) => void onPickOwnLeasePdf(e.target.files)}
+              />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <label
+                  htmlFor="resident-upload-own-lease"
+                  className="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+                >
+                  Upload PDF
+                </label>
+                {ownLease ? (
+                  <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onRemoveOwnLease}>
+                    Remove upload
+                  </Button>
+                ) : null}
+              </div>
+              {ownLease ? <p className="mt-2 text-xs text-slate-500">{ownLease.fileName}</p> : null}
+            </>
+          ) : (
+            <p className="mt-3 text-xs text-slate-600">Upload opens when your manager has sent the lease to you for review and signature.</p>
+          )}
         </Card>
       </div>
 
-      {((aiPreviewUrl && !pipelineRow?.generatedHtml) || ownLease) && (
+      {residentLeaseActions && ((aiPreviewUrl && !pipelineRow?.generatedHtml) || ownLease) ? (
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           {aiPreviewUrl && !pipelineRow?.generatedHtml ? (
             <Card className="overflow-hidden border-slate-200/80 p-0">
@@ -431,14 +455,14 @@ export function ResidentLeasePanel() {
             </Card>
           ) : null}
         </div>
-      )}
+      ) : null}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Card className="border-slate-200/80 p-5">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Version history</p>
           <ul className="mt-3 space-y-2 text-sm">
             {demoResidentLeaseVersions.length === 0 ? (
-              <li className="text-sm text-slate-500">No prior versions in demo data — use AI download / upload above.</li>
+              <li className="text-sm text-slate-500">No prior versions on file — use AI download / upload above.</li>
             ) : (
               demoResidentLeaseVersions.map((v) => (
                 <li key={v.id} className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
@@ -467,9 +491,13 @@ export function ResidentLeasePanel() {
               </li>
             ))}
           </ul>
-          <Button type="button" className="mt-4 rounded-full" variant="outline" onClick={() => showToast("Comment sent to manager (demo).")}>
-            Add comment for manager
-          </Button>
+          {residentLeaseActions ? (
+            <Button type="button" className="mt-4 rounded-full" variant="outline" onClick={() => showToast("Comment sent to manager.")}>
+              Add comment for manager
+            </Button>
+          ) : (
+            <p className="mt-4 text-xs text-slate-500">Comments to your manager are available once the lease is with you (With resident).</p>
+          )}
         </Card>
       </div>
     </ManagerPortalPageShell>

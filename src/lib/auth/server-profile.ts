@@ -19,11 +19,17 @@ export async function getServerSessionProfile(): Promise<{ user: { id: string; e
     } = await supabase.auth.getUser();
     if (!user) return { user: null, profile: null };
 
-    const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    let profile: ServerProfile | null = null;
+    try {
+      const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+      if (!error && data) profile = data as ServerProfile;
+    } catch {
+      profile = null;
+    }
 
     return {
       user: { id: user.id, email: user.email },
-      profile: profile as ServerProfile | null,
+      profile,
     };
   } catch {
     return { user: null, profile: null };

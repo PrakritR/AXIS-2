@@ -16,17 +16,40 @@ import {
 } from "@/components/portal/portal-data-table";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
+  adminKpiCounts,
+  deleteManagerLiveListing,
+  deleteUnlistedManagerProperty,
+  listAdminRow,
   publicListingHrefForPropertyRow,
   readAdminPropertyRows,
   resolveAdminPropertyRowPreview,
+  removeRejectedProperty,
+  restoreRejectedToPending,
+  returnRequestChangeToPending,
   unlistManagerListing,
   type AdminPropertyBucketIndex,
   type AdminPropertyRow,
 } from "@/lib/demo-admin-property-inventory";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 
-/** Managers only inventory admin-approved listings that are live (`adminPublishLive`). */
-const LISTED_BUCKET = 2 as AdminPropertyBucketIndex;
+/** Matches manager-facing stages: bucket 1 is admin “request change” / pre-list work (shown as Approved). */
+const MANAGER_TAB_LABELS = ["Pending", "Approved", "Listed", "Unlisted", "Rejected"] as const;
+
+const EMPTY_COPY: Record<AdminPropertyBucketIndex, string> = {
+  0: "No submissions in pending approval.",
+  1: "Nothing in this stage.",
+  2: "No listed properties.",
+  3: "No unlisted properties.",
+  4: "No rejected properties.",
+};
+
+const BANNER_COPY: Record<AdminPropertyBucketIndex, string> = {
+  0: "Pending listings are reviewed by Axis admin. You can edit your submission, but only admin can approve it for publication.",
+  1: "Axis admin has approved moving forward but requested changes before the listing goes live. Revise and resubmit from here.",
+  2: "Live on Rent with Axis — published listings you can unlist or remove.",
+  3: "These listings are off the public site. You can relist or delete them from your queue.",
+  4: "Rejected submissions stay here until you restore them to pending or delete them permanently.",
+};
 
 function HouseIcon({ className }: { className?: string }) {
   return (
@@ -47,18 +70,55 @@ function HouseIcon({ className }: { className?: string }) {
   );
 }
 
-function StatusPill({ label }: { label: string }) {
+function StatusPill({
+  label,
+  variant,
+}: {
+  label: string;
+  variant: "green" | "amber" | "slate" | "rose";
+}) {
+  const styles = {
+    green: "border-emerald-200/90 bg-emerald-50 text-emerald-900",
+    amber: "border-amber-200/90 bg-amber-50 text-amber-950",
+    slate: "border-slate-200/90 bg-slate-50 text-slate-700",
+    rose: "border-rose-200/90 bg-rose-50 text-rose-900",
+  } as const;
+  const dot = {
+    green: "bg-emerald-500",
+    amber: "bg-amber-500",
+    slate: "bg-slate-400",
+    rose: "bg-rose-500",
+  }[variant];
+
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[variant]}`}
+    >
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} aria-hidden />
       {label}
     </span>
   );
 }
 
+function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: "green" | "amber" | "slate" | "rose" } {
+  switch (bucket) {
+    case 0:
+      return { label: "Pending approval", variant: "amber" };
+    case 1:
+      return { label: "Approved · edits requested", variant: "amber" };
+    case 2:
+      return { label: "Listed", variant: "green" };
+    case 3:
+      return { label: "Unlisted", variant: "slate" };
+    default:
+      return { label: "Rejected", variant: "rose" };
+  }
+}
+
 function ManagerPropertyPreviewModal({
   open,
   onClose,
+  bucket,
   row,
   onUpdated,
   showToast,
@@ -66,6 +126,7 @@ function ManagerPropertyPreviewModal({
 }: {
   open: boolean;
   onClose: () => void;
+  bucket: AdminPropertyBucketIndex;
   row: AdminPropertyRow | null;
   onUpdated: () => void;
   showToast: (m: string) => void;
@@ -89,33 +150,138 @@ function ManagerPropertyPreviewModal({
 
   const footer = (
     <div className="flex flex-col gap-2">
+      {bucket === 1 && row.editRequestNote?.trim() ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Requested changes</p>
+          <p className="mt-1.5 whitespace-pre-wrap text-slate-700">{row.editRequestNote.trim()}</p>
+        </div>
+      ) : null}
+
       <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Actions</p>
-      <p className="text-xs text-slate-500">Listing approval is handled by Axis admin.</p>
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        {listingId ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => run("Unlisted property.", unlistManagerListing(listingId, managerUserId))}
-            >
-              Unlist
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => {
-                onClose();
-                router.push(`/manager/properties?editListing=${encodeURIComponent(listingId)}`);
-              }}
-            >
-              Edit listing
-            </Button>
-          </>
-        ) : null}
-      </div>
+
+      {bucket === 0 ? (
+        <>
+          <p className="text-xs text-slate-500">
+            Managers cannot approve their own listing. Axis admin reviews and publishes approved properties.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            onClick={() => {
+              onClose();
+              router.push(`/manager/properties?editPending=${encodeURIComponent(row.adminRefId)}`);
+            }}
+          >
+            Edit submission
+          </Button>
+        </>
+      ) : null}
+
+      {bucket === 1 ? (
+        <>
+          <p className="text-xs text-slate-500">
+            Return this to your pending queue to edit and resubmit — it will appear under Pending again.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            onClick={() => run("Returned to pending — you can edit and resubmit.", returnRequestChangeToPending(row.adminRefId, managerUserId))}
+          >
+            Move to pending & revise
+          </Button>
+        </>
+      ) : null}
+
+      {bucket === 2 && listingId ? (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            onClick={() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId))}
+          >
+            Unlist
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+            onClick={() => {
+              if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
+              run("Listing deleted.", deleteManagerLiveListing(listingId, managerUserId));
+            }}
+          >
+            Delete listing
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            onClick={() => {
+              onClose();
+              router.push(`/manager/properties?editListing=${encodeURIComponent(listingId)}`);
+            }}
+          >
+            Edit listing
+          </Button>
+        </>
+      ) : null}
+
+      {bucket === 3 ? (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            onClick={() => {
+              const id = listAdminRow(row, managerUserId);
+              if (!id) {
+                showToast("Could not relist.");
+                return;
+              }
+              showToast("Listing is live again.");
+              onUpdated();
+              onClose();
+            }}
+          >
+            Relist on Rent with Axis
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+            onClick={() => {
+              if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
+              run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId));
+            }}
+          >
+            Delete from queue
+          </Button>
+        </>
+      ) : null}
+
+      {bucket === 4 ? (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            onClick={() => run("Restored to pending approval.", restoreRejectedToPending(row.adminRefId, managerUserId))}
+          >
+            Move to pending approval
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+            onClick={() => run("Property removed.", removeRejectedProperty(row.adminRefId, managerUserId))}
+          >
+            Delete property
+          </Button>
+        </>
+      ) : null}
     </div>
   );
 
@@ -134,6 +300,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const [detailRow, setDetailRow] = useState<AdminPropertyRow | null>(null);
+  const [activeBucket, setActiveBucket] = useState<AdminPropertyBucketIndex>(0);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -145,10 +312,14 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
     };
   }, []);
 
+  const kpiValues = useMemo(() => adminKpiCounts(managerUserId), [tick, managerUserId]);
+
   const rows = useMemo(
-    () => (managerUserId ? readAdminPropertyRows(LISTED_BUCKET, managerUserId) : []),
-    [tick, managerUserId],
+    () => (managerUserId ? readAdminPropertyRows(activeBucket, managerUserId) : []),
+    [tick, managerUserId, activeBucket],
   );
+
+  const status = rowStatus(activeBucket);
 
   if (!authReady) {
     return <p className="text-sm text-slate-500">Loading your properties…</p>;
@@ -159,10 +330,29 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
 
   return (
     <>
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
-        Showing <span className="font-semibold text-slate-800">live listings</span> approved by Axis admin and published on
-        Rent with Axis.
+      <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+        {MANAGER_TAB_LABELS.map((label, i) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => setActiveBucket(i as AdminPropertyBucketIndex)}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
+              activeBucket === i ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {label}
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                activeBucket === i ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+              }`}
+            >
+              {kpiValues[i]}
+            </span>
+          </button>
+        ))}
       </div>
+
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">{BANNER_COPY[activeBucket]}</div>
 
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>
         {rows.length === 0 ? (
@@ -170,9 +360,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
             <AxisHeaderMarkTile>
               <HouseIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
-            <p className="mt-4 max-w-sm text-sm font-medium text-slate-500">
-              No approved listings yet. Submit a property for admin review; after approval it appears here.
-            </p>
+            <p className="mt-4 max-w-sm text-sm font-medium text-slate-500">{EMPTY_COPY[activeBucket]}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -188,6 +376,9 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
               <tbody>
                 {rows.map((row) => {
                   const publicHref = publicListingHrefForPropertyRow(row);
+                  const listingId = row.listingId;
+                  const showListedActions = activeBucket === 2 && listingId;
+
                   return (
                     <tr key={row.adminRefId + (row.listingId ?? "")} className={PORTAL_TABLE_TR}>
                       <td className={PORTAL_TABLE_TD}>
@@ -207,10 +398,47 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                         {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-slate-500">{row.tagline}</p> : null}
                       </td>
                       <td className={PORTAL_TABLE_TD}>
-                        <StatusPill label="Listed" />
+                        <StatusPill label={status.label} variant={status.variant} />
                       </td>
                       <td className={`${PORTAL_TABLE_TD} text-right`}>
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          {activeBucket === 0 ? (
+                            <Link
+                              href={`/manager/properties?editPending=${encodeURIComponent(row.adminRefId)}`}
+                              className={`inline-flex items-center justify-center ${PORTAL_TABLE_ROW_TOGGLE_CLASS}`}
+                            >
+                              Edit
+                            </Link>
+                          ) : null}
+                          {showListedActions ? (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                                onClick={() => {
+                                  const ok = unlistManagerListing(listingId, managerUserId);
+                                  showToast(ok ? "Listing unlisted." : "Could not unlist.");
+                                  if (ok) setTick((t) => t + 1);
+                                }}
+                              >
+                                Unlist
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                                onClick={() => {
+                                  if (!window.confirm("Permanently delete this listing from your catalog?")) return;
+                                  const ok = deleteManagerLiveListing(listingId, managerUserId);
+                                  showToast(ok ? "Listing deleted." : "Could not delete.");
+                                  if (ok) setTick((t) => t + 1);
+                                }}
+                              >
+                                Delete
+                              </Button>
+                            </>
+                          ) : null}
                           {publicHref ? (
                             <Link
                               href={publicHref}
@@ -238,6 +466,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
       <ManagerPropertyPreviewModal
         open={Boolean(detailRow)}
         onClose={() => setDetailRow(null)}
+        bucket={activeBucket}
         row={detailRow}
         onUpdated={() => setTick((t) => t + 1)}
         showToast={showToast}

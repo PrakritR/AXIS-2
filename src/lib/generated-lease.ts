@@ -1,5 +1,5 @@
 /**
- * AI-style generated residential room rental agreement (HTML) for demo.
+ * AI-style generated residential room rental agreement (HTML).
  * Sections mirror a typical “room lease” / coliving PDF (e.g. *Lease Agreement — Room 1* style):
  * parties, premises & description, term, rent & late payment, security deposit & move-in
  * charges, utilities, use & occupancy, shared spaces & amenities, pets, maintenance & alterations,
@@ -177,7 +177,7 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
 
   const body = `
 <h1>RESIDENTIAL ROOM RENTAL AGREEMENT</h1>
-<p class="sub"><strong>AI-generated draft</strong> — assembled from your rental application and listing details (demo). Not legal advice. Have counsel review before signing.</p>
+<p class="sub"><strong>AI-generated draft</strong> — assembled from your rental application and listing details. Not legal advice. Have counsel review before signing.</p>
 <p><strong>Generated:</strong> ${escapeHtml(new Date(generatedAtIso).toLocaleString())}</p>
 
 <h2>1. Parties</h2>
@@ -245,7 +245,7 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
 <p>This document, listing disclosures, and signed addenda constitute the entire agreement. If any provision is invalid, the remainder survives. Amendments must be in writing and signed.</p>
 
 <h2>20. Governing law</h2>
-<p>This Agreement shall be governed by the laws of the State of Washington (demo placeholder—replace with true governing jurisdiction for your property).</p>
+<p>This Agreement shall be governed by the laws of the State of Washington (replace with the governing jurisdiction for your property).</p>
 
 <h2>21. Disclosures</h2>
 <p>For housing built before 1978, federal lead-based paint disclosure may be required. Mold, smoke-free, and local rental disclosures may apply. Resident acknowledges reading listing materials and any provided pamphlets.</p>

@@ -1,4 +1,4 @@
-/** Table-shaped mocks; bulk demo lives in `demo-portal.ts`. */
+/** Table-shaped portal data re-exported from `demo-portal.ts` (defaults are empty until wired). */
 export {
   demoAdminPropertyRows as adminPropertyRows,
   demoApplicantRows as applicantRows,
@@ -7,17 +7,4 @@ export {
   demoWorkOrderRows as workOrderRows,
 } from "./demo-portal";
 
-export const announcementRows = [
-  {
-    title: "Spring HVAC filter swap",
-    audience: "All residents",
-    posted: "Apr 12",
-    status: "Sent",
-  },
-  {
-    title: "Parking stall reassignment (May)",
-    audience: "Ballard properties",
-    posted: "Apr 9",
-    status: "Scheduled",
-  },
-];
+export const announcementRows: { title: string; audience: string; posted: string; status: string }[] = [];

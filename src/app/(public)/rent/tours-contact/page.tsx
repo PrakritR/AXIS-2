@@ -88,9 +88,9 @@ export default function ToursContactPage() {
 
         <div key={tab} className="animate-fade-in">
           {tab === "tour" ? (
-            <TourFlow onSuccess={() => showToast("Tour booked! (demo)")} />
+            <TourFlow onSuccess={() => showToast("Tour booked.")} />
           ) : (
-            <MessageFlow onSuccess={() => showToast("Message sent (demo)")} />
+            <MessageFlow onSuccess={() => showToast("Message sent.")} />
           )}
         </div>
       </div>

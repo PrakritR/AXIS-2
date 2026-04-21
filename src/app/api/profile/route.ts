@@ -6,6 +6,11 @@ export const runtime = "nodejs";
 const MAX_NAME = 200;
 const MAX_PHONE = 40;
 
+function looksLikeMissingPhoneColumn(err: { message?: string; code?: string }) {
+  const m = (err.message ?? "").toLowerCase();
+  return m.includes("phone") && (m.includes("column") || m.includes("schema") || m.includes("unknown"));
+}
+
 export async function PATCH(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
@@ -16,7 +21,12 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const body = (await req.json()) as { fullName?: unknown; phone?: unknown };
+    let body: { fullName?: unknown; phone?: unknown };
+    try {
+      body = (await req.json()) as { fullName?: unknown; phone?: unknown };
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    }
     const fullNameRaw = typeof body.fullName === "string" ? body.fullName.trim() : "";
     const phoneRaw = typeof body.phone === "string" ? body.phone.trim() : "";
 
@@ -27,14 +37,29 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: `Phone must be at most ${MAX_PHONE} characters.` }, { status: 400 });
     }
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        full_name: fullNameRaw.length ? fullNameRaw : null,
-        phone: phoneRaw.length ? phoneRaw : null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", user.id);
+    const updatedAt = new Date().toISOString();
+    let error = (
+      await supabase
+        .from("profiles")
+        .update({
+          full_name: fullNameRaw.length ? fullNameRaw : null,
+          phone: phoneRaw.length ? phoneRaw : null,
+          updated_at: updatedAt,
+        })
+        .eq("id", user.id)
+    ).error;
+
+    if (error && looksLikeMissingPhoneColumn(error)) {
+      error = (
+        await supabase
+          .from("profiles")
+          .update({
+            full_name: fullNameRaw.length ? fullNameRaw : null,
+            updated_at: updatedAt,
+          })
+          .eq("id", user.id)
+      ).error;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

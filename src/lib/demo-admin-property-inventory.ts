@@ -336,3 +336,22 @@ export function removeRejectedProperty(adminRefId: string, forManagerUserId?: st
 export function ensureDemoManagerSideBucketsSeed(_forManagerUserId: string | null): void {
   /* no-op */
 }
+
+/** Permanently removes a live mgr-* listing from the portal (does not move to Unlisted). */
+export function deleteManagerLiveListing(listingId: string, forManagerUserId: string | null): boolean {
+  if (!forManagerUserId?.trim()) return false;
+  const extras = readExtraListingsForUser(forManagerUserId);
+  const hit = extras.find((p) => p.id === listingId);
+  if (!hit || !hit.id.startsWith("mgr-")) return false;
+  return removeExtraListing(listingId) !== null;
+}
+
+/** Drops a row from the manager-only unlisted queue (does not restore a public listing). */
+export function deleteUnlistedManagerProperty(adminRefId: string, forManagerUserId: string | null): boolean {
+  const side = readSide(forManagerUserId);
+  const idx = side.unlisted.findIndex((r) => r.adminRefId === adminRefId);
+  if (idx === -1) return false;
+  const nextUn = [...side.unlisted.slice(0, idx), ...side.unlisted.slice(idx + 1)];
+  writeSideStorage({ ...side, unlisted: nextUn }, forManagerUserId);
+  return true;
+}

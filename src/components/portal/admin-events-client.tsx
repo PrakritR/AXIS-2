@@ -36,7 +36,7 @@ function PartnerInquiryDetailPanel({
 }) {
   const onAccept = () => {
     if (acceptPartnerInquiry(row.id, { instructions: instructionsDraft })) {
-      showToast("Scheduled — partner emailed (demo: sessionStorage axis_demo_outbound_mail_v1).");
+      showToast("Scheduled — partner emailed (logged in outbound mail queue).");
       onChanged();
       onClose();
     } else showToast("Could not accept this request.");

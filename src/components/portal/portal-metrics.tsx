@@ -66,14 +66,6 @@ const TIER_FILTER_OPTIONS: { id: PortalTierFilterId; label: string }[] = [
   { id: "business", label: "Business" },
 ];
 
-/** Deterministic demo tier for filter chips when rows have no tier column (admin / manager Properties). */
-export function portalDemoTierFromId(seed: string): Exclude<PortalTierFilterId, "all"> {
-  const tiers: Exclude<PortalTierFilterId, "all">[] = ["free", "pro", "business"];
-  let n = 0;
-  for (let i = 0; i < seed.length; i++) n += seed.charCodeAt(i);
-  return tiers[n % 3];
-}
-
 export function PortalStatusTierFilterBar({
   statusTabs,
   activeStatusId,

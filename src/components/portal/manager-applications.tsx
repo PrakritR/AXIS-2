@@ -23,9 +23,7 @@ import {
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
-import type { ManagerApplicationBucket } from "@/data/demo-portal";
-import { demoApplicantRows } from "@/data/demo-portal";
-import type { DemoApplicantRow } from "@/data/demo-portal";
+import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
@@ -44,10 +42,10 @@ export function ManagerApplications() {
   const { showToast } = useAppUi();
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [rows, setRows] = useState<DemoApplicantRow[]>(demoApplicantRows);
+  const [rows, setRows] = useState<DemoApplicantRow[]>([]);
 
   useEffect(() => {
-    const sync = () => setRows(readManagerApplicationRows(demoApplicantRows));
+    const sync = () => setRows(readManagerApplicationRows());
     sync();
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
     window.addEventListener("storage", sync);
@@ -101,7 +99,7 @@ export function ManagerApplications() {
       titleAside={
         <>
           <PortalPropertyFilterPill />
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Refreshed (demo).")}>
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Refreshed.")}>
             Refresh
           </Button>
         </>
@@ -128,7 +126,7 @@ export function ManagerApplications() {
               {rowsForBucket.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">
-                    {rows.length === 0 ? "No applications yet (demo)." : "No applications in this bucket (demo)."}
+                    {rows.length === 0 ? "No applications yet." : "No applications in this bucket."}
                   </td>
                 </tr>
               ) : (

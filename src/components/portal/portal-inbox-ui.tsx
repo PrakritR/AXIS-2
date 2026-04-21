@@ -181,7 +181,7 @@ export function PortalInboxMessageTable({
   getDetailBody?: (row: PortalInboxTableRow) => string | undefined;
   expandedId?: string | null;
   onToggleExpand?: (id: string) => void;
-  /** Trash, restore, delete — shown after Mark read when present. */
+  /** Trash / restore / delete — shown in the expanded row only (with Mark read, Reply, Hide). */
   renderExtraActions?: (row: PortalInboxTableRow) => ReactNode;
 }) {
   const { showToast } = useAppUi();
@@ -202,9 +202,12 @@ export function PortalInboxMessageTable({
             {rows.map((row) => {
               const detailText = getDetailBody?.(row);
               const showDetails = Boolean(onToggleExpand);
+              const isExpanded = expandedId === row.id && showDetails;
               const hasMarkRead = Boolean(!row.read && onMarkRead);
               const extra = renderExtraActions?.(row);
-              const hasActionCell = hasMarkRead || showDetails || extra;
+              /** Summary row: only Details (expand). Everything else appears under the opened message. */
+              const summaryActionsOnlyDetails = showDetails;
+              const fallbackSummaryActions = !showDetails && (hasMarkRead || extra);
 
               return (
                 <Fragment key={row.id}>
@@ -219,7 +222,20 @@ export function PortalInboxMessageTable({
                     </td>
                     <td className={`${PORTAL_TABLE_TD} align-middle text-slate-500`}>{row.whenLabel}</td>
                     <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
-                      {hasActionCell ? (
+                      {summaryActionsOnlyDetails ? (
+                        isExpanded ? (
+                          <span className="text-xs text-slate-400">—</span>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                            onClick={() => onToggleExpand?.(row.id)}
+                          >
+                            Details
+                          </Button>
+                        )
+                      ) : fallbackSummaryActions ? (
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
                           {hasMarkRead ? (
                             <Button
@@ -232,23 +248,13 @@ export function PortalInboxMessageTable({
                             </Button>
                           ) : null}
                           {extra}
-                          {showDetails ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                              onClick={() => onToggleExpand?.(row.id)}
-                            >
-                              {expandedId === row.id ? "Hide" : "Details"}
-                            </Button>
-                          ) : null}
                         </div>
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
                     </td>
                   </tr>
-                  {expandedId === row.id && showDetails ? (
+                  {isExpanded ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
                       <td colSpan={5} className={`${PORTAL_TABLE_DETAIL_CELL} text-left`}>
                         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Message</p>
@@ -256,8 +262,22 @@ export function PortalInboxMessageTable({
                           {(detailText ?? "").trim() ? detailText : "—"}
                         </p>
                         <PortalTableDetailActions>
-                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Reply (demo).")}>
+                          {hasMarkRead ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              onClick={() => onMarkRead?.(row.id)}
+                            >
+                              Mark read
+                            </Button>
+                          ) : null}
+                          {extra}
+                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Reply sent.")}>
                             Reply
+                          </Button>
+                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onToggleExpand?.(row.id)}>
+                            Hide
                           </Button>
                         </PortalTableDetailActions>
                       </td>

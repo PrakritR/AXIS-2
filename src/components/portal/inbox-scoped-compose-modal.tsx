@@ -221,7 +221,7 @@ export function ScopedInboxComposeModal({
         ) : null}
 
         {isPick(mode) && pickList.length === 0 ? (
-          <p className="text-sm text-slate-500">No contacts available for this category (demo).</p>
+          <p className="text-sm text-slate-500">No contacts available for this category.</p>
         ) : null}
 
         <div>

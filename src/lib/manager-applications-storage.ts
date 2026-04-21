@@ -1,8 +1,9 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
-import { demoApplicantRows } from "@/data/demo-portal";
 
 const KEY = "axis_manager_applications_v1";
 export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
+
+const EMPTY_FALLBACK: DemoApplicantRow[] = [];
 
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -13,7 +14,7 @@ function emit() {
   window.dispatchEvent(new Event(MANAGER_APPLICATIONS_EVENT));
 }
 
-export function readManagerApplicationRows(fallback: DemoApplicantRow[] = demoApplicantRows): DemoApplicantRow[] {
+export function readManagerApplicationRows(fallback: DemoApplicantRow[] = EMPTY_FALLBACK): DemoApplicantRow[] {
   if (!canUseStorage()) return [...fallback];
   try {
     const raw = window.localStorage.getItem(KEY);
@@ -40,7 +41,6 @@ export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
   try {
     window.localStorage.setItem(KEY, JSON.stringify(rows));
     emit();
-    /** Approved applications → lease pipeline rows (async to avoid circular imports). */
     void import("@/lib/lease-pipeline-storage").then(({ readLeasePipeline }) => {
       readLeasePipeline();
     });

@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s · Axis",
   },
   description:
-    "Axis — find rooms for rent, apply online, and manage your lease in one place (demo UI).",
+    "Axis — find rooms for rent, apply online, and manage your lease in one place.",
 };
 
 export default function RootLayout({

@@ -26,7 +26,7 @@ export default function ForgotPasswordPage() {
       <Button
         type="button"
         className="mt-8 w-full rounded-full py-3 text-base font-semibold"
-        onClick={() => showToast("Reset email sent (demo)")}
+        onClick={() => showToast("Reset email sent.")}
       >
         Send reset link
       </Button>

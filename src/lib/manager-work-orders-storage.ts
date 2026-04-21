@@ -1,16 +1,14 @@
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
-import { demoManagerWorkOrderRowsFull } from "@/data/demo-portal";
 
 const KEY = "axis_manager_work_orders_v2";
 export const MANAGER_WORK_ORDERS_EVENT = "axis:manager-work-orders";
 
+const EMPTY_FALLBACK: DemoManagerWorkOrderRow[] = [];
+
 /**
- * Stable snapshot for SSR, hydration, and empty localStorage when using default demo rows.
- * Must stay referentially stable so `useSyncExternalStore` server + first client paints match.
+ * Stable snapshot for SSR, hydration, and empty localStorage.
  */
-export const MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT: DemoManagerWorkOrderRow[] = demoManagerWorkOrderRowsFull.map((r) => ({
-  ...r,
-}));
+export const MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT: DemoManagerWorkOrderRow[] = EMPTY_FALLBACK;
 
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -21,20 +19,18 @@ function emit() {
   window.dispatchEvent(new Event(MANAGER_WORK_ORDERS_EVENT));
 }
 
-export function readManagerWorkOrderRows(
-  fallback: DemoManagerWorkOrderRow[] = demoManagerWorkOrderRowsFull,
-): DemoManagerWorkOrderRow[] {
+export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = EMPTY_FALLBACK): DemoManagerWorkOrderRow[] {
   if (!canUseStorage()) {
-    return fallback === demoManagerWorkOrderRowsFull ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
+    return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
   }
   try {
     const raw = window.localStorage.getItem(KEY);
     if (!raw) {
-      return fallback === demoManagerWorkOrderRowsFull ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
+      return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
     }
     const v = JSON.parse(raw) as unknown;
     if (!Array.isArray(v)) {
-      return fallback === demoManagerWorkOrderRowsFull ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
+      return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
     }
     const stored = v as DemoManagerWorkOrderRow[];
     const byId = new Map(stored.map((r) => [r.id, r]));
@@ -46,7 +42,7 @@ export function readManagerWorkOrderRows(
     const extras = stored.filter((s) => s.id && !fallbackIds.has(s.id));
     return [...merged, ...extras];
   } catch {
-    return fallback === demoManagerWorkOrderRowsFull ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
+    return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
   }
 }
 
@@ -72,7 +68,7 @@ export function updateManagerWorkOrder(
   writeManagerWorkOrderRows(next);
 }
 
-export function resetManagerWorkOrderRowsToDemo(): void {
+export function resetManagerWorkOrderRows(): void {
   if (!canUseStorage()) return;
   window.localStorage.removeItem(KEY);
   emit();

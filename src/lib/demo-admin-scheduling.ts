@@ -325,7 +325,7 @@ export function acceptPartnerInquiry(id: string, opts?: { instructions?: string 
   logDemoOutboundEmail(
     row.email,
     "Your Axis partner meeting is scheduled",
-    `Hi ${row.name},\n\nYour meeting is confirmed for:\n${when}.${extra}\n\n— Axis Housing (demo: check sessionStorage axis_demo_outbound_mail_v1)`,
+    `Hi ${row.name},\n\nYour meeting is confirmed for:\n${when}.${extra}\n\n— Axis Housing (outbound mail is logged for review).`,
   );
   return true;
 }

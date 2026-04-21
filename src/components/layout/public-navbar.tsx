@@ -69,11 +69,7 @@ export function PublicNavbar() {
           : "border-transparent bg-white/95 shadow-none backdrop-blur-none"
       }`}
     >
-      <div
-        className={`mx-auto grid w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 transition-[padding] duration-300 ease-out sm:px-5 lg:grid-cols-[auto_1fr_auto] ${
-          scrolled ? "py-2 sm:py-2.5" : "py-3 sm:py-3.5"
-        }`}
-      >
+      <div className="mx-auto grid min-h-[52px] w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 sm:px-5 sm:min-h-[56px] lg:grid-cols-[auto_1fr_auto]">
         <div className="justify-self-start">
           <AxisLogoLink href="/" />
         </div>

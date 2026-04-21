@@ -179,8 +179,8 @@ export function ResidentPaymentsPanel() {
                             </div>
                           ) : (
                             <p className="leading-relaxed">
-                              Your manager records payment when they receive it (Zelle, check, or portal billing). This demo does not run live card
-                              charges.
+                              Your manager records payment when they receive it (Zelle, check, or portal billing). Live card charges are not
+                              processed here.
                             </p>
                           )}
                           {row.status === "paid" && row.paidAt ? (
@@ -196,7 +196,7 @@ export function ResidentPaymentsPanel() {
                             </p>
                           ) : null}
                           <PortalTableDetailActions>
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Balance copied (demo).")}>
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Balance copied.")}>
                               Copy balance
                             </Button>
                             <Link

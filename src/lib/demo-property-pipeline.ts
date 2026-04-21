@@ -418,40 +418,7 @@ export function approvePendingManagerProperty(pendingId: string): MockProperty |
   return prop;
 }
 
-/**
- * When a manager has no mgr-* approved live listings, seed one admin-approved listing for the Properties demo.
- */
-export function ensureDemoManagerPipelineSeed(userId: string | null): void {
-  if (!isBrowser() || !userId?.trim()) return;
-  migrateLegacyGlobalIntoUser(userId);
-  const extras = readExtrasMap()[userId] ?? [];
-  const mgrExtras = extras.filter((p) => p.id.startsWith("mgr-"));
-  const approvedLive = mgrExtras.filter((p) => p.adminPublishLive === true);
-  if (approvedLive.length > 0) return;
-  /* Avoid stacking seed rows when legacy mgr-* extras exist without adminPublishLive. */
-  if (mgrExtras.length > 0) return;
-
-  const ts = Date.now();
-  const short = userId.slice(0, 10);
-  const listedDraft: ManagerPendingPropertyRow = {
-    id: `demo-${short}-listed-src-${ts}`,
-    submittedAt: new Date().toISOString(),
-    buildingName: "Market Street Studios",
-    address: "188 Minna St",
-    zip: "94105",
-    neighborhood: "SoMa",
-    unitLabel: "Studio 6L",
-    beds: 1,
-    baths: 1,
-    monthlyRent: 2195,
-    petFriendly: true,
-    tagline: "Live on Rent with Axis — admin-approved demo listing.",
-    submittedByUserId: userId,
-  };
-  const listingId = `mgr-market-studios-${slugPart(listedDraft.buildingName)}-${String(ts).slice(-6)}`;
-  const prop: MockProperty = {
-    ...buildMockPropertyFromDraft(listedDraft, listingId),
-    adminPublishLive: true,
-  };
-  appendExtraListing(prop, userId);
+/** Reserved for optional onboarding seeding; no automatic listing data is injected. */
+export function ensureDemoManagerPipelineSeed(_userId: string | null): void {
+  /* no-op */
 }

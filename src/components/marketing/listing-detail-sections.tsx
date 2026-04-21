@@ -14,7 +14,7 @@ import {
   LeaseBasicsTableInteractive,
   SharedTableInteractive,
 } from "@/components/marketing/listing-detail-tables-client";
-import { listingDemoMapCenter } from "@/lib/listing-map";
+import { listingFallbackMapCenter } from "@/lib/listing-map";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import type { MockProperty } from "@/data/types";
 import type { ListingRichContent } from "@/data/listing-rich-content";
@@ -165,7 +165,7 @@ export function ListingDetailSections({
                     Floor plans
                   </h2>
                   <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                    {roomCount} rooms listed (demo)
+                    {roomCount} rooms listed
                   </p>
                 </div>
                 <div className="space-y-5">
@@ -214,7 +214,7 @@ export function ListingDetailSections({
                     <span className="font-semibold text-slate-800">
                       Details
                     </span>{" "}
-                    button for a tour video placeholder and photo strip (demo).
+                    button for a tour video placeholder and photo strip.
                   </p>
                   <div className="mt-4 md:overflow-x-auto sm:mt-5">
                     <SharedTableInteractive
@@ -235,7 +235,7 @@ export function ListingDetailSections({
                     <span className="font-semibold text-slate-800">
                       Details
                     </span>{" "}
-                    for the full explanation and next steps (demo).
+                    for the full explanation and next steps.
                   </p>
                   <div className="mt-5 md:overflow-x-auto">
                     <LeaseBasicsTableInteractive
@@ -259,7 +259,7 @@ export function ListingDetailSections({
                     <span className="font-semibold text-slate-800">
                       Details
                     </span>{" "}
-                    for a short amenity note (demo).
+                    for a short amenity note.
                   </p>
                   <div className="mt-5 md:overflow-x-auto">
                     <AmenitiesTableInteractive
@@ -283,7 +283,7 @@ export function ListingDetailSections({
                     <span className="font-semibold text-slate-800">
                       Details
                     </span>{" "}
-                    for scope and pricing notes (demo).
+                    for scope and pricing notes.
                   </p>
                   <div className="mt-4 md:overflow-x-auto">
                     <BundleTableInteractive
@@ -302,7 +302,7 @@ export function ListingDetailSections({
 
               <section id="location" className={sectionScroll}>
                 <ListingLocationBlock
-                  {...listingDemoMapCenter(property)}
+                  {...listingFallbackMapCenter(property)}
                   address={property.address}
                 />
               </section>

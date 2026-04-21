@@ -95,7 +95,7 @@ export type BundleCard = {
 
 export type ListingRichContent = {
   heroTagline: string;
-  /** Longer house overview from manager submission (demo); shown under the tagline when set. */
+  /** Longer house overview from manager submission; shown under the tagline when set. */
   heroOverview?: string;
   priceRangeLabel: string;
   floorPlans: ListingFloorCard[];
@@ -458,7 +458,7 @@ export function getListingRichContent(property: MockProperty): ListingRichConten
     leaseBasics: defaultLease,
     amenities: defaultAmenities,
     bundlesText:
-      "**Four lease options** are available for every package. Month-to-month renewals add **$25/month** in this demo copy.",
+      "**Four lease options** are available for every package. Month-to-month renewals add **$25/month** where applicable.",
     bundleCards: defaultBundles,
     quickFacts: [
       { label: "Neighborhood", value: property.neighborhood },

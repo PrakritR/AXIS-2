@@ -1,8 +1,4 @@
-import {
-  demoManagerPaymentLedgerRows,
-  type DemoManagerPaymentLedgerRow,
-  type ManagerPaymentBucket,
-} from "@/data/demo-portal";
+import { type DemoManagerPaymentLedgerRow, type ManagerPaymentBucket } from "@/data/demo-portal";
 import { HOUSEHOLD_CHARGES_EVENT } from "@/lib/household-charges";
 
 const PAID_KEY = "axis_demo_manager_ledger_marked_paid_v1";
@@ -86,17 +82,17 @@ function applyPaidOverrides(rows: DemoManagerPaymentLedgerRow[]): DemoManagerPay
   });
 }
 
-/** Built-in demo rows + custom lines, with deletions, paid overrides, and custom additions applied. */
-export function mergeWithDemoPayments(
-  staticRows: DemoManagerPaymentLedgerRow[] = demoManagerPaymentLedgerRows,
-): DemoManagerPaymentLedgerRow[] {
+const BUILT_IN_STATIC: DemoManagerPaymentLedgerRow[] = [];
+
+/** Payment lines from storage + custom lines, with paid overrides applied. */
+export function mergeManagerPaymentLedger(staticRows: DemoManagerPaymentLedgerRow[] = BUILT_IN_STATIC): DemoManagerPaymentLedgerRow[] {
   const deleted = readDeletedIds();
   const filteredStatic = staticRows.filter((r) => !deleted.has(r.id));
   const custom = readCustomPaymentLines();
   return [...applyPaidOverrides(filteredStatic), ...applyPaidOverrides(custom)];
 }
 
-export function markDemoPaymentLedgerRowPaid(id: string): void {
+export function markManagerPaymentLedgerPaid(id: string): void {
   if (typeof window === "undefined") return;
   try {
     const next = new Set(readPaidIds());
@@ -108,7 +104,7 @@ export function markDemoPaymentLedgerRowPaid(id: string): void {
   }
 }
 
-/** Removes a built-in demo row id from view, or a custom line from storage. */
+/** Removes a built-in static row id from view, or a custom line from storage. */
 export function deleteManagerPaymentLedgerEntry(id: string): boolean {
   if (typeof window === "undefined") return false;
 
@@ -121,7 +117,7 @@ export function deleteManagerPaymentLedgerEntry(id: string): boolean {
     return true;
   }
 
-  if (demoManagerPaymentLedgerRows.some((r) => r.id === id)) {
+  if (BUILT_IN_STATIC.some((r) => r.id === id)) {
     const del = readDeletedIds();
     del.add(id);
     writeDeletedIds(del);

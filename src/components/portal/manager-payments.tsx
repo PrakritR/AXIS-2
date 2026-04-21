@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -7,7 +8,7 @@ import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/p
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
-import { mergeWithDemoPayments } from "@/lib/demo-manager-payment-ledger";
+import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import { householdChargeToLedgerRow, HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
@@ -34,7 +35,7 @@ export function ManagerPayments() {
   const mergedRows = useMemo(() => {
     void hcTick;
     const fromHc = readChargesForManager(userId).map(householdChargeToLedgerRow);
-    return [...fromHc, ...mergeWithDemoPayments()];
+    return [...fromHc, ...mergeManagerPaymentLedger()];
   }, [userId, hcTick]);
 
   const counts = useMemo(() => {
@@ -75,7 +76,14 @@ export function ManagerPayments() {
         </>
       }
       filterRow={
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4">
+          <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
+            <span className="font-semibold text-slate-900">Receiving rent & fees:</span> connect a Stripe Express account on the{" "}
+            <Link href="/manager/payments/stripe" className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90">
+              Stripe payouts
+            </Link>{" "}
+            tab so payouts can route to your bank once charges go live.
+          </div>
           <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
         </div>
       }

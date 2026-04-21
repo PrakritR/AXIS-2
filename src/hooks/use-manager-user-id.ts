@@ -4,7 +4,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useEffect, useState } from "react";
 
 /**
- * Signed-in Supabase user id for scoping manager demo data (localStorage).
+ * Signed-in Supabase user id for scoping manager localStorage data.
  * Returns null while loading or when not signed in.
  */
 export function useManagerUserId(): { userId: string | null; ready: boolean } {

@@ -32,7 +32,7 @@ export function parseRadiusParam(raw: string | undefined): RadiusMiles {
   return 10;
 }
 
-/** First dollar amount in a label like "$950 / mo" — demo-only until rent is numeric in the API. */
+/** First dollar amount in a label like "$950 / mo" until rent is numeric in the API. */
 export function parseMonthlyRent(rentLabel: string): number | null {
   const m = rentLabel.replace(/,/g, "").match(/\$(\d+)/);
   if (!m) return null;

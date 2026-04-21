@@ -244,7 +244,7 @@ export function CosignerApplyFlow({
       clearCosignerDraft();
       setF(emptyCosigner());
       setStep(1);
-      showToast("Co-signer application submitted (demo).");
+      showToast("Co-signer application submitted.");
       return;
     }
     setFieldErrors({});

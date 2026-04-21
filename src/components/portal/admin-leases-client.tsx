@@ -96,6 +96,9 @@ function LeasePipelineAdminDetail({
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
+  /** Generate, upload, send back to manager, and thread replies only when manager submitted this lease for admin review. */
+  const adminWorkflowEnabled = row.bucket === "admin";
+
   const fileRef = useRef<HTMLInputElement>(null);
   const [reply, setReply] = useState("");
 
@@ -139,6 +142,14 @@ function LeasePipelineAdminDetail({
         emptyHint="No application answers on file to build a preview — managers must link an approved application."
       />
 
+      {!adminWorkflowEnabled ? (
+        <p className="rounded-2xl border border-slate-200/90 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <span className="font-semibold text-slate-800">View only.</span> Admin can generate drafts, upload a PDF, send back to the
+          manager, and reply in the thread only when the lease is in <strong>Admin review</strong> (after the manager requests admin review).
+          At other stages, work continues in the manager or resident portal.
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
@@ -151,76 +162,88 @@ function LeasePipelineAdminDetail({
         >
           Download lease
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="rounded-full"
-          onClick={() => {
-            const res = generateLeaseHtmlForRow(row.id);
-            if (res.ok === true) {
-              showToast(`Regenerated draft v${res.version}.`);
-              onSaved();
-            } else showToast(res.error ?? "Could not generate.");
-          }}
-        >
-          Generate from application
-        </Button>
-        <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={onPickFile} />
-        <Button type="button" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>
-          Upload PDF
-        </Button>
-        <Button
-          type="button"
-          className="rounded-full"
-          onClick={() => {
-            appendLeaseThreadMessage(row.id, "admin", "Returned to manager for updates.");
-            if (updateLeasePipelineRow(row.id, { bucket: "manager" })) {
-              showToast("Sent back to manager.");
-              onSaved();
-            }
-          }}
-        >
-          Send to manager
-        </Button>
+        {adminWorkflowEnabled ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => {
+                const res = generateLeaseHtmlForRow(row.id);
+                if (res.ok === true) {
+                  showToast(`Regenerated draft v${res.version}.`);
+                  onSaved();
+                } else showToast(res.error ?? "Could not generate.");
+              }}
+            >
+              Generate from application
+            </Button>
+            <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={onPickFile} />
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>
+              Upload PDF
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full"
+              onClick={() => {
+                appendLeaseThreadMessage(row.id, "admin", "Returned to manager for updates.");
+                if (updateLeasePipelineRow(row.id, { bucket: "manager" })) {
+                  showToast("Sent back to manager.");
+                  onSaved();
+                }
+              }}
+            >
+              Send to manager
+            </Button>
+          </>
+        ) : null}
       </div>
 
       <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">
-        Residents receive the lease from the manager portal. Post notes above if needed, then send the draft back to the manager — they release
-        it to residents when ready.
+        {adminWorkflowEnabled ? (
+          <>
+            Residents receive the lease from the manager portal. Post notes below if needed, then send the draft back to the manager — they
+            release it to residents when ready.
+          </>
+        ) : (
+          <>Use the tabs above to monitor each stage. Open <strong>Admin review</strong> when a manager sends a lease for your pass.</>
+        )}
       </p>
 
-      <div>
-        <label htmlFor={`admin-reply-${row.id}`} className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-          Reply to thread
-        </label>
-        <textarea
-          id={`admin-reply-${row.id}`}
-          value={reply}
-          onChange={(e) => setReply(e.target.value)}
-          rows={3}
-          className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
-          placeholder="Visible to manager and resident on their lease views…"
-        />
-        <Button
-          type="button"
-          variant="outline"
-          className="mt-2 rounded-full"
-          onClick={() => {
-            const t = reply.trim();
-            if (!t) {
-              showToast("Enter a message.");
-              return;
-            }
-            if (appendLeaseThreadMessage(row.id, "admin", t)) {
-              setReply("");
-              showToast("Reply posted.");
-              onSaved();
-            }
-          }}
-        >
-          Post reply
-        </Button>
-      </div>
+      {adminWorkflowEnabled ? (
+        <div>
+          <label htmlFor={`admin-reply-${row.id}`} className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+            Reply to thread
+          </label>
+          <textarea
+            id={`admin-reply-${row.id}`}
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
+            rows={3}
+            className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            placeholder="Visible to manager and resident on their lease views…"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-2 rounded-full"
+            onClick={() => {
+              const t = reply.trim();
+              if (!t) {
+                showToast("Enter a message.");
+                return;
+              }
+              if (appendLeaseThreadMessage(row.id, "admin", t)) {
+                setReply("");
+                showToast("Reply posted.");
+                onSaved();
+              }
+            }}
+          >
+            Post reply
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

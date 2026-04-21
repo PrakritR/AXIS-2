@@ -191,37 +191,6 @@ export function ManagerLeasesPipelinePanel({
                       <p className="text-sm leading-relaxed text-slate-600">{row.notes}</p>
                       <p className="mt-1.5 text-xs text-slate-500">PDF version v{row.pdfVersion}</p>
 
-                      {bucket === "admin" ? (
-                        <>
-                          <LeaseDocumentPreview
-                            row={row}
-                            emptyHint="No lease PDF yet — generate from application data or upload when this lease is back in Manager review."
-                          />
-                          <div className="mt-4">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                              Internal comments (read-only)
-                            </p>
-                            <ThreadView row={row} />
-                          </div>
-                          <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">
-                            Admin review is read-only here — you can view the lease and comments only. Messaging and routing happen in the
-                            Axis admin portal. When this returns to Manager review, you&apos;ll see admin feedback above and can reply or send
-                            the lease onward.
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <LeaseDocumentPreview row={row} />
-                          <ThreadView row={row} />
-                          {bucket === "manager" && row.thread.some((m) => m.role === "admin") ? (
-                            <p className="mt-2 text-xs font-medium text-sky-900/90">
-                              Admin feedback appears in the thread above — address it before sending to the resident or requesting another
-                              admin pass.
-                            </p>
-                          ) : null}
-                        </>
-                      )}
-
                       {bucket === "manager" ? (
                         <div className="mt-3 space-y-3">
                           <Textarea
@@ -239,7 +208,7 @@ export function ManagerLeasesPipelinePanel({
                         </div>
                       ) : null}
 
-                      <PortalTableDetailActions>
+                      <PortalTableDetailActions placement="top">
                         {bucket === "admin" ? (
                           <>
                             <Button
@@ -305,6 +274,37 @@ export function ManagerLeasesPipelinePanel({
                           </>
                         )}
                       </PortalTableDetailActions>
+
+                      {bucket === "admin" ? (
+                        <>
+                          <LeaseDocumentPreview
+                            row={row}
+                            emptyHint="No lease PDF yet — generate from application data or upload when this lease is back in Manager review."
+                          />
+                          <div className="mt-4">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                              Internal comments (read-only)
+                            </p>
+                            <ThreadView row={row} />
+                          </div>
+                          <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">
+                            Admin review is read-only here — you can view the lease and comments only. Messaging and routing happen in the
+                            Axis admin portal. When this returns to Manager review, you&apos;ll see admin feedback above and can reply or send
+                            the lease onward.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <LeaseDocumentPreview row={row} />
+                          <ThreadView row={row} />
+                          {bucket === "manager" && row.thread.some((m) => m.role === "admin") ? (
+                            <p className="mt-2 text-xs font-medium text-sky-900/90">
+                              Admin feedback appears in the thread above — address it before sending to the resident or requesting another
+                              admin pass.
+                            </p>
+                          ) : null}
+                        </>
+                      )}
                     </td>
                   </tr>
                 ) : null}

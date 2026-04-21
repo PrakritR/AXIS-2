@@ -13,18 +13,18 @@ export function AdminPreviewBanner({ label }: { label: string | null }) {
   };
 
   return (
-    <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-center text-sm text-amber-950 lg:px-8">
+    <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-center text-sm text-amber-950 lg:px-8">
       <span className="font-semibold">Admin preview</span>
-      {label ? <span className="mx-1">— viewing as {label}</span> : null}
+      {label ? <span>— viewing as {label}</span> : null}
       <button
         type="button"
         onClick={() => void exit()}
-        className="ml-2 font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950"
+        className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950"
       >
         Exit preview
       </button>
-      <span className="mx-2 text-amber-700/80">·</span>
-      <Link href="/admin/dashboard" className="font-semibold text-amber-900 hover:underline">
+      <span className="hidden text-amber-700/80 sm:inline">·</span>
+      <Link href="/admin/dashboard" className="font-semibold text-amber-900 underline-offset-2 hover:underline">
         Back to admin
       </Link>
     </div>

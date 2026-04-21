@@ -42,22 +42,12 @@ function ManagerCalendarPropertyFilter({
           ))}
         </select>
       </div>
-      <p className="min-w-0 text-xs leading-snug text-slate-500">
-        {value === "all" ? (
-          <>
-            Tour windows apply as a <span className="font-medium text-slate-700">portfolio default</span> in this demo. Choose a building to
-            set availability just for tours at that property.
-          </>
-        ) : (
-          <>
-            Editing tour slots for{" "}
-            <span className="font-semibold text-slate-800">
-              {demoManagerHouseRows.find((p) => p.id === value)?.name ?? "property"}
-            </span>
-            . Paint half-hour cells in the availability editor below.
-          </>
-        )}
-      </p>
+      {value === "all" ? (
+        <p className="min-w-0 text-xs leading-snug text-slate-500">
+          Tour windows apply as a <span className="font-medium text-slate-700">portfolio default</span>. Choose a building to
+          set availability just for tours at that property.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -65,7 +55,7 @@ function ManagerCalendarPropertyFilter({
 export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   const { userId, ready: authReady } = useManagerUserId();
   const [calendarRefreshSignal, setCalendarRefreshSignal] = useState(0);
-  /** `all` = portfolio-wide demo key; else demo house row id */
+  /** `all` = portfolio-wide key; else a specific property id */
   const [calendarPropertyId, setCalendarPropertyId] = useState<string>("all");
 
   const storageKey = useMemo(() => {

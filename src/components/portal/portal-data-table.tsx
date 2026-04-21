@@ -23,14 +23,23 @@ export const PORTAL_TABLE_TD = "px-4 py-2.5 align-top text-sm text-slate-700";
 export const PORTAL_TABLE_DETAIL_CELL = "px-4 py-3 align-top";
 
 /**
- * Action strip at the bottom of an expanded detail row — subtle divider + compact buttons.
- * Place narrative / forms above, then this.
+ * Action strip in an expanded detail row — subtle divider + compact buttons.
+ * Default `bottom`: border above the strip (content above, actions below).
+ * `top`: border below the strip (toolbar first, lease preview / thread below).
  */
-export function PortalTableDetailActions({ children }: { children: ReactNode }) {
+export function PortalTableDetailActions({
+  children,
+  placement = "bottom",
+}: {
+  children: ReactNode;
+  placement?: "top" | "bottom";
+}) {
   if (children == null) return null;
-  return (
-    <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-slate-200/50 pt-4">{children}</div>
-  );
+  const edge =
+    placement === "top"
+      ? "mt-3 mb-4 border-b border-slate-200/50 pb-4"
+      : "mt-4 border-t border-slate-200/50 pt-4";
+  return <div className={`flex flex-wrap items-center gap-1.5 ${edge}`}>{children}</div>;
 }
 
 /** “Details” / “Hide” toggle on the summary row (use with `Button variant="outline"`). */

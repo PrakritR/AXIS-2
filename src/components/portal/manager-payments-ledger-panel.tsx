@@ -19,7 +19,7 @@ import {
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
-import { deleteManagerPaymentLedgerEntry, markDemoPaymentLedgerRowPaid } from "@/lib/demo-manager-payment-ledger";
+import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid } from "@/lib/demo-manager-payment-ledger";
 import { deleteHouseholdCharge, markHouseholdChargePaid } from "@/lib/household-charges";
 
 function statusTone(label: string) {
@@ -76,7 +76,7 @@ export function ManagerPaymentsLedgerPanel({
       showToast("Could not update this line.");
       return;
     }
-    markDemoPaymentLedgerRowPaid(row.id);
+    markManagerPaymentLedgerPaid(row.id);
     showToast(toastMessage);
     setExpandedId(null);
   };
@@ -143,7 +143,7 @@ export function ManagerPaymentsLedgerPanel({
                           </>
                         ) : null}
                         {activeBucket !== "pending" ? (
-                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Moved to pending (demo).")}>
+                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Moved to pending.")}>
                             Move to pending
                           </Button>
                         ) : null}

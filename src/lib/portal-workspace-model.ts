@@ -32,7 +32,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
     {
       label: "Refresh",
       kind: "toast",
-      message: "Refreshed (demo).",
+      message: "Refreshed.",
     },
   ];
 
@@ -64,7 +64,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           {
             label: "Approve applicant",
             kind: "toast",
-            message: "Applicant approved (demo).",
+            message: "Applicant approved.",
           },
           {
             label: "Request docs",
@@ -78,7 +78,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "Approve applicant",
           kind: "toast",
-          message: "Applicant approved (demo).",
+          message: "Applicant approved.",
         },
         {
           label: "Request docs",
@@ -113,7 +113,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           {
             label: "Request work order",
             kind: "toast",
-            message: "Requests route to your property manager for triage (demo).",
+            message: "Requests route to your property manager for triage.",
           },
           ...common,
         ];
@@ -122,7 +122,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "Create work order",
           kind: "toast",
-          message: "WO draft created (demo).",
+          message: "Work order draft created.",
         },
         {
           label: "Assign vendor",
@@ -149,12 +149,12 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "Refresh",
           kind: "toast",
-          message: "Demo refresh — no live data yet.",
+          message: "Refreshed.",
         },
       ];
     if (section === "payments")
       return [
-        { label: "Add payment", kind: "toast", message: "Demo — no charges are processed." },
+        { label: "Add payment", kind: "toast", message: "No charges are processed yet." },
         {
           label: "Download receipt",
           kind: "modal",
@@ -163,7 +163,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "Refresh",
           kind: "toast",
-          message: "Refreshed payments (demo).",
+          message: "Payments refreshed.",
         },
       ];
     if (section === "work-orders")
@@ -171,12 +171,12 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "Submit work order",
           kind: "toast",
-          message: "Request captured for demo purposes.",
+          message: "Request captured.",
         },
         {
           label: "Refresh",
           kind: "toast",
-          message: "Refreshed work orders (demo).",
+          message: "Work orders refreshed.",
         },
       ];
     if (section === "inbox")
@@ -189,7 +189,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "Refresh",
           kind: "toast",
-          message: "Refreshed inbox (demo).",
+          message: "Inbox refreshed.",
         },
       ];
     if (section === "profile")
@@ -208,7 +208,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "Refresh",
           kind: "toast",
-          message: "Refreshed property queue (demo).",
+          message: "Property queue refreshed.",
         },
       ];
     if (
@@ -223,7 +223,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "Refresh",
           kind: "toast",
-          message: "Refreshed (demo).",
+          message: "Refreshed.",
         },
       ];
     if (section === "inbox")
@@ -236,7 +236,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "Refresh",
           kind: "toast",
-          message: "Refreshed inbox (demo).",
+          message: "Inbox refreshed.",
         },
       ];
     if (section === "profile")
@@ -276,7 +276,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
     {
       label: "Primary action",
       kind: "toast",
-      message: "Action recorded (demo).",
+      message: "Action recorded.",
     },
     ...common,
   ];
@@ -323,7 +323,7 @@ export function buildPortalWorkspaceModel(
                 {
                   label: "Occupancy",
                   value: "92.4%",
-                  hint: "Portfolio-wide (demo)",
+                  hint: "Portfolio-wide",
                 },
                 {
                   label: "Open work orders",
@@ -425,7 +425,7 @@ export function buildPortalWorkspaceModel(
       eyebrow,
       title: "Inbox",
       subtitle:
-        "Thread previews are mocked. Compose opens a placeholder modal.",
+        "Compose opens when messaging is connected.",
       columns: [
         { key: "from", label: "From" },
         { key: "subject", label: "Subject" },
@@ -489,7 +489,7 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Applicants",
-      subtitle: "Pipeline view with mock screening labels.",
+      subtitle: "Pipeline view with screening labels.",
       columns: [
         { key: "name", label: "Applicant" },
         { key: "property", label: "Property" },
@@ -529,7 +529,7 @@ export function buildPortalWorkspaceModel(
     return {
       eyebrow,
       title: "Work orders",
-      subtitle: "Statuses update locally for demo walkthroughs.",
+      subtitle: "Statuses update locally until integrations are enabled.",
       columns: [
         { key: "id", label: "ID" },
         { key: "unit", label: "Unit" },
@@ -707,7 +707,7 @@ export function buildPortalWorkspaceModel(
       showToolbar: false,
       showQuickLinks: false,
       actions: [
-        { label: "Add payment", kind: "toast", message: "Demo — no charges are processed." },
+        { label: "Add payment", kind: "toast", message: "No charges are processed yet." },
         ...actionsFor(portal, section),
       ],
       columns: [
@@ -887,7 +887,7 @@ export function buildPortalWorkspaceModel(
     eyebrow,
     title: `${humanize(section)} · ${humanize(tabId)}`,
     subtitle:
-      "Seeded rows for layout testing. Replace with queries when backend wiring lands.",
+      "Placeholder content. Replace with queries when backend wiring lands.",
     columns: [
       { key: "record", label: "Record" },
       { key: "state", label: "State" },

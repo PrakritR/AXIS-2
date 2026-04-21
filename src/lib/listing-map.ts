@@ -1,7 +1,7 @@
 import type { MockProperty } from "@/data/types";
 
-/** Demo map center when property has no explicit coordinates. */
-export function listingDemoMapCenter(property: MockProperty): { lat: number; lng: number } {
+/** Fallback map center when property has no explicit coordinates. */
+export function listingFallbackMapCenter(property: MockProperty): { lat: number; lng: number } {
   if (property.mapLat != null && property.mapLng != null) {
     return { lat: property.mapLat, lng: property.mapLng };
   }

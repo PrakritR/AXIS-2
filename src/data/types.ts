@@ -17,10 +17,10 @@ export type MockProperty = {
   buildingId: string;
   buildingName: string;
   unitLabel: string;
-  /** Optional map center for listing detail (demo). WGS84 */
+  /** Optional map center for listing detail. WGS84 */
   mapLat?: number;
   mapLng?: number;
-  /** When set, listing detail sections are generated from manager submission (demo). */
+  /** When set, listing detail sections are generated from manager submission. */
   listingSubmission?: ManagerListingSubmissionV1;
   /** Supabase user id of the owning manager (demo localStorage scoping). */
   managerUserId?: string;

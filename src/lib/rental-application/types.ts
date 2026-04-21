@@ -74,7 +74,7 @@ export type RentalWizardFormState = {
   dateSigned: string;
   /** Step 12 — non-refundable application processing fee acknowledgement */
   applicationFeeAcknowledged: boolean;
-  /** Step 12 — optional promo to waive the listing application fee (demo: FEEWAIVE). */
+  /** Step 12 — optional promo to waive the listing application fee (e.g. FEEWAIVE). */
   applicationFeePromoCode: string;
   applicationFeeWaivedByPromo: boolean;
 };

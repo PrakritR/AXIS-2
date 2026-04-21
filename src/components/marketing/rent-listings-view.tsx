@@ -93,7 +93,7 @@ export function RentListingsView() {
                 <span className="font-semibold text-slate-900">ZIP {props.zipRaw}</span>
                 <span className="text-slate-500"> · </span>
                 <span>
-                  Within <span className="font-semibold text-slate-900">{props.radiusMiles} mi</span> (demo)
+                  Within <span className="font-semibold text-slate-900">{props.radiusMiles} mi</span>
                 </span>
               </>
             ) : (

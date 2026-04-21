@@ -16,14 +16,14 @@ export function PortalTopbar({ definition }: { definition: PortalDefinition }) {
       <div className="flex items-center justify-between gap-3 px-4 py-3 lg:px-8">
         <div className="min-w-0">
           <p className="truncate text-xs font-semibold uppercase tracking-wide text-muted">
-            Signed in (demo)
+            Signed in
           </p>
           <p className="truncate text-sm font-semibold text-foreground">
             {definition.title} · {pathname}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" onClick={() => showToast("Notifications (demo)")}>
+          <Button type="button" variant="outline" onClick={() => showToast("Notifications")}>
             Alerts
           </Button>
           <Link href="/auth/sign-in">

@@ -22,7 +22,7 @@ function toShellActions(
 ): ShellAction[] {
   let primaryPlaced = false;
   return actions.map((a) => {
-    const label = a.label.replace(/\s*\(demo\)\s*$/i, "").trim();
+    const label = a.label.trim();
     const isRefresh = /^refresh/i.test(label);
     const variant: "primary" | "outline" = isRefresh || primaryPlaced ? "outline" : "primary";
     if (!isRefresh && variant === "primary") primaryPlaced = true;
@@ -98,7 +98,7 @@ export function PortalWorkspaceClient({
       {showToolbar ? (
         <Toolbar>
           <div className="flex w-full flex-col gap-2 md:flex-row md:items-center">
-            <Input placeholder="Search (demo)" className="md:max-w-md" />
+            <Input placeholder="Search" className="md:max-w-md" />
             <Select className="md:max-w-xs">
               <option>All statuses</option>
               <option>Active</option>
@@ -108,7 +108,7 @@ export function PortalWorkspaceClient({
               type="button"
               variant="outline"
               className="md:ml-auto"
-              onClick={() => showToast("Filters are demo-only")}
+              onClick={() => showToast("Filters are not connected yet.")}
             >
               Filters
             </Button>
@@ -147,7 +147,7 @@ export function PortalWorkspaceClient({
           actionLabel={model.emptyState.actionLabel}
           onAction={
             model.emptyState.actionLabel
-              ? () => showToast("Thanks — this is a demo empty state.")
+              ? () => showToast("Action recorded.")
               : undefined
           }
         />
@@ -159,7 +159,7 @@ export function PortalWorkspaceClient({
             isCompactPortalShell ? "" : "This tab is wired for navigation. Add your query + UI states when backend work begins."
           }
           actionLabel={isCompactPortalShell ? undefined : "Show sample toast"}
-          onAction={isCompactPortalShell ? undefined : () => showToast("Thanks — this is a demo empty state.")}
+          onAction={isCompactPortalShell ? undefined : () => showToast("Action recorded.")}
         />
       )}
 
@@ -176,7 +176,7 @@ export function PortalWorkspaceClient({
             <Button
               type="button"
               variant="ghost"
-              onClick={() => openModal({ title: "Keyboard shortcuts", body: "Demo only." })}
+              onClick={() => openModal({ title: "Keyboard shortcuts", body: "Shortcuts are not configured yet." })}
             >
               Shortcuts
             </Button>

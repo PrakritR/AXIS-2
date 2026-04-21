@@ -101,7 +101,7 @@ export function ManagerSectionShell({
                     a.onClick ??
                     (() => {
                       showToast(
-                        /refresh/i.test(a.label) ? "Refreshed (demo)." : `${a.label} (demo)`,
+                        /refresh/i.test(a.label) ? "Refreshed." : `${a.label}.`,
                       );
                     })
                   }

@@ -257,8 +257,8 @@ export function ManagerAddListingForm({
               <h2 className="text-xl font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "Add a house"}</h2>
               <p className="mt-1 text-sm text-slate-600">
                 {isEditMode
-                  ? "Update your listing details below. Saves apply to your portfolio and public listing (demo)."
-                  : "Step through each section. Everything you enter is used to build the public listing (demo)."}
+                  ? "Update your listing details below. Saves apply to your portfolio and public listing."
+                  : "Step through each section. Everything you enter is used to build the public listing."}
               </p>
             </div>
             <button
@@ -375,7 +375,7 @@ export function ManagerAddListingForm({
           {step === 2 ? (
             <section>
               <p className="text-sm text-slate-600">
-                Applicants and residents can pay via Zelle using the contact you provide. You mark payments in the manager Payments tab (demo).
+                Applicants and residents can pay via Zelle using the contact you provide. You mark payments in the manager Payments tab.
               </p>
               <div className="mt-4 space-y-3">
                 <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">

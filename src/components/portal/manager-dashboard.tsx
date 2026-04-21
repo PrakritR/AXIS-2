@@ -176,7 +176,7 @@ export function ManagerDashboard() {
           <div className="hidden sm:block">
             <PortalPropertyFilter />
           </div>
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Dashboard refreshed (demo).")}>
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Dashboard refreshed.")}>
             Refresh
           </Button>
         </>

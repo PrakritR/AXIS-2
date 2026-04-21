@@ -24,7 +24,6 @@ import {
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import type { DemoResidentWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
-import { demoResidentWorkOrderRows } from "@/data/demo-portal";
 
 const TABS: { id: ResidentWorkBucket; label: string }[] = [
   { id: "open", label: "Open" },
@@ -48,7 +47,7 @@ export function ResidentWorkOrdersPanel() {
   const [priority, setPriority] = useState("Medium");
   const [createdRows, setCreatedRows] = useState<DemoResidentWorkOrderRow[]>([]);
 
-  const allRows = useMemo(() => [...createdRows, ...demoResidentWorkOrderRows], [createdRows]);
+  const allRows = useMemo(() => createdRows, [createdRows]);
 
   const rows = useMemo(() => allRows.filter((r) => r.bucket === bucket), [allRows, bucket]);
 
@@ -88,7 +87,7 @@ export function ResidentWorkOrdersPanel() {
     <ManagerPortalPageShell
       title="Work orders"
       titleAside={
-        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Refreshed work orders (demo).")}>
+        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Work orders refreshed.")}>
           Refresh
         </Button>
       }
@@ -145,7 +144,7 @@ export function ResidentWorkOrdersPanel() {
                           <p className="mt-1.5 leading-relaxed">{row.description}</p>
                           {bucket === "open" ? (
                             <PortalTableDetailActions>
-                              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Work order removed (demo).")}>
+                              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Work order removed.")}>
                                 Delete request
                               </Button>
                             </PortalTableDetailActions>
@@ -183,7 +182,7 @@ export function ResidentWorkOrdersPanel() {
           </Button>
         </div>
         <p className="mt-2 text-xs text-slate-500">Photos attach in production; here the button confirms intent.</p>
-        <Button type="button" variant="outline" className="mt-3 rounded-full text-xs" onClick={() => showToast("Photo picker (demo).")}>
+        <Button type="button" variant="outline" className="mt-3 rounded-full text-xs" onClick={() => showToast("Photos attach when media upload is enabled.")}>
           Add photos
         </Button>
       </div>

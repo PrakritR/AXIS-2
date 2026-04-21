@@ -373,7 +373,7 @@ export function residentSignLease(email: string): boolean {
   const row = rows[idx]!;
   if (row.bucket !== "resident") return false;
   const iso = new Date().toISOString();
-  const thread = [...row.thread, makeMsg("resident", "Signed electronically (demo).")];
+  const thread = [...row.thread, makeMsg("resident", "Signed electronically.")];
   rows[idx] = {
     ...row,
     bucket: "signed",
@@ -392,6 +392,7 @@ export function residentRequestEdits(email: string, message: string): boolean {
   const idx = rows.findIndex((r) => r.residentEmail.toLowerCase() === email.trim().toLowerCase());
   if (idx === -1) return false;
   const row = rows[idx]!;
+  if (row.bucket !== "resident") return false;
   if (!message.trim()) return false;
   const iso = new Date().toISOString();
   const thread = [...row.thread, makeMsg("resident", message)];

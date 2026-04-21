@@ -6,8 +6,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
-import type { ManagerWorkOrderBucket } from "@/data/demo-portal";
-import { demoManagerWorkOrderRowsFull } from "@/data/demo-portal";
+import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import {
   MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
   MANAGER_WORK_ORDERS_EVENT,
@@ -20,7 +19,7 @@ const WO_LABELS: { id: ManagerWorkOrderBucket; label: string }[] = [
   { id: "completed", label: "Completed" },
 ];
 
-function countWorkOrders(rows: typeof demoManagerWorkOrderRowsFull) {
+function countWorkOrders(rows: DemoManagerWorkOrderRow[]) {
   const c: Record<ManagerWorkOrderBucket, number> = {
     open: 0,
     scheduled: 0,
@@ -54,7 +53,7 @@ export function ManagerWorkOrders() {
 
   const allRows = useMemo(
     () =>
-      storageReady ? readManagerWorkOrderRows(demoManagerWorkOrderRowsFull) : MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
+      storageReady ? readManagerWorkOrderRows() : MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
     [storageReady, storeTick],
   );
 
@@ -70,7 +69,7 @@ export function ManagerWorkOrders() {
       titleAside={
         <>
           <PortalPropertyFilterPill applications />
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Refreshed work orders (demo).")}>
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Work orders refreshed.")}>
             Refresh
           </Button>
         </>

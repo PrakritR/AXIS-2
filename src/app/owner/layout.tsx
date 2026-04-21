@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { PublicNavbar } from "@/components/layout/public-navbar";
-import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
@@ -8,7 +7,7 @@ import { getPortalAccessContext, hasAdminRole } from "@/lib/auth/portal-access";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
 import { getManagerSubscriptionTier } from "@/lib/manager-access";
 import { ownerPortal } from "@/lib/portals/owner";
-import { ManagerPlanBanner } from "@/components/portal/manager-plan-banner";
+import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 
 export default async function OwnerLayout({ children }: { children: ReactNode }) {
   await assertPortalLayoutRole("owner", "owner");
@@ -29,8 +28,12 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100/80 via-white to-slate-50/90">
       <PublicNavbar />
-      {showPreviewBanner ? <AdminPreviewBanner label={previewLabel} /> : null}
-      {showPlanBanner ? <ManagerPlanBanner planHref="/owner/plan" /> : null}
+      <PortalTopBanners
+        planHref="/owner/plan"
+        showPreviewBanner={showPreviewBanner}
+        previewLabel={previewLabel}
+        showPlanBanner={showPlanBanner}
+      />
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col lg:flex-row">
         <PortalSidebar definition={ownerPortal} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">

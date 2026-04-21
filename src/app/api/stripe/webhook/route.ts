@@ -60,6 +60,16 @@ export async function POST(req: Request) {
   }
 
   try {
+    if (event.type === "account.updated") {
+      const account = event.data.object as Stripe.Account;
+      // eslint-disable-next-line no-console -- Connect observability
+      console.info("[stripe webhook] account.updated", {
+        accountId: account.id,
+        chargesEnabled: account.charges_enabled,
+        payoutsEnabled: account.payouts_enabled,
+      });
+      /* Optional: upsert payout readiness into Supabase (e.g. profiles) using service role. */
+    }
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
       logCheckoutCompleted(session);
