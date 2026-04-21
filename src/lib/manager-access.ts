@@ -72,11 +72,15 @@ export function formatManagerMonthlyLabel(tier: string | null | undefined): stri
  * null if no purchase row (legacy / unknown — treat as full access).
  */
 export async function getManagerSubscriptionTier(userId: string): Promise<"free" | "paid" | null> {
-  const supabase = createSupabaseServiceRoleClient();
-  const { data } = await supabase.from("manager_purchases").select("tier").eq("user_id", userId).maybeSingle();
-  if (!data?.tier) return null;
-  if (String(data.tier).toLowerCase() === "free") return "free";
-  return "paid";
+  try {
+    const supabase = createSupabaseServiceRoleClient();
+    const { data } = await supabase.from("manager_purchases").select("tier").eq("user_id", userId).maybeSingle();
+    if (!data?.tier) return null;
+    if (String(data.tier).toLowerCase() === "free") return "free";
+    return "paid";
+  } catch {
+    return null;
+  }
 }
 
 /** Raw tier + billing from manager_purchases (service role). */

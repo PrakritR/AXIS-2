@@ -36,15 +36,25 @@ export async function getPortalAccessContext(): Promise<PortalAccessContext> {
     return { user: null, profile: null, roles: [], effectiveRole: null };
   }
 
-  const supabase = await createSupabaseServerClient();
-  const { data: roleRows, error: roleErr } = await supabase.from("profile_roles").select("role").eq("user_id", base.user.id);
-
   const fallback = base.profile?.role ? (base.profile.role as AuthRole) : null;
-  const roles = roleErr ? normalizeRoles(null, fallback) : normalizeRoles(roleRows, fallback);
 
-  const c = await cookies();
-  const cookieRaw = c.get(ACTIVE_PORTAL_COOKIE)?.value?.trim() ?? "";
-  const cookieRole = isAuthRole(cookieRaw) ? cookieRaw : null;
+  let roles: AuthRole[];
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: roleRows, error: roleErr } = await supabase.from("profile_roles").select("role").eq("user_id", base.user.id);
+    roles = roleErr ? normalizeRoles(null, fallback) : normalizeRoles(roleRows, fallback);
+  } catch {
+    roles = normalizeRoles(null, fallback);
+  }
+
+  let cookieRole: AuthRole | null = null;
+  try {
+    const c = await cookies();
+    const cookieRaw = c.get(ACTIVE_PORTAL_COOKIE)?.value?.trim() ?? "";
+    cookieRole = isAuthRole(cookieRaw) ? cookieRaw : null;
+  } catch {
+    cookieRole = null;
+  }
 
   let effectiveRole: AuthRole | null;
   if (roles.length === 1) {

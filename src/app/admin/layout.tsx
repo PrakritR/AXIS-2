@@ -4,6 +4,8 @@ import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { assertAdminPortalAccess } from "@/lib/auth/portal-access";
 import { adminPortal } from "@/lib/portals/admin";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await assertAdminPortalAccess();
   return (
