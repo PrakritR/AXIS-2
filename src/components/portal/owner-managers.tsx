@@ -14,10 +14,7 @@ export function OwnerManagers({ variant = "owner" }: { variant?: "owner" | "mana
     <ManagerSectionShell
       title="Managers"
       filters={<PortalPropertyFilter />}
-      actions={[
-        { label: "Message", variant: "primary" },
-        { label: "Refresh", variant: "outline" },
-      ]}
+      actions={[{ label: "Refresh", variant: "outline" }]}
     >
       <p className="text-sm text-slate-600">{intro}</p>
       <div className="space-y-3">

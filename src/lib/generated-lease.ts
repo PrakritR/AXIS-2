@@ -66,8 +66,7 @@ export type LeaseGenerationContext = {
   generatedAtIso: string;
 };
 
-export function gatherLeaseGenerationContext(): LeaseGenerationContext {
-  const application = loadRentalWizardDraft() ?? {};
+export function leaseContextFromApplication(application: Partial<RentalWizardFormState>): LeaseGenerationContext {
   const leasedRoom = resolveLeasedRoomProperty(application);
   const listingProperty = resolveApplicationListing(application) ?? leasedRoom;
   const submission = submissionFor(listingProperty) ?? submissionFor(leasedRoom);
@@ -78,6 +77,11 @@ export function gatherLeaseGenerationContext(): LeaseGenerationContext {
     submission,
     generatedAtIso: new Date().toISOString(),
   };
+}
+
+export function gatherLeaseGenerationContext(): LeaseGenerationContext {
+  const application = loadRentalWizardDraft() ?? {};
+  return leaseContextFromApplication(application);
 }
 
 function leaseCss(): string {

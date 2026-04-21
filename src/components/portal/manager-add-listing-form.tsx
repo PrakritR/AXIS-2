@@ -5,7 +5,11 @@ import { useState } from "react";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Select } from "@/components/ui/input";
-import { submitManagerPendingProperty } from "@/lib/demo-property-pipeline";
+import {
+  submitManagerPendingProperty,
+  updateExtraListingFromSubmission,
+  updatePendingManagerProperty,
+} from "@/lib/demo-property-pipeline";
 import { PRO_MAX_PROPERTIES, proTierPropertyLimitReached } from "@/lib/manager-access";
 import {
   createDefaultListingSubmission,
@@ -56,19 +60,26 @@ export function ManagerAddListingForm({
   showToast,
   skuTier,
   propCountBeforeSubmit,
+  editPendingId = null,
+  editListingId = null,
+  initialSubmission = null,
 }: {
   onClose: () => void;
   onSubmitted: () => void;
   showToast: (m: string) => void;
   skuTier: string | null;
   propCountBeforeSubmit: number;
+  editPendingId?: string | null;
+  editListingId?: string | null;
+  initialSubmission?: ManagerListingSubmissionV1 | null;
 }) {
-  const [sub, setSub] = useState<ManagerListingSubmissionV1>(() => createDefaultListingSubmission());
+  const [sub, setSub] = useState<ManagerListingSubmissionV1>(() => initialSubmission ?? createDefaultListingSubmission());
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const { userId, ready: authReady } = useManagerUserId();
 
   const lastStep = STEP_LABELS.length - 1;
+  const isEditMode = Boolean(editPendingId ?? editListingId);
 
   const setRoom = (i: number, patch: Partial<ManagerRoomSubmission>) => {
     setSub((s) => {
@@ -199,8 +210,26 @@ export function ManagerAddListingForm({
         showToast("Sign in to submit a property.");
         return;
       }
-      if (proTierPropertyLimitReached(skuTier, propCountBeforeSubmit)) {
+      if (!isEditMode && proTierPropertyLimitReached(skuTier, propCountBeforeSubmit)) {
         showToast(`Pro includes up to ${PRO_MAX_PROPERTIES} properties. Upgrade to Business to add more.`);
+        return;
+      }
+      if (editPendingId) {
+        const ok = updatePendingManagerProperty(editPendingId, sub, userId);
+        if (!ok) {
+          showToast("Could not save changes.");
+          return;
+        }
+        onSubmitted();
+        return;
+      }
+      if (editListingId) {
+        const ok = updateExtraListingFromSubmission(editListingId, userId, sub);
+        if (!ok) {
+          showToast("Could not save changes.");
+          return;
+        }
+        onSubmitted();
         return;
       }
       submitManagerPendingProperty(sub, userId);
@@ -225,9 +254,11 @@ export function ManagerAddListingForm({
         <div className="shrink-0 border-b border-slate-100 p-6 pb-4 sm:p-8 sm:pb-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-slate-900">Add a house</h2>
+              <h2 className="text-xl font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "Add a house"}</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Step through each section. Everything you enter is used to build the public listing (demo).
+                {isEditMode
+                  ? "Update your listing details below. Saves apply to your portfolio and public listing (demo)."
+                  : "Step through each section. Everything you enter is used to build the public listing (demo)."}
               </p>
             </div>
             <button
@@ -646,7 +677,7 @@ export function ManagerAddListingForm({
               </Button>
             ) : (
               <Button type="submit" className="rounded-full" disabled={busy}>
-                {busy ? "Submitting…" : "Submit for approval"}
+                {busy ? (isEditMode ? "Saving…" : "Submitting…") : isEditMode ? "Save changes" : "Submit for approval"}
               </Button>
             )}
           </div>

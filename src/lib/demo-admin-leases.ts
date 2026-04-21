@@ -1,3 +1,4 @@
+import { leasePipelineBucketCounts } from "@/lib/lease-pipeline-storage";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 
 const KEY = "axis_admin_leases_v1";
@@ -57,6 +58,13 @@ export function readAdminLeases(): AdminLeaseRow[] {
 }
 
 export function adminLeaseKpiCounts(): [number, number, number, number] {
+  if (typeof window !== "undefined") {
+    try {
+      return leasePipelineBucketCounts();
+    } catch {
+      /* fall through */
+    }
+  }
   const rows = readAdminLeases();
   return [
     rows.filter((r) => r.bucket === 0).length,

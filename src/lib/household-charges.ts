@@ -298,6 +298,16 @@ export function readChargesForManager(managerUserId: string | null): HouseholdCh
   return readAll().filter((r) => r.managerUserId === scope);
 }
 
+export function deleteHouseholdCharge(chargeId: string, managerUserId: string | null): boolean {
+  if (!isBrowser()) return false;
+  const rows = readAll();
+  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  const idx = rows.findIndex((r) => r.id === chargeId && r.managerUserId === scope);
+  if (idx === -1) return false;
+  writeAll(rows.filter((_, i) => i !== idx));
+  return true;
+}
+
 export function markHouseholdChargePaid(chargeId: string, managerUserId: string | null): boolean {
   const rows = readAll();
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;

@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalCalendarPanels } from "@/components/portal/portal-calendar-panels";
+import { PortalPropertyFilter } from "@/components/portal/manager-section-shell";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   acceptPartnerInquiry,
@@ -160,13 +161,34 @@ export function AdminEventsClient() {
     <ManagerPortalPageShell
       title="Calendar"
       titleAside={
-        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-          Refresh
-        </Button>
+        <>
+          <div className="hidden min-w-0 max-w-full shrink sm:block">
+            <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+              <PortalPropertyFilter />
+            </div>
+          </div>
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
+            Refresh
+          </Button>
+        </>
+      }
+      filterRow={
+        <div className="sm:hidden">
+          <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+            <PortalPropertyFilter />
+          </div>
+        </div>
       }
     >
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch xl:gap-5">
-        <div className="flex min-w-0 flex-col gap-4 xl:w-[min(420px,40%)] xl:shrink-0">
+      <div className="flex flex-col gap-6">
+        <PortalCalendarPanels
+          storageKey={ADMIN_AVAILABILITY_STORAGE_KEY}
+          calendarRefreshSignal={calendarRefreshSignal}
+          defaultViewMode="month"
+          pinMonthSchedule
+        />
+
+        <div className="grid gap-4 lg:grid-cols-2">
           <Card className="overflow-hidden p-0">
             <div className="border-b border-slate-200/80 bg-white px-5 py-3">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Planned events</p>
@@ -234,7 +256,7 @@ export function AdminEventsClient() {
             </div>
           </Card>
 
-          <Card className="flex min-h-[12rem] min-w-0 flex-1 flex-col overflow-hidden p-0">
+          <Card className="flex min-h-[12rem] min-w-0 flex-col overflow-hidden p-0 lg:min-h-[min(24rem,50vh)]">
             <div className="border-b border-slate-200/80 bg-white px-5 py-3">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Partner inquiries</p>
             </div>
@@ -301,13 +323,6 @@ export function AdminEventsClient() {
               )}
             </div>
           </Card>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <PortalCalendarPanels
-            storageKey={ADMIN_AVAILABILITY_STORAGE_KEY}
-            calendarRefreshSignal={calendarRefreshSignal}
-          />
         </div>
       </div>
     </ManagerPortalPageShell>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -21,7 +21,15 @@ import {
   buildAiGeneratedLeaseHtml,
   downloadAiGeneratedLeaseHtml,
   gatherLeaseGenerationContext,
+  leaseContextFromApplication,
 } from "@/lib/generated-lease";
+import {
+  LEASE_PIPELINE_EVENT,
+  downloadLeaseFromRow,
+  findLeaseForResidentEmail,
+  residentRequestEdits,
+  residentSignLease,
+} from "@/lib/lease-pipeline-storage";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import {
   clearUploadedOwnLease,
@@ -45,6 +53,8 @@ export function ResidentLeasePanel() {
   const [aiPreviewUrl, setAiPreviewUrl] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const aiBlobUrlRef = useRef<string | null>(null);
+  const [pipelineTick, setPipelineTick] = useState(0);
+  const [editRequestDraft, setEditRequestDraft] = useState("");
 
   const refreshLeaseGate = useCallback(() => {
     void (async () => {
@@ -83,6 +93,16 @@ export function ResidentLeasePanel() {
   }, [refreshLeaseGate]);
 
   useEffect(() => {
+    const on = () => setPipelineTick((t) => t + 1);
+    window.addEventListener(LEASE_PIPELINE_EVENT, on);
+    window.addEventListener("storage", on);
+    return () => {
+      window.removeEventListener(LEASE_PIPELINE_EVENT, on);
+      window.removeEventListener("storage", on);
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (aiBlobUrlRef.current) {
         URL.revokeObjectURL(aiBlobUrlRef.current);
@@ -91,7 +111,18 @@ export function ResidentLeasePanel() {
     };
   }, []);
 
-  const leaseCtx = gatherLeaseGenerationContext();
+  const pipelineRow = useMemo(() => {
+    void pipelineTick;
+    if (!email) return null;
+    return findLeaseForResidentEmail(email);
+  }, [email, pipelineTick]);
+
+  const leaseCtx = useMemo(() => {
+    if (pipelineRow?.application && Object.keys(pipelineRow.application).length > 0) {
+      return leaseContextFromApplication(pipelineRow.application);
+    }
+    return gatherLeaseGenerationContext();
+  }, [pipelineRow]);
 
   const summaryFromApp = (() => {
     const a = leaseCtx.application;
@@ -122,20 +153,64 @@ export function ResidentLeasePanel() {
 
   const leaseLocked = leaseBlockers.length > 0;
 
+  const canSignElectronically = Boolean(pipelineRow?.bucket === "resident" && !leaseLocked);
+
+  const onDownloadAiLease = useCallback(() => {
+    downloadAiGeneratedLeaseHtml(leaseCtx);
+    showToast("Downloaded AI lease (HTML). Open the file and use Print → Save as PDF if you need a PDF.");
+  }, [leaseCtx, showToast]);
+
+  const onDownloadLeasePackage = useCallback(() => {
+    if (pipelineRow) {
+      if (pipelineRow.generatedHtml || pipelineRow.managerUploadedPdf) {
+        downloadLeaseFromRow(pipelineRow);
+        showToast("Download started.");
+        return;
+      }
+      if (ownLease) {
+        downloadLeaseFromRow(pipelineRow);
+        showToast("Download started.");
+        return;
+      }
+      showToast("Ask your manager to generate the lease, or upload your PDF below.");
+      return;
+    }
+    onDownloadAiLease();
+  }, [pipelineRow, ownLease, onDownloadAiLease, showToast]);
+
+  const onSignLease = () => {
+    if (!email || leaseLocked) return;
+    if (residentSignLease(email)) {
+      showToast("Lease recorded as signed.");
+      setPipelineTick((t) => t + 1);
+    } else {
+      showToast(
+        pipelineRow?.bucket === "resident"
+          ? "Could not sign — try again."
+          : "Signing opens when your manager sends the lease to you (With resident stage).",
+      );
+    }
+  };
+
+  const onSubmitEditRequest = () => {
+    if (!email || !editRequestDraft.trim()) {
+      showToast("Describe what should change.");
+      return;
+    }
+    if (residentRequestEdits(email, editRequestDraft.trim())) {
+      showToast("Edit request sent to your manager.");
+      setEditRequestDraft("");
+      setPipelineTick((t) => t + 1);
+    } else showToast("Could not send request.");
+  };
+
   const buildPreviewBlobUrl = useCallback(() => {
-    const ctx = gatherLeaseGenerationContext();
-    const blob = new Blob([buildAiGeneratedLeaseHtml(ctx)], { type: "text/html;charset=utf-8" });
+    const blob = new Blob([buildAiGeneratedLeaseHtml(leaseCtx)], { type: "text/html;charset=utf-8" });
     if (aiBlobUrlRef.current) URL.revokeObjectURL(aiBlobUrlRef.current);
     const u = URL.createObjectURL(blob);
     aiBlobUrlRef.current = u;
     setAiPreviewUrl(u);
-  }, []);
-
-  const onDownloadAiLease = () => {
-    const ctx = gatherLeaseGenerationContext();
-    downloadAiGeneratedLeaseHtml(ctx);
-    showToast("Downloaded AI lease (HTML). Open the file and use Print → Save as PDF if you need a PDF.");
-  };
+  }, [leaseCtx]);
 
   const onPickOwnLeasePdf = async (files: FileList | null) => {
     const f = files?.[0];
@@ -162,6 +237,7 @@ export function ResidentLeasePanel() {
       };
       saveUploadedOwnLease(email, payload);
       setOwnLease(payload);
+      window.dispatchEvent(new Event(LEASE_PIPELINE_EVENT));
       showToast("Your lease PDF is saved in this browser (demo).");
     };
     reader.onerror = () => showToast("Could not read that file.");
@@ -184,15 +260,15 @@ export function ResidentLeasePanel() {
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Request extension (demo).")}>
             Request extension
           </Button>
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadAiLease}>
-            Download AI lease
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
+            Download lease
           </Button>
           <Button
             type="button"
             variant="primary"
             className="shrink-0 rounded-full"
-            disabled={leaseLocked}
-            onClick={() => (leaseLocked ? null : showToast("Sign lease (demo)."))}
+            disabled={leaseLocked || !canSignElectronically}
+            onClick={() => onSignLease()}
           >
             Sign lease
           </Button>
@@ -214,6 +290,44 @@ export function ResidentLeasePanel() {
             Open Payments
           </Link>
         </div>
+      ) : null}
+
+      {pipelineRow?.thread?.length ? (
+        <Card className="border-slate-200/80 p-5">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Messages</p>
+          <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+            {pipelineRow.thread.map((m) => (
+              <li key={m.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                <span className="font-semibold capitalize text-slate-800">{m.role}</span>
+                <span className="text-xs text-slate-400"> · {new Date(m.at).toLocaleString()}</span>
+                <p className="mt-1 whitespace-pre-wrap text-slate-700">{m.body}</p>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-slate-500">
+            Stage: <span className="font-semibold">{pipelineRow.stageLabel}</span>
+          </p>
+        </Card>
+      ) : null}
+
+      {(pipelineRow?.bucket === "resident" ||
+        pipelineRow?.bucket === "manager" ||
+        pipelineRow?.bucket === "admin") &&
+      email ? (
+        <Card className="border-slate-200/80 p-5">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Request edits</p>
+          <p className="mt-1 text-sm text-slate-600">Send a note to your property manager. Your lease moves back to manager review.</p>
+          <textarea
+            rows={3}
+            value={editRequestDraft}
+            onChange={(e) => setEditRequestDraft(e.target.value)}
+            placeholder="What needs to change in the lease?"
+            className="mt-3 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800"
+          />
+          <Button type="button" variant="outline" className="mt-3 rounded-full" onClick={onSubmitEditRequest}>
+            Send edit request
+          </Button>
+        </Card>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -257,8 +371,8 @@ export function ResidentLeasePanel() {
             <Button type="button" variant="outline" className="rounded-full text-xs" onClick={buildPreviewBlobUrl}>
               Preview AI lease
             </Button>
-            <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onDownloadAiLease}>
-              Download AI lease
+            <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onDownloadLeasePackage}>
+              Download lease
             </Button>
           </div>
 

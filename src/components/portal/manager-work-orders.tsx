@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
@@ -8,7 +8,11 @@ import { PortalPropertyFilterPill } from "@/components/portal/manager-section-sh
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
 import type { ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { demoManagerWorkOrderRowsFull } from "@/data/demo-portal";
-import { readManagerWorkOrderRows, subscribeManagerWorkOrders } from "@/lib/manager-work-orders-storage";
+import {
+  MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
+  readManagerWorkOrderRows,
+  subscribeManagerWorkOrders,
+} from "@/lib/manager-work-orders-storage";
 
 const WO_LABELS: { id: ManagerWorkOrderBucket; label: string }[] = [
   { id: "open", label: "Open" },
@@ -31,11 +35,15 @@ function countWorkOrders(rows: typeof demoManagerWorkOrderRowsFull) {
 export function ManagerWorkOrders() {
   const { showToast } = useAppUi();
   const [bucket, setBucket] = useState<ManagerWorkOrderBucket>("open");
+  /** Avoid SSR / hydration mismatch: server and first client paint must not read localStorage yet. */
+  const [storageReady, setStorageReady] = useState(false);
+  useEffect(() => setStorageReady(true), []);
 
   const allRows = useSyncExternalStore(
     subscribeManagerWorkOrders,
-    () => readManagerWorkOrderRows(demoManagerWorkOrderRowsFull),
-    () => demoManagerWorkOrderRowsFull,
+    () =>
+      storageReady ? readManagerWorkOrderRows(demoManagerWorkOrderRowsFull) : MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
+    () => MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
   );
 
   const counts = useMemo(() => countWorkOrders(allRows), [allRows]);
@@ -61,7 +69,11 @@ export function ManagerWorkOrders() {
         </div>
       }
     >
-      <ManagerWorkOrdersPanel bucket={bucket} onAfterSchedule={() => setBucket("scheduled")} />
+      <ManagerWorkOrdersPanel
+        allRows={allRows}
+        bucket={bucket}
+        onAfterSchedule={() => setBucket("scheduled")}
+      />
     </ManagerPortalPageShell>
   );
 }

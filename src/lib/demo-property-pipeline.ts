@@ -255,6 +255,55 @@ export function submitManagerPendingProperty(input: ManagerPropertyDraftInput, m
   return id;
 }
 
+export function updatePendingManagerProperty(
+  pendingId: string,
+  input: ManagerPropertyDraftInput,
+  managerUserId: string,
+): boolean {
+  if (!managerUserId.trim()) return false;
+  const map = readPendingMap();
+  const list = map[managerUserId];
+  if (!list) return false;
+  const idx = list.findIndex((p) => p.id === pendingId);
+  if (idx === -1) return false;
+  const legacy = deriveLegacyFields(input);
+  list[idx] = {
+    ...list[idx]!,
+    ...legacy,
+    submission: input,
+  };
+  map[managerUserId] = list;
+  writePendingMap(map);
+  return true;
+}
+
+export function updateExtraListingFromSubmission(
+  listingId: string,
+  managerUserId: string,
+  input: ManagerPropertyDraftInput,
+): boolean {
+  if (!managerUserId.trim()) return false;
+  const map = readExtrasMap();
+  const list = map[managerUserId];
+  if (!list) return false;
+  const idx = list.findIndex((p) => p.id === listingId);
+  if (idx === -1) return false;
+  const legacy = deriveLegacyFields(input);
+  const pendingLike: ManagerPendingPropertyRow = {
+    ...legacy,
+    id: listingId,
+    submittedAt: new Date().toISOString(),
+    submission: input,
+    submittedByUserId: managerUserId,
+  };
+  const next = buildMockPropertyFromDraft(pendingLike, listingId);
+  const owner = next.managerUserId ?? managerUserId;
+  list[idx] = { ...next, managerUserId: owner };
+  map[managerUserId] = list;
+  writeExtrasMap(map);
+  return true;
+}
+
 /** Publish from an admin-bucket row (no stored submission — listing uses defaults until edited). */
 export function buildMockPropertyFromAdminRow(row: ManagerAdminShapeRow, listingId: string): MockProperty {
   const pendingLike: ManagerPendingPropertyRow = {

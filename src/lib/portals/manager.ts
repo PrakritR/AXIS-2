@@ -8,14 +8,26 @@ export const managerPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
-    { section: "owners", label: "Add owner", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
+    {
+      section: "payments",
+      label: "Payments",
+      tabs: [
+        { id: "ledger", label: "Rent & collections" },
+        { id: "stripe", label: "Stripe payouts" },
+      ],
+    },
     { section: "leases", label: "Leases", tabs: [] },
-    { section: "payments", label: "Payments", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },
-    { section: "stripe", label: "Stripe payouts", tabs: [] },
-    { section: "managers", label: "Managers", tabs: [] },
+    {
+      section: "people",
+      label: "Owners / managers",
+      tabs: [
+        { id: "owners", label: "Owners" },
+        { id: "managers", label: "Managers" },
+      ],
+    },
     { section: "plan", label: "Plan", tabs: [] },
     {
       section: "inbox",

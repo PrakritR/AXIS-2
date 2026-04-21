@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SegmentedThree } from "@/components/ui/segmented-control";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import { MANAGER_TIER_MONTHLY_USD, type ManagerSkuTier } from "@/lib/manager-access";
+import { formatManagerMonthlyLabel, type ManagerSkuTier } from "@/lib/manager-access";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 type SubPayload = {
@@ -42,6 +42,8 @@ function pickerValue(sub: SubPayload | null): ManagerSkuTier {
 
 export function ManagerPlan() {
   const router = useRouter();
+  const pathname = usePathname();
+  const planReturnPath = pathname.startsWith("/owner") ? "/owner/plan" : "/manager/plan";
   const { showToast } = useAppUi();
   const [sub, setSub] = useState<SubPayload | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,6 +67,29 @@ export function ManagerPlan() {
   }, [load]);
 
   const selectedTier = useMemo(() => pickerValue(sub), [sub]);
+
+  const openBillingPortal = async () => {
+    if (!sub?.stripeManaged || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/stripe/billing-portal", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnPath: planReturnPath }),
+      });
+      const body = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !body.url) {
+        showToast(body.error ?? "Could not open billing portal.");
+        return;
+      }
+      window.location.href = body.url;
+    } catch {
+      showToast("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const setTier = async (tier: ManagerSkuTier) => {
     if (!sub || busy) return;
@@ -93,7 +118,22 @@ export function ManagerPlan() {
     }
   };
 
-  const monthlyDisplay = sub?.monthlyLabel ?? "—";
+  const cancelToFree = async () => {
+    if (!sub || busy || sub.isFree) return;
+    const ok = window.confirm(
+      "Cancel your subscription and move to the Free plan? Paid features such as leases and work orders may be locked until you upgrade again.",
+    );
+    if (!ok) return;
+    await setTier("free");
+  };
+
+  /** Legacy accounts have no tier in DB — estimate from the plan picker instead of "—". */
+  const monthlyDisplay = useMemo(() => {
+    if (!sub) return "—";
+    if (sub.monthlyAmountUsd !== null) return sub.monthlyLabel;
+    const pick = pickerValue(sub);
+    return formatManagerMonthlyLabel(pick);
+  }, [sub]);
   const planBlurb = useMemo(() => {
     if (!sub) return "";
     const t = pickerValue(sub);
@@ -117,6 +157,9 @@ export function ManagerPlan() {
         <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Payment per month (estimated)</p>
           <p className="mt-2 text-4xl font-bold tabular-nums tracking-tight text-slate-900">{monthlyDisplay}</p>
+          {sub?.isLegacyUnlimited ? (
+            <p className="mt-1 text-xs text-slate-500">Estimated from the plan you select below until you save.</p>
+          ) : null}
           {sub?.stripeManaged ? (
             <p className="mt-2 text-xs font-medium text-emerald-800">Stripe subscription — changing plan updates your subscription (prorations may apply).</p>
           ) : null}
@@ -128,7 +171,7 @@ export function ManagerPlan() {
           <p className="mt-1 text-lg font-semibold text-slate-900">{tierTitle(sub)}</p>
           {sub?.isLegacyUnlimited ? (
             <p className="mt-2 max-w-xl text-sm text-slate-600">
-              Your account has legacy full access. Picking a plan records it on your account for the demo (portal billing).
+              No plan row on file yet — pricing follows your selection below. Saving applies it for portal billing (and Stripe when connected).
             </p>
           ) : null}
           <div className={`mt-4 max-w-lg ${busy || !sub ? "pointer-events-none opacity-60" : ""}`}>
@@ -153,6 +196,37 @@ export function ManagerPlan() {
         </div>
 
         {!sub ? <p className="text-sm text-slate-500">Loading subscription…</p> : null}
+
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Billing & subscription</p>
+          <p className="mt-2 text-sm text-slate-600">
+            Update the card on file, download invoices, or cancel through Stripe when your plan is billed there. Otherwise use the plan
+            picker above — choosing Free cancels an active Stripe subscription when one is linked.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              disabled={busy || !sub?.stripeManaged}
+              onClick={() => void openBillingPortal()}
+            >
+              Payment method & invoices
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-rose-200 text-rose-900 hover:bg-rose-50"
+              disabled={busy || !sub || sub.isFree}
+              onClick={() => void cancelToFree()}
+            >
+              Cancel to Free
+            </Button>
+          </div>
+          {!sub?.stripeManaged && sub && !sub.isFree ? (
+            <p className="mt-3 text-xs text-slate-500">Stripe Customer Portal opens when this account has an active Stripe subscription.</p>
+          ) : null}
+        </div>
       </div>
     </ManagerPortalPageShell>
   );

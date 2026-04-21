@@ -13,29 +13,42 @@ export function PortalSegmentedControl<T extends string>({
   value,
   onChange,
   size = "md",
+  optionDisabled,
 }: {
   options: { id: T; label: string }[];
   value: T;
   onChange: (id: T) => void;
   size?: "sm" | "md";
+  /** When true, option is inactive (e.g. paid-only portal arm for Free tier). */
+  optionDisabled?: (id: T) => boolean;
 }) {
   const pad = size === "sm" ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-sm";
   return (
     <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1" role="tablist" aria-label="View">
-      {options.map((opt) => (
-        <button
-          key={opt.id}
-          type="button"
-          role="tab"
-          aria-selected={value === opt.id}
-          onClick={() => onChange(opt.id)}
-          className={`rounded-full font-semibold transition-all duration-150 ${pad} ${
-            value === opt.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
+      {options.map((opt) => {
+        const disabled = optionDisabled?.(opt.id) ?? false;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            role="tab"
+            aria-selected={value === opt.id}
+            disabled={disabled}
+            onClick={() => {
+              if (!disabled) onChange(opt.id);
+            }}
+            className={`rounded-full font-semibold transition-all duration-150 ${pad} ${
+              disabled
+                ? "cursor-not-allowed opacity-45"
+                : value === opt.id
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

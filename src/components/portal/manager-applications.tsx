@@ -78,6 +78,12 @@ export function ManagerApplications() {
     showToast(msg);
   };
 
+  const deleteApplication = (id: string) => {
+    persist(rows.filter((r) => r.id !== id));
+    setExpandedId(null);
+    showToast("Application deleted.");
+  };
+
   return (
     <ManagerPortalPageShell
       title="Applications"
@@ -154,8 +160,13 @@ export function ManagerApplications() {
                                 Move to pending
                               </Button>
                             )}
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Request sent to applicant (demo).")}>
-                              Request more info
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                              onClick={() => deleteApplication(row.id)}
+                            >
+                              Delete application
                             </Button>
                           </PortalTableDetailActions>
 

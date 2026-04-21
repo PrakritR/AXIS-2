@@ -54,6 +54,14 @@ function formatWeekRangeMonFri(monday: Date): string {
   return `${monday.toLocaleDateString(undefined, opts)}–${fri.toLocaleDateString(undefined, { ...opts, year: "numeric" })}`;
 }
 
+function isInMonthPickRange(ds: string, pick: { start: string | null; end: string | null }): boolean {
+  if (!pick.start) return false;
+  if (!pick.end) return ds === pick.start;
+  const lo = pick.start < pick.end ? pick.start : pick.end;
+  const hi = pick.start < pick.end ? pick.end : pick.start;
+  return ds >= lo && ds <= hi;
+}
+
 function formatNavTitle(anchor: Date, mode: CalendarMode): string {
   if (mode === "month") {
     return anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -84,12 +92,20 @@ const slotRowIndices = Array.from(
 export function PortalCalendarPanels({
   storageKey,
   calendarRefreshSignal,
+  defaultViewMode = "week",
+  pinMonthSchedule = false,
 }: {
   storageKey: string | null;
   /** Increment from parent to reload slot state from storage (e.g. admin page Refresh). */
   calendarRefreshSignal?: number;
+  /** Initial schedule panel mode (admin defaults to month). */
+  defaultViewMode?: CalendarMode;
+  /** When true, month grid stays visible: day clicks choose a range + sync week without jumping to Day view (admin Calendar). */
+  pinMonthSchedule?: boolean;
 }) {
-  const [viewMode, setViewMode] = useState<CalendarMode>("week");
+  const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
+  /** yyyy-mm-dd inclusive range highlights in month view when `pinMonthSchedule`. */
+  const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [activeSlots, setActiveSlots] = useState<Set<string>>(() => new Set());
   const [dragMode, setDragMode] = useState<"add" | "remove" | null>(null);
@@ -111,6 +127,18 @@ export function PortalCalendarPanels({
   const monthYear = anchorDate.getFullYear();
   const monthIndex = anchorDate.getMonth();
   const monthCells = useMemo(() => buildMonthCells(monthYear, monthIndex), [monthYear, monthIndex]);
+
+  const monthBlocksCount = useMemo(() => {
+    let n = 0;
+    const dim = new Date(monthYear, monthIndex + 1, 0).getDate();
+    for (let day = 1; day <= dim; day += 1) {
+      const ds = toLocalDateStr(new Date(monthYear, monthIndex, day, 12, 0, 0, 0));
+      for (const slot of slotRowIndices) {
+        if (activeSlots.has(dateSlotKey(ds, slot))) n += 1;
+      }
+    }
+    return n;
+  }, [monthYear, monthIndex, activeSlots]);
 
   const applySlot = useCallback(
     (key: string, mode: "add" | "remove") => {
@@ -195,7 +223,9 @@ export function PortalCalendarPanels({
               value={viewMode}
               onChange={setViewMode}
             />
-            <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600">{meetings.length} blocks</div>
+            <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600">
+              {viewMode === "month" ? monthBlocksCount : meetings.length} blocks
+            </div>
           </div>
         </div>
       </div>
@@ -210,27 +240,36 @@ export function PortalCalendarPanels({
             ))}
           </div>
           <div className="mt-1 grid grid-cols-7 gap-1">
-            {monthCells.map((day, i) =>
-              day ? (
+            {monthCells.map((day, i) => {
+              if (!day) return <div key={`pad-${i}`} className="aspect-square" />;
+              const cellDate = new Date(monthYear, monthIndex, day, 12, 0, 0, 0);
+              const ds = toLocalDateStr(cellDate);
+              const picked = pinMonthSchedule && isInMonthPickRange(ds, monthPick);
+              const hasAvail = dateHasAvailability(cellDate, activeSlots);
+              return (
                 <button
-                  key={i}
+                  key={`${monthYear}-${monthIndex}-${day}`}
                   type="button"
                   onClick={() => {
-                    setAnchorDate(new Date(monthYear, monthIndex, day, 12, 0, 0, 0));
-                    setViewMode("day");
+                    setAnchorDate(cellDate);
+                    if (pinMonthSchedule) {
+                      setMonthPick((prev) => {
+                        if (!prev.start || (prev.start && prev.end)) return { start: ds, end: null };
+                        if (prev.start === ds) return { start: ds, end: null };
+                        return prev.start <= ds ? { start: prev.start, end: ds } : { start: ds, end: prev.start };
+                      });
+                    } else {
+                      setViewMode("day");
+                    }
                   }}
                   className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-sm font-semibold transition hover:border-primary/30 ${
-                    dateHasAvailability(new Date(monthYear, monthIndex, day, 12, 0, 0, 0), activeSlots)
-                      ? "border-primary/25 bg-primary/[0.07] text-slate-900"
-                      : "border-slate-100 bg-white text-slate-800"
-                  }`}
+                    picked ? "border-primary bg-primary/[0.14] text-slate-900 ring-2 ring-primary/35" : ""
+                  } ${hasAvail ? "border-primary/25 bg-primary/[0.07] text-slate-900" : "border-slate-100 bg-white text-slate-800"}`}
                 >
                   {day}
                 </button>
-              ) : (
-                <div key={i} className="aspect-square" />
-              ),
-            )}
+              );
+            })}
           </div>
         </div>
       ) : null}

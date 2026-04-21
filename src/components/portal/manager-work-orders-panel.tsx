@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -19,7 +19,6 @@ import {
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
-import { demoManagerWorkOrderRowsFull } from "@/data/demo-portal";
 import {
   findPendingWorkOrderCharge,
   HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
@@ -27,7 +26,7 @@ import {
   parseMoneyAmount,
   recordWorkOrderResidentCharge,
 } from "@/lib/household-charges";
-import { readManagerWorkOrderRows, subscribeManagerWorkOrders, updateManagerWorkOrder } from "@/lib/manager-work-orders-storage";
+import { updateManagerWorkOrder } from "@/lib/manager-work-orders-storage";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 
 function priorityClass(p: string) {
@@ -68,9 +67,11 @@ function formatScheduledLabel(iso: string): string {
 }
 
 export function ManagerWorkOrdersPanel({
+  allRows,
   bucket,
   onAfterSchedule,
 }: {
+  allRows: DemoManagerWorkOrderRow[];
   bucket: ManagerWorkOrderBucket;
   /** After moving a row from Open → Scheduled, switch the parent tab so the row is still visible. */
   onAfterSchedule?: () => void;
@@ -81,12 +82,6 @@ export function ManagerWorkOrdersPanel({
   const [billDraftById, setBillDraftById] = useState<Record<string, BillDraft>>({});
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
   const [hcTick, setHcTick] = useState(0);
-
-  const allRows = useSyncExternalStore(
-    subscribeManagerWorkOrders,
-    () => readManagerWorkOrderRows(demoManagerWorkOrderRowsFull),
-    () => demoManagerWorkOrderRowsFull,
-  );
 
   const rows = useMemo(() => allRows.filter((r) => r.bucket === bucket), [allRows, bucket]);
 

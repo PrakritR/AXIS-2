@@ -4,16 +4,18 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { adminLeaseKpiCounts, type AdminLeaseBucketIndex } from "@/lib/demo-admin-leases";
 import {
-  adminLeaseKpiCounts,
-  filterAdminLeases,
-  readAdminLeases,
-  uniqueManagerNames,
-  uniquePropertyGroups,
-  updateAdminLease,
-  type AdminLeaseBucketIndex,
-  type AdminLeaseRow,
-} from "@/lib/demo-admin-leases";
+  LEASE_PIPELINE_EVENT,
+  appendLeaseThreadMessage,
+  downloadLeaseFromRow,
+  generateLeaseHtmlForRow,
+  managerUploadLeasePdf,
+  readLeasePipeline,
+  updateLeasePipelineRow,
+  type LeasePipelineRow,
+} from "@/lib/lease-pipeline-storage";
+import type { ManagerLeaseBucket } from "@/data/demo-portal";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { PORTAL_DATA_TABLE_WRAP, PORTAL_DATA_TABLE_SCROLL, PORTAL_TABLE_DETAIL_ROW, PORTAL_TABLE_TR } from "@/components/portal/portal-data-table";
@@ -73,129 +75,175 @@ function StatusPill({ bucket }: { bucket: AdminLeaseBucketIndex }) {
   );
 }
 
-function LeaseDetailInline({
+function bucketToPillIndex(b: ManagerLeaseBucket): AdminLeaseBucketIndex {
+  const m: Record<ManagerLeaseBucket, AdminLeaseBucketIndex> = {
+    manager: 0,
+    admin: 1,
+    resident: 2,
+    signed: 3,
+  };
+  return m[b];
+}
+
+function LeasePipelineAdminDetail({
   row,
   onSaved,
   showToast,
 }: {
-  row: AdminLeaseRow;
+  row: LeasePipelineRow;
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [comments, setComments] = useState("");
+  const [reply, setReply] = useState("");
 
-  useEffect(() => {
-    setComments(row.comments);
-  }, [row]);
+  const pdfSrc = row.managerUploadedPdf?.dataUrl ?? null;
 
-  const pdfSrc = row.uploadedPdfDataUrl ?? row.pdfUrl;
-
-  const saveComments = () => {
-    const next = comments.trim();
-    if (updateAdminLease(row.id, { comments: next })) {
-      showToast("Comments saved.");
-      onSaved();
-    } else showToast("Could not save comments.");
-  };
-
-  const onPickFile: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+  const onPickFile: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (file.type !== "application/pdf") {
-      showToast("Please choose a PDF file.");
-      return;
-    }
-    if (file.size > 3 * 1024 * 1024) {
-      showToast("File too large (max 3 MB in this demo).");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = reader.result;
-      if (typeof data !== "string") return;
-      if (updateAdminLease(row.id, { uploadedPdfDataUrl: data })) {
-        showToast("Lease file updated.");
-        onSaved();
-      } else showToast("Could not save file.");
-    };
-    reader.readAsDataURL(file);
+    const res = await managerUploadLeasePdf(row.id, file);
+    if (res.ok) {
+      showToast("Lease PDF saved.");
+      onSaved();
+    } else showToast(res.error ?? "Upload failed.");
   };
 
   return (
     <div className="max-h-[min(70vh,520px)] space-y-4 overflow-y-auto pr-1">
-          <div>
-            <p className="text-base font-semibold text-slate-900">{row.propertyLabel}</p>
-            <p className="mt-0.5 text-sm text-slate-500">{row.addressLine}</p>
-            <p className="mt-2 text-sm font-semibold text-slate-800">{row.rentLabel}</p>
-            <p className="mt-1 text-xs text-slate-500">
-              {row.residentName} · {row.managerName}
-            </p>
-          </div>
+      <div>
+        <p className="text-base font-semibold text-slate-900">{row.unit}</p>
+        <p className="mt-0.5 text-sm text-slate-500">{row.residentName}</p>
+        <p className="mt-2 text-sm text-slate-700">{row.notes}</p>
+      </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50">
-            <p className="border-b border-slate-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              Lease PDF
-            </p>
-            {pdfSrc ? (
-              <iframe
-                title="Lease PDF preview"
-                src={pdfSrc}
-                className="h-[min(52vh,420px)] w-full bg-white"
-              />
-            ) : (
-              <div className="flex h-[min(52vh,420px)] items-center justify-center px-4 text-center text-sm text-slate-500">
-                No PDF on file.
-              </div>
-            )}
-          </div>
+      {row.thread.length ? (
+        <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 px-3 py-2">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Thread</p>
+          <ul className="mt-2 max-h-36 space-y-2 overflow-y-auto text-sm">
+            {row.thread.map((m) => (
+              <li key={m.id} className="rounded-lg bg-white px-2 py-1.5 shadow-sm ring-1 ring-slate-100">
+                <span className="font-semibold capitalize">{m.role}</span>
+                <span className="text-xs text-slate-400"> · {new Date(m.at).toLocaleString()}</span>
+                <p className="mt-0.5 whitespace-pre-wrap text-slate-700">{m.body}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
-          <div className="flex flex-wrap gap-2">
-            {pdfSrc ? (
-              <a
-                href={pdfSrc}
-                target="_blank"
-                rel="noreferrer"
-                download
-                className="inline-flex items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-5 py-2.5 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
-              >
-                Download
-              </a>
-            ) : (
-              <span className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-500">No file to download</span>
-            )}
-            <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={onPickFile} />
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>
-              Upload new lease
-            </Button>
-            <Button
-              type="button"
-              className="rounded-full"
-              onClick={() => {
-                showToast(`Sent to ${row.managerName}.`);
-              }}
-            >
-              Send to manager
-            </Button>
+      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50">
+        <p className="border-b border-slate-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+          Lease preview
+        </p>
+        {pdfSrc ? (
+          <iframe title="Lease PDF preview" src={pdfSrc} className="h-[min(52vh,420px)] w-full bg-white" />
+        ) : row.generatedHtml ? (
+          <iframe
+            title="Generated lease HTML"
+            srcDoc={row.generatedHtml}
+            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+            className="h-[min(52vh,420px)] w-full bg-white"
+          />
+        ) : (
+          <div className="flex h-[min(52vh,420px)] items-center justify-center px-4 text-center text-sm text-slate-500">
+            No generated lease yet — managers generate from application data.
           </div>
+        )}
+      </div>
 
-          <div>
-            <label htmlFor={`lease-comments-${row.id}`} className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              Comments
-            </label>
-            <textarea
-              id={`lease-comments-${row.id}`}
-              value={comments}
-              onChange={(e) => setComments(e.target.value)}
-              rows={4}
-              className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
-              placeholder="Internal notes…"
-            />
-            <Button type="button" variant="outline" className="mt-2 rounded-full" onClick={saveComments}>
-              Save comments
-            </Button>
-          </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full"
+          onClick={() => {
+            downloadLeaseFromRow(row);
+            showToast("Download started.");
+          }}
+        >
+          Download lease
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full"
+          onClick={() => {
+            const res = generateLeaseHtmlForRow(row.id);
+            if (res.ok === true) {
+              showToast(`Regenerated draft v${res.version}.`);
+              onSaved();
+            } else showToast(res.error ?? "Could not generate.");
+          }}
+        >
+          Generate from application
+        </Button>
+        <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={onPickFile} />
+        <Button type="button" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>
+          Upload PDF
+        </Button>
+        <Button
+          type="button"
+          className="rounded-full"
+          onClick={() => {
+            appendLeaseThreadMessage(row.id, "admin", "Returned to manager for updates.");
+            if (updateLeasePipelineRow(row.id, { bucket: "manager" })) {
+              showToast("Sent back to manager.");
+              onSaved();
+            }
+          }}
+        >
+          Send to manager
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full"
+          onClick={() => {
+            appendLeaseThreadMessage(row.id, "admin", "Approved — releasing to resident.");
+            if (updateLeasePipelineRow(row.id, { bucket: "resident" })) {
+              showToast("Lease moved to resident.");
+              onSaved();
+            }
+          }}
+        >
+          Send to resident
+        </Button>
+      </div>
+
+      <div>
+        <label htmlFor={`admin-reply-${row.id}`} className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+          Reply to thread
+        </label>
+        <textarea
+          id={`admin-reply-${row.id}`}
+          value={reply}
+          onChange={(e) => setReply(e.target.value)}
+          rows={3}
+          className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          placeholder="Visible to manager and resident on their lease views…"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-2 rounded-full"
+          onClick={() => {
+            const t = reply.trim();
+            if (!t) {
+              showToast("Enter a message.");
+              return;
+            }
+            if (appendLeaseThreadMessage(row.id, "admin", t)) {
+              setReply("");
+              showToast("Reply posted.");
+              onSaved();
+            }
+          }}
+        >
+          Post reply
+        </Button>
+      </div>
     </div>
   );
 }
@@ -203,8 +251,6 @@ function LeaseDetailInline({
 export function AdminLeasesClient() {
   const { showToast } = useAppUi();
   const [activeBucket, setActiveBucket] = useState<AdminLeaseBucketIndex>(0);
-  const [propertyFilter, setPropertyFilter] = useState("all");
-  const [managerFilter, setManagerFilter] = useState("all");
   const [tick, setTick] = useState(0);
   const [expandedLeaseId, setExpandedLeaseId] = useState<string | null>(null);
 
@@ -215,23 +261,30 @@ export function AdminLeasesClient() {
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
+    window.addEventListener(LEASE_PIPELINE_EVENT, on);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     window.addEventListener("storage", on);
     return () => {
+      window.removeEventListener(LEASE_PIPELINE_EVENT, on);
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
       window.removeEventListener("storage", on);
     };
   }, []);
 
-  const allRows = useMemo(() => readAdminLeases(), [tick]);
-  const kpiValues = useMemo(() => adminLeaseKpiCounts(), [tick]);
-  const propertyOptions = useMemo(() => uniquePropertyGroups(allRows), [allRows]);
-  const managerOptions = useMemo(() => uniqueManagerNames(allRows), [allRows]);
+  const ADMIN_INDEX_TO_PIPELINE: Record<AdminLeaseBucketIndex, ManagerLeaseBucket> = {
+    0: "manager",
+    1: "admin",
+    2: "resident",
+    3: "signed",
+  };
 
-  const rows = useMemo(
-    () => filterAdminLeases(allRows, activeBucket, propertyFilter, managerFilter, ""),
-    [allRows, activeBucket, propertyFilter, managerFilter],
-  );
+  const allRows = useMemo(() => readLeasePipeline(), [tick]);
+  const kpiValues = useMemo(() => adminLeaseKpiCounts(), [tick]);
+
+  const rows = useMemo(() => {
+    const want = ADMIN_INDEX_TO_PIPELINE[activeBucket];
+    return allRows.filter((r) => r.bucket === want);
+  }, [allRows, activeBucket]);
 
   useEffect(() => {
     if (expandedLeaseId && !rows.some((r) => r.id === expandedLeaseId)) {
@@ -271,46 +324,6 @@ export function AdminLeasesClient() {
           ))}
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
-          <div className="inline-flex min-w-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-            <label htmlFor="admin-lease-manager-filter" className="sr-only">
-              Managers
-            </label>
-            <select
-              id="admin-lease-manager-filter"
-              aria-label="Managers"
-              className="max-w-[min(100%,14rem)] min-w-0 flex-1 rounded-full border-0 bg-transparent py-1.5 pl-3 pr-2 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-0 sm:max-w-none"
-              value={managerFilter}
-              onChange={(e) => setManagerFilter(e.target.value)}
-            >
-              <option value="all">All managers</option>
-              {managerOptions.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="inline-flex min-w-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-            <label htmlFor="admin-lease-property-filter" className="sr-only">
-              Properties
-            </label>
-            <select
-              id="admin-lease-property-filter"
-              aria-label="Properties"
-              className="max-w-[min(100%,14rem)] min-w-0 flex-1 rounded-full border-0 bg-transparent py-1.5 pl-3 pr-2 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-0 sm:max-w-none"
-              value={propertyFilter}
-              onChange={(e) => setPropertyFilter(e.target.value)}
-            >
-              <option value="all">All properties</option>
-              {propertyOptions.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
       </div>
 
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-5`}>
@@ -320,9 +333,7 @@ export function AdminLeasesClient() {
               <DocIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
             <p className="mt-4 text-sm font-medium text-slate-500">
-              {allRows.length === 0
-                ? "No leases yet"
-                : "No leases in this bucket for the selected property and manager."}
+              {allRows.length === 0 ? "No leases yet" : "No leases in this stage."}
             </p>
           </div>
         ) : (
@@ -341,14 +352,15 @@ export function AdminLeasesClient() {
                   <Fragment key={row.id}>
                     <tr className={PORTAL_TABLE_TR}>
                       <td className="px-5 py-4 align-middle">
-                        <p className="font-semibold text-slate-900">{row.propertyLabel}</p>
-                        <p className="mt-0.5 text-sm text-slate-500">{row.addressLine}</p>
+                        <p className="font-semibold text-slate-900">{row.unit}</p>
+                        <p className="mt-0.5 text-sm text-slate-500">{row.residentName}</p>
                       </td>
                       <td className="px-5 py-4 align-middle">
-                        <p className="font-semibold text-slate-900">{row.rentLabel}</p>
+                        <p className="font-semibold text-slate-900">—</p>
+                        <p className="text-xs text-slate-500">From application / listing</p>
                       </td>
                       <td className="px-5 py-4 align-middle">
-                        <StatusPill bucket={row.bucket} />
+                        <StatusPill bucket={bucketToPillIndex(row.bucket)} />
                       </td>
                       <td className="px-5 py-4 text-right align-middle">
                         <Button
@@ -364,7 +376,11 @@ export function AdminLeasesClient() {
                     {expandedLeaseId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
                         <td colSpan={4} className="px-5 py-4">
-                          <LeaseDetailInline row={row} onSaved={() => setTick((t) => t + 1)} showToast={showToast} />
+                          <LeasePipelineAdminDetail
+                            row={row}
+                            onSaved={() => setTick((t) => t + 1)}
+                            showToast={showToast}
+                          />
                         </td>
                       </tr>
                     ) : null}

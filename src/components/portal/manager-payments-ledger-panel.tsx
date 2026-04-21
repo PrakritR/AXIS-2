@@ -18,8 +18,9 @@ import {
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
-import type { DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
-import { markHouseholdChargePaid } from "@/lib/household-charges";
+import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
+import { deleteManagerPaymentLedgerEntry, markDemoPaymentLedgerRowPaid } from "@/lib/demo-manager-payment-ledger";
+import { deleteHouseholdCharge, markHouseholdChargePaid } from "@/lib/household-charges";
 
 function statusTone(label: string) {
   const l = label.toLowerCase();
@@ -32,9 +33,11 @@ function statusTone(label: string) {
 export function ManagerPaymentsLedgerPanel({
   rows,
   managerUserId,
+  activeBucket,
 }: {
   rows: DemoManagerPaymentLedgerRow[];
   managerUserId: string | null;
+  activeBucket: ManagerPaymentBucket;
 }) {
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -45,32 +48,51 @@ export function ManagerPaymentsLedgerPanel({
     return <PortalDataTableEmpty message="No payment lines in this bucket." />;
   }
 
-  const markPaid = (row: DemoManagerPaymentLedgerRow) => {
+  const removePayment = (row: DemoManagerPaymentLedgerRow) => {
+    if (row.householdChargeId) {
+      if (deleteHouseholdCharge(row.householdChargeId, managerUserId)) {
+        showToast("Payment removed.");
+        setExpandedId(null);
+        return;
+      }
+      showToast("Could not remove this line.");
+      return;
+    }
+    if (deleteManagerPaymentLedgerEntry(row.id)) {
+      showToast("Payment removed.");
+      setExpandedId(null);
+      return;
+    }
+    showToast("Could not remove this line.");
+  };
+
+  const recordPaid = (row: DemoManagerPaymentLedgerRow, toastMessage: string) => {
     if (row.householdChargeId) {
       if (markHouseholdChargePaid(row.householdChargeId, managerUserId)) {
-        showToast("Marked as paid.");
+        showToast(toastMessage);
         setExpandedId(null);
         return;
       }
       showToast("Could not update this line.");
       return;
     }
-    showToast("Marked paid (demo).");
+    markDemoPaymentLedgerRowPaid(row.id);
+    showToast(toastMessage);
+    setExpandedId(null);
   };
 
   return (
     <div className={PORTAL_DATA_TABLE_WRAP}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="min-w-[980px] w-full border-collapse text-left text-sm">
+        <table className="min-w-[880px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Line amount</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount paid</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Balance due</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>Amount owed</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Due date</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
               <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
@@ -84,7 +106,6 @@ export function ManagerPaymentsLedgerPanel({
                   <td className={PORTAL_TABLE_TD}>Room {row.roomNumber}</td>
                   <td className={PORTAL_TABLE_TD}>{row.residentName}</td>
                   <td className={PORTAL_TABLE_TD}>{row.chargeTitle}</td>
-                  <td className={`${PORTAL_TABLE_TD} tabular-nums text-slate-800`}>{row.lineAmount}</td>
                   <td className={`${PORTAL_TABLE_TD} tabular-nums text-slate-700`}>{row.amountPaid}</td>
                   <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-slate-900`}>{row.balanceDue}</td>
                   <td className={`${PORTAL_TABLE_TD} text-slate-600`}>{row.dueDate}</td>
@@ -106,24 +127,28 @@ export function ManagerPaymentsLedgerPanel({
                 </tr>
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={10} className={PORTAL_TABLE_DETAIL_CELL}>
+                    <td colSpan={9} className={PORTAL_TABLE_DETAIL_CELL}>
                       <p className="text-sm leading-relaxed text-slate-600">
                         <span className="font-medium text-slate-800">{row.residentName}</span> · {row.notes}
                       </p>
                       <PortalTableDetailActions>
                         {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
-                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => markPaid(row)}>
-                            Mark as paid
+                          <>
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => recordPaid(row, "Marked as paid.")}>
+                              Mark as paid
+                            </Button>
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Zelle.")}>
+                              Paid with Zelle
+                            </Button>
+                          </>
+                        ) : null}
+                        {activeBucket !== "pending" ? (
+                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Moved to pending (demo).")}>
+                            Move to pending
                           </Button>
                         ) : null}
-                        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Moved to pending (demo).")}>
-                          Move to pending
-                        </Button>
-                        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Recorded as paid with Zelle (demo).")}>
-                          Paid with Zelle
-                        </Button>
-                        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Line removed (demo).")}>
-                          Delete line
+                        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => removePayment(row)}>
+                          Delete
                         </Button>
                       </PortalTableDetailActions>
                     </td>

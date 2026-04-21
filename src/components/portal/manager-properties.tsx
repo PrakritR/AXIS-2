@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import type { MockProperty } from "@/data/types";
 import { Button } from "@/components/ui/button";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerHousePropertiesPanel } from "@/components/portal/manager-house-properties-panel";
@@ -11,14 +13,47 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   countManagerManagedPropertiesForUser,
   PROPERTY_PIPELINE_EVENT,
+  readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
+  type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import { PRO_MAX_PROPERTIES, proTierPropertyLimitReached } from "@/lib/manager-access";
+import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { legacyAdminFieldsToSubmission } from "@/lib/manager-listing-submission";
+
+function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
+  if (row.submission) return row.submission;
+  return legacyAdminFieldsToSubmission(row);
+}
+
+function submissionForListedEdit(p: MockProperty): ManagerListingSubmissionV1 {
+  if (p.listingSubmission) return p.listingSubmission;
+  const rentNum = Number.parseFloat(String(p.rentLabel).replace(/[^\d.]/g, "")) || 0;
+  return legacyAdminFieldsToSubmission({
+    buildingName: p.buildingName,
+    address: p.address,
+    zip: p.zip,
+    neighborhood: p.neighborhood,
+    unitLabel: p.unitLabel,
+    beds: p.beds,
+    baths: p.baths,
+    monthlyRent: rentNum,
+    petFriendly: p.petFriendly,
+    tagline: p.tagline,
+  });
+}
+
+type EditListingContext =
+  | { mode: "pending"; id: string; submission: ManagerListingSubmissionV1 }
+  | { mode: "listed"; id: string; submission: ManagerListingSubmissionV1 };
 
 export function ManagerProperties() {
   const { showToast } = useAppUi();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { userId } = useManagerUserId();
   const [formOpen, setFormOpen] = useState(false);
+  const [editListingContext, setEditListingContext] = useState<EditListingContext | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [skuLoaded, setSkuLoaded] = useState(false);
   const [skuTier, setSkuTier] = useState<string | null>(null);
@@ -59,6 +94,38 @@ export function ManagerProperties() {
     return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
   }, [refreshPending]);
 
+  useEffect(() => {
+    const editPending = searchParams.get("editPending");
+    const editListing = searchParams.get("editListing");
+    if (!editPending && !editListing) return;
+    if (!userId) return;
+
+    if (editPending) {
+      const row = readPendingManagerPropertiesForUser(userId).find((r) => r.id === editPending);
+      if (row) {
+        setEditListingContext({ mode: "pending", id: editPending, submission: submissionForPendingEdit(row) });
+        setFormOpen(true);
+        router.replace("/manager/properties", { scroll: false });
+        return;
+      }
+      showToast("Could not load that listing for editing.");
+      router.replace("/manager/properties", { scroll: false });
+      return;
+    }
+
+    if (editListing) {
+      const hit = readExtraListingsForUser(userId).find((p) => p.id === editListing);
+      if (hit) {
+        setEditListingContext({ mode: "listed", id: editListing, submission: submissionForListedEdit(hit) });
+        setFormOpen(true);
+        router.replace("/manager/properties", { scroll: false });
+        return;
+      }
+      showToast("Could not load that listing for editing.");
+      router.replace("/manager/properties", { scroll: false });
+    }
+  }, [userId, searchParams, router, showToast]);
+
   const atProLimit = skuLoaded && proTierPropertyLimitReached(skuTier, propCount);
 
   const tryOpenAdd = () => {
@@ -80,15 +147,25 @@ export function ManagerProperties() {
     <>
       {formOpen ? (
         <ManagerAddListingForm
+          key={editListingContext ? `${editListingContext.mode}-${editListingContext.id}` : "new-listing"}
           showToast={showToast}
           skuTier={skuTier ?? null}
           propCountBeforeSubmit={propCount}
-          onClose={() => setFormOpen(false)}
+          editPendingId={editListingContext?.mode === "pending" ? editListingContext.id : null}
+          editListingId={editListingContext?.mode === "listed" ? editListingContext.id : null}
+          initialSubmission={editListingContext?.submission ?? null}
+          onClose={() => {
+            setFormOpen(false);
+            setEditListingContext(null);
+          }}
           onSubmitted={() => {
-            showToast("Property submitted for admin approval. It will appear on public listings after approval.");
+            showToast(
+              editListingContext ? "Listing saved." : "Property submitted for admin approval. It will appear on public listings after approval.",
+            );
             refreshPending();
             void loadSku();
             setFormOpen(false);
+            setEditListingContext(null);
           }}
         />
       ) : null}

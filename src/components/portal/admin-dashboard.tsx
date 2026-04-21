@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import { pendingInquiryCount, readPlannedEvents } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
+import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 
 const launchPreviewClassName =
   "inline-flex items-center justify-center rounded-full px-5 py-2.5 text-[14px] font-semibold text-white shadow-[0_0_18px_rgba(0,122,255,0.28)] outline-none transition hover:-translate-y-0.5 hover:shadow-[0_0_22px_rgba(0,122,255,0.35)] active:translate-y-px";
@@ -41,6 +43,7 @@ export function AdminDashboard() {
   const [residents, setResidents] = useState<PortalUser[]>([]);
   const [owners, setOwners] = useState<PortalUser[]>([]);
   const [counts, setCounts] = useState({ managers: 0, residents: 0, owners: 0 });
+  const [propertiesTotal, setPropertiesTotal] = useState("0");
   const [managerId, setManagerId] = useState("");
   const [residentId, setResidentId] = useState("");
   const [ownerId, setOwnerId] = useState("");
@@ -110,6 +113,20 @@ export function AdminDashboard() {
     return () => {
       window.removeEventListener(ADMIN_UI_EVENT, on);
       window.removeEventListener("storage", on);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncProperties = () => {
+      const [p0, p1, p2, p3, p4] = adminKpiCounts();
+      setPropertiesTotal(String(p0 + p1 + p2 + p3 + p4));
+    };
+    syncProperties();
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, syncProperties);
+    window.addEventListener("storage", syncProperties);
+    return () => {
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, syncProperties);
+      window.removeEventListener("storage", syncProperties);
     };
   }, []);
 
@@ -209,7 +226,7 @@ export function AdminDashboard() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Properties" value="0" href="/admin/properties" />
+        <StatCard label="Properties" value={propertiesTotal} href="/admin/properties" />
         <StatCard label="Managers" value={String(counts.managers)} href="/admin/managers" />
         <StatCard label="Owners" value={String(counts.owners)} href="/admin/owners" />
         <StatCard label="Calendar" value={eventsTotal} href="/admin/events" />

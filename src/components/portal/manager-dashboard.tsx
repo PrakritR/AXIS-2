@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -19,6 +20,7 @@ import { HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readManagerWorkOrderRows, subscribeManagerWorkOrders } from "@/lib/manager-work-orders-storage";
+import { OwnerManagerAccountSwitch } from "@/components/portal/owner-manager-account-switch";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilter } from "./manager-section-shell";
 import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "./portal-metrics";
@@ -37,6 +39,8 @@ function StatLink({ label, value, href }: { label: string; value: string; href: 
 
 export function ManagerDashboard() {
   const { showToast } = useAppUi();
+  const pathname = usePathname();
+  const portalBase = pathname.startsWith("/owner") ? "/owner" : "/manager";
   const { userId, ready } = useManagerUserId();
 
   const [pipelineTick, setPipelineTick] = useState(0);
@@ -102,6 +106,7 @@ export function ManagerDashboard() {
       title="Dashboard"
       titleAside={
         <>
+          <OwnerManagerAccountSwitch />
           <div className="hidden sm:block">
             <PortalPropertyFilter />
           </div>
@@ -116,7 +121,7 @@ export function ManagerDashboard() {
           <p className="rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950">
             <span className="font-semibold">{demoKpis.payments.overdue}</span> payment line
             {Number(demoKpis.payments.overdue) === 1 ? " is" : "s are"} overdue.{" "}
-            <Link className="font-semibold text-primary underline-offset-2 hover:underline" href="/manager/payments">
+            <Link className="font-semibold text-primary underline-offset-2 hover:underline" href={`${portalBase}/payments/ledger`}>
               Open payments
             </Link>
           </p>
@@ -127,7 +132,7 @@ export function ManagerDashboard() {
               <>
                 <span className="font-semibold">{pipelineSummary.pendingProperties}</span> propert
                 {pipelineSummary.pendingProperties === 1 ? "y" : "ies"} pending approval.{" "}
-                <Link className="font-semibold text-primary underline-offset-2 hover:underline" href="/manager/properties">
+                <Link className="font-semibold text-primary underline-offset-2 hover:underline" href={`${portalBase}/properties`}>
                   Review properties
                 </Link>
               </>
@@ -137,7 +142,7 @@ export function ManagerDashboard() {
               <>
                 <span className="font-semibold">{pendingApplications}</span> application{pendingApplications === 1 ? "" : "s"} need a
                 decision.{" "}
-                <Link className="font-semibold text-primary underline-offset-2 hover:underline" href="/manager/applications">
+                <Link className="font-semibold text-primary underline-offset-2 hover:underline" href={`${portalBase}/applications`}>
                   Open applications
                 </Link>
               </>
@@ -146,12 +151,12 @@ export function ManagerDashboard() {
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatLink label="Properties" value={String(pipelineSummary.totalProperties)} href="/manager/properties" />
-          <StatLink label="Applications" value={String(applicationRows.length)} href="/manager/applications" />
-          <StatLink label="Leases" value={String(demoManagerLeaseDraftRows.length)} href="/manager/leases" />
-          <StatLink label="Payments" value={String(paymentLineCount)} href="/manager/payments" />
-          <StatLink label="Work orders" value={String(workOrderRows.length)} href="/manager/work-orders" />
-          <StatLink label="Inbox" value={String(demoManagerInboxUnopenedCount())} href="/manager/inbox/unopened" />
+          <StatLink label="Properties" value={String(pipelineSummary.totalProperties)} href={`${portalBase}/properties`} />
+          <StatLink label="Applications" value={String(applicationRows.length)} href={`${portalBase}/applications`} />
+          <StatLink label="Leases" value={String(demoManagerLeaseDraftRows.length)} href={`${portalBase}/leases`} />
+          <StatLink label="Payments" value={String(paymentLineCount)} href={`${portalBase}/payments/ledger`} />
+          <StatLink label="Work orders" value={String(workOrderRows.length)} href={`${portalBase}/work-orders`} />
+          <StatLink label="Inbox" value={String(demoManagerInboxUnopenedCount())} href={`${portalBase}/inbox/unopened`} />
         </div>
       </div>
     </ManagerPortalPageShell>

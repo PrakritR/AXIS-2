@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { ListingPublicPreviewModal } from "@/components/portal/listing-public-preview-modal";
-import { PropertyRequestEditForm } from "@/components/portal/property-request-edit-form";
-import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { PORTAL_DATA_TABLE_WRAP, PORTAL_TABLE_HEAD_ROW, PORTAL_TABLE_ROW_TOGGLE_CLASS, PORTAL_TABLE_TR, PORTAL_TABLE_TD } from "@/components/portal/portal-data-table";
 import type { ManagerHouseBucket } from "@/data/demo-portal";
@@ -16,9 +15,7 @@ import {
   declineFromRequestChange,
   listAdminRow,
   moveListedToRejected,
-  moveListedToRequestChange,
   movePendingToRejected,
-  movePendingToRequestChange,
   moveUnlistedToRejected,
   publicListingHrefForPropertyRow,
   readAdminPropertyRows,
@@ -135,13 +132,9 @@ function ManagerPropertyPreviewModal({
   showToast: (m: string) => void;
   managerUserId: string | null;
 }) {
+  const router = useRouter();
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
   const listingId = row?.listingId;
-  const [composeEdit, setComposeEdit] = useState<null | "pending" | "listed">(null);
-
-  useEffect(() => {
-    setComposeEdit(null);
-  }, [row?.adminRefId, open]);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
@@ -165,65 +158,19 @@ function ManagerPropertyPreviewModal({
       ) : null}
       <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Actions</p>
       <p className="text-xs text-slate-500">Listing approval is handled by Axis admin.</p>
-      {composeEdit === "pending" && bucket === 0 ? (
-        <PropertyRequestEditForm
-          recipientHint="your team contact or Axis admin"
-          onCancel={() => setComposeEdit(null)}
-          onSend={(note) => {
-            const t = note.trim();
-            if (!t) {
-              showToast("Enter a message describing the requested edits.");
-              return;
-            }
-            const ok = movePendingToRequestChange(row.adminRefId, managerUserId, t);
-            if (!ok) {
-              showToast("Action could not be completed.");
-              return;
-            }
-            logDemoOutboundEmail(
-              `mgr-house-pending-${row.adminRefId}@portal.axis.demo`,
-              `Edits requested: ${row.buildingName} · ${row.unitLabel}`,
-              `${t}\n\nProperty: ${row.address}${row.zip ? `, ${row.zip}` : ""}`,
-            );
-            showToast("Edit request recorded (demo: sessionStorage axis_demo_outbound_mail_v1).");
-            setComposeEdit(null);
-            onUpdated();
-            onClose();
-          }}
-        />
-      ) : null}
-      {composeEdit === "listed" && bucket === 2 && listingId ? (
-        <PropertyRequestEditForm
-          recipientHint="your team contact or Axis admin"
-          onCancel={() => setComposeEdit(null)}
-          onSend={(note) => {
-            const t = note.trim();
-            if (!t) {
-              showToast("Enter a message describing the requested edits.");
-              return;
-            }
-            const ok = moveListedToRequestChange(listingId, managerUserId, t);
-            if (!ok) {
-              showToast("Action could not be completed.");
-              return;
-            }
-            logDemoOutboundEmail(
-              `mgr-house-listed-${listingId}@portal.axis.demo`,
-              `Edits requested (listed): ${row.buildingName} · ${row.unitLabel}`,
-              `${t}\n\nListing ID: ${listingId}`,
-            );
-            showToast("Edit request recorded (demo: sessionStorage axis_demo_outbound_mail_v1).");
-            setComposeEdit(null);
-            onUpdated();
-            onClose();
-          }}
-        />
-      ) : null}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        {bucket === 0 && composeEdit !== "pending" ? (
+        {bucket === 0 ? (
           <>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setComposeEdit("pending")}>
-              Request edit
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => {
+                onClose();
+                router.push(`/manager/properties?editPending=${encodeURIComponent(row.adminRefId)}`);
+              }}
+            >
+              Edit listing
             </Button>
             <Button
               type="button"
@@ -257,13 +204,21 @@ function ManagerPropertyPreviewModal({
           </>
         ) : null}
 
-        {bucket === 2 && listingId && composeEdit !== "listed" ? (
+        {bucket === 2 && listingId ? (
           <>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => run("Unlisted property.", unlistManagerListing(listingId, managerUserId))}>
               Unlist
             </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setComposeEdit("listed")}>
-              Request edit
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => {
+                onClose();
+                router.push(`/manager/properties?editListing=${encodeURIComponent(listingId)}`);
+              }}
+            >
+              Edit listing
             </Button>
             <Button
               type="button"

@@ -1,0 +1,145 @@
+import {
+  demoManagerPaymentLedgerRows,
+  type DemoManagerPaymentLedgerRow,
+  type ManagerPaymentBucket,
+} from "@/data/demo-portal";
+import { HOUSEHOLD_CHARGES_EVENT } from "@/lib/household-charges";
+
+const PAID_KEY = "axis_demo_manager_ledger_marked_paid_v1";
+const DELETED_KEY = "axis_demo_manager_ledger_deleted_v1";
+const CUSTOM_KEY = "axis_manager_payment_custom_lines_v1";
+
+function emitChargesRefresh() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(HOUSEHOLD_CHARGES_EVENT));
+}
+
+function readJson<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function readPaidIds(): Set<string> {
+  const arr = readJson<string[]>(PAID_KEY, []);
+  return new Set(arr);
+}
+
+function writePaidIds(s: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PAID_KEY, JSON.stringify([...s]));
+  } catch {
+    /* ignore */
+  }
+}
+
+function readDeletedIds(): Set<string> {
+  const arr = readJson<string[]>(DELETED_KEY, []);
+  return new Set(arr);
+}
+
+function writeDeletedIds(s: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DELETED_KEY, JSON.stringify([...s]));
+  } catch {
+    /* ignore */
+  }
+}
+
+function readCustomPaymentLines(): DemoManagerPaymentLedgerRow[] {
+  return readJson<DemoManagerPaymentLedgerRow[]>(CUSTOM_KEY, []);
+}
+
+function writeCustom(lines: DemoManagerPaymentLedgerRow[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CUSTOM_KEY, JSON.stringify(lines));
+  } catch {
+    /* ignore */
+  }
+}
+
+function removePaidId(id: string) {
+  const s = readPaidIds();
+  if (!s.delete(id)) return;
+  writePaidIds(s);
+}
+
+function applyPaidOverrides(rows: DemoManagerPaymentLedgerRow[]): DemoManagerPaymentLedgerRow[] {
+  const paidIds = readPaidIds();
+  return rows.map((r) => {
+    if (!paidIds.has(r.id)) return r;
+    return {
+      ...r,
+      bucket: "paid" as ManagerPaymentBucket,
+      amountPaid: r.lineAmount,
+      balanceDue: "$0.00",
+      statusLabel: "Paid",
+    };
+  });
+}
+
+/** Built-in demo rows + custom lines, with deletions, paid overrides, and custom additions applied. */
+export function mergeWithDemoPayments(
+  staticRows: DemoManagerPaymentLedgerRow[] = demoManagerPaymentLedgerRows,
+): DemoManagerPaymentLedgerRow[] {
+  const deleted = readDeletedIds();
+  const filteredStatic = staticRows.filter((r) => !deleted.has(r.id));
+  const custom = readCustomPaymentLines();
+  return [...applyPaidOverrides(filteredStatic), ...applyPaidOverrides(custom)];
+}
+
+export function markDemoPaymentLedgerRowPaid(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const next = new Set(readPaidIds());
+    next.add(id);
+    writePaidIds(next);
+    emitChargesRefresh();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Removes a built-in demo row id from view, or a custom line from storage. */
+export function deleteManagerPaymentLedgerEntry(id: string): boolean {
+  if (typeof window === "undefined") return false;
+
+  const custom = readCustomPaymentLines();
+  const ci = custom.findIndex((r) => r.id === id);
+  if (ci !== -1) {
+    writeCustom([...custom.slice(0, ci), ...custom.slice(ci + 1)]);
+    removePaidId(id);
+    emitChargesRefresh();
+    return true;
+  }
+
+  if (demoManagerPaymentLedgerRows.some((r) => r.id === id)) {
+    const del = readDeletedIds();
+    del.add(id);
+    writeDeletedIds(del);
+    removePaidId(id);
+    emitChargesRefresh();
+    return true;
+  }
+
+  return false;
+}
+
+export function addCustomManagerPaymentRow(row: DemoManagerPaymentLedgerRow): void {
+  if (typeof window === "undefined") return;
+  try {
+    const next = [...readCustomPaymentLines(), row];
+    writeCustom(next);
+    emitChargesRefresh();
+  } catch {
+    /* ignore */
+  }
+}
