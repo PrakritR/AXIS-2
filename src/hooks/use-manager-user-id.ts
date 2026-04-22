@@ -7,8 +7,9 @@ import { useEffect, useState } from "react";
  * Signed-in Supabase user id for scoping manager localStorage data.
  * Returns null while loading or when not signed in.
  */
-export function useManagerUserId(): { userId: string | null; ready: boolean } {
+export function useManagerUserId(): { userId: string | null; email: string | null; ready: boolean } {
   const [userId, setUserId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -28,6 +29,7 @@ export function useManagerUserId(): { userId: string | null; ready: boolean } {
       } = await supabase.auth.getUser();
       if (!cancelled) {
         setUserId(user?.id ?? null);
+        setEmail(user?.email ?? null);
         setReady(true);
       }
     })();
@@ -35,7 +37,10 @@ export function useManagerUserId(): { userId: string | null; ready: boolean } {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!cancelled) setUserId(session?.user?.id ?? null);
+      if (!cancelled) {
+        setUserId(session?.user?.id ?? null);
+        setEmail(session?.user?.email ?? null);
+      }
     });
 
     return () => {
@@ -44,5 +49,5 @@ export function useManagerUserId(): { userId: string | null; ready: boolean } {
     };
   }, []);
 
-  return { userId, ready };
+  return { userId, email, ready };
 }

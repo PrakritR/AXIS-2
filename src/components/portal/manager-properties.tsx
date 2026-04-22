@@ -10,6 +10,7 @@ import { ManagerHousePropertiesPanel } from "@/components/portal/manager-house-p
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { ensureAccountListingSeeds } from "@/lib/account-listing-seeds";
 import {
   countManagerManagedPropertiesForUser,
   PROPERTY_PIPELINE_EVENT,
@@ -62,7 +63,7 @@ export function ManagerProperties() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const portalBase = usePaidPortalBasePath();
-  const { userId } = useManagerUserId();
+  const { userId, email } = useManagerUserId();
   const [formOpen, setFormOpen] = useState(false);
   const [editListingContext, setEditListingContext] = useState<EditListingContext | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -104,6 +105,13 @@ export function ManagerProperties() {
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
   }, [refreshPending]);
+
+  useEffect(() => {
+    if (!userId || !email) return;
+    if (ensureAccountListingSeeds(userId, email)) {
+      refreshPending();
+    }
+  }, [userId, email, refreshPending]);
 
   useEffect(() => {
     const editPending = searchParams.get("editPending");
