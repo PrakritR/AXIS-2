@@ -7,7 +7,6 @@ import { PortalCalendarPanels } from "./portal-calendar-panels";
 import { demoManagerHouseRows } from "@/data/demo-portal";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
-  managerAvailabilityStorageKey,
   managerPropertyAvailabilityStorageKey,
 } from "@/lib/demo-admin-scheduling";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -34,7 +33,7 @@ function ManagerCalendarPropertyFilter({
           value={value}
           onChange={(e) => onChange(e.target.value)}
         >
-          <option value="all">All your properties (shared default)</option>
+          <option value="">Select a house</option>
           {demoManagerHouseRows.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -42,10 +41,9 @@ function ManagerCalendarPropertyFilter({
           ))}
         </select>
       </div>
-      {value === "all" ? (
+      {!value ? (
         <p className="min-w-0 text-xs leading-snug text-slate-500">
-          Tour windows apply as a <span className="font-medium text-slate-700">portfolio default</span>. Choose a building to
-          set availability just for tours at that property.
+          Choose a house before creating tour windows.
         </p>
       ) : null}
     </div>
@@ -55,19 +53,18 @@ function ManagerCalendarPropertyFilter({
 export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   const { userId, ready: authReady } = useManagerUserId();
   const [calendarRefreshSignal, setCalendarRefreshSignal] = useState(0);
-  /** `all` = portfolio-wide key; else a specific property id */
-  const [calendarPropertyId, setCalendarPropertyId] = useState<string>("all");
+  const [calendarPropertyId, setCalendarPropertyId] = useState<string>("");
 
   const storageKey = useMemo(() => {
     if (portal === "admin") return ADMIN_AVAILABILITY_STORAGE_KEY;
     if (!userId) return null;
-    if (calendarPropertyId === "all") return managerAvailabilityStorageKey(userId);
+    if (!calendarPropertyId) return null;
     return managerPropertyAvailabilityStorageKey(userId, calendarPropertyId);
   }, [portal, userId, calendarPropertyId]);
 
   const tourScopeLabel = useMemo(() => {
     if (portal !== "manager") return undefined;
-    if (calendarPropertyId === "all") return "Portfolio default (all properties)";
+    if (!calendarPropertyId) return undefined;
     const name = demoManagerHouseRows.find((p) => p.id === calendarPropertyId)?.name;
     return name ? `Tours · ${name}` : undefined;
   }, [portal, calendarPropertyId]);
@@ -127,6 +124,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
         storageKey={storageKey}
         calendarRefreshSignal={calendarRefreshSignal}
         tourScopeLabel={tourScopeLabel}
+        unavailableMessage="Select a house before creating tour windows."
       />
     </ManagerPortalPageShell>
   );

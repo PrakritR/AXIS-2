@@ -31,12 +31,13 @@
   --color-danger: var(--danger);
   --color-announce: var(--announce);
   --color-auth-input-bg: var(--auth-input-bg);
-  --font-sans: var(--font-inter);
+  --font-sans: "Inter", "Inter Fallback", -apple-system, BlinkMacSystemFont, "SF Pro Display", ui-sans-serif, system-ui, sans-serif;
 }
 
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  background: var(--background);
 }
 
 body {
@@ -45,6 +46,28 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(0, 122, 255, 0.18);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ── Smooth scroll ── */

@@ -38,7 +38,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
   const desktopAside = (
     <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-200/90 bg-white lg:flex">
       <div className={`bg-gradient-to-br px-6 py-6 text-white ${accent}`}>
-        <p className="text-xs font-semibold uppercase tracking-wide text-white/80">Axis Housing</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/80">Axis Housing</p>
         <p className="mt-2 text-lg font-semibold leading-snug">{definition.title}</p>
       </div>
       <nav className="flex min-h-0 flex-1 flex-col px-3 py-4">
@@ -50,8 +50,8 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               <Link
                 key={s.section}
                 href={href}
-                className={`flex items-center gap-2.5 rounded-2xl px-3 py-2 text-sm font-semibold transition ${
-                  active ? "bg-slate-900 text-white shadow-sm" : "text-slate-700 hover:bg-slate-50"
+                className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                  active ? "bg-slate-950 text-white shadow-sm" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"
                 }`}
               >
                 {adminNavIcons ? (
@@ -86,14 +86,14 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
       {desktopAside}
 
       <div className="lg:hidden">
-        <div className="flex items-center justify-between border-b border-slate-200/90 bg-white px-4 py-3">
+          <div className="flex items-center justify-between border-b border-slate-200/90 bg-white px-4 py-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{definition.title}</p>
             <p className="text-sm font-semibold text-slate-900">Menu</p>
           </div>
           <button
             type="button"
-            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-semibold text-slate-800 shadow-sm"
+            className="min-h-10 rounded-full border border-slate-200 bg-white px-4 py-1 text-sm font-semibold text-slate-800 shadow-sm"
             onClick={() => setOpen((v) => !v)}
           >
             {open ? "Close" : "Open"}
@@ -109,8 +109,8 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     key={s.section}
                     href={hrefForSection(definition, s.section)}
                     onClick={() => setOpen(false)}
-                    className={`flex items-center gap-2.5 rounded-2xl px-3 py-2 text-sm font-semibold transition ${
-                      active ? "bg-slate-900 text-white shadow-sm" : "text-slate-700 hover:bg-slate-50"
+                    className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                      active ? "bg-slate-950 text-white shadow-sm" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"
                     }`}
                   >
                     {adminNavIcons ? (

@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
-const STRIPE_POPUP = "axisStripePayout";
-const POPUP_FEATURES = "popup=yes,width=600,height=720,left=80,top=60,scrollbars=yes,resizable=yes";
+const CONNECT_JS_SRC = "https://connect-js.stripe.com/v1.0/connect.js";
 
 type ConnectStatus = {
   connected: boolean;
@@ -19,18 +18,56 @@ type ConnectStatus = {
   stripeError?: string;
 };
 
-type OnboardResponse =
-  | {
-      url: string;
-      accountId?: string;
-      mode?: "express_dashboard" | "onboarding" | "update";
-      demo?: undefined;
-    }
-  | { demo: true; message: string; url?: undefined };
+type AccountSessionResponse =
+  | { clientSecret: string; accountId?: string; demo?: undefined }
+  | { demo: true; message: string; clientSecret?: undefined };
 
-function openStripePopup(url: string): Window | null {
-  if (typeof window === "undefined") return null;
-  return window.open(url, STRIPE_POPUP, POPUP_FEATURES);
+type StripeConnectElement = HTMLElement & {
+  setOnExit?: (cb: () => void) => void;
+  setOnLoaderStart?: (cb: () => void) => void;
+  setOnLoadError?: (cb: (event: { error?: { message?: string } }) => void) => void;
+};
+
+type StripeConnectInstance = {
+  create: (componentName: "account-onboarding" | "payouts") => StripeConnectElement;
+};
+
+type StripeConnectGlobal = {
+  init?: (opts: {
+    publishableKey: string;
+    fetchClientSecret: () => Promise<string | undefined>;
+    appearance?: Record<string, unknown>;
+  }) => StripeConnectInstance;
+  onLoad?: () => void;
+};
+
+declare global {
+  interface Window {
+    StripeConnect?: StripeConnectGlobal;
+  }
+}
+
+let connectScriptPromise: Promise<StripeConnectGlobal> | null = null;
+
+function loadConnectJs(): Promise<StripeConnectGlobal> {
+  if (typeof window === "undefined") return Promise.reject(new Error("Connect.js requires a browser."));
+  if (window.StripeConnect?.init) return Promise.resolve(window.StripeConnect);
+  if (connectScriptPromise) return connectScriptPromise;
+  connectScriptPromise = new Promise((resolve, reject) => {
+    window.StripeConnect = window.StripeConnect ?? {};
+    window.StripeConnect.onLoad = () => {
+      if (window.StripeConnect?.init) resolve(window.StripeConnect);
+      else reject(new Error("Stripe Connect.js loaded without init."));
+    };
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${CONNECT_JS_SRC}"]`);
+    if (existing) return;
+    const script = document.createElement("script");
+    script.src = CONNECT_JS_SRC;
+    script.async = true;
+    script.onerror = () => reject(new Error("Could not load Stripe Connect.js."));
+    document.head.appendChild(script);
+  });
+  return connectScriptPromise;
 }
 
 export function PortalStripeConnectPanel({
@@ -43,8 +80,10 @@ export function PortalStripeConnectPanel({
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [status, setStatus] = useState<ConnectStatus | null>(null);
-  const autoOnboardSent = useRef(false);
+  const connectContainerRef = useRef<HTMLDivElement | null>(null);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -94,36 +133,72 @@ export function PortalStripeConnectPanel({
     }
   }, [basePath, loadStatus, showToast]);
 
-  const startOnboarding = useCallback(async () => {
+  const createAccountSession = useCallback(async (): Promise<string | undefined> => {
+    const res = await fetch("/api/stripe/connect/account-session", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ basePath }),
+    });
+    const body = (await res.json()) as AccountSessionResponse & { error?: string };
+    if (!res.ok) {
+      throw new Error(body.error ?? "Could not start embedded payout setup.");
+    }
+    if ("demo" in body && body.demo) {
+      showToast(body.message);
+      return undefined;
+    }
+    return body.clientSecret;
+  }, [basePath, showToast]);
+
+  const refreshEmbeddedComponent = useCallback(async () => {
+    const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
+    if (!publishableKey) {
+      setConnectError("Set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY to embed Stripe payout setup.");
+      return;
+    }
+    const container = connectContainerRef.current;
+    if (!container || !status || status.demo) return;
     setBusy(true);
+    setConnectLoading(true);
+    setConnectError(null);
     try {
-      const res = await fetch("/api/stripe/connect/onboard", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ basePath }),
+      container.replaceChildren();
+      const stripeConnect = await loadConnectJs();
+      if (!stripeConnect.init) throw new Error("Stripe Connect.js is unavailable.");
+      const instance = stripeConnect.init({
+        publishableKey,
+        fetchClientSecret: createAccountSession,
+        appearance: {
+          overlays: "dialog",
+          variables: {
+            colorPrimary: "#2563eb",
+            borderRadius: "8px",
+            fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+          },
+        },
       });
-      const body = (await res.json()) as OnboardResponse & { error?: string };
-      if (!res.ok) {
-        showToast(body.error ?? "Could not start payout setup.");
-        return;
-      }
-      if ("demo" in body && body.demo) {
-        showToast(body.message);
-        return;
-      }
-      if (body.url) {
-        const w = openStripePopup(body.url);
-        if (!w) {
-          showToast("Allow popups for this site to open Stripe in a new window.");
-        }
-      }
-    } catch {
-      showToast("Network error.");
+      const componentName = status.chargesEnabled && status.payoutsEnabled ? "payouts" : "account-onboarding";
+      const component = instance.create(componentName);
+      component.setOnExit?.(() => {
+        showToast("Payout status updated.");
+        void loadStatus();
+      });
+      component.setOnLoaderStart?.(() => setConnectLoading(false));
+      component.setOnLoadError?.((event) => {
+        setConnectLoading(false);
+        setConnectError(event.error?.message ?? "Stripe embedded component could not load.");
+      });
+      container.appendChild(component);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Network error.";
+      setConnectError(msg);
+      showToast(msg);
     } finally {
       setBusy(false);
+      setConnectLoading(false);
     }
-  }, [basePath, showToast]);
+  }, [createAccountSession, loadStatus, showToast, status]);
 
   const ready =
     status &&
@@ -136,13 +211,9 @@ export function PortalStripeConnectPanel({
 
   useEffect(() => {
     if (variant !== "embedded") return;
-    if (autoOnboardSent.current) return;
-    if (status == null) return;
-    if (status.demo) return;
-    if (ready) return;
-    autoOnboardSent.current = true;
-    void startOnboarding();
-  }, [variant, status, ready, startOnboarding]);
+    if (status == null || status.demo) return;
+    void refreshEmbeddedComponent();
+  }, [variant, status, refreshEmbeddedComponent]);
 
   const body = (
     <div
@@ -179,17 +250,25 @@ export function PortalStripeConnectPanel({
 
       {needsOnboarding ? (
         <div className="pt-1">
-          <Button type="button" className="min-h-[44px] rounded-full px-6" disabled={busy} onClick={() => void startOnboarding()}>
-            {busy ? "Opening…" : "Open Stripe setup"}
+          <Button type="button" className="min-h-[44px] rounded-full px-6" disabled={busy} onClick={() => void refreshEmbeddedComponent()}>
+            {busy ? "Loading…" : "Reload setup"}
           </Button>
         </div>
       ) : null}
 
       {ready ? (
         <div className="pt-1">
-          <Button type="button" className="min-h-[44px] rounded-full px-6" disabled={busy} onClick={() => void startOnboarding()}>
-            {busy ? "Opening…" : "Open payout dashboard"}
+          <Button type="button" className="min-h-[44px] rounded-full px-6" disabled={busy} onClick={() => void refreshEmbeddedComponent()}>
+            {busy ? "Loading…" : "Reload payout tools"}
           </Button>
+        </div>
+      ) : null}
+
+      {!status?.demo ? (
+        <div className="min-h-[360px] overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          {connectLoading ? <div className="px-4 py-6 text-sm text-slate-500">Loading Stripe payout setup…</div> : null}
+          {connectError ? <div className="px-4 py-4 text-sm text-rose-800">{connectError}</div> : null}
+          <div ref={connectContainerRef} className="min-h-[320px] p-2" />
         </div>
       ) : null}
     </div>

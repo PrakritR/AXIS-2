@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /** Outer frame for tabbed portal tables — light border, minimal shadow. */
 export const PORTAL_DATA_TABLE_WRAP =
-  "overflow-hidden rounded-xl border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
+  "overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
 
 export const PORTAL_DATA_TABLE_SCROLL = "overflow-x-auto";
 
@@ -11,7 +11,7 @@ export const PORTAL_TABLE_HEAD_ROW = "border-b border-slate-200/60 bg-slate-50/4
 
 /** Primary data row. */
 export const PORTAL_TABLE_TR =
-  "border-b border-slate-100/90 align-top transition-colors last:border-0 hover:bg-slate-50/40";
+  "border-b border-slate-100/90 align-top transition-colors last:border-0 hover:bg-slate-50/70";
 
 /** Expanded detail row (full-width cell below the summary row). */
 export const PORTAL_TABLE_DETAIL_ROW = "border-b border-slate-100/90 bg-slate-50/25 last:border-0";
@@ -44,15 +44,15 @@ export function PortalTableDetailActions({
 
 /** “Details” / “Hide” toggle on the summary row (use with `Button variant="outline"`). */
 export const PORTAL_TABLE_ROW_TOGGLE_CLASS =
-  "h-8 min-h-0 !rounded-md border-slate-200/80 px-3 py-0 text-xs font-medium text-slate-700 !shadow-none hover:!translate-y-0";
+  "h-8 min-h-0 !rounded-lg border-slate-200/80 px-3 py-0 text-xs font-medium text-slate-700 !shadow-none hover:!translate-y-0";
 
 /** Secondary actions in {@link PortalTableDetailActions} (use with `Button variant="outline"`). */
 export const PORTAL_DETAIL_BTN =
-  "h-8 min-h-0 !rounded-md border-slate-200/80 px-3 py-0 text-xs font-medium text-slate-700 !shadow-none hover:!translate-y-0";
+  "h-8 min-h-0 !rounded-lg border-slate-200/80 px-3 py-0 text-xs font-medium text-slate-700 !shadow-none hover:!translate-y-0";
 
 /** Primary / success action in detail toolbar (use with `Button variant="outline"`). */
 export const PORTAL_DETAIL_BTN_PRIMARY =
-  "h-8 min-h-0 !rounded-md !border-emerald-600 !bg-emerald-600 px-3 py-0 text-xs font-medium !text-white hover:!border-emerald-700 hover:!bg-emerald-700 !shadow-none hover:!translate-y-0";
+  "h-8 min-h-0 !rounded-lg !border-emerald-600 !bg-emerald-600 px-3 py-0 text-xs font-medium !text-white hover:!border-emerald-700 hover:!bg-emerald-700 !shadow-none hover:!translate-y-0";
 
 export function PortalDataTableEmpty({ message }: { message: string }) {
   return (

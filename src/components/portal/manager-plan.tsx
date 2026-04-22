@@ -9,10 +9,6 @@ import { MANAGER_PLAN_TIERS } from "@/data/manager-plan-tiers";
 import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
-const STRIPE_BILLING_POPUP = "axisStripeBilling";
-const STRIPE_BILLING_FEATURES =
-  "popup=yes,width=620,height=760,left=80,top=60,scrollbars=yes,resizable=yes";
-
 type SubPayload = {
   tier: string | null;
   /** `monthly` | `annual` when Stripe-managed; may be legacy values otherwise. */
@@ -73,6 +69,7 @@ export function ManagerPlan() {
   const [billingSyncBusy, setBillingSyncBusy] = useState(false);
   const [billingPortalBusy, setBillingPortalBusy] = useState(false);
   const [resumeBusy, setResumeBusy] = useState(false);
+  const [cancelDowngradeBusy, setCancelDowngradeBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -142,16 +139,6 @@ export function ManagerPlan() {
         }
       }
 
-      if (window.opener && !window.opener.closed) {
-        try {
-          window.opener.postMessage({ type: "axis-stripe-plan-checkout", checkout }, window.location.origin);
-        } catch {
-          /* ignore cross-window edge cases */
-        }
-        window.close();
-        return;
-      }
-
       window.history.replaceState({}, "", pathname);
 
       if (checkout === "cancelled") {
@@ -169,34 +156,8 @@ export function ManagerPlan() {
     })();
   }, [pathname, load, showToast]);
 
-  useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      if (e.origin !== window.location.origin) return;
-      if (e.data?.type !== "axis-stripe-plan-checkout") return;
-      if (e.data?.checkout === "cancelled") {
-        showToast("Checkout was cancelled.");
-        return;
-      }
-      if (e.data?.checkout === "success") {
-        showToast("Payment received. Activating your plan…");
-        void (async () => {
-          for (let i = 0; i < 6; i++) {
-            await load();
-            if (i < 5) await new Promise((r) => setTimeout(r, 1400));
-          }
-          startTransition(() => router.refresh());
-        })();
-      }
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [load, router, showToast]);
-
-  const openStripePopup = (url: string): boolean => {
-    const w = window.open(url, STRIPE_BILLING_POPUP, STRIPE_BILLING_FEATURES);
-    if (w) return true;
-    showToast("Allow popups for this site to continue in Stripe.");
-    return false;
+  const continueInCurrentTab = (url: string) => {
+    window.location.assign(url);
   };
 
   const openBillingPortal = async () => {
@@ -214,7 +175,7 @@ export function ManagerPlan() {
         showToast(body.error ?? "Could not open billing portal.");
         return;
       }
-      openStripePopup(body.url);
+      continueInCurrentTab(body.url);
     } catch {
       showToast("Network error.");
     } finally {
@@ -241,7 +202,7 @@ export function ManagerPlan() {
         setBusyTier(null);
         return;
       }
-      openStripePopup(body.url);
+      continueInCurrentTab(body.url);
       setBusyTier(null);
     } catch {
       showToast("Network error.");
@@ -315,6 +276,31 @@ export function ManagerPlan() {
     }
   };
 
+  const cancelScheduledDowngrade = async () => {
+    if (!sub?.stripeManaged || cancelDowngradeBusy) return;
+    flushSync(() => setCancelDowngradeBusy(true));
+    try {
+      const res = await fetch("/api/stripe/subscription/update-tier", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel_downgrade" }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        showToast(body.error ?? "Could not cancel downgrade.");
+        return;
+      }
+      showToast("Scheduled downgrade cancelled.");
+      await load();
+      startTransition(() => router.refresh());
+    } catch {
+      showToast("Network error.");
+    } finally {
+      setCancelDowngradeBusy(false);
+    }
+  };
+
   const handleTierAction = (target: ManagerSkuTier) => {
     if (!sub || busyTier !== null || billingSyncBusy || billingPortalBusy) return;
     setPendingTier(target);
@@ -340,8 +326,7 @@ export function ManagerPlan() {
   const periodEndLabel = (unix: number | null | undefined) => {
     if (unix == null || typeof unix !== "number") return "the end of your billing period";
     return new Date(unix * 1000).toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
+      month: "long",
       day: "numeric",
       year: "numeric",
     });
@@ -435,7 +420,7 @@ export function ManagerPlan() {
         {!sub ? (
           <div className="grid gap-5 lg:grid-cols-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-[420px] animate-pulse rounded-3xl border border-slate-200 bg-slate-100/80" aria-hidden />
+              <div key={i} className="h-[420px] animate-pulse rounded-2xl border border-slate-200 bg-slate-100/80" aria-hidden />
             ))}
           </div>
         ) : (
@@ -492,7 +477,7 @@ export function ManagerPlan() {
               return (
                 <div
                   key={t.id}
-                  className={`relative flex flex-col rounded-3xl border p-7 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.08)] transition-shadow ${
+                  className={`relative flex flex-col rounded-2xl border p-7 shadow-[0_12px_42px_-34px_rgba(15,23,42,0.26)] transition-shadow ${
                     selected
                       ? "border-2 border-primary bg-primary/[0.07] shadow-[0_8px_28px_-10px_rgba(0,122,255,0.35)] ring-1 ring-primary/20"
                       : "border border-slate-200 bg-white hover:border-slate-300"
@@ -546,15 +531,14 @@ export function ManagerPlan() {
           <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-5 py-4 text-sm text-amber-950">
             {sub.cancelAtPeriodEnd ? (
               <p>
-                <span className="font-semibold">Cancellation scheduled.</span> Paid access continues through{" "}
-                {periodEndLabel(sub.currentPeriodEnd ?? null)}. You can resume before then.
+                <span className="font-semibold">Cancellation scheduled.</span> Paid access ends on{" "}
+                <span className="font-semibold">{periodEndLabel(sub.currentPeriodEnd ?? null)}</span>. You can resume before that date.
               </p>
-            ) : null}
-            {sub.scheduledDowngrade ? (
-              <p className={sub.cancelAtPeriodEnd ? "mt-2" : ""}>
-                <span className="font-semibold">Downgrade scheduled.</span> Your workspace stays on{" "}
-                {tierLabel(committedTier)} until {periodEndLabel(sub.currentPeriodEnd ?? null)}, then moves to{" "}
-                {tierLabel(sub.scheduledDowngrade.tier as ManagerSkuTier)} ({sub.scheduledDowngrade.billing}).
+            ) : sub.scheduledDowngrade ? (
+              <p>
+                <span className="font-semibold">Downgrade scheduled.</span> Your workspace stays on {tierLabel(committedTier)} until{" "}
+                <span className="font-semibold">{periodEndLabel(sub.currentPeriodEnd ?? null)}</span>, then moves to{" "}
+                {tierLabel(sub.scheduledDowngrade.tier as ManagerSkuTier)} ({sub.scheduledDowngrade.billing}) on that date.
               </p>
             ) : null}
             {sub.cancelAtPeriodEnd ? (
@@ -568,6 +552,17 @@ export function ManagerPlan() {
                 {resumeBusy ? "Resuming…" : "Resume subscription"}
               </Button>
             ) : null}
+            {!sub.cancelAtPeriodEnd && sub.scheduledDowngrade ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3 rounded-full"
+                disabled={cancelDowngradeBusy}
+                onClick={() => void cancelScheduledDowngrade()}
+              >
+                {cancelDowngradeBusy ? "Cancelling…" : "Cancel downgrade"}
+              </Button>
+            ) : null}
           </div>
         ) : null}
 
@@ -578,7 +573,7 @@ export function ManagerPlan() {
               Upgrades charge your saved card (Stripe invoices any proration). Downgrades to a lower paid tier start at your{" "}
               <span className="font-medium text-slate-800">next renewal</span>. Canceling ends paid access after the current period — use{" "}
               <span className="font-medium text-slate-800">Cancel plan</span> on Free or the button below. First-time paid signup opens Stripe
-              Checkout.
+              Checkout in this tab.
             </>
           ) : (
             <>

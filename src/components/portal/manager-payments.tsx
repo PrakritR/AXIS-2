@@ -8,6 +8,7 @@ import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/p
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
+import { ManagerPayoutSplitsForm } from "@/components/portal/manager-payout-splits-form";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import { householdChargeToLedgerRow, HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
@@ -21,7 +22,7 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "paid", label: "Paid" },
 ];
 
-export function ManagerPayments() {
+export function ManagerPayments({ tab = "ledger" }: { tab?: "ledger" | "payouts" }) {
   const { showToast } = useAppUi();
   const { userId } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
@@ -104,6 +105,19 @@ export function ManagerPayments() {
   );
 
   const rowsForBucket = useMemo(() => mergedRows.filter((r) => r.bucket === bucket), [mergedRows, bucket]);
+
+  if (tab === "payouts") {
+    return (
+      <ManagerPortalPageShell title="Payments">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.05fr)]">
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
+            <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
+          </div>
+          <ManagerPayoutSplitsForm />
+        </div>
+      </ManagerPortalPageShell>
+    );
+  }
 
   return (
     <ManagerPortalPageShell

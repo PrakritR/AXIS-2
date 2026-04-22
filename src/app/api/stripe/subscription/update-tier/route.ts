@@ -62,6 +62,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, resumed: true });
     }
 
+    if (body?.action === "cancel_downgrade") {
+      const { stripeSubscriptionId } = await getManagerPurchaseSku(user.id);
+      if (!stripeSubscriptionId) {
+        return NextResponse.json({ error: "No active subscription found." }, { status: 400 });
+      }
+      const stripe = getStripe();
+      const existing = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+      const meta = clearScheduleMetadata({ ...(existing.metadata ?? {}) });
+      await stripe.subscriptions.update(stripeSubscriptionId, { metadata: meta });
+      await reconcileManagerPurchaseWithStripe(user.id);
+      return NextResponse.json({ ok: true, canceledDowngrade: true });
+    }
+
     const tierRaw = typeof body?.tier === "string" ? body.tier.toLowerCase().trim() : "";
     if (!isSku(tierRaw)) {
       return NextResponse.json({ error: "tier must be free, pro, or business." }, { status: 400 });

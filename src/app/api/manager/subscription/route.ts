@@ -77,7 +77,7 @@ export async function GET() {
         currentPeriodEnd = stripeSubscriptionPeriodEndSec(sub);
         const st = sub.metadata?.[META_SCHEDULED_TIER]?.trim().toLowerCase();
         const sb = sub.metadata?.[META_SCHEDULED_BILLING]?.trim().toLowerCase();
-        if ((st === "pro" || st === "business") && (sb === "monthly" || sb === "annual")) {
+        if (!cancelAtPeriodEnd && (st === "pro" || st === "business") && (sb === "monthly" || sb === "annual")) {
           scheduledDowngrade = { tier: st, billing: sb };
         }
       } catch {

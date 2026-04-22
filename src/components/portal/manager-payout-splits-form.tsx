@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { PayoutOwnerSplit, PayoutSplitsConfig } from "@/lib/manager-payout-splits";
-import { managerRemainderPercents } from "@/lib/manager-payout-splits";
 
 function newRow(): PayoutOwnerSplit {
   const id =
@@ -23,6 +22,7 @@ function newRow(): PayoutOwnerSplit {
 type ApiPayload = {
   config?: PayoutSplitsConfig;
   platformFees?: { applicationFee: number; rent: number };
+  tier?: string;
   error?: string;
   migrationRequired?: boolean;
 };
@@ -31,7 +31,12 @@ export function ManagerPayoutSplitsForm() {
   const { showToast } = useAppUi();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [config, setConfig] = useState<PayoutSplitsConfig>({ owners: [], notes: "" });
+  const [config, setConfig] = useState<PayoutSplitsConfig>({
+    managerApplicationFeePercent: 100,
+    managerRentPercent: 100,
+    owners: [],
+    notes: "",
+  });
   const [platformFees, setPlatformFees] = useState<{ applicationFee: number; rent: number } | null>(null);
   const [migrationRequired, setMigrationRequired] = useState(false);
 
@@ -58,7 +63,14 @@ export function ManagerPayoutSplitsForm() {
     void load();
   }, [load]);
 
-  const remainder = useMemo(() => managerRemainderPercents(config), [config]);
+  const totals = useMemo(() => {
+    const ownerApplication = config.owners.reduce((s, r) => s + r.applicationFeePercent, 0);
+    const ownerRent = config.owners.reduce((s, r) => s + r.rentPercent, 0);
+    return {
+      applicationFee: config.managerApplicationFeePercent + ownerApplication,
+      rent: config.managerRentPercent + ownerRent,
+    };
+  }, [config]);
 
   const updateOwner = useCallback((id: string, patch: Partial<PayoutOwnerSplit>) => {
     setConfig((c) => ({
@@ -73,6 +85,10 @@ export function ManagerPayoutSplitsForm() {
 
   const addOwner = useCallback(() => {
     setConfig((c) => ({ ...c, owners: [...c.owners, newRow()] }));
+  }, []);
+
+  const updateManagerSplit = useCallback((patch: Partial<Pick<PayoutSplitsConfig, "managerApplicationFeePercent" | "managerRentPercent">>) => {
+    setConfig((c) => ({ ...c, ...patch }));
   }, []);
 
   const save = useCallback(async () => {
@@ -106,7 +122,9 @@ export function ManagerPayoutSplitsForm() {
     );
   }
 
-  const pf = platformFees ?? { applicationFee: 1, rent: 0.5 };
+  const pf = platformFees ?? { applicationFee: 2, rent: 0.25 };
+  const applicationOk = Math.abs(totals.applicationFee - 100) <= 0.01;
+  const rentOk = Math.abs(totals.rent - 100) <= 0.01;
 
   if (migrationRequired) {
     return (
@@ -122,25 +140,53 @@ export function ManagerPayoutSplitsForm() {
 
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white px-4 py-5 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Owner revenue shares</p>
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Revenue shares</p>
       <p className="mt-2 text-sm leading-relaxed text-slate-600">
-        Add property owners and what share of{" "}
+        Set the manager share and owner shares for{" "}
         <span className="font-medium text-slate-800">application fees</span> and{" "}
-        <span className="font-medium text-slate-800">rent</span> they receive after Axis platform fees. Whatever you do not assign here stays with
-        the manager&apos;s connected payout account ({remainder.applicationFee.toFixed(1)}% app fee share / {remainder.rent.toFixed(1)}% rent share
-        remaining).
+        <span className="font-medium text-slate-800">rent</span> after Axis platform fees. Each column must total 100%, so a 5% manager rent split
+        is entered directly as 5%.
       </p>
 
       <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm leading-relaxed text-blue-950">
         <p className="font-semibold text-blue-950">Axis platform fee (Stripe)</p>
         <p className="mt-1">
-          On live card payments, the platform collects{" "}
+          On live card payments for this account tier, Axis collects{" "}
           <span className="font-semibold">{pf.applicationFee}%</span> of each application fee charge and{" "}
-          <span className="font-semibold">{pf.rent}%</span> of each rent collection charge into the main Stripe account (configure via{" "}
-          <code className="rounded bg-blue-100/80 px-1 py-0.5 font-mono text-xs">application_fee_amount</code> on Connect PaymentIntents). Override
-          with env <code className="font-mono text-xs">AXIS_PLATFORM_APPLICATION_FEE_BPS</code> and{" "}
-          <code className="font-mono text-xs">AXIS_PLATFORM_RENT_BPS</code> (basis points).
+          <span className="font-semibold">{pf.rent}%</span> of each rent collection charge into the main Stripe account via{" "}
+          <code className="rounded bg-blue-100/80 px-1 py-0.5 font-mono text-xs">application_fee_amount</code>. The remaining amount follows the
+          split below.
         </p>
+      </div>
+
+      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+        <p className="text-sm font-semibold text-slate-900">Manager payout</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-semibold text-slate-600">
+            Manager share of application fees (%)
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              value={config.managerApplicationFeePercent || ""}
+              onChange={(e) => updateManagerSplit({ managerApplicationFeePercent: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="block text-xs font-semibold text-slate-600">
+            Manager share of rent (%)
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              value={config.managerRentPercent || ""}
+              onChange={(e) => updateManagerSplit({ managerRentPercent: Number(e.target.value) || 0 })}
+            />
+          </label>
+        </div>
       </div>
 
       <div className="mt-5 space-y-4">
@@ -213,6 +259,14 @@ export function ManagerPayoutSplitsForm() {
         </Button>
       </div>
 
+      <div
+        className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+          applicationOk && rentOk ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"
+        }`}
+      >
+        Application fee splits total {totals.applicationFee.toFixed(1)}%. Rent splits total {totals.rent.toFixed(1)}%.
+      </div>
+
       <label className="mt-6 block text-xs font-semibold text-slate-600">
         Notes for your team (optional)
         <textarea
@@ -225,7 +279,7 @@ export function ManagerPayoutSplitsForm() {
       </label>
 
       <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-        <Button type="button" className="rounded-full" disabled={saving} onClick={() => void save()}>
+        <Button type="button" className="rounded-full" disabled={saving || !applicationOk || !rentOk} onClick={() => void save()}>
           {saving ? "Saving…" : "Save payout splits"}
         </Button>
       </div>

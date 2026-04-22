@@ -13,7 +13,7 @@ export default function HomePage() {
         }}
       />
 
-      <div className="relative px-4 pb-24 pt-16 sm:pb-28 sm:pt-28 md:pt-32">
+      <div className="relative px-4 pb-24 pt-14 sm:pb-28 sm:pt-24 md:pt-28">
         <div className="mx-auto max-w-5xl text-center">
           {/* Eyebrow */}
           <div className="animate-fade-up mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.07] px-3 py-1.5 sm:mb-6 sm:px-4">
@@ -25,7 +25,7 @@ export default function HomePage() {
 
           {/* Headline */}
           <h1
-            className="animate-fade-up mx-auto max-w-3xl text-[2.25rem] font-semibold leading-[1.1] tracking-[-0.03em] text-[#1d1d1f] sm:text-[3.75rem] sm:leading-[1.08] md:text-[4.5rem]"
+            className="animate-fade-up mx-auto max-w-3xl text-[2.25rem] font-semibold leading-[1.1] text-slate-950 sm:text-[3.75rem] sm:leading-[1.08] md:text-[4.5rem]"
             style={{ animationDelay: "60ms" }}
           >
             Find a room that{" "}

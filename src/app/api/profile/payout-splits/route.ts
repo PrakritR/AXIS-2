@@ -7,6 +7,7 @@ import {
   type PayoutSplitsConfig,
 } from "@/lib/manager-payout-splits";
 import { platformFeeDisplayPercents } from "@/lib/platform-fees";
+import { getManagerPurchaseSku } from "@/lib/manager-access";
 
 export const runtime = "nodejs";
 
@@ -45,10 +46,12 @@ export async function GET() {
     }
 
     const config = normalizePayoutSplitsConfig(profile?.payout_splits_config);
+    const { tier } = await getManagerPurchaseSku(user.id);
 
     return NextResponse.json({
       config,
-      platformFees: platformFeeDisplayPercents(),
+      tier: tier ?? "free",
+      platformFees: platformFeeDisplayPercents(tier),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
@@ -101,7 +104,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       config: normalized,
-      platformFees: platformFeeDisplayPercents(),
+      platformFees: platformFeeDisplayPercents((await getManagerPurchaseSku(user.id)).tier),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

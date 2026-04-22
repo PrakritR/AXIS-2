@@ -68,10 +68,10 @@ export async function renderPortalSection(
   }
 
   if (kind === "manager" || kind === "pro") {
-    if (section === "stripe") redirect(`${def.basePath}/payments?payouts=1`);
+    if (section === "stripe") redirect(`${def.basePath}/payments/payouts`);
   }
   if (kind === "owner") {
-    if (section === "stripe") redirect(`${def.basePath}/payments?payouts=1`);
+    if (section === "stripe") redirect(`${def.basePath}/payments/payouts`);
   }
 
   const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
@@ -176,12 +176,24 @@ export async function renderPortalSection(
       );
     }
     if (section === "payments") {
-      if (tabParts?.length) {
-        const legacy = tabParts[0];
-        if (legacy === "stripe") redirect(`${def.basePath}/payments?payouts=1`);
-        redirect(`${def.basePath}/payments`);
-      }
-      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
+      if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
+      const paymentsTab = tabParts[0]!;
+      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
+      if (!["ledger", "payouts"].includes(paymentsTab)) redirect(`${def.basePath}/payments/ledger`);
+      const paymentTabs: TabItem[] = meta.tabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        href: `${def.basePath}/payments/${t.id}`,
+      }));
+      return subscriptionGated(
+        <>
+          <PortalSectionSubtabs tabs={paymentTabs} activeId={paymentsTab} />
+          <ManagerPayments tab={paymentsTab as "ledger" | "payouts"} />
+        </>,
+        kind,
+        "payments",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
@@ -256,12 +268,24 @@ export async function renderPortalSection(
       );
     }
     if (section === "payments") {
-      if (tabParts?.length) {
-        const legacy = tabParts[0];
-        if (legacy === "stripe") redirect(`${def.basePath}/payments?payouts=1`);
-        redirect(`${def.basePath}/payments`);
-      }
-      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
+      if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
+      const paymentsTab = tabParts[0]!;
+      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
+      if (!["ledger", "payouts"].includes(paymentsTab)) redirect(`${def.basePath}/payments/ledger`);
+      const paymentTabs: TabItem[] = meta.tabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        href: `${def.basePath}/payments/${t.id}`,
+      }));
+      return subscriptionGated(
+        <>
+          <PortalSectionSubtabs tabs={paymentTabs} activeId={paymentsTab} />
+          <ManagerPayments tab={paymentsTab as "ledger" | "payouts"} />
+        </>,
+        kind,
+        "payments",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
@@ -315,12 +339,24 @@ export async function renderPortalSection(
       );
     }
     if (section === "payments") {
-      if (tabParts?.length) {
-        const legacy = tabParts[0];
-        if (legacy === "stripe") redirect(`${def.basePath}/payments?payouts=1`);
-        redirect(`${def.basePath}/payments`);
-      }
-      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
+      if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
+      const paymentsTab = tabParts[0]!;
+      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
+      if (!["ledger", "payouts"].includes(paymentsTab)) redirect(`${def.basePath}/payments/ledger`);
+      const paymentTabs: TabItem[] = meta.tabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        href: `${def.basePath}/payments/${t.id}`,
+      }));
+      return subscriptionGated(
+        <>
+          <PortalSectionSubtabs tabs={paymentTabs} activeId={paymentsTab} />
+          <ManagerPayments tab={paymentsTab as "ledger" | "payouts"} />
+        </>,
+        kind,
+        "payments",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {

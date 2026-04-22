@@ -11,7 +11,6 @@ import {
   readAvailabilityDateSetForStorageKey,
   startOfWeekMonday,
   toLocalDateStr,
-  WEEKDAY_LABELS,
   writeAvailabilityDateSetForStorageKey,
 } from "@/lib/demo-admin-scheduling";
 
@@ -94,6 +93,7 @@ export function PortalCalendarPanels({
   defaultViewMode = "week",
   pinMonthSchedule = false,
   tourScopeLabel,
+  unavailableMessage = "Sign in to manage your availability.",
 }: {
   storageKey: string | null;
   /** Increment from parent to reload slot state from storage (e.g. admin page Refresh). */
@@ -104,6 +104,7 @@ export function PortalCalendarPanels({
   pinMonthSchedule?: boolean;
   /** Manager portal: which property / portfolio scope tour slots apply to */
   tourScopeLabel?: string;
+  unavailableMessage?: string;
 }) {
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
   /** yyyy-mm-dd inclusive range highlights in month view when `pinMonthSchedule`. */
@@ -194,7 +195,11 @@ export function PortalCalendarPanels({
   }, []);
 
   if (!storageKey) {
-    return <p className="text-sm text-slate-600">Sign in to manage your availability.</p>;
+    return (
+      <Card className="p-5">
+        <p className="text-sm font-medium text-slate-800">{unavailableMessage}</p>
+      </Card>
+    );
   }
 
   const scheduleCard = (
@@ -277,39 +282,40 @@ export function PortalCalendarPanels({
       ) : null}
 
       {viewMode === "week" ? (
-        <div className={`${PORTAL_CALENDAR_FRAME} overflow-x-auto`}>
-          <div className="grid min-w-[720px] grid-cols-[68px_repeat(7,minmax(0,1fr))] gap-px bg-slate-200">
-            <div className="bg-slate-50" />
-            {fullWeekDates.map((d, idx) => (
-              <div key={toLocalDateStr(d)} className="bg-slate-50 px-2 py-3 text-center">
-                <p className="text-sm font-semibold text-slate-900">{WEEKDAY_LABELS[idx]}</p>
-                <p className="text-xs text-slate-500">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-              </div>
-            ))}
-            {slotRowIndices.map((slotIdx) => (
-              <Fragment key={slotIdx}>
-                <div className="bg-white px-2 py-2 text-[11px] font-semibold text-slate-400">
-                  {formatAvailabilitySlotLabel(slotIdx)}
+        <div className={PORTAL_CALENDAR_FRAME}>
+          <div className="space-y-3">
+            {fullWeekDates.map((d) => {
+              const ds = toLocalDateStr(d);
+              return (
+                <div key={ds} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <div className="bg-slate-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-slate-900">{d.toLocaleDateString(undefined, { weekday: "long" })}</p>
+                    <p className="text-xs text-slate-500">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+                  </div>
+                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-px bg-slate-100">
+                    {slotRowIndices.map((slotIdx) => {
+                      const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
+                      return (
+                        <Fragment key={`${ds}-${slotIdx}`}>
+                          <div className="bg-white px-3 py-2 text-[11px] font-semibold text-slate-400">
+                            {formatAvailabilitySlotLabel(slotIdx)}
+                          </div>
+                          <div className="relative min-h-[40px] bg-white p-1">
+                            {meeting ? (
+                              <div className={`rounded-xl border px-2 py-2 text-xs font-semibold shadow-sm ${meeting.color}`}>
+                                {meeting.title}
+                              </div>
+                            ) : (
+                              <div className="h-full rounded-xl border border-dashed border-slate-100" />
+                            )}
+                          </div>
+                        </Fragment>
+                      );
+                    })}
+                  </div>
                 </div>
-                {fullWeekDateStrs.map((ds) => {
-                  const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
-                  return (
-                    <div key={`${ds}-${slotIdx}`} className="relative min-h-[40px] bg-white p-1">
-                      {meeting ? (
-                        <div
-                          className={`absolute inset-1 z-[1] rounded-xl border px-2 py-2 text-xs font-semibold shadow-sm ${meeting.color}`}
-                          style={{ height: `calc(${meeting.span} * 40px - 4px)` }}
-                        >
-                          {meeting.title}
-                        </div>
-                      ) : (
-                        <div className="h-full rounded-xl border border-dashed border-slate-100" />
-                      )}
-                    </div>
-                  );
-                })}
-              </Fragment>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -389,44 +395,50 @@ export function PortalCalendarPanels({
       </div>
 
       <div
-        className="mt-4 grid min-w-[640px] grid-cols-[64px_repeat(7,minmax(0,1fr))] gap-1 overflow-x-auto rounded-[24px] border border-slate-200 bg-slate-50 p-3"
+        className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3"
         onMouseLeave={() => setDragMode(null)}
         onMouseUp={() => setDragMode(null)}
       >
-        <div />
-        {fullWeekDates.map((d, idx) => (
-          <div key={toLocalDateStr(d)} className="px-1 py-2 text-center">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{WEEKDAY_LABELS[idx]}</p>
-            <p className="text-[11px] font-semibold text-slate-700">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-          </div>
-        ))}
-        {slotRowIndices.map((slotIdx) => (
-          <div key={slotIdx} className="contents">
-            <div className="flex items-center text-[11px] font-medium text-slate-400">{formatAvailabilitySlotLabel(slotIdx)}</div>
-            {fullWeekDateStrs.map((ds) => {
-              const key = dateSlotKey(ds, slotIdx);
-              const active = activeSlots.has(key);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onMouseDown={() => {
-                    const nextMode = active ? "remove" : "add";
-                    setDragMode(nextMode);
-                    applySlot(key, nextMode);
-                  }}
-                  onMouseEnter={() => {
-                    if (dragMode) applySlot(key, dragMode);
-                  }}
-                  onMouseUp={() => setDragMode(null)}
-                  className={`h-8 rounded-xl border transition ${
-                    active ? "border-emerald-300 bg-emerald-200/80" : "border-white bg-white hover:border-primary/20 hover:bg-primary/[0.06]"
-                  }`}
-                />
-              );
-            })}
-          </div>
-        ))}
+        {fullWeekDates.map((d) => {
+          const ds = toLocalDateStr(d);
+          return (
+            <div key={ds} className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="mb-3">
+                <p className="text-sm font-bold text-slate-900">{d.toLocaleDateString(undefined, { weekday: "long" })}</p>
+                <p className="text-xs font-semibold text-slate-500">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {slotRowIndices.map((slotIdx) => {
+                  const key = dateSlotKey(ds, slotIdx);
+                  const active = activeSlots.has(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onMouseDown={() => {
+                        const nextMode = active ? "remove" : "add";
+                        setDragMode(nextMode);
+                        applySlot(key, nextMode);
+                      }}
+                      onMouseEnter={() => {
+                        if (dragMode) applySlot(key, dragMode);
+                      }}
+                      onMouseUp={() => setDragMode(null)}
+                      className={`flex min-h-10 items-center justify-between rounded-xl border px-3 text-left text-xs font-semibold transition ${
+                        active
+                          ? "border-emerald-300 bg-emerald-100 text-emerald-900"
+                          : "border-slate-100 bg-slate-50 text-slate-500 hover:border-primary/20 hover:bg-primary/[0.06]"
+                      }`}
+                    >
+                      <span>{formatAvailabilitySlotLabel(slotIdx)}</span>
+                      <span>{active ? "Open" : ""}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">

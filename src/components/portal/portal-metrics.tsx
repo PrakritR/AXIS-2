@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 
 /** Outer white “card” wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
-  "rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_14px_50px_-36px_rgba(15,23,42,0.16)] sm:p-6";
+  "rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_14px_50px_-38px_rgba(15,23,42,0.24)] sm:p-6";
 
 /** Calendar week grid outer frame (matches manager calendar chrome). */
-export const PORTAL_CALENDAR_FRAME = "overflow-hidden rounded-[24px] border border-slate-200 bg-slate-200";
+export const PORTAL_CALENDAR_FRAME = "overflow-hidden rounded-2xl border border-slate-200 bg-slate-200";
 
 /** Pill toggles: Day / Week / Month (Managers filter style). */
 export function PortalSegmentedControl<T extends string>({
@@ -24,7 +24,7 @@ export function PortalSegmentedControl<T extends string>({
 }) {
   const pad = size === "sm" ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-sm";
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1" role="tablist" aria-label="View">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1" role="tablist" aria-label="View">
       {options.map((opt) => {
         const disabled = optionDisabled?.(opt.id) ?? false;
         return (
@@ -37,7 +37,7 @@ export function PortalSegmentedControl<T extends string>({
             onClick={() => {
               if (!disabled) onChange(opt.id);
             }}
-            className={`rounded-full font-semibold transition-all duration-150 ${pad} ${
+            className={`min-h-9 rounded-full font-semibold transition-all duration-150 ${pad} ${
               disabled
                 ? "cursor-not-allowed opacity-45"
                 : value === opt.id
@@ -81,13 +81,13 @@ export function PortalStatusTierFilterBar({
 }) {
   return (
     <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:rounded-full">
         {statusTabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onStatusChange(tab.id)}
-            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+            className={`flex min-h-9 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
               activeStatusId === tab.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
             }`}
           >
@@ -103,13 +103,13 @@ export function PortalStatusTierFilterBar({
         ))}
       </div>
 
-      <div className="inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+      <div className="inline-flex flex-wrap items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:rounded-full">
         {TIER_FILTER_OPTIONS.map((opt) => (
           <button
             key={opt.id}
             type="button"
             onClick={() => onTierChange(opt.id)}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+            className={`min-h-9 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
               tierFilter === opt.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
             }`}
           >
@@ -133,7 +133,7 @@ export function PortalStatRow({ items }: { items: PortalMetricItem[] }) {
       {items.map((k) => (
         <div
           key={k.label}
-          className="min-w-[10rem] flex-1 rounded-xl border border-slate-200/80 bg-white px-5 py-4 sm:flex-none sm:min-w-[11rem]"
+          className="min-w-[10rem] flex-1 rounded-xl border border-slate-200/80 bg-slate-50/60 px-5 py-4 sm:min-w-[11rem] sm:flex-none"
         >
           <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{k.value}</p>
           <p className="mt-1 text-xs font-medium text-slate-500">{k.label}</p>
@@ -203,7 +203,7 @@ export function ManagerPortalStatusPills({
 }) {
   const isPrimary = activeTone === "primary";
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:rounded-full">
       {tabs.map((tab) => {
         const active = activeId === tab.id;
         return (
@@ -211,7 +211,7 @@ export function ManagerPortalStatusPills({
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
-            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+            className={`flex min-h-9 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
               active
                 ? isPrimary
                   ? "bg-primary text-white shadow-sm"
@@ -253,7 +253,7 @@ export function ManagerPortalPageShell({
   return (
     <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
+        <h1 className="text-2xl font-bold text-slate-950">{title}</h1>
         {titleAside ? <div className="flex flex-wrap items-center gap-2 sm:justify-end">{titleAside}</div> : null}
       </div>
       {filterRow ? <div className="mt-5">{filterRow}</div> : null}

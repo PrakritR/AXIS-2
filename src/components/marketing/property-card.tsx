@@ -73,8 +73,8 @@ export function PropertyCard({ property }: { property: MockProperty }) {
   const go = (d: number) => setSlide((s) => (s + d + slideCount * 10) % slideCount);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-[0_12px_40px_-28px_rgba(15,23,42,0.12)] transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-[0_20px_50px_-28px_rgba(15,23,42,0.16)]">
-      <div className="relative aspect-[16/10] overflow-hidden rounded-t-3xl bg-gradient-to-br from-slate-200 to-slate-400">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_14px_44px_-34px_rgba(15,23,42,0.28)] transition duration-200 ease-out hover:border-primary/20 hover:shadow-[0_20px_54px_-36px_rgba(15,23,42,0.34)]">
+      <div className="relative aspect-[16/10] overflow-hidden bg-slate-200">
         <img src={slideSrc} alt={title} className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
         {sharedHousing ? (
@@ -87,7 +87,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
         <button
           type="button"
           aria-label="Previous photo"
-          className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:bg-white"
+          className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:bg-white"
           onClick={() => go(-1)}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -97,7 +97,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
         <button
           type="button"
           aria-label="Next photo"
-          className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:bg-white"
+          className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:bg-white"
           onClick={() => go(1)}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -126,7 +126,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
 
       <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
         <div>
-          <h3 className="text-lg font-bold tracking-tight text-slate-900">{title}</h3>
+          <h3 className="text-lg font-bold text-slate-950">{title}</h3>
           <p className="mt-1 text-sm text-slate-500">{fullAddress}</p>
           <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-700">
             <span className="inline-flex items-center gap-1.5">

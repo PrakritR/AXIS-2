@@ -115,7 +115,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
 
   return (
     <div
-      className="mx-auto w-full max-w-[1060px] rounded-[24px] px-4 py-6 sm:px-10 sm:py-9"
+      className="mx-auto w-full max-w-[1060px] rounded-2xl px-4 py-6 sm:px-10 sm:py-9"
       style={{
         background: "rgba(255,255,255,0.75)",
         backdropFilter: "blur(24px)",

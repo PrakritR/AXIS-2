@@ -69,7 +69,7 @@ export function PublicNavbar() {
           : "border-transparent bg-white/95 shadow-none backdrop-blur-none"
       }`}
     >
-      <div className="mx-auto grid min-h-[52px] w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 sm:px-5 sm:min-h-[56px] lg:grid-cols-[auto_1fr_auto]">
+      <div className="mx-auto grid min-h-[56px] w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 sm:px-5 lg:grid-cols-[auto_1fr_auto]">
         <div className="justify-self-start">
           <AxisLogoLink href="/" />
         </div>
@@ -125,7 +125,7 @@ export function PublicNavbar() {
           {/* Mobile menu button */}
           <button
             type="button"
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition hover:bg-slate-50 lg:hidden"
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full border border-slate-200/90 bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 lg:hidden"
             onClick={() => setMobileOpen((v) => !v)}
           >
           {mobileOpen ? (
@@ -204,7 +204,7 @@ function RentWithAxisTrigger({
     <div className="relative inline-flex items-center gap-0.5">
       <Link
         href="/"
-        className={`relative flex items-center rounded-full px-3 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
+        className={`relative flex min-h-10 items-center rounded-full px-3 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
           active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
         } ${open ? "bg-slate-100/80" : "hover:bg-slate-100/60"}`}
       >
@@ -219,7 +219,7 @@ function RentWithAxisTrigger({
           e.preventDefault();
           onToggleChevron();
         }}
-        className={`relative flex items-center rounded-full p-2 outline-none transition-colors duration-200 ${
+        className={`relative flex min-h-10 min-w-10 items-center justify-center rounded-full p-2 outline-none transition-colors duration-200 ${
           active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
         } ${open ? "bg-slate-100/80" : "hover:bg-slate-100/60"}`}
       >
@@ -252,7 +252,7 @@ function PartnerDropdownTrigger({
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={onToggle}
-        className={`relative flex items-center gap-1.5 rounded-full px-4 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
+        className={`relative flex min-h-10 items-center gap-1.5 rounded-full px-4 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
           active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
         } ${open ? "bg-slate-100/80" : "hover:bg-slate-100/60"}`}
       >
