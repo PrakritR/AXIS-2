@@ -125,6 +125,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
         calendarRefreshSignal={calendarRefreshSignal}
         tourScopeLabel={tourScopeLabel}
         unavailableMessage="Select a house before creating tour windows."
+        compactAvailability={portal === "manager"}
       />
     </ManagerPortalPageShell>
   );
