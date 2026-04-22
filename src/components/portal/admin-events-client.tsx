@@ -171,6 +171,7 @@ export function AdminEventsClient() {
           calendarRefreshSignal={calendarRefreshSignal}
           defaultViewMode="month"
           pinMonthSchedule
+          compactAvailability
         />
 
         <div className="grid gap-4 lg:grid-cols-2">

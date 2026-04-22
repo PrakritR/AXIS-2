@@ -112,7 +112,6 @@ export function PortalCalendarPanels({
   /** yyyy-mm-dd inclusive range highlights in month view when `pinMonthSchedule`. */
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [anchorDate, setAnchorDate] = useState(() => new Date());
-  const [selectedDayIndex, setSelectedDayIndex] = useState(() => mondayBasedDayIndex(new Date()));
   const [activeSlots, setActiveSlots] = useState<Set<string>>(() => new Set());
   const [dragMode, setDragMode] = useState<"add" | "remove" | null>(null);
 
@@ -206,16 +205,9 @@ export function PortalCalendarPanels({
   }
 
   if (compactAvailability) {
-    const selectedDate = fullWeekDates[selectedDayIndex] ?? fullWeekDates[0]!;
-    const selectedDateStr = toLocalDateStr(selectedDate);
-    const selectedDaySlotCount = slotRowIndices.reduce(
-      (total, slot) => total + (activeSlots.has(dateSlotKey(selectedDateStr, slot)) ? 1 : 0),
-      0,
-    );
-
     return (
       <Card className="p-4 sm:p-5">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -244,35 +236,6 @@ export function PortalCalendarPanels({
               <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
                 {weekSlotCount} open this week
               </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-              {fullWeekDates.map((d, i) => {
-                const ds = toLocalDateStr(d);
-                const count = slotRowIndices.reduce(
-                  (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
-                  0,
-                );
-                const selected = i === selectedDayIndex;
-                return (
-                  <button
-                    key={ds}
-                    type="button"
-                    onClick={() => setSelectedDayIndex(i)}
-                    className={`rounded-2xl border px-3 py-2 text-left transition ${
-                      selected
-                        ? "border-primary bg-primary/[0.08] text-slate-950 ring-1 ring-primary/25"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                    }`}
-                  >
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
-                      {d.toLocaleDateString(undefined, { weekday: "short" })}
-                    </p>
-                    <p className="mt-0.5 text-sm font-semibold">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-                    <p className="mt-1 text-xs font-medium text-slate-500">{count} open</p>
-                  </button>
-                );
-              })}
             </div>
           </div>
 
@@ -315,48 +278,69 @@ export function PortalCalendarPanels({
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-2 px-1">
-            <div>
-              <p className="text-sm font-bold text-slate-950">
-                {selectedDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
-              </p>
-              <p className="text-xs text-slate-500">Click or drag slots to open and close tour times.</p>
-            </div>
-            <p className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">{selectedDaySlotCount} open slots</p>
+        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="text-xs font-semibold text-slate-600">Click and drag directly on the calendar to open or close booking slots.</p>
           </div>
           <div
-            className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+            className="overflow-x-auto"
             onMouseLeave={() => setDragMode(null)}
             onMouseUp={() => setDragMode(null)}
           >
-            {slotRowIndices.map((slotIdx) => {
-              const key = dateSlotKey(selectedDateStr, slotIdx);
-              const active = activeSlots.has(key);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onMouseDown={() => {
-                    const nextMode = active ? "remove" : "add";
-                    setDragMode(nextMode);
-                    applySlot(key, nextMode);
-                  }}
-                  onMouseEnter={() => {
-                    if (dragMode) applySlot(key, dragMode);
-                  }}
-                  onMouseUp={() => setDragMode(null)}
-                  className={`flex min-h-11 items-center justify-between rounded-xl border px-3 text-left text-sm font-semibold transition ${
-                    active
-                      ? "border-emerald-300 bg-emerald-100 text-emerald-950"
-                      : "border-slate-100 bg-white text-slate-500 hover:border-primary/20 hover:bg-primary/[0.06]"
-                  }`}
-                >
-                  <span>{formatAvailabilitySlotLabel(slotIdx)}</span>
-                  <span className="text-xs">{active ? "Open" : ""}</span>
-                </button>
-              );
-            })}
+            <div className="grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] gap-px bg-slate-200 text-xs">
+              <div className="bg-slate-50 px-2 py-2 font-bold uppercase tracking-[0.12em] text-slate-400">Time</div>
+              {fullWeekDates.map((d) => {
+                const ds = toLocalDateStr(d);
+                const count = slotRowIndices.reduce(
+                  (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
+                  0,
+                );
+                return (
+                  <div key={ds} className="bg-slate-50 px-2 py-2 text-center">
+                    <p className="font-bold uppercase tracking-[0.12em] text-slate-500">
+                      {d.toLocaleDateString(undefined, { weekday: "short" })}
+                    </p>
+                    <p className="mt-0.5 font-semibold text-slate-900">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+                    <p className="mt-0.5 text-[11px] font-medium text-emerald-700">{count} open</p>
+                  </div>
+                );
+              })}
+
+              {slotRowIndices.map((slotIdx) => (
+                <Fragment key={slotIdx}>
+                  <div className="flex min-h-9 items-center bg-white px-2 font-semibold text-slate-500">
+                    {formatAvailabilitySlotLabel(slotIdx)}
+                  </div>
+                  {fullWeekDateStrs.map((ds) => {
+                    const key = dateSlotKey(ds, slotIdx);
+                    const active = activeSlots.has(key);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onMouseDown={() => {
+                          const nextMode = active ? "remove" : "add";
+                          setDragMode(nextMode);
+                          applySlot(key, nextMode);
+                        }}
+                        onMouseEnter={() => {
+                          if (dragMode) applySlot(key, dragMode);
+                        }}
+                        onMouseUp={() => setDragMode(null)}
+                        className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
+                          active
+                            ? "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300"
+                            : "bg-white text-transparent hover:bg-primary/[0.07] hover:text-primary"
+                        }`}
+                        aria-label={`${active ? "Close" : "Open"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
+                      >
+                        {active ? "Open" : "Add"}
+                      </button>
+                    );
+                  })}
+                </Fragment>
+              ))}
+            </div>
           </div>
         </div>
       </Card>
