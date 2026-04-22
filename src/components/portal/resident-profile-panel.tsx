@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 
 export function ResidentProfilePanel() {
   const { showToast } = useAppUi();
+  const [userId, setUserId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -27,8 +28,10 @@ export function ResidentProfilePanel() {
         if (!user || cancelled) return;
         const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
         if (cancelled) return;
+        setUserId(user.id);
         setEmail(user.email ?? "");
         setName(profile?.full_name ?? "");
+        setPhone(profile?.phone ?? "");
         setAxisId(profile?.id ? `AXIS-R-${profile.id.slice(0, 8).toUpperCase()}` : "");
       } catch {
         /* env missing */
@@ -39,16 +42,38 @@ export function ResidentProfilePanel() {
     };
   }, []);
 
+  const saveProfile = async () => {
+    if (!userId) {
+      showToast("Sign in to save profile.");
+      return;
+    }
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: name.trim(), phone: phone.trim() })
+        .eq("id", userId);
+      if (error) {
+        showToast("Could not save profile.");
+        return;
+      }
+      showToast("Profile saved.");
+    } catch {
+      showToast("Could not save profile.");
+    }
+  };
+
   return (
     <ManagerPortalPageShell
       title="Profile"
       titleAside={
-        <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => showToast("Profile saved.")}>
+        <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => void saveProfile()}>
           Save
         </Button>
       }
     >
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        <div className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-semibold text-slate-800">Full name</label>
           <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -71,6 +96,12 @@ export function ResidentProfilePanel() {
             <Input value={emName} onChange={(e) => setEmName(e.target.value)} placeholder="Name" />
             <Input value={emPhone} onChange={(e) => setEmPhone(e.target.value)} placeholder="Phone" />
           </div>
+        </div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Resident access</p>
+          <p className="mt-3 text-sm font-semibold text-slate-900">{axisId || "Axis ID pending"}</p>
+          <p className="mt-1 text-sm text-slate-600">Keep this profile current so your manager can reach you for lease, payment, and work-order updates.</p>
         </div>
       </div>
     </ManagerPortalPageShell>

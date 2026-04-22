@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 function StatCard({
   label,
   children,
@@ -42,14 +42,24 @@ export function ResidentDashboard({
 
   if (applicationApproved) {
     return (
-      <div className={`mx-auto w-full max-w-[1600px] space-y-4 ${PORTAL_SECTION_SURFACE}`}>
+      <ManagerPortalPageShell
+        title="Dashboard"
+        titleAside={
+          <Link
+            href="/resident/inbox/unopened"
+            className="inline-flex min-h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+          >
+            Inbox
+          </Link>
+        }
+      >
         {showTestAccessNote ? (
-          <p className="rounded-2xl border border-sky-200/80 bg-sky-50/90 px-4 py-2.5 text-sm font-medium text-sky-950">
+          <p className="rounded-2xl border border-sky-200/80 bg-sky-50/90 px-4 py-3 text-sm font-medium text-sky-950">
             Test account: full resident portal is unlocked for this email while application approval is still pending in
             the database.
           </p>
         ) : (
-          <p className="rounded-2xl border border-emerald-200/70 bg-emerald-50/90 px-4 py-2.5 text-sm font-medium text-emerald-950">
+          <p className="rounded-2xl border border-emerald-200/70 bg-emerald-50/90 px-4 py-3 text-sm font-medium text-emerald-950">
             Application approved · {displayName}
           </p>
         )}
@@ -105,12 +115,12 @@ export function ResidentDashboard({
           </span>
           <span className="text-primary">Open</span>
         </Link>
-      </div>
+      </ManagerPortalPageShell>
     );
   }
 
   return (
-    <div className={`mx-auto w-full max-w-[1600px] space-y-4 ${PORTAL_SECTION_SURFACE}`}>
+    <ManagerPortalPageShell title="Dashboard">
       <p className="rounded-2xl border border-amber-200/70 bg-amber-50/90 px-4 py-2.5 text-sm font-medium text-amber-950">
         Application under review
       </p>
@@ -132,6 +142,6 @@ export function ResidentDashboard({
           <p className="text-sm text-slate-500">After approval</p>
         </StatCard>
       </div>
-    </div>
+    </ManagerPortalPageShell>
   );
 }

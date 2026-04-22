@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/input";
@@ -31,6 +31,28 @@ const TABS: { id: ResidentWorkBucket; label: string }[] = [
   { id: "completed", label: "Completed" },
 ];
 
+const RESIDENT_WORK_ORDERS_KEY = "axis_resident_work_orders_v1";
+
+function readStoredRows(): DemoResidentWorkOrderRow[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(RESIDENT_WORK_ORDERS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredRows(rows: DemoResidentWorkOrderRow[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(RESIDENT_WORK_ORDERS_KEY, JSON.stringify(rows));
+  } catch {
+    /* ignore */
+  }
+}
+
 function priorityClass(p: string) {
   const x = p.toLowerCase();
   if (x === "high") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
@@ -46,6 +68,10 @@ export function ResidentWorkOrdersPanel() {
   const [category, setCategory] = useState("Plumbing");
   const [priority, setPriority] = useState("Medium");
   const [createdRows, setCreatedRows] = useState<DemoResidentWorkOrderRow[]>([]);
+
+  useEffect(() => {
+    setCreatedRows(readStoredRows());
+  }, []);
 
   const allRows = useMemo(() => createdRows, [createdRows]);
 
@@ -77,7 +103,11 @@ export function ResidentWorkOrdersPanel() {
       description:
         "Your request is logged. Maintenance will review and update this thread — open Details anytime for notes.",
     };
-    setCreatedRows((prev) => [row, ...prev]);
+    setCreatedRows((prev) => {
+      const next = [row, ...prev];
+      writeStoredRows(next);
+      return next;
+    });
     setExpandedId(row.id);
     showToast("Work order added to your open requests.");
     setTitle("");
@@ -144,7 +174,20 @@ export function ResidentWorkOrdersPanel() {
                           <p className="mt-1.5 leading-relaxed">{row.description}</p>
                           {bucket === "open" ? (
                             <PortalTableDetailActions>
-                              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Work order removed.")}>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => {
+                                  setCreatedRows((prev) => {
+                                    const next = prev.filter((r) => r.id !== row.id);
+                                    writeStoredRows(next);
+                                    return next;
+                                  });
+                                  setExpandedId(null);
+                                  showToast("Work order removed.");
+                                }}
+                              >
                                 Delete request
                               </Button>
                             </PortalTableDetailActions>

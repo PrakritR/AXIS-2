@@ -34,6 +34,11 @@ function statusClass(label: string) {
   return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
 }
 
+function centsFromLabel(label: string): number {
+  const n = Number(label.replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
+}
+
 export function ResidentPaymentsPanel() {
   const { showToast } = useAppUi();
   const [tab, setTab] = useState<PayTab>("pending");
@@ -81,6 +86,13 @@ export function ResidentPaymentsPanel() {
   }, [email, userId, tick]);
 
   const rows = useMemo(() => charges.filter((c) => (tab === "pending" ? c.status === "pending" : c.status === "paid")), [charges, tab]);
+  const pendingTotal = useMemo(
+    () =>
+      charges
+        .filter((c) => c.status === "pending")
+        .reduce((sum, c) => sum + centsFromLabel(c.balanceLabel), 0),
+    [charges],
+  );
 
   const counts = useMemo(() => {
     return {
@@ -107,11 +119,16 @@ export function ResidentPaymentsPanel() {
         </Button>
       }
       filterRow={
-        <ManagerPortalStatusPills
-          tabs={[...tabs]}
-          activeId={tab}
-          onChange={(id) => setTab(id as PayTab)}
-        />
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <ManagerPortalStatusPills
+            tabs={[...tabs]}
+            activeId={tab}
+            onChange={(id) => setTab(id as PayTab)}
+          />
+          <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+            Pending balance: <span className="tabular-nums text-slate-950">${(pendingTotal / 100).toFixed(2)}</span>
+          </div>
+        </div>
       }
     >
       {!email ? (
@@ -196,7 +213,15 @@ export function ResidentPaymentsPanel() {
                             </p>
                           ) : null}
                           <PortalTableDetailActions>
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Balance copied.")}>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              onClick={() => {
+                                void navigator.clipboard?.writeText(row.balanceLabel);
+                                showToast("Balance copied.");
+                              }}
+                            >
                               Copy balance
                             </Button>
                             <Link
