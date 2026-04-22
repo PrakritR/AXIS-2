@@ -291,6 +291,8 @@ export function ManagerPlan() {
         showToast(body.error ?? "Could not cancel downgrade.");
         return;
       }
+      setSub((current) => (current ? { ...current, scheduledDowngrade: null } : current));
+      setPendingTier(committedTier);
       showToast("Scheduled downgrade cancelled.");
       await load();
       startTransition(() => router.refresh());
@@ -324,13 +326,15 @@ export function ManagerPlan() {
   const hasPendingChanges = hasPlanChange || hasBillingChange;
 
   const periodEndLabel = (unix: number | null | undefined) => {
-    if (unix == null || typeof unix !== "number") return "the end of your billing period";
+    if (unix == null || typeof unix !== "number" || !Number.isFinite(unix) || unix <= 0) return null;
     return new Date(unix * 1000).toLocaleDateString(undefined, {
       month: "long",
       day: "numeric",
       year: "numeric",
     });
   };
+
+  const currentPeriodEndLabel = periodEndLabel(sub?.currentPeriodEnd ?? null);
 
   const confirmChanges = async () => {
     if (!sub || !hasPendingChanges) return;
@@ -350,7 +354,9 @@ export function ManagerPlan() {
     }
     if (pendingTier === "free" && committedTier !== "free") {
       const msg = sub.stripeManaged
-        ? `Cancel your paid subscription? You keep Pro or Business features until ${periodEndLabel(sub.currentPeriodEnd ?? null)}, then the account moves to Free.`
+        ? `Cancel your paid subscription? You keep ${tierLabel(committedTier)} features until ${
+            currentPeriodEndLabel ?? "Stripe confirms the billing-period end date"
+          }, then the account moves to Free.`
         : "Confirm switch to Free plan? Paid features may be limited after you change.";
       if (!window.confirm(msg)) return;
     }
@@ -430,6 +436,7 @@ export function ManagerPlan() {
               const pb = pendingBilling === "monthly" ? t.monthly : t.annual;
               const current = isCurrent(tierId);
               const selected = isSelected(tierId);
+              const pendingSelection = selected && !current;
               const busyHere = busyTier === tierId;
 
               let ctaLabel = "";
@@ -478,10 +485,10 @@ export function ManagerPlan() {
                 <div
                   key={t.id}
                   className={`relative flex flex-col rounded-2xl border p-7 shadow-[0_12px_42px_-34px_rgba(15,23,42,0.26)] transition-shadow ${
-                    selected
+                    current
                       ? "border-2 border-primary bg-primary/[0.07] shadow-[0_8px_28px_-10px_rgba(0,122,255,0.35)] ring-1 ring-primary/20"
                       : "border border-slate-200 bg-white hover:border-slate-300"
-                  }`}
+                  } ${pendingSelection ? "ring-1 ring-slate-200" : ""}`}
                 >
                   {tierId === "pro" ? (
                     <span className="absolute right-5 top-5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
@@ -531,14 +538,32 @@ export function ManagerPlan() {
           <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-5 py-4 text-sm text-amber-950">
             {sub.cancelAtPeriodEnd ? (
               <p>
-                <span className="font-semibold">Cancellation scheduled.</span> Paid access ends on{" "}
-                <span className="font-semibold">{periodEndLabel(sub.currentPeriodEnd ?? null)}</span>. You can resume before that date.
+                <span className="font-semibold">Cancellation scheduled.</span>{" "}
+                {currentPeriodEndLabel ? (
+                  <>
+                    Paid access ends on <span className="font-semibold">{currentPeriodEndLabel}</span>. You can resume before that date.
+                  </>
+                ) : (
+                  <>Stripe has not returned the exact billing-period end date yet. Refresh billing status or open Stripe billing to confirm it.</>
+                )}
               </p>
             ) : sub.scheduledDowngrade ? (
               <p>
-                <span className="font-semibold">Downgrade scheduled.</span> Your workspace stays on {tierLabel(committedTier)} until{" "}
-                <span className="font-semibold">{periodEndLabel(sub.currentPeriodEnd ?? null)}</span>, then moves to{" "}
-                {tierLabel(sub.scheduledDowngrade.tier as ManagerSkuTier)} ({sub.scheduledDowngrade.billing}) on that date.
+                <span className="font-semibold">Downgrade scheduled.</span>{" "}
+                {currentPeriodEndLabel ? (
+                  <>
+                    Your workspace stays on {tierLabel(committedTier)} until{" "}
+                    <span className="font-semibold">{currentPeriodEndLabel}</span>, then moves to{" "}
+                    {tierLabel(sub.scheduledDowngrade.tier as ManagerSkuTier)} ({sub.scheduledDowngrade.billing}) on{" "}
+                    <span className="font-semibold">{currentPeriodEndLabel}</span>.
+                  </>
+                ) : (
+                  <>
+                    Your workspace will move to {tierLabel(sub.scheduledDowngrade.tier as ManagerSkuTier)} (
+                    {sub.scheduledDowngrade.billing}), but Stripe has not returned the exact renewal date yet. Refresh billing status or open Stripe
+                    billing to confirm it.
+                  </>
+                )}
               </p>
             ) : null}
             {sub.cancelAtPeriodEnd ? (
@@ -606,7 +631,9 @@ export function ManagerPlan() {
                 void (async () => {
                   if (
                     !window.confirm(
-                      `Cancel your paid subscription? You keep ${tierLabel(committedTier)} features until ${periodEndLabel(sub.currentPeriodEnd ?? null)}, then the account becomes Free.`,
+                      `Cancel your paid subscription? You keep ${tierLabel(committedTier)} features until ${
+                        currentPeriodEndLabel ?? "Stripe confirms the billing-period end date"
+                      }, then the account becomes Free.`,
                     )
                   ) {
                     setPendingTier(committedTier);
