@@ -4,6 +4,8 @@ import {
   getManagerPurchaseSku,
   isBusinessSkuTier,
   isProSkuTier,
+  maxAccountLinksForTier,
+  maxPropertiesForManagerTier,
   monthlyUsdForManagerTier,
   PRO_MAX_PROPERTIES,
   setManagerPurchaseTier,
@@ -26,6 +28,8 @@ function subscriptionJson(tier: string | null, billing: string | null) {
     /** No purchase row — legacy / unknown; not treated as Pro-capped. */
     isLegacyUnlimited: t === null,
     proPropertyLimit: PRO_MAX_PROPERTIES,
+    propertyLimit: maxPropertiesForManagerTier(t),
+    accountLinkLimit: maxAccountLinksForTier(t),
     monthlyAmountUsd: monthlyUsdForManagerTier(t),
     monthlyLabel: formatManagerMonthlyLabel(t),
   };

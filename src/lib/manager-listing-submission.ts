@@ -85,6 +85,8 @@ export type ManagerListingSubmissionV1 = {
   houseOverview: string;
   /** Quiet hours, guests, smoking, shared spaces — shown on House rules tab */
   houseRulesText: string;
+  /** General house photos (common areas, exterior, kitchen) shown at the top of the public listing. */
+  housePhotoDataUrls: string[];
   leaseTermsBody: string;
   applicationFee: string;
   securityDeposit: string;
@@ -102,6 +104,16 @@ export type ManagerListingSubmissionV1 = {
   zellePaymentsEnabled?: boolean;
   /** Phone or email for Zelle (shown to applicants; manager marks payments paid manually). */
   zelleContact?: string;
+  /**
+   * When Zelle is enabled for the listing, applicants can still use the default “portal / online” path
+   * for the application fee (manager marks received). Default true.
+   */
+  applicationFeeStripeEnabled?: boolean;
+  /**
+   * When Zelle is enabled, offer Zelle as an application-fee payment path in the apply flow.
+   * Default true when Zelle is on; ignored when Zelle is off.
+   */
+  applicationFeeZelleEnabled?: boolean;
   rooms: ManagerRoomSubmission[];
   bathrooms: ManagerBathroomSubmission[];
   /** Optional bundle rows for the listing; if empty, copy is derived from rooms. */
@@ -240,6 +252,22 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     }));
   }
 
+  const zelleEnabled = Boolean(sub.zellePaymentsEnabled && sub.zelleContact?.trim());
+  let applicationFeeStripeEnabled =
+    typeof sub.applicationFeeStripeEnabled === "boolean" ? sub.applicationFeeStripeEnabled : true;
+  let applicationFeeZelleEnabled =
+    typeof sub.applicationFeeZelleEnabled === "boolean" ? sub.applicationFeeZelleEnabled : zelleEnabled;
+  if (!sub.zellePaymentsEnabled) {
+    applicationFeeZelleEnabled = false;
+  } else if (zelleEnabled && !applicationFeeStripeEnabled && !applicationFeeZelleEnabled) {
+    applicationFeeStripeEnabled = true;
+    applicationFeeZelleEnabled = true;
+  }
+
+  const housePhotoDataUrls = Array.isArray(sub.housePhotoDataUrls)
+    ? sub.housePhotoDataUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0).slice(0, 12)
+    : [];
+
   const next = {
     ...sub,
     houseRulesText: typeof sub.houseRulesText === "string" ? sub.houseRulesText : "",
@@ -249,6 +277,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     sharedSpaces,
     bundles,
     quickFacts,
+    applicationFeeStripeEnabled,
+    applicationFeeZelleEnabled,
+    housePhotoDataUrls,
   };
   delete (next as Record<string, unknown>).sharedSpacesDescription;
   delete (next as Record<string, unknown>).paymentAtSigning;
@@ -337,6 +368,7 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     tagline: "",
     petFriendly: false,
     houseOverview: "",
+    housePhotoDataUrls: [],
     houseRulesText: "",
     leaseTermsBody: "",
     applicationFee: "",
@@ -351,6 +383,8 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     amenitiesText: "",
     zellePaymentsEnabled: false,
     zelleContact: "",
+    applicationFeeStripeEnabled: true,
+    applicationFeeZelleEnabled: false,
     rooms: [{ ...emptyRoom(0), name: "", availability: "" }],
     bathrooms: [],
     bundles: [],

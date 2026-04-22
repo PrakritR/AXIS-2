@@ -10,9 +10,16 @@ import {
   updateExtraListingFromSubmission,
   updatePendingManagerProperty,
 } from "@/lib/demo-property-pipeline";
-import { PRO_MAX_PROPERTIES, proTierPropertyLimitReached } from "@/lib/manager-access";
+import {
+  BUSINESS_MAX_PROPERTIES,
+  FREE_MAX_PROPERTIES,
+  managerTierPropertyLimitReached,
+  normalizeManagerSkuTier,
+  PRO_MAX_PROPERTIES,
+} from "@/lib/manager-access";
 import {
   createDefaultListingSubmission,
+  normalizeManagerListingSubmissionV1,
   duplicateRoomEntry,
   emptyBathroom,
   emptyBundleRow,
@@ -81,6 +88,7 @@ function togglePaymentAtSigning(
 
 const MAX_IMG_BYTES = 2.6 * 1024 * 1024;
 const MAX_VID_BYTES = 14 * 1024 * 1024;
+const MAX_HOUSE_PHOTOS = 12;
 
 
 async function fileToDataUrl(file: File, maxBytes: number): Promise<string | null> {
@@ -98,6 +106,28 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: stri
     <div className="mb-1.5">
       <p className="text-xs font-semibold text-slate-800">{children}</p>
       {hint ? <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+function ListingSubsection({
+  id,
+  title,
+  description,
+  children,
+}: {
+  id?: string;
+  title: string;
+  description?: ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div id={id} className="rounded-xl border border-slate-200/90 bg-slate-50/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] sm:p-5">
+      <div className="border-b border-slate-200/70 pb-3">
+        <h4 className="text-sm font-bold text-slate-900">{title}</h4>
+        {description ? <div className="mt-1 text-xs leading-relaxed text-slate-600">{description}</div> : null}
+      </div>
+      <div className="mt-4 space-y-4">{children}</div>
     </div>
   );
 }
@@ -121,7 +151,9 @@ export function ManagerAddListingForm({
   editListingId?: string | null;
   initialSubmission?: ManagerListingSubmissionV1 | null;
 }) {
-  const [sub, setSub] = useState<ManagerListingSubmissionV1>(() => initialSubmission ?? createDefaultListingSubmission());
+  const [sub, setSub] = useState<ManagerListingSubmissionV1>(() =>
+    initialSubmission ? normalizeManagerListingSubmissionV1(initialSubmission) : createDefaultListingSubmission(),
+  );
   const [busy, setBusy] = useState(false);
   const { userId, ready: authReady } = useManagerUserId();
 
@@ -337,6 +369,38 @@ export function ManagerAddListingForm({
     });
   };
 
+  const onPickHousePhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const cur = sub.housePhotoDataUrls ?? [];
+    const remaining = MAX_HOUSE_PHOTOS - cur.length;
+    if (remaining <= 0) {
+      showToast(`You can add up to ${MAX_HOUSE_PHOTOS} house photos.`);
+      return;
+    }
+    const next: string[] = [...cur];
+    for (let i = 0; i < Math.min(files.length, remaining); i++) {
+      const f = files[i]!;
+      if (!f.type.startsWith("image/")) {
+        showToast("Images only for house photos.");
+        return;
+      }
+      const url = await fileToDataUrl(f, MAX_IMG_BYTES);
+      if (!url) {
+        showToast(`Image too large (max ${Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB): ${f.name}`);
+        return;
+      }
+      next.push(url);
+    }
+    setSub((s) => ({ ...s, housePhotoDataUrls: next }));
+  };
+
+  const removeHousePhoto = (photoIndex: number) => {
+    setSub((s) => ({
+      ...s,
+      housePhotoDataUrls: (s.housePhotoDataUrls ?? []).filter((_, j) => j !== photoIndex),
+    }));
+  };
+
   const clearRoomVideo = (roomIndex: number) => {
     setRoom(roomIndex, { videoDataUrl: null });
   };
@@ -363,8 +427,15 @@ export function ManagerAddListingForm({
         showToast("Sign in to submit a property.");
         return;
       }
-      if (!isEditMode && proTierPropertyLimitReached(skuTier, propCountBeforeSubmit)) {
-        showToast(`Pro includes up to ${PRO_MAX_PROPERTIES} properties. Upgrade to Business to add more.`);
+      if (!isEditMode && managerTierPropertyLimitReached(skuTier, propCountBeforeSubmit)) {
+        const n = normalizeManagerSkuTier(skuTier);
+        showToast(
+          n === "free"
+            ? `Free includes ${FREE_MAX_PROPERTIES} property. Upgrade to Pro or Business to add more.`
+            : n === "pro"
+              ? `Pro includes up to ${PRO_MAX_PROPERTIES} properties. Upgrade to Business to add more.`
+              : `Business includes up to ${BUSINESS_MAX_PROPERTIES} properties.`,
+        );
         return;
       }
       if (editPendingId) {
@@ -427,6 +498,56 @@ export function ManagerAddListingForm({
             title="Building & listing"
             description="Legal address and marketing copy for search and the listing page."
           >
+            <div className="mb-6">
+              <ListingSubsection
+                title="General house photos"
+                description="Exterior, kitchen, living areas, and other shared spaces—these appear at the top of your public listing (not room-specific tours)."
+              >
+                <div>
+                  <FieldLabel hint="Shown in the large photo grid on the listing page.">Upload photos</FieldLabel>
+                  <div className="mt-2 rounded-xl border border-dashed border-slate-200/90 bg-white p-4">
+                    <input
+                      id="house-photos-input"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => {
+                        void onPickHousePhotos(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                    <label
+                      htmlFor="house-photos-input"
+                      className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                    >
+                      Add house photos
+                    </label>
+                    {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
+                          <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                            <img src={url} alt="" className="h-full w-full object-cover" />
+                            <button
+                              type="button"
+                              className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70"
+                              onClick={() => removeHousePhoto(pi)}
+                              aria-label="Remove photo"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-[11px] text-slate-500">
+                        No photos yet — up to {MAX_HOUSE_PHOTOS} images (~{Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB each).
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </ListingSubsection>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <FieldLabel>Building name *</FieldLabel>
@@ -473,56 +594,137 @@ export function ManagerAddListingForm({
 
           <FormSection
             id="edit-lease"
-            title="Lease, fees & signing"
+            title="Lease, fees & resident payments"
             description={
               <>
-                Application, deposit, and signing-day charges. <span className="font-medium text-slate-700">Leave a money field blank or $0 if it does not apply</span> — those
-                lines stay off the public “Lease basics” table.
+                Application, deposit, signing-day charges, and optional Zelle.{" "}
+                <span className="font-medium text-slate-700">Leave a money field blank or $0 if it does not apply</span> — those lines stay off the
+                public “Lease basics” table.
               </>
             }
           >
-            <div className="space-y-6">
-              <div>
-                <FieldLabel>Lease terms & lengths</FieldLabel>
-                <Textarea className="min-h-[72px]" value={sub.leaseTermsBody} onChange={(e) => setSub((s) => ({ ...s, leaseTermsBody: e.target.value }))} />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-5">
+              <ListingSubsection title="Lease terms & lengths">
                 <div>
-                  <FieldLabel hint='e.g. "$50" or "Waived"'>Application fee</FieldLabel>
-                  <Input value={sub.applicationFee} onChange={(e) => setSub((s) => ({ ...s, applicationFee: e.target.value }))} placeholder="$50 or Waived" />
+                  <FieldLabel>Lease terms & lengths</FieldLabel>
+                  <Textarea className="min-h-[72px]" value={sub.leaseTermsBody} onChange={(e) => setSub((s) => ({ ...s, leaseTermsBody: e.target.value }))} />
                 </div>
-                <div>
-                  <FieldLabel>Security deposit</FieldLabel>
-                  <Input value={sub.securityDeposit} onChange={(e) => setSub((s) => ({ ...s, securityDeposit: e.target.value }))} placeholder="$500" />
-                </div>
-                <div>
-                  <FieldLabel>Move-in fee</FieldLabel>
-                  <Input value={sub.moveInFee} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} placeholder="$100 or —" />
-                </div>
-                <div className="sm:col-span-2">
-                  <FieldLabel hint="Select every charge collected when the lease is signed. Totals use your amounts below and per-room rent / utilities.">
-                    Payment due at signing
-                  </FieldLabel>
-                  <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-                    {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
-                      <label key={opt.id} className="flex cursor-pointer items-center gap-2">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300"
-                          checked={sub.paymentAtSigningIncludes.includes(opt.id)}
-                          onChange={(e) =>
-                            setSub((s) => ({
-                              ...s,
-                              paymentAtSigningIncludes: togglePaymentAtSigning(s.paymentAtSigningIncludes, opt.id, e.target.checked),
-                            }))
-                          }
-                        />
-                        <span className="text-sm font-medium text-slate-800">{opt.label}</span>
-                      </label>
-                    ))}
+              </ListingSubsection>
+
+              <ListingSubsection
+                title="Published fees"
+                description="Shown on your listing and on the rental application when relevant."
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <FieldLabel hint='e.g. "$50" or "Waived"'>Application fee</FieldLabel>
+                    <Input value={sub.applicationFee} onChange={(e) => setSub((s) => ({ ...s, applicationFee: e.target.value }))} placeholder="$50 or Waived" />
+                  </div>
+                  <div>
+                    <FieldLabel>Security deposit</FieldLabel>
+                    <Input value={sub.securityDeposit} onChange={(e) => setSub((s) => ({ ...s, securityDeposit: e.target.value }))} placeholder="$500" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <FieldLabel>Move-in fee</FieldLabel>
+                    <Input value={sub.moveInFee} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} placeholder="$100 or —" />
                   </div>
                 </div>
-              </div>
+              </ListingSubsection>
+
+              <ListingSubsection
+                title="Payment due at signing"
+                description="Select every charge collected when the lease is signed. Totals use your amounts above and per-room rent / utilities."
+              >
+                <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                  {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
+                    <label key={opt.id} className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={sub.paymentAtSigningIncludes.includes(opt.id)}
+                        onChange={(e) =>
+                          setSub((s) => ({
+                            ...s,
+                            paymentAtSigningIncludes: togglePaymentAtSigning(s.paymentAtSigningIncludes, opt.id, e.target.checked),
+                          }))
+                        }
+                      />
+                      <span className="text-sm font-medium text-slate-800">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </ListingSubsection>
+
+              <ListingSubsection
+                id="edit-zelle"
+                title="Zelle & application-fee options"
+                description="When Zelle is on, you can still offer the default portal-tracked fee line—applicants pick how they pay on the apply flow."
+              >
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-slate-300"
+                    checked={sub.zellePaymentsEnabled ?? false}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setSub((s) => ({
+                        ...s,
+                        zellePaymentsEnabled: on,
+                        applicationFeeZelleEnabled: on ? (s.applicationFeeZelleEnabled ?? true) : false,
+                      }));
+                    }}
+                  />
+                  <span className="text-sm font-medium text-slate-800">Accept application fees and rent through Zelle</span>
+                </label>
+                <div>
+                  <FieldLabel hint="Phone number or email for your Zelle account (shown to applicants when Zelle is enabled).">Zelle phone or email</FieldLabel>
+                  <Input
+                    value={sub.zelleContact ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, zelleContact: e.target.value }))}
+                    placeholder="+1 555 010 8899 or name@email.com"
+                    disabled={!(sub.zellePaymentsEnabled ?? false)}
+                  />
+                </div>
+                {sub.zellePaymentsEnabled ? (
+                  <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">Application fee payment options</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                        When both are enabled, applicants choose Portal / tracked payment or Zelle before submitting. They still receive an Application ID and can sign up at Create
+                        account—you approve applications before full resident portal access.
+                      </p>
+                    </div>
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-slate-300"
+                        checked={sub.applicationFeeStripeEnabled !== false}
+                        onChange={(e) =>
+                          setSub((s) => ({
+                            ...s,
+                            applicationFeeStripeEnabled: e.target.checked,
+                          }))
+                        }
+                      />
+                      <span className="text-sm font-medium text-slate-800">Offer portal / tracked payment for the application fee</span>
+                    </label>
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-slate-300"
+                        checked={Boolean(sub.applicationFeeZelleEnabled ?? true)}
+                        onChange={(e) =>
+                          setSub((s) => ({
+                            ...s,
+                            applicationFeeZelleEnabled: e.target.checked,
+                          }))
+                        }
+                      />
+                      <span className="text-sm font-medium text-slate-800">Offer Zelle for the application fee</span>
+                    </label>
+                  </div>
+                ) : null}
+              </ListingSubsection>
             </div>
           </FormSection>
 
@@ -601,33 +803,6 @@ export function ManagerAddListingForm({
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addBundle}>
                 + Add bundle
               </Button>
-            </div>
-          </FormSection>
-
-          <FormSection
-            id="edit-zelle"
-            title="Zelle & payments"
-            description="Applicants and residents can pay via Zelle using the contact you provide. You mark payments in the manager Payments tab."
-          >
-            <div className="space-y-3">
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-slate-300"
-                  checked={sub.zellePaymentsEnabled ?? false}
-                  onChange={(e) => setSub((s) => ({ ...s, zellePaymentsEnabled: e.target.checked }))}
-                />
-                <span className="text-sm font-medium text-slate-800">Accept application fees and rent through Zelle</span>
-              </label>
-              <div>
-                <FieldLabel hint="Phone number or email for your Zelle account.">Zelle phone or email</FieldLabel>
-                <Input
-                  value={sub.zelleContact ?? ""}
-                  onChange={(e) => setSub((s) => ({ ...s, zelleContact: e.target.value }))}
-                  placeholder="+1 555 010 8899 or name@email.com"
-                  disabled={!(sub.zellePaymentsEnabled ?? false)}
-                />
-              </div>
             </div>
           </FormSection>
 

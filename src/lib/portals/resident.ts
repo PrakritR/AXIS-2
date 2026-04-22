@@ -5,7 +5,7 @@ import { residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 const residentPortalUnderReview: PortalDefinition = {
   kind: "resident",
   basePath: "/resident",
-  title: "Resident portal",
+  title: "Resident Portal",
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
@@ -16,7 +16,7 @@ const residentPortalUnderReview: PortalDefinition = {
 const residentPortalApproved: PortalDefinition = {
   kind: "resident",
   basePath: "/resident",
-  title: "Resident portal",
+  title: "Resident Portal",
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },

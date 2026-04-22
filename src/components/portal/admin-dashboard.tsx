@@ -135,7 +135,7 @@ export function AdminDashboard() {
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
         <div className="mt-6 grid gap-8 lg:grid-cols-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Axis Pro Portal</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Axis Pro Portal</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <select
                 aria-label="Manager preview"
@@ -164,7 +164,7 @@ export function AdminDashboard() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Owner portal</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner Portal</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <select
                 aria-label="Owner preview"
@@ -193,7 +193,7 @@ export function AdminDashboard() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Resident portal</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Resident Portal</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <select
                 aria-label="Resident preview"

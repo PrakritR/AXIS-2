@@ -11,9 +11,9 @@ export function PortalTierPaywall({ basePath }: { basePath: "/manager" | "/owner
       <div className="mx-auto max-w-lg space-y-4 text-center">
         <p className="text-sm leading-relaxed text-slate-600">
           This area is not included on the <span className="font-semibold text-slate-900">Free</span> plan. Upgrade to{" "}
-          <span className="font-semibold text-slate-900">Pro</span> or <span className="font-semibold text-slate-900">Business</span> to use
-          leases, work orders, calendar, inbox, and other full manager tools. On Free you still have listings, applications, payments, and
-          team access.
+          <span className="font-semibold text-slate-900">Pro</span> or <span className="font-semibold text-slate-900">Business</span> for lease
+          generation, work orders, and higher property & account-link limits. On Free you still have up to 1 property, applications, payments, calendar,
+          inbox, and limited account linking.
         </p>
         <Link href={`${basePath}/plan`} className={primaryCta}>
           View plans &amp; upgrade

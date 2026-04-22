@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
-import { getManagerSubscriptionTier } from "@/lib/manager-access";
+import { getManagerPurchaseSku, normalizeManagerSkuTier, paidWorkspacePortalTitle } from "@/lib/manager-access";
 import type { PreviewPortal } from "@/lib/auth/preview-types";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -41,8 +41,11 @@ export async function buildProPortalDefinition(): Promise<{
   const effectiveUserId = await getEffectiveUserIdForPortal(previewPortal);
   if (!effectiveUserId) redirect("/admin/dashboard");
 
-  const tier = await getManagerSubscriptionTier(effectiveUserId);
-  const isFree = tier === "free";
+  const purchase = await getManagerPurchaseSku(effectiveUserId);
+  const portalTitle = paidWorkspacePortalTitle(purchase.tier, purchase.stripeSubscriptionId);
+  const missingTier = purchase.tier == null || String(purchase.tier).trim() === "";
+  const stripeManaged = Boolean(purchase.stripeSubscriptionId);
+  const isFree = normalizeManagerSkuTier(purchase.tier) === "free" || (missingTier && !stripeManaged);
 
   const previewCookie = await getAdminPreviewFromCookies();
   const showPreviewBanner = hasAdminRole(ctx) && !!previewCookie?.targetUserId;
@@ -59,7 +62,7 @@ export async function buildProPortalDefinition(): Promise<{
   }
 
   return {
-    definition: { ...proPortal, sections: proPortal.sections },
+    definition: { ...proPortal, sections: proPortal.sections, title: portalTitle },
     showPlanBanner: isFree,
     showPreviewBanner,
     previewLabel,

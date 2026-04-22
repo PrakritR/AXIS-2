@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
@@ -35,8 +35,18 @@ export function PropertyCard({ property }: { property: MockProperty }) {
   const listingPath = `/rent/listings/${property.id}`;
   const applyHref = buildRentalApplyHref({ propertyId: property.id });
   const rich = useMemo(() => getListingRichContent(property), [property]);
+  const heroUrls = rich.heroHousePhotoUrls?.filter(Boolean) ?? [];
   const [slide, setSlide] = useState(0);
-  const slideCount = LISTING_PHOTO_IDS.length;
+  const slideCount = heroUrls.length > 0 ? heroUrls.length : LISTING_PHOTO_IDS.length;
+
+  useEffect(() => {
+    setSlide(0);
+  }, [property.id, heroUrls.length]);
+
+  const slideSrc =
+    heroUrls.length > 0
+      ? heroUrls[slide % heroUrls.length]!
+      : listingPhotoSrc(LISTING_PHOTO_IDS[slide % LISTING_PHOTO_IDS.length]!);
 
   const sharedHousing =
     /\bshared\b/i.test(property.tagline) || property.beds >= 5 || /\bco-?living\b/i.test(property.tagline);
@@ -60,16 +70,12 @@ export function PropertyCard({ property }: { property: MockProperty }) {
     Boolean,
   ) as string[];
 
-  const go = (d: number) => setSlide((s) => (s + d + slideCount) % slideCount);
+  const go = (d: number) => setSlide((s) => (s + d + slideCount * 10) % slideCount);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-[0_12px_40px_-28px_rgba(15,23,42,0.12)] transition duration-300 ease-out hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-[0_20px_50px_-28px_rgba(15,23,42,0.16)]">
       <div className="relative aspect-[16/10] overflow-hidden rounded-t-3xl bg-gradient-to-br from-slate-200 to-slate-400">
-        <img
-          src={listingPhotoSrc(LISTING_PHOTO_IDS[slide]!)}
-          alt={title}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
+        <img src={slideSrc} alt={title} className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
         {sharedHousing ? (
           <div className="absolute left-3 top-3">
@@ -99,7 +105,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
           </svg>
         </button>
         <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
-          {LISTING_PHOTO_IDS.map((_, i) => (
+          {Array.from({ length: slideCount }, (_, i) => (
             <button
               key={i}
               type="button"

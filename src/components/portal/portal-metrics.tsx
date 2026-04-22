@@ -53,8 +53,8 @@ export function PortalSegmentedControl<T extends string>({
   );
 }
 
-/** Primary page title in portal workspaces. */
-export const PORTAL_PAGE_TITLE = "text-2xl font-bold tracking-tight text-[#0d1f4e]";
+/** Primary page title in portal workspaces (aligned with Axis Pro Portal dashboard). */
+export const PORTAL_PAGE_TITLE = "text-2xl font-bold tracking-tight text-slate-900";
 
 /** Matches admin Managers / Properties filter row (status + tier pill groups). */
 export type PortalTierFilterId = "all" | "free" | "pro" | "business";
@@ -135,7 +135,7 @@ export function PortalStatRow({ items }: { items: PortalMetricItem[] }) {
           key={k.label}
           className="min-w-[10rem] flex-1 rounded-xl border border-slate-200/80 bg-white px-5 py-4 sm:flex-none sm:min-w-[11rem]"
         >
-          <p className="text-2xl font-bold tabular-nums tracking-tight text-[#0d1f4e]">{k.value}</p>
+          <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{k.value}</p>
           <p className="mt-1 text-xs font-medium text-slate-500">{k.label}</p>
         </div>
       ))}
@@ -174,7 +174,7 @@ export function PortalKpiTabStrip({
         const active = i === activeIndex;
         return (
           <button key={k.label} type="button" onClick={() => onSelect(i)} className={tabButtonClass(active, textAlign)}>
-            <p className="text-2xl font-bold tabular-nums tracking-tight text-[#0d1f4e]">{k.value}</p>
+            <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{k.value}</p>
             <p className="mt-1 text-xs font-medium text-slate-500">{k.label}</p>
           </button>
         );
@@ -276,5 +276,5 @@ export const PORTAL_KPI_CHIP_ACTIVE =
 export const PORTAL_KPI_CHIP_STATIC =
   "rounded-xl border border-slate-200/60 bg-slate-50/90 px-4 py-3 text-left";
 
-export const PORTAL_KPI_VALUE = "text-2xl font-bold tabular-nums tracking-tight text-[#0d1f4e]";
+export const PORTAL_KPI_VALUE = "text-2xl font-bold tabular-nums tracking-tight text-slate-900";
 export const PORTAL_KPI_LABEL = "mt-1 text-xs font-medium text-slate-500";

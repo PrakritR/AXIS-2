@@ -76,5 +76,6 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     applicationFeeAcknowledged: false,
     applicationFeePromoCode: "",
     applicationFeeWaivedByPromo: false,
+    applicationFeePayChannel: "stripe",
   };
 }

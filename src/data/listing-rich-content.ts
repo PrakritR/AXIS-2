@@ -99,6 +99,8 @@ export type BundleCard = {
 
 export type ListingRichContent = {
   heroTagline: string;
+  /** Manager-uploaded general house photos (hero grid + search cards when present). */
+  heroHousePhotoUrls?: string[];
   /** Longer house overview from manager submission; shown under the tagline when set. */
   heroOverview?: string;
   /** House rules / community guidelines for the listing (House rules tab). */

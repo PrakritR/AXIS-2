@@ -26,7 +26,14 @@ type OnboardResponse =
     }
   | { demo: true; message: string; url?: undefined };
 
-export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | "/owner" | "/pro" }) {
+export function PortalStripeConnectPanel({
+  basePath,
+  variant = "page",
+}: {
+  basePath: "/manager" | "/owner" | "/pro";
+  /** `embedded` skips the outer page shell for use inside a modal. */
+  variant?: "page" | "embedded";
+}) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<ConnectStatus | null>(null);
@@ -53,18 +60,19 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
   }, [loadStatus]);
 
   useEffect(() => {
+    if (variant === "embedded") return;
     if (typeof window === "undefined") return;
     const q = new URLSearchParams(window.location.search).get("connect");
     if (q === "done") {
       showToast("Returned from onboarding. Connection status updated below.");
       void loadStatus();
-      window.history.replaceState({}, "", `${basePath}/payments/stripe`);
+      window.history.replaceState({}, "", `${basePath}/payments`);
     } else if (q === "refresh") {
       showToast("Setup link expired — starting a fresh connection step.");
       void loadStatus();
-      window.history.replaceState({}, "", `${basePath}/payments/stripe`);
+      window.history.replaceState({}, "", `${basePath}/payments`);
     }
-  }, [basePath, loadStatus, showToast]);
+  }, [basePath, loadStatus, showToast, variant]);
 
   const startOnboarding = useCallback(async () => {
     setBusy(true);
@@ -113,9 +121,8 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
       ? "Open payout dashboard"
       : "Continue payout setup";
 
-  return (
-    <ManagerPortalPageShell title="Payouts">
-      <div className="max-w-4xl space-y-6 text-sm leading-relaxed text-slate-700">
+  const body = (
+    <div className={`space-y-6 text-sm leading-relaxed text-slate-700 ${variant === "embedded" ? "max-h-[min(72vh,640px)] overflow-y-auto pr-1" : "max-w-4xl"}`}>
         <div className="rounded-2xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">How payouts work</p>
           <p className="mt-2">
@@ -186,6 +193,11 @@ export function PortalStripeConnectPanel({ basePath }: { basePath: "/manager" | 
 
         <ManagerPayoutSplitsForm />
       </div>
-    </ManagerPortalPageShell>
   );
+
+  if (variant === "embedded") {
+    return body;
+  }
+
+  return <ManagerPortalPageShell title="Payouts">{body}</ManagerPortalPageShell>;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PropertyDetailActions } from "@/components/marketing/property-detail-actions";
@@ -21,6 +22,90 @@ import { DEFAULT_LISTING_HOUSE_RULES_FALLBACK, type ListingRichContent } from "@
 
 const sectionScroll =
   "scroll-mt-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+8.75rem))]";
+
+function ListingHeroPhotoGrid({
+  urls,
+  priceRangeLabel,
+}: {
+  urls: string[];
+  priceRangeLabel: string;
+}) {
+  const [slide, setSlide] = useState(0);
+  const n = urls.length;
+  useEffect(() => {
+    setSlide(0);
+  }, [urls.join("|")]);
+
+  const mainUrl = n ? urls[slide % n]! : null;
+  const side1 = n > 1 ? urls[1]! : null;
+  const side2 = n > 2 ? urls[2]! : null;
+
+  const go = (delta: number) => {
+    if (n <= 1) return;
+    setSlide((s) => (s + delta + n) % n);
+  };
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm">
+        {mainUrl ? (
+          <img src={mainUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        ) : null}
+        {n > 0 ? (
+          <div className="absolute right-3 top-3 rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm sm:right-4 sm:top-4 sm:px-3 sm:text-xs">
+            {n > 1 ? `${slide + 1} / ${n}` : "1 / 1"}
+          </div>
+        ) : (
+          <div className="absolute right-3 top-3 rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm sm:right-4 sm:top-4 sm:px-3 sm:text-xs">
+            Gallery
+          </div>
+        )}
+        <div className="absolute bottom-3 right-3 max-w-[min(100%,14rem)] truncate rounded-full bg-white/90 px-3 py-1.5 text-xs font-bold text-slate-900 shadow-md backdrop-blur-sm sm:bottom-4 sm:right-4 sm:max-w-none sm:px-4 sm:py-2 sm:text-sm">
+          {priceRangeLabel}
+        </div>
+        <div className="aspect-[4/3] w-full" />
+        {n > 1 ? (
+          <>
+            <button
+              type="button"
+              aria-label="Previous photo"
+              className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:bg-white"
+              onClick={() => go(-1)}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              aria-label="Next photo"
+              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:bg-white"
+              onClick={() => go(1)}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </>
+        ) : null}
+      </div>
+      <div className="grid grid-rows-2 gap-4">
+        <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-sm">
+          {side1 ? (
+            <img src={side1} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          ) : null}
+          <div className="aspect-[16/10] h-full min-h-[120px] w-full lg:aspect-auto lg:min-h-0" />
+        </div>
+        <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-sm">
+          {side2 ? (
+            <img src={side2} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          ) : null}
+          <div className="aspect-[16/10] h-full min-h-[120px] w-full lg:aspect-auto lg:min-h-0" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function formatBoldSegments(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -111,29 +196,12 @@ export function ListingDetailSections({
   const houseRulesDisplay =
     rich.houseRulesBody?.trim() ||
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
+  const heroUrls = rich.heroHousePhotoUrls ?? [];
   return (
     <div className="bg-[#f4f7fb]">
       <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10"}`}>
         {previewModal ? <ListingStickySubnav mode="modal" /> : null}
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm">
-            <div className="absolute right-3 top-3 rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm sm:right-4 sm:top-4 sm:px-3 sm:text-xs">
-              1 / 16
-            </div>
-            <div className="absolute bottom-3 right-3 max-w-[min(100%,14rem)] truncate rounded-full bg-white/90 px-3 py-1.5 text-xs font-bold text-slate-900 shadow-md backdrop-blur-sm sm:bottom-4 sm:right-4 sm:max-w-none sm:px-4 sm:py-2 sm:text-sm">
-              {rich.priceRangeLabel}
-            </div>
-            <div className="aspect-[4/3] w-full" />
-          </div>
-          <div className="grid grid-rows-2 gap-4">
-            <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-sm">
-              <div className="aspect-[16/10] h-full min-h-[120px] w-full lg:aspect-auto lg:min-h-0" />
-            </div>
-            <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-sm">
-              <div className="aspect-[16/10] h-full min-h-[120px] w-full lg:aspect-auto lg:min-h-0" />
-            </div>
-          </div>
-        </div>
+        <ListingHeroPhotoGrid urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
 
         <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>

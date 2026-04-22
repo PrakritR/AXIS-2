@@ -18,6 +18,9 @@ import {
   type ProRelationshipPerspective,
   type ProRelationshipRecord,
 } from "@/lib/pro-relationships";
+import { maxAccountLinksForTier, normalizeManagerSkuTier } from "@/lib/manager-access";
+import Link from "next/link";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 function propertyChoices(userId: string): { id: string; label: string }[] {
   const live = readExtraListingsForUser(userId);
@@ -40,6 +43,7 @@ export function ProAccountLinksPanel({
   userId: string;
 }) {
   const { showToast } = useAppUi();
+  const planBase = usePaidPortalBasePath();
   const perspective: ProRelationshipPerspective =
     mode === "owner" ? "owner_linked_manager" : "manager_linked_owner";
 
@@ -72,6 +76,32 @@ export function ProAccountLinksPanel({
 
   const [selectedProps, setSelectedProps] = useState<Record<string, boolean>>({});
   const [payoutDraft, setPayoutDraft] = useState(15);
+  const [skuTier, setSkuTier] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/manager/subscription", { credentials: "include" });
+        const body = (await res.json()) as { tier?: string | null; isFree?: boolean };
+        if (!res.ok || cancelled) return;
+        if (body.isFree) {
+          setSkuTier("free");
+          return;
+        }
+        const t = body.tier?.trim() ?? null;
+        setSkuTier(normalizeManagerSkuTier(t) ?? t);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const linkCap = maxAccountLinksForTier(skuTier);
+  const atLinkCap = linkCap != null && rows.length >= linkCap;
 
   const lookup = async () => {
     const raw = axisInput.trim();
@@ -123,6 +153,12 @@ export function ProAccountLinksPanel({
   };
 
   const saveNewLink = () => {
+    if (linkCap != null && rows.length >= linkCap) {
+      showToast(
+        `Your plan allows up to ${linkCap} linked ${mode === "owner" ? "manager" : "owner"} account${linkCap === 1 ? "" : "s"} on this tab.`,
+      );
+      return;
+    }
     if (!draftAxisId || !draftUserId) {
       showToast(`Verify an ${AXIS_ID_LABEL} first.`);
       return;
@@ -198,12 +234,21 @@ export function ProAccountLinksPanel({
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
             {mode === "owner" ? "Owner perspective" : "Manager perspective"}
           </p>
-          <h2 className="mt-2 text-xl font-bold tracking-tight text-[#0d1f4e]">{title}</h2>
+          <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900">{title}</h2>
           <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            Enter another paid workspace&apos;s <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span>. We verify the account is on{" "}
-            <span className="font-semibold">Pro</span> or <span className="font-semibold">Business</span>, then you assign which properties belong to
-            this relationship and what percentage the manager receives on those properties.
+            Enter another workspace&apos;s <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span>. We confirm it&apos;s a valid manager or owner
+            account, then you choose which properties belong to this relationship and what percentage the manager receives on those properties.
           </p>
+          {linkCap != null ? (
+            <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
+              Your plan allows up to <span className="font-semibold text-slate-900">{linkCap}</span>{" "}
+              {mode === "owner" ? "manager" : "owner"} link{linkCap === 1 ? "" : "s"} on this tab ({rows.length}/{linkCap} used).{" "}
+              <Link href={`${planBase}/plan`} className="font-semibold text-primary underline-offset-2 hover:underline">
+                Upgrade
+              </Link>{" "}
+              for higher caps.
+            </p>
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-6 shadow-sm">
@@ -219,10 +264,26 @@ export function ProAccountLinksPanel({
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
             </label>
-            <Button type="button" className="rounded-full px-6" disabled={lookupBusy} onClick={() => void lookup()}>
+            <Button
+              type="button"
+              className="rounded-full px-6"
+              disabled={lookupBusy || atLinkCap}
+              onClick={() => void lookup()}
+              title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
+            >
               {lookupBusy ? "Checking…" : "Verify account"}
             </Button>
           </div>
+
+          {atLinkCap ? (
+            <p className="mt-3 text-xs text-rose-700">
+              Link limit reached for this tab. Remove a link below or upgrade on{" "}
+              <Link href={`${planBase}/plan`} className="font-semibold underline">
+                Plan
+              </Link>
+              .
+            </p>
+          ) : null}
 
           {draftAxisId ? (
             <div className="mt-6 space-y-5 border-t border-slate-100 pt-6">

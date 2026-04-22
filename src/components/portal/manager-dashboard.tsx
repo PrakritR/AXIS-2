@@ -213,7 +213,7 @@ export function ManagerDashboard() {
           <p className="rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950">
             <span className="font-semibold">{demoKpis.payments.overdue}</span> payment line
             {Number(demoKpis.payments.overdue) === 1 ? " is" : "s are"} overdue.{" "}
-            <Link className="font-semibold text-primary underline-offset-2 hover:underline" href={`${portalBase}/payments/ledger`}>
+            <Link className="font-semibold text-primary underline-offset-2 hover:underline" href={`${portalBase}/payments`}>
               Open payments
             </Link>
           </p>
@@ -246,7 +246,7 @@ export function ManagerDashboard() {
           <StatLink label="Properties" value={String(pipelineSummary.totalProperties)} href={`${portalBase}/properties`} />
           <StatLink label="Applications" value={String(applicationRows.length)} href={`${portalBase}/applications`} />
           <StatLink label="Leases" value={String(leasePipelineCount)} href={`${portalBase}/leases`} />
-          <StatLink label="Payments" value={String(paymentLineCount)} href={`${portalBase}/payments/ledger`} />
+          <StatLink label="Payments" value={String(paymentLineCount)} href={`${portalBase}/payments`} />
           <StatLink label="Work orders" value={String(workOrderRows.length)} href={`${portalBase}/work-orders`} />
           <StatLink label="Inbox" value={String(inboxUnopenedCount)} href={`${portalBase}/inbox/unopened`} />
         </div>

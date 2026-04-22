@@ -77,6 +77,11 @@ export type RentalWizardFormState = {
   /** Step 12 — optional promo to waive the listing application fee (e.g. FEEWAIVE). */
   applicationFeePromoCode: string;
   applicationFeeWaivedByPromo: boolean;
+  /**
+   * Step 12 — how the applicant will satisfy the listing application fee when the listing offers both portal tracking and Zelle.
+   * “stripe” names the tracked fee line (no live card capture in this demo).
+   */
+  applicationFeePayChannel: "stripe" | "zelle";
 };
 
 /** Field and step-level messages (string keys so consent booleans can still surface errors). */

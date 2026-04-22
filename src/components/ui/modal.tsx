@@ -8,11 +8,14 @@ export function Modal({
   title,
   onClose,
   children,
+  panelClassName,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Override default panel width (e.g. wide onboarding / payouts). */
+  panelClassName?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -33,7 +36,12 @@ export function Modal({
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative z-[71] w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-2xl">
+      <div
+        className={
+          panelClassName ??
+          "relative z-[71] w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-2xl"
+        }
+      >
         <div className="flex items-start justify-between gap-4">
           <h3 className="text-lg font-semibold text-foreground">{title}</h3>
           <button

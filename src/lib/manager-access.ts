@@ -1,7 +1,9 @@
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
-/** Pro tier includes up to this many active properties (pending + live listings in demo). Business is unlimited. */
+/** Property caps by plan (houses / listings in the portal). Legacy unknown tier → no numeric cap (`null`). */
+export const FREE_MAX_PROPERTIES = 1;
 export const PRO_MAX_PROPERTIES = 2;
+export const BUSINESS_MAX_PROPERTIES = 20;
 
 export type ManagerSkuTier = "free" | "pro" | "business";
 
@@ -14,14 +16,17 @@ export const MANAGER_TIER_MONTHLY_USD: Record<ManagerSkuTier, number> = {
 
 /**
  * Sections available on Free / “owner starter” subscription for managers and owners:
- * listings, applications, rent collection (including payouts under Payments), account & upgrade.
- * Everything else (leases, work orders, calendar, inbox, etc.) requires Pro+.
+ * listings, applications, payments, account linking, calendar, inbox, profile, plan.
+ * Other sections (e.g. leases, work orders) still require Pro+.
  */
 export const FREE_SUBSCRIPTION_SECTIONS = new Set([
   "dashboard",
   "properties",
   "applications",
   "payments",
+  "relationships",
+  "calendar",
+  "inbox",
   "profile",
   "plan",
 ]);
@@ -44,13 +49,34 @@ export function isBusinessSkuTier(tier: string | null | undefined): boolean {
   return normalizeManagerSkuTier(tier) === "business";
 }
 
-/**
- * Pro tier is capped at PRO_MAX_PROPERTIES; Business and legacy (unknown tier with paid access) are uncapped.
- * Free tier uses the same property UI but marketing limits may apply separately.
- */
+/** Max properties allowed for this tier; `null` = legacy / uncapped in UI. */
+export function maxPropertiesForManagerTier(tier: string | null | undefined): number | null {
+  const n = normalizeManagerSkuTier(tier);
+  if (n === "free") return FREE_MAX_PROPERTIES;
+  if (n === "pro") return PRO_MAX_PROPERTIES;
+  if (n === "business") return BUSINESS_MAX_PROPERTIES;
+  return null;
+}
+
+/** True when the user cannot add another property without upgrading. */
+export function managerTierPropertyLimitReached(tier: string | null | undefined, propertyCount: number): boolean {
+  const max = maxPropertiesForManagerTier(tier);
+  if (max === null) return false;
+  return propertyCount >= max;
+}
+
+/** Max linked owners or linked managers per account-links tab (same cap both directions). */
+export function maxAccountLinksForTier(tier: string | null | undefined): number | null {
+  const n = normalizeManagerSkuTier(tier);
+  if (n === "free") return 1;
+  if (n === "pro") return 2;
+  if (n === "business") return 20;
+  return null;
+}
+
+/** @deprecated use managerTierPropertyLimitReached */
 export function proTierPropertyLimitReached(tier: string | null | undefined, propertyCount: number): boolean {
-  if (!isProSkuTier(tier)) return false;
-  return propertyCount >= PRO_MAX_PROPERTIES;
+  return managerTierPropertyLimitReached(tier, propertyCount);
 }
 
 /** Monthly amount in USD for a normalized tier; legacy / unknown tier → null. */
@@ -65,6 +91,23 @@ export function formatManagerMonthlyLabel(tier: string | null | undefined): stri
   if (usd === null) return "—";
   if (usd === 0) return "$0/mo";
   return `$${usd}/mo`;
+}
+
+/**
+ * Sidebar branding for `/pro` (and shared paid workspace nav): reflects actual plan, not a generic “Pro” label.
+ */
+export function paidWorkspacePortalTitle(tierRaw: string | null | undefined, stripeSubscriptionId: string | null | undefined): string {
+  const stripeManaged = Boolean(stripeSubscriptionId?.trim());
+  const normalized = normalizeManagerSkuTier(tierRaw);
+  if (normalized === "free") return "Free Portal";
+  if (normalized === "pro") return "Pro Portal";
+  if (normalized === "business") return "Business Portal";
+
+  const missingTier = tierRaw == null || String(tierRaw).trim() === "";
+  if (missingTier && !stripeManaged) return "Free Portal";
+  if (missingTier && stripeManaged) return "Pro Portal";
+
+  return "Axis Pro Portal";
 }
 
 /**

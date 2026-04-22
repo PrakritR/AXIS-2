@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { MANAGER_PLAN_TIERS } from "@/data/manager-plan-tiers";
@@ -136,7 +137,7 @@ export function ManagerPlan() {
 
   const openBillingPortal = async () => {
     if (!sub?.stripeManaged || busyTier !== null || billingSyncBusy || billingPortalBusy) return;
-    setBillingPortalBusy(true);
+    flushSync(() => setBillingPortalBusy(true));
     try {
       const res = await fetch("/api/stripe/billing-portal", {
         method: "POST",
@@ -158,7 +159,7 @@ export function ManagerPlan() {
   };
 
   const startStripeCheckout = async (tier: "pro" | "business") => {
-    setBusyTier(tier);
+    flushSync(() => setBusyTier(tier));
     try {
       const res = await fetch("/api/stripe/checkout-portal", {
         method: "POST",
@@ -184,8 +185,8 @@ export function ManagerPlan() {
   };
 
   const setTierViaApi = async (tier: ManagerSkuTier, opts?: { billingInterval?: "monthly" | "annual"; billingOnly?: boolean }) => {
-    if (opts?.billingOnly) setBillingSyncBusy(true);
-    else setBusyTier(tier);
+    if (opts?.billingOnly) flushSync(() => setBillingSyncBusy(true));
+    else flushSync(() => setBusyTier(tier));
     try {
       const res = await fetch("/api/stripe/subscription/update-tier", {
         method: "POST",
@@ -361,7 +362,7 @@ export function ManagerPlan() {
                   <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{t.label}</p>
 
                   <div className="mt-4 flex flex-nowrap items-baseline gap-x-1">
-                    <span className="shrink-0 text-4xl font-black tracking-tight text-[#0d1f4e]">{pb.headline}</span>
+                    <span className="shrink-0 text-4xl font-black tracking-tight text-slate-900">{pb.headline}</span>
                     {pb.period ? (
                       <span className="whitespace-nowrap text-sm font-medium leading-none text-slate-400">{pb.period}</span>
                     ) : null}
@@ -395,6 +396,29 @@ export function ManagerPlan() {
             })}
           </div>
         )}
+
+        <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-5 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Axis platform fees</p>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            When residents pay application fees or rent through Axis with live processing, these platform fees apply before payouts (unless overridden in
+            your environment).
+          </p>
+          <ul className="mt-4 space-y-2 text-sm text-slate-700">
+            <li>
+              <span className="font-semibold text-slate-900">Free</span> — 2% of application fees · 0.25% of rent collected
+            </li>
+            <li>
+              <span className="font-semibold text-slate-900">Pro</span> — 2% of application fees · 0% on rent
+            </li>
+            <li>
+              <span className="font-semibold text-slate-900">Business</span> — 0% on application fees & rent (no Axis take on those payments)
+            </li>
+          </ul>
+          <p className="mt-3 text-xs text-slate-500">
+            Limits at a glance: Free — 1 property, no leases/work orders, 1 linked partner per tab. Pro — 2 of each. Business — 20 of each, plus zero
+            platform fees above.
+          </p>
+        </div>
 
         <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-5 py-4 text-sm text-slate-600">
           <span className="font-semibold text-slate-900">Billing: </span>

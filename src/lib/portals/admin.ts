@@ -4,7 +4,7 @@ import type { PortalDefinition } from "@/lib/portal-types";
 export const adminPortal: PortalDefinition = {
   kind: "admin",
   basePath: "/admin",
-  title: "Admin portal",
+  title: "Admin Portal",
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },

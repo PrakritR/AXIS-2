@@ -51,7 +51,34 @@ export async function POST(req: Request) {
     const stripe = getStripe();
 
     if (targetTier === "free") {
-      await stripe.subscriptions.cancel(stripeSubscriptionId);
+      try {
+        const existing = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+        const terminal = existing.status === "canceled" || existing.status === "incomplete_expired";
+        if (!terminal) {
+          try {
+            await stripe.subscriptions.cancel(stripeSubscriptionId);
+          } catch (cancelErr: unknown) {
+            const msg = cancelErr instanceof Error ? cancelErr.message : String(cancelErr);
+            const code =
+              typeof cancelErr === "object" && cancelErr !== null && "code" in cancelErr
+                ? String((cancelErr as { code?: string }).code)
+                : "";
+            const benign =
+              code === "resource_missing" ||
+              /\bcanceled\b/i.test(msg) ||
+              msg.toLowerCase().includes("no such subscription");
+            if (!benign) throw cancelErr;
+          }
+        }
+      } catch (e: unknown) {
+        const code =
+          typeof e === "object" && e !== null && "code" in e ? String((e as { code?: string }).code) : "";
+        const msg = e instanceof Error ? e.message : String(e);
+        const missing = code === "resource_missing" || msg.toLowerCase().includes("no such subscription");
+        if (!missing) throw e;
+        /* Subscription already removed in Stripe — still clear our row below. */
+      }
+
       const { error } = await supabase
         .from("manager_purchases")
         .update({ tier: "free", billing: "free", stripe_subscription_id: null })

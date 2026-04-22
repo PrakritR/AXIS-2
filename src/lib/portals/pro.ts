@@ -10,14 +10,7 @@ export const proPortal: PortalDefinition = {
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
-    {
-      section: "payments",
-      label: "Payments",
-      tabs: [
-        { id: "ledger", label: "Rent & collections" },
-        { id: "stripe", label: "Payouts" },
-      ],
-    },
+    { section: "payments", label: "Payments", tabs: [] },
     {
       section: "relationships",
       label: "Account links",
@@ -29,7 +22,6 @@ export const proPortal: PortalDefinition = {
     { section: "leases", label: "Leases", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },
-    { section: "plan", label: "Plan", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",
@@ -40,6 +32,7 @@ export const proPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
+    { section: "plan", label: "Plan", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
   ],
 };

@@ -470,8 +470,10 @@ export function listingRichFromManagerSubmission(
 
   const overview = sub.houseOverview.trim();
   const rules = sub.houseRulesText.trim();
+  const heroHouse = (sub.housePhotoDataUrls ?? []).filter(Boolean);
   return {
     heroTagline: sub.tagline.trim() || property.tagline || "New listing",
+    heroHousePhotoUrls: heroHouse.length ? heroHouse : undefined,
     heroOverview: overview || undefined,
     houseRulesBody: rules || undefined,
     priceRangeLabel: mids.length ? `from $${low}–$${high}/mo` : "—",

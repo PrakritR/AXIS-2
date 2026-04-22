@@ -15,6 +15,7 @@ import {
 } from "@/lib/household-charges";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getPropertyById, getPropertySelectOptions, getRoomOptionsForProperty } from "@/lib/rental-application/data";
+import { resolveApplicationFeePayChannel } from "@/lib/rental-application/application-fee-channel";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
@@ -207,6 +208,15 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     });
   }, []);
 
+  useEffect(() => {
+    if (!draftReady || step !== 12) return;
+    const pid = form.propertyId.trim();
+    const prop = pid ? getPropertyById(pid) : undefined;
+    const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+    const next = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
+    if (next !== form.applicationFeePayChannel) patchForm({ applicationFeePayChannel: next });
+  }, [draftReady, step, form.propertyId, form.applicationFeePayChannel, patchForm]);
+
   const setPhoneMasked = useCallback((key: keyof RentalWizardFormState, next: string) => {
     setForm((f) => ({ ...f, [key]: maskPhoneInput(String(f[key] ?? ""), next) }));
     setErrors((e) => ({ ...e, [key]: "" }));
@@ -384,15 +394,23 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>
             <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Save your Application ID</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-700">
-              Use this ID when you create your resident account, and share it with a co-signer if they are filing separately. Other move-in
-              charges from the listing appear under Payments in the resident portal; your manager marks Zelle or offline payments as received.
+              Use this ID when you create your resident account (use the button below to open signup with it filled in). Share it with a
+              co-signer if they are filing separately. Other move-in charges from the listing appear under Payments in the resident portal; your
+              manager marks Zelle or offline payments as received. After signup, your manager approves your application before the full resident
+              portal unlocks.
             </p>
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Application ID</p>
               <p className="mt-2 font-mono text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{postSubmit.applicationId}</p>
             </div>
-            <div className="mt-8">
-              <Button type="button" className="min-h-[48px] px-8" onClick={() => setPostSubmit(null)}>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <Link
+                href={`/auth/create-account?role=resident&application_id=${encodeURIComponent(postSubmit.applicationId)}`}
+                className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-8 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:translate-y-px"
+              >
+                Create resident account with Application ID
+              </Link>
+              <Button type="button" variant="outline" className="min-h-[48px] px-8" onClick={() => setPostSubmit(null)}>
                 Done
               </Button>
             </div>

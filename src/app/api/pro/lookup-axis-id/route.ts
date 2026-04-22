@@ -1,18 +1,10 @@
 import { NextResponse } from "next/server";
-import { getManagerPurchaseSku } from "@/lib/manager-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-function isPaidTier(tier: string | null, stripeSubscriptionId: string | null): boolean {
-  const t = tier?.toLowerCase().trim() ?? "";
-  if (t === "pro" || t === "business") return true;
-  if (stripeSubscriptionId?.trim()) return true;
-  return false;
-}
-
 /**
- * Resolve another account by Axis ID (`profiles.manager_id`) and confirm they have a paid subscription.
+ * Resolve another workspace by Axis ID (`profiles.manager_id`). Manager and owner roles can link regardless of plan.
  */
 export async function GET(req: Request) {
   try {
@@ -39,16 +31,7 @@ export async function GET(req: Request) {
     const role = String(profile.role ?? "").toLowerCase();
     if (role !== "manager" && role !== "owner") {
       return NextResponse.json(
-        { ok: false, error: "This account is not eligible for Axis Pro linking (must be a manager or owner workspace)." },
-        { status: 400 },
-      );
-    }
-
-    const sku = await getManagerPurchaseSku(profile.id);
-    const paid = isPaidTier(sku.tier, sku.stripeSubscriptionId);
-    if (!paid) {
-      return NextResponse.json(
-        { ok: false, error: "This account must be on a paid plan (Pro or Business) before you can link." },
+        { ok: false, error: "This account is not eligible for linking (must be a manager or owner workspace)." },
         { status: 400 },
       );
     }

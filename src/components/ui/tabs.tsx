@@ -50,7 +50,7 @@ export function TabNav({
   return (
     <div
       ref={wrapRef}
-      className="relative flex flex-wrap gap-1 rounded-full border border-border bg-slate-50/90 p-1 backdrop-blur-sm"
+      className="relative flex flex-wrap gap-1 rounded-full border border-slate-200 bg-slate-50 p-1"
     >
       {pill.w > 0 ? (
         <span
@@ -70,7 +70,7 @@ export function TabNav({
               else linkRefs.current.delete(t.id);
             }}
             className={`relative z-10 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
-              active ? "text-primary-foreground" : "text-muted hover:text-foreground"
+              active ? "text-primary-foreground" : "text-slate-600 hover:text-slate-900"
             }`}
           >
             {t.label}
@@ -128,7 +128,7 @@ export function PillTabs({
   return (
     <div
       ref={wrapRef}
-      className="relative flex flex-wrap gap-1 rounded-full border border-border bg-slate-50/90 p-1 backdrop-blur-sm"
+      className="relative flex flex-wrap gap-1 rounded-full border border-slate-200 bg-slate-50 p-1"
     >
       {pill.w > 0 ? (
         <span
@@ -149,7 +149,7 @@ export function PillTabs({
             }}
             onClick={() => onChange(t.id)}
             className={`relative z-10 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
-              active ? "text-primary-foreground" : "text-muted hover:text-foreground"
+              active ? "text-primary-foreground" : "text-slate-600 hover:text-slate-900"
             }`}
           >
             {t.label}
@@ -174,7 +174,7 @@ export function SectionTabs({
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
         <div className="mt-3">
           <TabNav items={tabs} activeId={activeId} />
         </div>

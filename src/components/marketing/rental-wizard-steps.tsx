@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { APPLICATION_FEE_PROMO_WAIVE_CODE, removePendingApplicationFeeCharge } from "@/lib/household-charges";
+import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
 import { LEASE_TERM_OPTIONS, getPropertyById, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
@@ -1328,8 +1329,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const sdLabel = sub?.securityDeposit?.trim() || "—";
     const signingLabel = sub ? paymentAtSigningPriceLabel(sub) : "—";
     const utilLabel = sub ? utilitiesListingEstimateLabel(sub) : "—";
-    const zelleOn = Boolean(sub?.zellePaymentsEnabled && sub.zelleContact?.trim());
+    const channels = listingApplicationFeeChannels(sub);
     const gate = applicationFeeGate;
+    const feeDecisionNeeded = gate.needsFee && !gate.waived && !gate.paid;
+    const showStripeInstructions =
+      channels.stripe && (!channels.zelle || form.applicationFeePayChannel === "stripe") && feeDecisionNeeded;
+    const showZelleInstructions =
+      channels.zelle && (!channels.stripe || form.applicationFeePayChannel === "zelle") && feeDecisionNeeded;
+    const showChannelPick = channels.stripe && channels.zelle && feeDecisionNeeded;
     return (
       <div className="space-y-6">
         <div>
@@ -1339,7 +1346,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             shows “—”, the property has not published that fee yet — confirm with the manager. When an application fee applies, you must pay it
             (your manager marks it received in this demo) or enter promo code <span className="font-mono font-semibold">FEEWAIVE</span> before
             you can submit and receive an Application ID. Submitting also creates other move-in lines in your resident portal; there is no live
-            card charge here.
+            card charge here. If this listing offers both Zelle and a tracked portal payment for the fee, choose how you will pay below before
+            your manager marks it received.
           </StepIntro>
         </div>
         {gate.needsFee ? (
@@ -1364,7 +1372,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               </p>
             ) : (
               <p>
-                <span className="font-semibold">Application fee required.</span> Pay the amount below (e.g. via Zelle if shown), then ask your
+                <span className="font-semibold">Application fee required.</span>{" "}
+                {showZelleInstructions && !showStripeInstructions ? (
+                  <>Send the amount via Zelle using the contact below, then ask your </>
+                ) : (
+                  <>Pay or settle the amount using the path you selected below, then ask your </>
+                )}
                 manager to mark the fee paid in Payments, or use promo {APPLICATION_FEE_PROMO_WAIVE_CODE} to waive it in this demo.
               </p>
             )}
@@ -1389,12 +1402,59 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               ) : null}
             </ul>
           </div>
-          {zelleOn ? (
+          {showChannelPick ? (
+            <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-white px-4 py-4">
+              <p className="text-sm font-semibold text-slate-900">How will you pay the application fee?</p>
+              <p className="text-xs leading-relaxed text-slate-600">
+                Pick one. No card is charged on this page—your manager confirms funds and marks the line paid in Payments.
+              </p>
+              <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                <input
+                  type="radio"
+                  name="application-fee-channel"
+                  className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
+                  checked={form.applicationFeePayChannel === "stripe"}
+                  onChange={() => patch({ applicationFeePayChannel: "stripe" })}
+                />
+                <span>
+                  <span className="text-sm font-semibold text-slate-900">Portal / tracked payment</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                    Manager records receipt when ready (card-on-file elsewhere, ACH, cash, etc.—whatever your house uses).
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                <input
+                  type="radio"
+                  name="application-fee-channel"
+                  className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
+                  checked={form.applicationFeePayChannel === "zelle"}
+                  onChange={() => patch({ applicationFeePayChannel: "zelle" })}
+                />
+                <span>
+                  <span className="text-sm font-semibold text-slate-900">Zelle</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                    Send from your bank&apos;s Zelle screen using the household contact shown below.
+                  </span>
+                </span>
+              </label>
+            </div>
+          ) : null}
+          {showStripeInstructions ? (
+            <div className="mt-4 rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm text-slate-700">
+              <p className="font-semibold text-slate-900">Tracked application fee</p>
+              <p className="mt-1 leading-relaxed">
+                Your manager marks this line paid in Payments after they verify the funds. Use the same email you used on this application so
+                the charge links to you.
+              </p>
+            </div>
+          ) : null}
+          {showZelleInstructions && sub?.zelleContact?.trim() ? (
             <div className="mt-4 rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
               <p className="font-semibold">Zelle payment</p>
-              <p className="mt-1">
-                Send to <span className="font-mono font-semibold">{sub!.zelleContact!.trim()}</span>. Include your name and unit in the memo.
-                Your manager will mark the charge paid when funds are received.
+              <p className="mt-1 leading-relaxed">
+                Send to <span className="font-mono font-semibold">{sub.zelleContact.trim()}</span>. Include your name and preferred unit in the
+                memo. Your manager will mark the charge paid when funds are received.
               </p>
             </div>
           ) : null}

@@ -1,12 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
+import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import { householdChargeToLedgerRow, HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
@@ -27,12 +28,33 @@ export function ManagerPayments() {
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [hcTick, setHcTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
+  const [payoutsOpen, setPayoutsOpen] = useState(false);
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const payouts = params.get("payouts");
+    const connect = params.get("connect");
+    if (payouts === "1" || connect === "done" || connect === "refresh") {
+      setPayoutsOpen(true);
+      if (connect === "done") {
+        showToast("Returned from onboarding. Connection status updated in Payouts.");
+      } else if (connect === "refresh") {
+        showToast("Setup link expired — starting a fresh connection step.");
+      }
+      params.delete("payouts");
+      params.delete("connect");
+      const next = params.toString();
+      const path = `${window.location.pathname}${next ? `?${next}` : ""}`;
+      window.history.replaceState({}, "", path);
+    }
+  }, [showToast]);
 
   const mergedRows = useMemo(() => {
     void hcTick;
@@ -61,6 +83,9 @@ export function ManagerPayments() {
       titleAside={
         <>
           <PortalPropertyFilterPill residents />
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => setPayoutsOpen(true)}>
+            Payouts
+          </Button>
           <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setAddOpen(true)}>
             Add payment
           </Button>
@@ -80,11 +105,15 @@ export function ManagerPayments() {
       filterRow={
         <div className="flex flex-col gap-4">
           <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
-            <span className="font-semibold text-slate-900">Receiving rent & fees:</span> complete payout setup on the{" "}
-            <Link href={`${portalBase}/payments/stripe`} className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90">
+            <span className="font-semibold text-slate-900">Receiving rent & fees:</span> open{" "}
+            <button
+              type="button"
+              className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90"
+              onClick={() => setPayoutsOpen(true)}
+            >
               Payouts
-            </Link>{" "}
-            tab so funds can route to your bank when billing goes live.
+            </button>{" "}
+            to connect your bank so funds can route when billing goes live.
           </div>
           <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
         </div>
@@ -99,6 +128,15 @@ export function ManagerPayments() {
           setAddOpen(false);
         }}
       />
+
+      <Modal
+        open={payoutsOpen}
+        title="Payouts"
+        onClose={() => setPayoutsOpen(false)}
+        panelClassName="relative z-[71] max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-2xl"
+      >
+        <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
+      </Modal>
     </ManagerPortalPageShell>
   );
 }

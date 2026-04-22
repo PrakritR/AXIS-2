@@ -22,15 +22,17 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json().catch(() => ({}))) as { basePath?: string };
-    const basePath = body.basePath === "/owner" ? "/owner" : "/manager";
+    const raw = body.basePath?.trim();
+    const basePath =
+      raw === "/owner" ? "/owner" : raw === "/pro" ? "/pro" : "/manager";
 
     const h = await headers();
     const host = h.get("x-forwarded-host") ?? h.get("host");
     const proto = h.get("x-forwarded-proto") ?? "http";
     const origin = host ? `${proto}://${host}` : "http://localhost:3000";
 
-    const refreshUrl = `${origin}${basePath}/payments/stripe?connect=refresh`;
-    const returnUrl = `${origin}${basePath}/payments/stripe?connect=done`;
+    const refreshUrl = `${origin}${basePath}/payments?connect=refresh`;
+    const returnUrl = `${origin}${basePath}/payments?connect=done`;
 
     try {
       const stripe = getStripe();
@@ -54,7 +56,7 @@ export async function POST(req: Request) {
           },
           metadata: {
             axis_user_id: user.id,
-            axis_portal: basePath === "/owner" ? "owner" : "manager",
+            axis_portal: basePath === "/owner" ? "owner" : basePath === "/pro" ? "pro" : "manager",
           },
         });
         accountId = account.id;

@@ -17,7 +17,14 @@ import {
   readPendingManagerPropertiesForUser,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
-import { PRO_MAX_PROPERTIES, proTierPropertyLimitReached } from "@/lib/manager-access";
+import {
+  BUSINESS_MAX_PROPERTIES,
+  FREE_MAX_PROPERTIES,
+  managerTierPropertyLimitReached,
+  maxPropertiesForManagerTier,
+  normalizeManagerSkuTier,
+  PRO_MAX_PROPERTIES,
+} from "@/lib/manager-access";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
@@ -130,7 +137,8 @@ export function ManagerProperties() {
     }
   }, [userId, searchParams, router, showToast, portalBase]);
 
-  const atProLimit = skuLoaded && proTierPropertyLimitReached(skuTier, propCount);
+  const atPropertyLimit = skuLoaded && managerTierPropertyLimitReached(skuTier, propCount);
+  const limitMax = maxPropertiesForManagerTier(skuTier);
 
   const tryOpenAdd = () => {
     if (!skuLoaded) {
@@ -138,9 +146,14 @@ export function ManagerProperties() {
       void loadSku();
       return;
     }
-    if (atProLimit) {
+    if (atPropertyLimit) {
+      const n = normalizeManagerSkuTier(skuTier);
       showToast(
-        `Pro includes up to ${PRO_MAX_PROPERTIES} properties. Upgrade to Business to add more.`,
+        n === "free"
+          ? `Free includes ${FREE_MAX_PROPERTIES} property. Upgrade to Pro or Business for more.`
+          : n === "pro"
+            ? `Pro includes up to ${PRO_MAX_PROPERTIES} properties. Upgrade to Business for more.`
+            : `Business includes up to ${BUSINESS_MAX_PROPERTIES} properties.`,
       );
       return;
     }
@@ -195,11 +208,11 @@ export function ManagerProperties() {
           </>
         }
       >
-        {atProLimit ? (
+        {atPropertyLimit && limitMax != null ? (
           <p className="mb-4 rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950">
-            You’ve reached the Pro limit of {PRO_MAX_PROPERTIES} properties.{" "}
+            You’ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.{" "}
             <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={`${portalBase}/plan`}>
-              Upgrade to Business
+              View plans
             </Link>{" "}
             to add more.
           </p>

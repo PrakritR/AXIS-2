@@ -50,6 +50,12 @@ function CreateAccountContent() {
     setOwnerInviteRef(searchParams.get("slot") ?? "");
   }, [searchParams]);
 
+  const applicationIdFromUrl = useMemo(() => searchParams.get("application_id")?.trim() ?? "", [searchParams]);
+
+  useEffect(() => {
+    if (applicationIdFromUrl) setApplicationId(applicationIdFromUrl);
+  }, [applicationIdFromUrl]);
+
   useEffect(() => {
     if (role !== "manager" || !sessionIdFromUrl) {
       setCheckoutPreview(null);

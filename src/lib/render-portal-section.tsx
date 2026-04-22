@@ -27,7 +27,6 @@ import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-pan
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-orders-panel";
 import { PortalSectionSubtabs } from "@/components/portal/portal-section-subtabs";
-import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
 import { ProAccountLinksPanelLoader } from "@/components/portal/pro-account-links-panel";
@@ -70,10 +69,10 @@ export async function renderPortalSection(
   }
 
   if (kind === "manager" || kind === "pro") {
-    if (section === "stripe") redirect(`${def.basePath}/payments/stripe`);
+    if (section === "stripe") redirect(`${def.basePath}/payments?payouts=1`);
   }
   if (kind === "owner") {
-    if (section === "stripe") redirect(`${def.basePath}/payments/stripe`);
+    if (section === "stripe") redirect(`${def.basePath}/payments?payouts=1`);
   }
 
   const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
@@ -190,32 +189,12 @@ export async function renderPortalSection(
       );
     }
     if (section === "payments") {
-      if (!meta.tabs.length) notFound();
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/payments/${meta.tabs[0]!.id}`);
+      if (tabParts?.length) {
+        const legacy = tabParts[0];
+        if (legacy === "stripe") redirect(`${def.basePath}/payments?payouts=1`);
+        redirect(`${def.basePath}/payments`);
       }
-      const payTab = tabParts[0]!;
-      if (!["ledger", "stripe"].includes(payTab)) notFound();
-      const paymentTabs: TabItem[] = meta.tabs.map((t) => ({
-        id: t.id,
-        label: t.label,
-        href: `${def.basePath}/payments/${t.id}`,
-      }));
-      const inner =
-        payTab === "ledger" ? (
-          <ManagerPayments />
-        ) : (
-          <PortalStripeConnectPanel basePath="/manager" />
-        );
-      return subscriptionGated(
-        <>
-          <PortalSectionSubtabs tabs={paymentTabs} activeId={payTab} />
-          {inner}
-        </>,
-        kind,
-        "payments",
-        managerOwnerSubscriptionTier,
-      );
+      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
@@ -290,32 +269,12 @@ export async function renderPortalSection(
       );
     }
     if (section === "payments") {
-      if (!meta.tabs.length) notFound();
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/payments/${meta.tabs[0]!.id}`);
+      if (tabParts?.length) {
+        const legacy = tabParts[0];
+        if (legacy === "stripe") redirect(`${def.basePath}/payments?payouts=1`);
+        redirect(`${def.basePath}/payments`);
       }
-      const payTab = tabParts[0]!;
-      if (!["ledger", "stripe"].includes(payTab)) notFound();
-      const paymentTabs: TabItem[] = meta.tabs.map((t) => ({
-        id: t.id,
-        label: t.label,
-        href: `${def.basePath}/payments/${t.id}`,
-      }));
-      const inner =
-        payTab === "ledger" ? (
-          <ManagerPayments />
-        ) : (
-          <PortalStripeConnectPanel basePath="/pro" />
-        );
-      return subscriptionGated(
-        <>
-          <PortalSectionSubtabs tabs={paymentTabs} activeId={payTab} />
-          {inner}
-        </>,
-        kind,
-        "payments",
-        managerOwnerSubscriptionTier,
-      );
+      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
@@ -369,32 +328,12 @@ export async function renderPortalSection(
       );
     }
     if (section === "payments") {
-      if (!meta.tabs.length) notFound();
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/payments/${meta.tabs[0]!.id}`);
+      if (tabParts?.length) {
+        const legacy = tabParts[0];
+        if (legacy === "stripe") redirect(`${def.basePath}/payments?payouts=1`);
+        redirect(`${def.basePath}/payments`);
       }
-      const payTab = tabParts[0]!;
-      if (!["ledger", "stripe"].includes(payTab)) notFound();
-      const paymentTabs: TabItem[] = meta.tabs.map((t) => ({
-        id: t.id,
-        label: t.label,
-        href: `${def.basePath}/payments/${t.id}`,
-      }));
-      const inner =
-        payTab === "ledger" ? (
-          <ManagerPayments />
-        ) : (
-          <PortalStripeConnectPanel basePath="/owner" />
-        );
-      return subscriptionGated(
-        <>
-          <PortalSectionSubtabs tabs={paymentTabs} activeId={payTab} />
-          {inner}
-        </>,
-        kind,
-        "payments",
-        managerOwnerSubscriptionTier,
-      );
+      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
