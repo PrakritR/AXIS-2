@@ -1,6 +1,9 @@
 import { renderPortalSection } from "@/lib/render-portal-section";
 import { notFound } from "next/navigation";
 
+/** Session/cookies-backed admin sections must not be statically prerendered. */
+export const dynamic = "force-dynamic";
+
 export default async function AdminSectionPage({
   params,
 }: {

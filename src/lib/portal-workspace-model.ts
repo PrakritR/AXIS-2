@@ -113,7 +113,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         {
           label: "Payout dashboard",
           kind: "modal",
-          message: "Use the Payouts tab in Payments to finish onboarding, or open your provider dashboard.",
+          message: "Open Payments, then Payouts, to finish setup in Stripe.",
         },
         ...common,
       ];

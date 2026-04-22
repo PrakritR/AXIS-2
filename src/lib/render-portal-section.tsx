@@ -14,7 +14,7 @@ import { AdminOwnersClient } from "@/components/portal/admin-owners-client";
 import { AdminLeasesClient } from "@/components/portal/admin-leases-client";
 import { AdminPropertiesClient } from "@/components/portal/admin-properties-client";
 import { AdminEventsClient } from "@/components/portal/admin-events-client";
-import { AdminProfileClient } from "@/components/portal/admin-profile-client";
+import { AdminProfileSection } from "@/components/portal/admin-profile-section";
 import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
 import { ManagerProperties } from "@/components/portal/manager-properties";
 import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
@@ -36,7 +36,6 @@ import type { ReactNode } from "react";
 import type { PreviewPortal } from "@/lib/auth/preview-types";
 import { getPortalAccessContext } from "@/lib/auth/portal-access";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
-import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { getManagerSubscriptionTier, managerSectionAllowedForTier } from "@/lib/manager-access";
 import { residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
@@ -141,19 +140,7 @@ export async function renderPortalSection(
 
   if (kind === "admin" && section === "profile") {
     if (tabParts?.length) notFound();
-    const { profile, user } = await getServerSessionProfile();
-    const dash = (s: string | null | undefined) => {
-      const t = (s ?? "").trim();
-      return t.length ? t : "—";
-    };
-    return (
-      <AdminProfileClient
-        fullName={dash(profile?.full_name)}
-        email={dash(profile?.email ?? user?.email)}
-        phone={dash(profile?.phone)}
-        adminId={dash(profile?.id ?? user?.id)}
-      />
-    );
+    return <AdminProfileSection />;
   }
 
   if (kind === "admin" && section === "inbox") {

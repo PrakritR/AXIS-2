@@ -4,7 +4,7 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 export const runtime = "nodejs";
 
 /**
- * Resolve another workspace by Axis ID (`profiles.manager_id`). Manager and owner roles can link regardless of plan.
+ * Resolve another workspace by Axis ID (`profiles.manager_id`). Owner and manager workspaces validate separately per Account links tab.
  */
 export async function GET(req: Request) {
   try {

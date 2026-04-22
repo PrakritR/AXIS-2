@@ -9,6 +9,10 @@ import { MANAGER_PLAN_TIERS } from "@/data/manager-plan-tiers";
 import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
+const STRIPE_BILLING_POPUP = "axisStripeBilling";
+const STRIPE_BILLING_FEATURES =
+  "popup=yes,width=620,height=760,left=80,top=60,scrollbars=yes,resizable=yes";
+
 type SubPayload = {
   tier: string | null;
   /** `monthly` | `annual` when Stripe-managed; may be legacy values otherwise. */
@@ -118,6 +122,16 @@ export function ManagerPlan() {
         }
       }
 
+      if (window.opener && !window.opener.closed) {
+        try {
+          window.opener.postMessage({ type: "axis-stripe-plan-checkout", checkout }, window.location.origin);
+        } catch {
+          /* ignore cross-window edge cases */
+        }
+        window.close();
+        return;
+      }
+
       window.history.replaceState({}, "", pathname);
 
       if (checkout === "cancelled") {
@@ -135,6 +149,36 @@ export function ManagerPlan() {
     })();
   }, [pathname, load, showToast]);
 
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type !== "axis-stripe-plan-checkout") return;
+      if (e.data?.checkout === "cancelled") {
+        showToast("Checkout was cancelled.");
+        return;
+      }
+      if (e.data?.checkout === "success") {
+        showToast("Payment received. Activating your plan…");
+        void (async () => {
+          for (let i = 0; i < 6; i++) {
+            await load();
+            if (i < 5) await new Promise((r) => setTimeout(r, 1400));
+          }
+          startTransition(() => router.refresh());
+        })();
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [load, router, showToast]);
+
+  const openStripePopup = (url: string): boolean => {
+    const w = window.open(url, STRIPE_BILLING_POPUP, STRIPE_BILLING_FEATURES);
+    if (w) return true;
+    showToast("Allow popups for this site to continue in Stripe.");
+    return false;
+  };
+
   const openBillingPortal = async () => {
     if (!sub?.stripeManaged || busyTier !== null || billingSyncBusy || billingPortalBusy) return;
     flushSync(() => setBillingPortalBusy(true));
@@ -150,7 +194,7 @@ export function ManagerPlan() {
         showToast(body.error ?? "Could not open billing portal.");
         return;
       }
-      window.location.href = body.url;
+      openStripePopup(body.url);
     } catch {
       showToast("Network error.");
     } finally {
@@ -177,7 +221,8 @@ export function ManagerPlan() {
         setBusyTier(null);
         return;
       }
-      window.location.assign(body.url);
+      openStripePopup(body.url);
+      setBusyTier(null);
     } catch {
       showToast("Network error.");
       setBusyTier(null);
@@ -396,29 +441,6 @@ export function ManagerPlan() {
             })}
           </div>
         )}
-
-        <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Axis platform fees</p>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">
-            When residents pay application fees or rent through Axis with live processing, these platform fees apply before payouts (unless overridden in
-            your environment).
-          </p>
-          <ul className="mt-4 space-y-2 text-sm text-slate-700">
-            <li>
-              <span className="font-semibold text-slate-900">Free</span> — 2% of application fees · 0.25% of rent collected
-            </li>
-            <li>
-              <span className="font-semibold text-slate-900">Pro</span> — 2% of application fees · 0% on rent
-            </li>
-            <li>
-              <span className="font-semibold text-slate-900">Business</span> — 0% on application fees & rent (no Axis take on those payments)
-            </li>
-          </ul>
-          <p className="mt-3 text-xs text-slate-500">
-            Limits at a glance: Free — 1 property, no leases/work orders, 1 linked partner per tab. Pro — 2 of each. Business — 20 of each, plus zero
-            platform fees above.
-          </p>
-        </div>
 
         <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-5 py-4 text-sm text-slate-600">
           <span className="font-semibold text-slate-900">Billing: </span>

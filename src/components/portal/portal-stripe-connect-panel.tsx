@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ManagerPayoutSplitsForm } from "@/components/portal/manager-payout-splits-form";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+
+const STRIPE_POPUP = "axisStripePayout";
+const POPUP_FEATURES = "popup=yes,width=600,height=720,left=80,top=60,scrollbars=yes,resizable=yes";
 
 type ConnectStatus = {
   connected: boolean;
@@ -26,6 +28,11 @@ type OnboardResponse =
     }
   | { demo: true; message: string; url?: undefined };
 
+function openStripePopup(url: string): Window | null {
+  if (typeof window === "undefined") return null;
+  return window.open(url, STRIPE_POPUP, POPUP_FEATURES);
+}
+
 export function PortalStripeConnectPanel({
   basePath,
   variant = "page",
@@ -37,6 +44,7 @@ export function PortalStripeConnectPanel({
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<ConnectStatus | null>(null);
+  const autoOnboardSent = useRef(false);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -47,9 +55,6 @@ export function PortalStripeConnectPanel({
         return;
       }
       setStatus(body);
-      if (body.demo && body.message) {
-        /* demo keys message — optional one-time toast avoided on every load */
-      }
     } catch {
       setStatus(null);
     }
@@ -60,19 +65,34 @@ export function PortalStripeConnectPanel({
   }, [loadStatus]);
 
   useEffect(() => {
-    if (variant === "embedded") return;
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === "axis-stripe-connect") {
+        void loadStatus();
+      }
+    };
+    const onCustom = () => void loadStatus();
+    window.addEventListener("message", onMsg);
+    window.addEventListener("axis-stripe-connect-refresh", onCustom);
+    return () => {
+      window.removeEventListener("message", onMsg);
+      window.removeEventListener("axis-stripe-connect-refresh", onCustom);
+    };
+  }, [loadStatus]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const q = new URLSearchParams(window.location.search).get("connect");
     if (q === "done") {
-      showToast("Returned from onboarding. Connection status updated below.");
+      showToast("Payout status updated.");
       void loadStatus();
       window.history.replaceState({}, "", `${basePath}/payments`);
     } else if (q === "refresh") {
-      showToast("Setup link expired — starting a fresh connection step.");
+      showToast("Setup link expired — try again from Payouts.");
       void loadStatus();
       window.history.replaceState({}, "", `${basePath}/payments`);
     }
-  }, [basePath, loadStatus, showToast, variant]);
+  }, [basePath, loadStatus, showToast]);
 
   const startOnboarding = useCallback(async () => {
     setBusy(true);
@@ -85,7 +105,7 @@ export function PortalStripeConnectPanel({
       });
       const body = (await res.json()) as OnboardResponse & { error?: string };
       if (!res.ok) {
-        showToast(body.error ?? "Could not start payout onboarding.");
+        showToast(body.error ?? "Could not start payout setup.");
         return;
       }
       if ("demo" in body && body.demo) {
@@ -93,7 +113,10 @@ export function PortalStripeConnectPanel({
         return;
       }
       if (body.url) {
-        window.location.href = body.url;
+        const w = openStripePopup(body.url);
+        if (!w) {
+          showToast("Allow popups for this site to open Stripe in a new window.");
+        }
       }
     } catch {
       showToast("Network error.");
@@ -109,90 +132,67 @@ export function PortalStripeConnectPanel({
     status.payoutsEnabled &&
     !status.demo;
 
-  const inProgress =
-    status?.connected &&
-    !status.demo &&
-    status.detailsSubmitted &&
-    !(status.chargesEnabled && status.payoutsEnabled);
+  const needsOnboarding = status && !status.demo && !ready;
 
-  const primaryLabel = !status?.connected
-    ? "Connect payout account"
-    : ready
-      ? "Open payout dashboard"
-      : "Continue payout setup";
+  useEffect(() => {
+    if (variant !== "embedded") return;
+    if (autoOnboardSent.current) return;
+    if (status == null) return;
+    if (status.demo) return;
+    if (ready) return;
+    autoOnboardSent.current = true;
+    void startOnboarding();
+  }, [variant, status, ready, startOnboarding]);
 
   const body = (
-    <div className={`space-y-6 text-sm leading-relaxed text-slate-700 ${variant === "embedded" ? "max-h-[min(72vh,640px)] overflow-y-auto pr-1" : "max-w-4xl"}`}>
-        <div className="rounded-2xl border border-slate-200/90 bg-white px-4 py-3 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">How payouts work</p>
-          <p className="mt-2">
-            Link a verified payout account so residents can pay application fees and rent into your connected balance. You finish identity and
-            bank details in the provider&apos;s hosted onboarding flow.
-          </p>
-          <ul className="mt-3 list-outside space-y-2 pl-5 text-slate-600 marker:text-slate-400">
-            <li className="pl-1 leading-relaxed">
-              <span className="font-medium text-slate-800">Free:</span> one connected payout account.
-            </li>
-            <li className="pl-1 leading-relaxed">
-              <span className="font-medium text-slate-800">Pro / Business:</span> multiple connected accounts in Stripe when you scale; use the
-              owner split table below to record what share of fees and rent each owner receives after platform fees.
-            </li>
-          </ul>
-        </div>
+    <div
+      className={`space-y-4 text-sm leading-relaxed text-slate-700 ${
+        variant === "embedded" ? "max-h-[min(72vh,560px)] overflow-y-auto pr-1" : "max-w-lg"
+      }`}
+    >
+      <p className="font-medium text-slate-900">You must set up payout before creating a listing.</p>
 
-        {status?.demo ? (
-          <p className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
-            {status.message ??
-              "Live payout connection is not configured on the server — status here is demo-only until production keys are added."}
-          </p>
-        ) : null}
+      {status?.demo ? (
+        <p className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
+          {status.message ??
+            "Live Stripe is not configured on the server — status here is demo-only until production keys are added."}
+        </p>
+      ) : null}
 
-        {status?.stripeError ? (
-          <p className="rounded-xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-xs text-rose-900">
-            Payout provider returned an error while loading your account: {status.stripeError}
-          </p>
-        ) : null}
+      {status?.stripeError ? (
+        <p className="rounded-xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-xs text-rose-900">
+          {status.stripeError}
+        </p>
+      ) : null}
 
-        {status && (
-          <div className="flex flex-wrap gap-2">
-            <span
-              className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
-                ready ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-700"
-              }`}
-            >
-              {ready ? "Ready for payouts" : status.connected ? "Setup in progress" : "Not connected"}
-            </span>
-            {status.accountId ? (
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 font-mono text-[11px] text-slate-600">
-                {status.accountId}
-              </span>
-            ) : null}
-          </div>
-        )}
-
-        {inProgress ? (
-          <p className="text-xs text-slate-600">
-            Your provider is still verifying this account or needs more information. Use <span className="font-medium">Continue payout setup</span>{" "}
-            to finish in their flow.
-          </p>
-        ) : null}
-
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button type="button" className="min-h-[44px] rounded-full px-6" disabled={busy} onClick={() => void startOnboarding()}>
-            {busy ? "Starting…" : primaryLabel}
-          </Button>
-          <a
-            href="https://dashboard.stripe.com/connect/accounts/overview"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-5 text-sm font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-px hover:bg-white hover:shadow-md"
+      {status && !status.demo ? (
+        <div className="flex flex-wrap gap-2">
+          <span
+            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
+              ready ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-700"
+            }`}
           >
-            Open provider dashboard
-          </a>
+            {ready ? "Payouts ready" : status.connected ? "Setup in progress" : "Not connected"}
+          </span>
         </div>
+      ) : null}
 
-        <ManagerPayoutSplitsForm />
-      </div>
+      {needsOnboarding ? (
+        <div className="pt-1">
+          <Button type="button" className="min-h-[44px] rounded-full px-6" disabled={busy} onClick={() => void startOnboarding()}>
+            {busy ? "Opening…" : "Open Stripe setup"}
+          </Button>
+        </div>
+      ) : null}
+
+      {ready ? (
+        <div className="pt-1">
+          <Button type="button" className="min-h-[44px] rounded-full px-6" disabled={busy} onClick={() => void startOnboarding()}>
+            {busy ? "Opening…" : "Open payout dashboard"}
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 
   if (variant === "embedded") {

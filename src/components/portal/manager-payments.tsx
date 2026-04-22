@@ -41,12 +41,25 @@ export function ManagerPayments() {
     const params = new URLSearchParams(window.location.search);
     const payouts = params.get("payouts");
     const connect = params.get("connect");
+    if (connect === "done" || connect === "refresh") {
+      if (window.opener && !window.opener.closed) {
+        try {
+          window.opener.postMessage({ type: "axis-stripe-connect", connect }, window.location.origin);
+        } catch {
+          /* cross-origin or closed */
+        }
+        window.close();
+        return;
+      }
+    }
     if (payouts === "1" || connect === "done" || connect === "refresh") {
       setPayoutsOpen(true);
       if (connect === "done") {
-        showToast("Returned from onboarding. Connection status updated in Payouts.");
+        showToast("Payout status updated.");
+        window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
       } else if (connect === "refresh") {
-        showToast("Setup link expired — starting a fresh connection step.");
+        showToast("Setup link expired — open Payouts to try again.");
+        window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
       }
       params.delete("payouts");
       params.delete("connect");
@@ -54,6 +67,21 @@ export function ManagerPayments() {
       const path = `${window.location.pathname}${next ? `?${next}` : ""}`;
       window.history.replaceState({}, "", path);
     }
+  }, [showToast]);
+
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type !== "axis-stripe-connect") return;
+      if (e.data?.connect === "done") {
+        showToast("Payout status updated.");
+      } else if (e.data?.connect === "refresh") {
+        showToast("Setup link expired — open Payouts to try again.");
+      }
+      window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
   }, [showToast]);
 
   const mergedRows = useMemo(() => {
@@ -104,16 +132,15 @@ export function ManagerPayments() {
       }
       filterRow={
         <div className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
-            <span className="font-semibold text-slate-900">Receiving rent & fees:</span> open{" "}
+          <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-3 text-sm text-slate-800">
+            Set up <span className="font-semibold">Payouts</span> before creating a listing.{" "}
             <button
               type="button"
               className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90"
               onClick={() => setPayoutsOpen(true)}
             >
-              Payouts
-            </button>{" "}
-            to connect your bank so funds can route when billing goes live.
+              Open Payouts
+            </button>
           </div>
           <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
         </div>
@@ -133,7 +160,7 @@ export function ManagerPayments() {
         open={payoutsOpen}
         title="Payouts"
         onClose={() => setPayoutsOpen(false)}
-        panelClassName="relative z-[71] max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-2xl"
+        panelClassName="relative z-[71] max-h-[90vh] w-full max-w-md overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-2xl"
       >
         <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
       </Modal>

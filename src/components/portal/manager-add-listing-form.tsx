@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -90,6 +90,20 @@ const MAX_IMG_BYTES = 2.6 * 1024 * 1024;
 const MAX_VID_BYTES = 14 * 1024 * 1024;
 const MAX_HOUSE_PHOTOS = 12;
 
+/** Multi-step flow (similar to the rental application wizard). */
+const LISTING_FORM_STEPS = [
+  { id: "building", label: "Building & listing" },
+  { id: "lease", label: "Lease & payments" },
+  { id: "bundles", label: "Bundles & leasing" },
+  { id: "costs", label: "House costs" },
+  { id: "rooms", label: "Rooms" },
+  { id: "bath", label: "Bathrooms" },
+  { id: "shared", label: "Shared spaces" },
+  { id: "quick-facts", label: "Quick facts" },
+  { id: "amenities", label: "Amenities" },
+] as const;
+
+const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 async function fileToDataUrl(file: File, maxBytes: number): Promise<string | null> {
   if (file.size > maxBytes) return null;
@@ -155,9 +169,33 @@ export function ManagerAddListingForm({
     initialSubmission ? normalizeManagerListingSubmissionV1(initialSubmission) : createDefaultListingSubmission(),
   );
   const [busy, setBusy] = useState(false);
+  const [stepIndex, setStepIndex] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { userId, ready: authReady } = useManagerUserId();
 
   const isEditMode = Boolean(editPendingId ?? editListingId);
+  const lastStepIndex = LISTING_STEP_COUNT - 1;
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [stepIndex]);
+
+  const canContinueFromStep = (i: number): boolean => {
+    if (i === 0) {
+      if (!sub.buildingName.trim() || !sub.address.trim() || !sub.zip.trim() || !sub.neighborhood.trim()) {
+        showToast("Fill in building name, address, ZIP, and neighborhood to continue.");
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const goNext = () => {
+    if (!canContinueFromStep(stepIndex)) return;
+    setStepIndex((s) => Math.min(s + 1, lastStepIndex));
+  };
+
+  const goPrev = () => setStepIndex((s) => Math.max(0, s - 1));
 
   const setRoom = (i: number, patch: Partial<ManagerRoomSubmission>) => {
     setSub((s) => {
@@ -477,8 +515,8 @@ export function ManagerAddListingForm({
               <h2 className="text-xl font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "Create listing"}</h2>
               <p className="mt-1 text-sm text-slate-600">
                 {isEditMode
-                  ? "Update any field below. Save when you are done — your public listing updates from this data."
-                  : "All sections are on one page. Start mostly blank and add rooms, bathrooms, amenities, and more whenever you are ready."}
+                  ? "Update any step below. Use Back and Continue to move between categories, then save when you are done — your public listing updates from this data."
+                  : "Work through each step. You can go back to change anything. Most fields are optional until you add rooms and submit at the end."}
               </p>
             </div>
             <button
@@ -490,9 +528,19 @@ export function ManagerAddListingForm({
               ×
             </button>
           </div>
+          <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            Step {stepIndex + 1} of {LISTING_STEP_COUNT} · {LISTING_FORM_STEPS[stepIndex]!.label}
+          </p>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+              style={{ width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%` }}
+            />
+          </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+          {stepIndex === 0 ? (
           <FormSection
             id="edit-building"
             title="Building & listing"
@@ -591,7 +639,9 @@ export function ManagerAddListingForm({
               </div>
             </div>
           </FormSection>
+          ) : null}
 
+          {stepIndex === 1 ? (
           <FormSection
             id="edit-lease"
             title="Lease, fees & resident payments"
@@ -727,7 +777,9 @@ export function ManagerAddListingForm({
               </ListingSubsection>
             </div>
           </FormSection>
+          ) : null}
 
+          {stepIndex === 2 ? (
           <FormSection
             id="edit-bundles"
             title="Bundles & leasing"
@@ -805,7 +857,9 @@ export function ManagerAddListingForm({
               </Button>
             </div>
           </FormSection>
+          ) : null}
 
+          {stepIndex === 3 ? (
           <FormSection
             id="edit-costs"
             title="House costs"
@@ -832,7 +886,9 @@ export function ManagerAddListingForm({
               </div>
             </div>
           </FormSection>
+          ) : null}
 
+          {stepIndex === 4 ? (
           <FormSection
             id="edit-rooms"
             title="Rooms"
@@ -1070,7 +1126,9 @@ export function ManagerAddListingForm({
               })}
             </div>
           </FormSection>
+          ) : null}
 
+          {stepIndex === 5 ? (
           <FormSection
             id="edit-bath"
             title="Bathrooms"
@@ -1142,7 +1200,9 @@ export function ManagerAddListingForm({
               </div>
               )}
           </FormSection>
+          ) : null}
 
+          {stepIndex === 6 ? (
           <FormSection
             id="edit-shared"
             title="Shared spaces"
@@ -1209,7 +1269,9 @@ export function ManagerAddListingForm({
                 </div>
               )}
           </FormSection>
+          ) : null}
 
+          {stepIndex === 7 ? (
           <FormSection
             id="edit-quick-facts"
             title="Quick facts (sidebar)"
@@ -1236,7 +1298,9 @@ export function ManagerAddListingForm({
               </Button>
             </div>
           </FormSection>
+          ) : null}
 
+          {stepIndex === 8 ? (
           <FormSection
             id="edit-amenities"
             title="Amenities"
@@ -1297,15 +1361,33 @@ export function ManagerAddListingForm({
               </div>
             </div>
           </FormSection>
+          ) : null}
         </div>
 
-        <div className="sticky bottom-0 z-20 flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-10px_28px_-12px_rgba(15,23,42,0.14)] sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
-            Close
-          </Button>
-          <Button type="submit" form="manager-add-listing-form" className="rounded-full" disabled={busy}>
-            {busy ? (isEditMode ? "Saving…" : "Submitting…") : isEditMode ? "Save listing" : "Submit for approval"}
-          </Button>
+        <div className="sticky bottom-0 z-20 shrink-0 border-t border-slate-200 bg-white px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-10px_28px_-12px_rgba(15,23,42,0.14)] sm:px-8">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
+                Close
+              </Button>
+              {stepIndex > 0 ? (
+                <Button type="button" variant="outline" className="rounded-full" onClick={goPrev} disabled={busy}>
+                  Back
+                </Button>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              {stepIndex < lastStepIndex ? (
+                <Button type="button" className="rounded-full" onClick={goNext} disabled={busy}>
+                  Continue
+                </Button>
+              ) : (
+                <Button type="submit" form="manager-add-listing-form" className="rounded-full" disabled={busy}>
+                  {busy ? (isEditMode ? "Saving…" : "Submitting…") : isEditMode ? "Save listing" : "Submit for approval"}
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </form>
     </div>
