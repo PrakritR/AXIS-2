@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import type { MockProperty } from "@/data/types";
-import { ListingPublicPreviewModal } from "@/components/portal/listing-public-preview-modal";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
@@ -45,7 +43,6 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
-import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
@@ -161,31 +158,26 @@ function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: 
   }
 }
 
-function ManagerPropertyPreviewModal({
-  open,
-  onClose,
+function ManagerPropertyInlineDetails({
   bucket,
   row,
   onUpdated,
   showToast,
   managerUserId,
 }: {
-  open: boolean;
-  onClose: () => void;
   bucket: AdminPropertyBucketIndex;
   row: AdminPropertyRow | null;
   onUpdated: () => void;
   showToast: (m: string) => void;
   managerUserId: string | null;
 }) {
-  const router = useRouter();
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
   const listingId = row?.listingId;
   const [listingEditorOpen, setListingEditorOpen] = useState(false);
   const [skuTier, setSkuTier] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) {
+    if (!row) {
       setListingEditorOpen(false);
       return;
     }
@@ -202,7 +194,7 @@ function ManagerPropertyPreviewModal({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [row]);
 
   const editorInitial = useMemo(() => {
     if (!listingEditorOpen || !managerUserId || !row) return null;
@@ -224,10 +216,10 @@ function ManagerPropertyPreviewModal({
     }
     showToast(label);
     onUpdated();
-    onClose();
   };
 
-  if (!open || !row || !mock) return null;
+  if (!row || !mock) return null;
+  const publicHref = publicListingHrefForPropertyRow(row);
 
   const openInlineEditor = () => {
     if (!managerUserId) {
@@ -334,6 +326,16 @@ function ManagerPropertyPreviewModal({
           <Button type="button" variant="outline" className="rounded-full" onClick={openInlineEditor}>
             Edit listing
           </Button>
+          {publicHref ? (
+            <Link
+              href={publicHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+            >
+              View listing
+            </Link>
+          ) : null}
         </>
       ) : null}
 
@@ -352,7 +354,6 @@ function ManagerPropertyPreviewModal({
                 }
                 showToast("Listing is live again.");
                 onUpdated();
-                onClose();
               });
             }}
           >
@@ -405,13 +406,25 @@ function ManagerPropertyPreviewModal({
 
   return (
     <>
-      <ListingPublicPreviewModal
-        open={open}
-        onClose={onClose}
-        property={mock}
-        publicHref={publicListingHrefForPropertyRow(row)}
-        footer={footer}
-      />
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_14px_38px_-32px_rgba(15,23,42,0.45)] sm:p-5">
+        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Details</p>
+            <h3 className="mt-2 text-base font-semibold text-slate-950">{mock.title}</h3>
+            <p className="mt-1 text-sm text-slate-600">{mock.address}</p>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">{mock.tagline}</p>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.rentLabel}</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                {mock.beds} bd / {mock.baths} ba
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.available}</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.neighborhood}</span>
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">{footer}</div>
+        </div>
+      </div>
       {listingEditorOpen && editorInitial && managerUserId ? (
         <ManagerAddListingForm
           key={`preview-edit-${bucket}-${row.adminRefId}-${row.listingId ?? "pending"}`}
@@ -434,10 +447,9 @@ function ManagerPropertyPreviewModal({
 }
 
 export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: string) => void }) {
-  const portalBase = usePaidPortalBasePath();
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
-  const [detailRow, setDetailRow] = useState<AdminPropertyRow | null>(null);
+  const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
   const [activeBucket, setActiveBucket] = useState<AdminPropertyBucketIndex>(0);
 
   useEffect(() => {
@@ -456,6 +468,10 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
     () => (managerUserId ? readAdminPropertyRows(activeBucket, managerUserId) : []),
     [tick, managerUserId, activeBucket],
   );
+
+  useEffect(() => {
+    setExpandedRowKey(null);
+  }, [activeBucket]);
 
   const status = rowStatus(activeBucket);
 
@@ -513,88 +529,57 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
               </thead>
               <tbody>
                 {rows.map((row) => {
-                  const publicHref = publicListingHrefForPropertyRow(row);
-                  const listingId = row.listingId;
-                  const showListedActions = activeBucket === 2 && listingId;
+                  const rowKey = row.adminRefId + (row.listingId ?? "");
+                  const expanded = expandedRowKey === rowKey;
 
                   return (
-                    <tr key={row.adminRefId + (row.listingId ?? "")} className={PORTAL_TABLE_TR}>
-                      <td className={PORTAL_TABLE_TD}>
-                        <p className="font-medium text-slate-900">
-                          {row.buildingName} · {row.unitLabel}
-                        </p>
-                        <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-                          {row.address}
-                          {row.zip ? `, ${row.zip}` : ""}
-                        </p>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        <p className="text-xs text-slate-600">
-                          <span className="font-medium text-slate-800">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths}{" "}
-                          ba · {row.neighborhood}
-                        </p>
-                        {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-slate-500">{row.tagline}</p> : null}
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        <StatusPill label={status.label} variant={status.variant} />
-                      </td>
-                      <td className={`${PORTAL_TABLE_TD} text-right`}>
-                        <div className="flex flex-wrap items-center justify-end gap-1.5">
-                          {activeBucket === 0 ? (
-                            <Link
-                              href={`${portalBase}/properties?editPending=${encodeURIComponent(row.adminRefId)}`}
-                              className={`inline-flex items-center justify-center ${PORTAL_TABLE_ROW_TOGGLE_CLASS}`}
-                            >
-                              Edit
-                            </Link>
-                          ) : null}
-                          {showListedActions ? (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                                onClick={() => {
-                                  deferCatalogMutation(() => {
-                                    const ok = unlistManagerListing(listingId, managerUserId);
-                                    showToast(ok ? "Listing unlisted." : "Could not unlist.");
-                                  });
-                                }}
-                              >
-                                Unlist
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-rose-200 text-rose-800 hover:bg-rose-50`}
-                                onClick={() => {
-                                  if (!window.confirm("Permanently delete this listing from your catalog?")) return;
-                                  deferCatalogMutation(() => {
-                                    const ok = deleteManagerLiveListing(listingId, managerUserId);
-                                    showToast(ok ? "Listing deleted." : "Could not delete.");
-                                  });
-                                }}
-                              >
-                                Delete
-                              </Button>
-                            </>
-                          ) : null}
-                          {publicHref ? (
-                            <Link
-                              href={publicHref}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`inline-flex items-center justify-center ${PORTAL_TABLE_ROW_TOGGLE_CLASS}`}
-                            >
-                              View listing
-                            </Link>
-                          ) : null}
-                          <Button type="button" variant="outline" className={PORTAL_TABLE_ROW_TOGGLE_CLASS} onClick={() => setDetailRow(row)}>
-                            More details
+                    <Fragment key={rowKey}>
+                      <tr className={PORTAL_TABLE_TR}>
+                        <td className={PORTAL_TABLE_TD}>
+                          <p className="font-medium text-slate-900">
+                            {row.buildingName} · {row.unitLabel}
+                          </p>
+                          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                            {row.address}
+                            {row.zip ? `, ${row.zip}` : ""}
+                          </p>
+                        </td>
+                        <td className={PORTAL_TABLE_TD}>
+                          <p className="text-xs text-slate-600">
+                            <span className="font-medium text-slate-800">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths}{" "}
+                            ba · {row.neighborhood}
+                          </p>
+                          {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-slate-500">{row.tagline}</p> : null}
+                        </td>
+                        <td className={PORTAL_TABLE_TD}>
+                          <StatusPill label={status.label} variant={status.variant} />
+                        </td>
+                        <td className={`${PORTAL_TABLE_TD} text-right`}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                            onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
+                            aria-expanded={expanded}
+                          >
+                            {expanded ? "Hide details" : "More details"}
                           </Button>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      {expanded ? (
+                        <tr key={`${rowKey}-details`} className="border-b border-slate-100">
+                          <td colSpan={4} className="bg-slate-50/40 px-4 py-4">
+                            <ManagerPropertyInlineDetails
+                              bucket={activeBucket}
+                              row={row}
+                              onUpdated={() => setTick((t) => t + 1)}
+                              showToast={showToast}
+                              managerUserId={managerUserId}
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -602,16 +587,6 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
           </div>
         )}
       </div>
-
-      <ManagerPropertyPreviewModal
-        open={Boolean(detailRow)}
-        onClose={() => setDetailRow(null)}
-        bucket={activeBucket}
-        row={detailRow}
-        onUpdated={() => setTick((t) => t + 1)}
-        showToast={showToast}
-        managerUserId={managerUserId}
-      />
     </>
   );
 }
