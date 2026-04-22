@@ -106,10 +106,8 @@ export function readAvailabilityDateSet(): Set<string> {
     const legacy = readJson<string[] | null>(AVAIL_KEY, null);
     if (Array.isArray(legacy) && legacy.length > 0) {
       const migrated = migrateLegacyWeeklyToDateKeys(legacy);
-      writeJson(AVAIL_V2_KEY, migrated);
       return new Set(migrated);
     }
-    writeJson(AVAIL_V2_KEY, []);
     return new Set();
   }
   try {
@@ -141,7 +139,6 @@ export function readAvailabilityDateSetForStorageKey(storageKey: string): Set<st
   if (!isBrowser()) return new Set();
   const rawV2 = window.localStorage.getItem(storageKey);
   if (rawV2 === null) {
-    writeJson(storageKey, []);
     return new Set();
   }
   try {

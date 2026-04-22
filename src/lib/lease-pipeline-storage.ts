@@ -107,7 +107,9 @@ function canUseStorage() {
 
 function emit() {
   if (!canUseStorage()) return;
-  window.dispatchEvent(new Event(LEASE_PIPELINE_EVENT));
+  queueMicrotask(() => {
+    window.dispatchEvent(new Event(LEASE_PIPELINE_EVENT));
+  });
 }
 
 function stageLabelForBucket(b: ManagerLeaseBucket): string {
@@ -234,12 +236,10 @@ export function readLeasePipeline(): LeasePipelineRow[] {
     stored = stored.map(normalizeLeasePipelineRow);
     if (stored.length === 0) {
       stored = demoManagerLeaseDraftRows.map(demoRowToPipeline);
-      write(stored);
     }
     const rows = enrichFromApplications(stored);
     const merged = syncApprovedApplications(rows);
     if (merged.length > stored.length) {
-      write(merged);
       return merged;
     }
     return rows;

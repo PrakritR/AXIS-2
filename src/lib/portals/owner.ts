@@ -4,7 +4,7 @@ import type { PortalDefinition } from "@/lib/portal-types";
 export const ownerPortal: PortalDefinition = {
   kind: "owner",
   basePath: "/owner",
-  title: "Axis Pro Portal",
+  title: "Axis Property Portal",
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },

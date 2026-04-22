@@ -41,16 +41,14 @@ export function AdminDashboard() {
   const [eventsTotal, setEventsTotal] = useState("0");
   const [managers, setManagers] = useState<PortalUser[]>([]);
   const [residents, setResidents] = useState<PortalUser[]>([]);
-  const [owners, setOwners] = useState<PortalUser[]>([]);
   const [counts, setCounts] = useState({ managers: 0, residents: 0, owners: 0 });
   const [propertiesTotal, setPropertiesTotal] = useState("0");
   const [managerId, setManagerId] = useState("");
   const [residentId, setResidentId] = useState("");
-  const [ownerId, setOwnerId] = useState("");
-  const [launchingPortal, setLaunchingPortal] = useState<"manager" | "resident" | "owner" | null>(null);
+  const [launchingPortal, setLaunchingPortal] = useState<"manager" | "resident" | null>(null);
 
   const goPreview = useCallback(
-    async (portal: "manager" | "resident" | "owner", id: string) => {
+    async (portal: "manager" | "resident", id: string) => {
       if (!id || launchingPortal) return;
       setLaunchingPortal(portal);
       try {
@@ -82,14 +80,12 @@ export function AdminDashboard() {
       const body = (await res.json()) as {
         managers?: PortalUser[];
         residents?: PortalUser[];
-        owners?: PortalUser[];
         counts?: { managers: number; residents: number; owners: number };
         error?: string;
       };
       if (!res.ok) return;
       setManagers(body.managers ?? []);
       setResidents(body.residents ?? []);
-      setOwners(body.owners ?? []);
       if (body.counts) setCounts(body.counts);
     } catch {
       /* ignore */
@@ -133,9 +129,9 @@ export function AdminDashboard() {
     <div className="space-y-6">
       <div className={PORTAL_SECTION_SURFACE}>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
-        <div className="mt-6 grid gap-8 lg:grid-cols-3">
+        <div className="mt-6 grid gap-8 lg:grid-cols-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Axis Pro Portal</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Axis Property Portal</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <select
                 aria-label="Manager preview"
@@ -160,35 +156,6 @@ export function AdminDashboard() {
                 }}
               >
                 {launchingPortal === "manager" ? "Opening…" : "Launch preview"}
-              </button>
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner Portal</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <select
-                aria-label="Owner preview"
-                className="min-w-[12rem] flex-1 rounded-full border border-slate-200 bg-slate-50/80 px-4 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                value={ownerId}
-                onChange={(e) => setOwnerId(e.target.value)}
-              >
-                <option value="">— choose owner —</option>
-                {owners.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={!ownerId || launchingPortal !== null}
-                onClick={() => void goPreview("owner", ownerId)}
-                className={`${launchPreviewClassName} ${!ownerId ? "pointer-events-none opacity-50" : ""} disabled:opacity-60`}
-                style={{
-                  background: "linear-gradient(135deg, var(--primary), var(--primary-alt))",
-                }}
-              >
-                {launchingPortal === "owner" ? "Opening…" : "Launch preview"}
               </button>
             </div>
           </div>

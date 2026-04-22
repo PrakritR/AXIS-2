@@ -138,7 +138,7 @@ export function ScopedInboxComposeModal({
       const r = pickRole(mode);
       const label = r === "manager" ? "All my managers" : r === "owner" ? "All my owners" : "All my residents";
       const stub =
-        r === "manager" ? "broadcast-managers@portal.demo" : r === "owner" ? "broadcast-owners@portal.demo" : "broadcast-residents@portal.demo";
+        r === "manager" ? "broadcast-managers@axis.local" : r === "owner" ? "broadcast-owners@axis.local" : "broadcast-residents@axis.local";
       onSend({ kind: "peer", subject: s, body: b, toLabel: label, toEmailLine: stub });
       return;
     }

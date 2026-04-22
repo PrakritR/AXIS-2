@@ -21,11 +21,8 @@ import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
-  ADMIN_INBOX_DEMO_MANAGERS,
-  ADMIN_INBOX_DEMO_OWNERS,
-  ADMIN_INBOX_DEMO_RESIDENTS,
+  appendInboxMessage,
   appendThreadReply,
-  composeAdminOutboundMessage,
   markInboxMessageRead,
   moveInboxMessageToTrash,
   permanentlyDeleteInboxMessage,
@@ -65,28 +62,32 @@ const ADMIN_COMPOSE_MODE_OPTIONS: { value: AdminComposeSendMode; label: string }
   { value: "pick_owners", label: "Choose owners…" },
 ];
 
+type Recipient = { id: string; name: string; email: string };
+
 function ComposeModal({
   open,
   onClose,
   onSent,
+  recipients,
 }: {
   open: boolean;
   onClose: () => void;
   onSent: () => void;
+  recipients: { managers: Recipient[]; residents: Recipient[]; owners: Recipient[] };
 }) {
   const { showToast } = useAppUi();
   const [mode, setMode] = useState<AdminComposeSendMode>("pick_managers");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set([ADMIN_INBOX_DEMO_MANAGERS[0]!.id]));
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [topic, setTopic] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
   const pickPool = useMemo(() => {
-    if (mode === "pick_managers") return [...ADMIN_INBOX_DEMO_MANAGERS];
-    if (mode === "pick_residents") return [...ADMIN_INBOX_DEMO_RESIDENTS];
-    if (mode === "pick_owners") return [...ADMIN_INBOX_DEMO_OWNERS];
-    return [] as { id: string; name: string; email: string }[];
-  }, [mode]);
+    if (mode === "pick_managers") return recipients.managers;
+    if (mode === "pick_residents") return recipients.residents;
+    if (mode === "pick_owners") return recipients.owners;
+    return [] as Recipient[];
+  }, [mode, recipients]);
 
   useEffect(() => {
     if (!open) return;
@@ -94,9 +95,10 @@ function ComposeModal({
       setTopic("");
       setBody("");
       setMode("pick_managers");
-      setSelectedIds(new Set([ADMIN_INBOX_DEMO_MANAGERS[0]!.id]));
+      const first = recipients.managers[0]?.id;
+      setSelectedIds(first ? new Set([first]) : new Set());
     });
-  }, [open]);
+  }, [open, recipients.managers]);
 
   if (!open) return null;
 
@@ -120,16 +122,69 @@ function ComposeModal({
         showToast("Select at least one recipient.");
         return;
       }
-      const row = composeAdminOutboundMessage({
-        topic,
-        body,
-        mode,
-        selectedIds: isPick ? [...selectedIds] : undefined,
-      });
-      if (!row) {
+
+      const topicTrim = topic.trim();
+      const bodyTrim = body.trim();
+      if (!topicTrim || !bodyTrim) {
         showToast("Add a subject and message.");
         return;
       }
+
+      if (mode === "all_portal" || mode === "all_managers" || mode === "all_residents" || mode === "all_owners") {
+        const label =
+          mode === "all_portal"
+            ? "All managers, residents & owners"
+            : mode === "all_managers"
+              ? "All managers"
+              : mode === "all_residents"
+                ? "All residents"
+                : "All owners";
+        const emailStub =
+          mode === "all_portal"
+            ? "all-portal@axis.local"
+            : mode === "all_managers"
+              ? "all-managers@axis.local"
+              : mode === "all_residents"
+                ? "all-residents@axis.local"
+                : "all-owners@axis.local";
+        appendInboxMessage({
+          name: "Broadcast",
+          email: emailStub,
+          topic: topicTrim,
+          body: bodyTrim,
+          folder: "sent",
+          senderRole: "admin",
+          composeAudience: mode === "all_portal" ? "all" : mode,
+          composeRecipientLabel: label,
+        });
+      } else {
+        const pool =
+          mode === "pick_managers"
+            ? recipients.managers
+            : mode === "pick_residents"
+              ? recipients.residents
+              : recipients.owners;
+        const picked = pool.filter((p) => selectedIds.has(p.id));
+        if (picked.length === 0) {
+          showToast("Select at least one recipient.");
+          return;
+        }
+        const roleLabel = mode === "pick_managers" ? "Manager" : mode === "pick_residents" ? "Resident" : "Owner";
+        appendInboxMessage({
+          name: picked.length === 1 ? picked[0]!.name : `${picked.length} recipients`,
+          email: picked.map((p) => p.email).filter(Boolean).join("; "),
+          topic: topicTrim,
+          body: bodyTrim,
+          folder: "sent",
+          senderRole: "admin",
+          composeAudience: picked.length > 1 ? "multi" : mode === "pick_managers" ? "manager" : mode === "pick_residents" ? "resident" : "owner",
+          composeRecipientLabel:
+            picked.length === 1
+              ? `${picked[0]!.name} (${roleLabel})`
+              : `${picked.length} ${roleLabel.toLowerCase()}s (${picked.map((p) => p.name).join(", ")})`,
+        });
+      }
+
       showToast("Message sent. It appears under Sent.");
       onSent();
       onClose();
@@ -166,10 +221,18 @@ function ComposeModal({
               onChange={(e) => {
                 const v = e.target.value as AdminComposeSendMode;
                 setMode(v);
-                if (v === "pick_managers") setSelectedIds(new Set([ADMIN_INBOX_DEMO_MANAGERS[0]!.id]));
-                else if (v === "pick_residents") setSelectedIds(new Set([ADMIN_INBOX_DEMO_RESIDENTS[0]!.id]));
-                else if (v === "pick_owners") setSelectedIds(new Set([ADMIN_INBOX_DEMO_OWNERS[0]!.id]));
-                else setSelectedIds(new Set());
+                if (v === "pick_managers") {
+                  const first = recipients.managers[0]?.id;
+                  setSelectedIds(first ? new Set([first]) : new Set());
+                } else if (v === "pick_residents") {
+                  const first = recipients.residents[0]?.id;
+                  setSelectedIds(first ? new Set([first]) : new Set());
+                } else if (v === "pick_owners") {
+                  const first = recipients.owners[0]?.id;
+                  setSelectedIds(first ? new Set([first]) : new Set());
+                } else {
+                  setSelectedIds(new Set());
+                }
               }}
               aria-label="Recipient type"
             >
@@ -250,6 +313,11 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
+  const [recipients, setRecipients] = useState<{ managers: Recipient[]; residents: Recipient[]; owners: Recipient[] }>({
+    managers: [],
+    residents: [],
+    owners: [],
+  });
 
   const refresh = useCallback(() => {
     setTick((t) => t + 1);
@@ -263,6 +331,31 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     return () => {
       window.removeEventListener(ADMIN_UI_EVENT, on);
       window.removeEventListener("storage", on);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/portal-users", { credentials: "include" });
+        const body = (await res.json()) as {
+          managers?: Recipient[];
+          residents?: Recipient[];
+          owners?: Recipient[];
+        };
+        if (!res.ok || cancelled) return;
+        setRecipients({
+          managers: body.managers ?? [],
+          residents: body.residents ?? [],
+          owners: body.owners ?? [],
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -356,6 +449,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           open={composeOpen}
           onClose={() => setComposeOpen(false)}
           onSent={() => setTick((t) => t + 1)}
+          recipients={recipients}
         />
 
         {rows.length === 0 ? (

@@ -107,7 +107,7 @@ export function paidWorkspacePortalTitle(tierRaw: string | null | undefined, str
   if (missingTier && !stripeManaged) return "Free Portal";
   if (missingTier && stripeManaged) return "Pro Portal";
 
-  return "Axis Pro Portal";
+  return "Axis Property Portal";
 }
 
 /**

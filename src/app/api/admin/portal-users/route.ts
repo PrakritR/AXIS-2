@@ -61,9 +61,33 @@ export async function GET() {
 
     const byId = new Map((rows ?? []).map((r) => [r.id, r as Row]));
 
-    const managers = mIds.map((id) => byId.get(id)).filter(Boolean).map((r) => ({ id: r!.id, label: labelFor(r!) }));
-    const residents = rIds.map((id) => byId.get(id)).filter(Boolean).map((r) => ({ id: r!.id, label: labelFor(r!) }));
-    const owners = oIds.map((id) => byId.get(id)).filter(Boolean).map((r) => ({ id: r!.id, label: labelFor(r!) }));
+    const managers = mIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((r) => ({
+        id: r!.id,
+        label: labelFor(r!),
+        name: r!.full_name?.trim() || r!.email?.trim() || r!.id.slice(0, 8),
+        email: r!.email?.trim() || "",
+      }));
+    const residents = rIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((r) => ({
+        id: r!.id,
+        label: labelFor(r!),
+        name: r!.full_name?.trim() || r!.email?.trim() || r!.id.slice(0, 8),
+        email: r!.email?.trim() || "",
+      }));
+    const owners = oIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((r) => ({
+        id: r!.id,
+        label: labelFor(r!),
+        name: r!.full_name?.trim() || r!.email?.trim() || r!.id.slice(0, 8),
+        email: r!.email?.trim() || "",
+      }));
 
     const managerCount = mIds.length;
     const residentCount = rIds.length;

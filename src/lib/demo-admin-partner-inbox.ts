@@ -244,25 +244,6 @@ export function permanentlyDeleteInboxMessage(id: string): boolean {
   return true;
 }
 
-/** Demo pick lists for admin compose recipient dropdowns */
-export const ADMIN_INBOX_DEMO_MANAGERS = [
-  { id: "mgr-1", name: "Alex Chen", email: "alex.chen@axis.demo" },
-  { id: "mgr-2", name: "Morgan Blake", email: "morgan@axis.demo" },
-  { id: "mgr-3", name: "Riley Park", email: "riley@axis.demo" },
-] as const;
-
-export const ADMIN_INBOX_DEMO_RESIDENTS = [
-  { id: "res-1", name: "Sam Rivera", email: "sam.rivera@axis.demo" },
-  { id: "res-2", name: "Jordan Kim", email: "jordan.kim@axis.demo" },
-  { id: "res-3", name: "Casey Nguyen", email: "casey@axis.demo" },
-] as const;
-
-export const ADMIN_INBOX_DEMO_OWNERS = [
-  { id: "own-1", name: "Harbor Holdings LLC", email: "harbor.owner@example.com" },
-  { id: "own-2", name: "Bayview Capital", email: "bayview.owner@example.com" },
-  { id: "own-3", name: "Northside REIT", email: "northside@example.com" },
-] as const;
-
 export type AdminComposeSendMode =
   | "all_portal"
   | "all_managers"
@@ -271,94 +252,6 @@ export type AdminComposeSendMode =
   | "pick_managers"
   | "pick_residents"
   | "pick_owners";
-
-function labelForBroadcast(mode: Exclude<AdminComposeSendMode, `pick_${string}`>): string {
-  switch (mode) {
-    case "all_portal":
-      return "All managers, residents & owners";
-    case "all_managers":
-      return "All managers";
-    case "all_residents":
-      return "All residents";
-    case "all_owners":
-      return "All owners";
-    default:
-      return "Broadcast";
-  }
-}
-
-function emailStubForBroadcast(mode: Exclude<AdminComposeSendMode, `pick_${string}`>): string {
-  switch (mode) {
-    case "all_portal":
-      return "broadcast-all@axis.demo";
-    case "all_managers":
-      return "broadcast-managers@axis.demo";
-    case "all_residents":
-      return "broadcast-residents@axis.demo";
-    case "all_owners":
-      return "broadcast-owners@axis.demo";
-    default:
-      return "broadcast@axis.demo";
-  }
-}
-
-/** Admin “New message” — appears under Sent. */
-export function composeAdminOutboundMessage(payload: {
-  topic: string;
-  body: string;
-  mode: AdminComposeSendMode;
-  /** Required when mode is pick_*; one or more ids from the matching demo list */
-  selectedIds?: string[];
-}): InboxMessage | null {
-  const topic = payload.topic.trim();
-  const body = payload.body.trim();
-  if (!topic || !body) return null;
-
-  if (payload.mode === "all_portal" || payload.mode === "all_managers" || payload.mode === "all_residents" || payload.mode === "all_owners") {
-    return appendInboxMessage({
-      name: "Broadcast",
-      email: emailStubForBroadcast(payload.mode),
-      topic,
-      body,
-      folder: "sent",
-      senderRole: "admin",
-      thread: [],
-      composeAudience: payload.mode === "all_portal" ? "all" : payload.mode,
-      composeRecipientLabel: labelForBroadcast(payload.mode),
-    });
-  }
-
-  const ids = payload.selectedIds?.filter(Boolean) ?? [];
-  if (ids.length === 0) return null;
-
-  const pool =
-    payload.mode === "pick_managers"
-      ? ADMIN_INBOX_DEMO_MANAGERS
-      : payload.mode === "pick_residents"
-        ? ADMIN_INBOX_DEMO_RESIDENTS
-        : ADMIN_INBOX_DEMO_OWNERS;
-  const picked = ids.map((id) => pool.find((p) => p.id === id)).filter(Boolean) as { id: string; name: string; email: string }[];
-  if (picked.length === 0) return null;
-
-  const roleLabel = payload.mode === "pick_managers" ? "Manager" : payload.mode === "pick_residents" ? "Resident" : "Owner";
-  const composeAudience = payload.mode === "pick_managers" ? "manager" : payload.mode === "pick_residents" ? "resident" : "owner";
-  const composeRecipientLabel =
-    picked.length === 1
-      ? `${picked[0]!.name} (${roleLabel})`
-      : `${picked.length} ${roleLabel.toLowerCase()}s (${picked.map((p) => p.name).join(", ")})`;
-
-  return appendInboxMessage({
-    name: picked.length === 1 ? picked[0]!.name : `${picked.length} recipients`,
-    email: picked.map((p) => p.email).join("; "),
-    topic,
-    body,
-    folder: "sent",
-    senderRole: "admin",
-    thread: [],
-    composeAudience: picked.length > 1 ? "multi" : composeAudience,
-    composeRecipientLabel,
-  });
-}
 
 /** @deprecated use readInboxMessages */
 export function readPartnerInboxMessages(): InboxMessage[] {
