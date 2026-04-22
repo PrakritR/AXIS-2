@@ -62,7 +62,8 @@ export function ManagerPlan() {
       : "/manager";
   const { showToast } = useAppUi();
   const [sub, setSub] = useState<SubPayload | null>(null);
-  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
+  const [pendingTier, setPendingTier] = useState<ManagerSkuTier>("free");
+  const [pendingBilling, setPendingBilling] = useState<"monthly" | "annual">("monthly");
   /** Paid-tier checkout / subscription API — never reuse for billing portal (avoid clobbering Free card). */
   const [busyTier, setBusyTier] = useState<ManagerSkuTier | null>(null);
   const [billingSyncBusy, setBillingSyncBusy] = useState(false);
@@ -89,10 +90,24 @@ export function ManagerPlan() {
   useEffect(() => {
     if (!sub?.billing) return;
     const b = sub.billing.toLowerCase();
-    if (b === "monthly" || b === "annual") setBilling(b);
+    if (b !== "monthly" && b !== "annual") return;
+    setPendingBilling(b);
   }, [sub?.billing]);
 
   const committedTier = useMemo(() => pickerValue(sub), [sub]);
+  const committedBilling = useMemo<"monthly" | "annual">(() => {
+    const b = sub?.billing?.toLowerCase();
+    return b === "annual" ? "annual" : "monthly";
+  }, [sub?.billing]);
+  const annualLocked = committedBilling === "annual";
+
+  useEffect(() => {
+    setPendingTier(committedTier);
+  }, [committedTier]);
+
+  useEffect(() => {
+    setPendingBilling(committedBilling);
+  }, [committedBilling]);
 
   const checkoutHandledRef = useRef(false);
   useEffect(() => {
@@ -202,7 +217,7 @@ export function ManagerPlan() {
     }
   };
 
-  const startStripeCheckout = async (tier: "pro" | "business") => {
+  const startStripeCheckout = async (tier: "pro" | "business", billingInterval: "monthly" | "annual") => {
     flushSync(() => setBusyTier(tier));
     try {
       const res = await fetch("/api/stripe/checkout-portal", {
@@ -211,7 +226,7 @@ export function ManagerPlan() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tier,
-          billing,
+          billing: billingInterval,
           returnBasePath: planBasePath,
         }),
       });
@@ -239,7 +254,7 @@ export function ManagerPlan() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tier,
-          ...(tier !== "free" && sub?.stripeManaged ? { billing: opts?.billingInterval ?? billing } : {}),
+          ...(tier !== "free" && sub?.stripeManaged ? { billing: opts?.billingInterval ?? pendingBilling } : {}),
         }),
       });
       const body = (await res.json()) as { error?: string };
@@ -265,42 +280,48 @@ export function ManagerPlan() {
 
   const handleTierAction = (target: ManagerSkuTier) => {
     if (!sub || busyTier !== null || billingSyncBusy || billingPortalBusy) return;
-
-    if (target === committedTier) return;
-
-    if (target === "free" && !sub.isFree) {
-      if (!window.confirm("Switch to the Free plan? Paid features may be limited after you change.")) return;
-      void setTierViaApi("free");
-      return;
-    }
-
-    if (target === "free") return;
-
-    const paidTarget = target as "pro" | "business";
-
-    if (!sub.stripeManaged) {
-      void startStripeCheckout(paidTarget);
-      return;
-    }
-
-    /** Upgrades/downgrades between Pro and Business bill the payment method already on file — no Checkout. */
-    void setTierViaApi(paidTarget);
+    setPendingTier(target);
   };
 
   const changeBillingInterval = (next: "monthly" | "annual") => {
-    setBilling(next);
-    if (!sub?.stripeManaged || billingSyncBusy || busyTier !== null || billingPortalBusy) return;
-    if (committedTier !== "pro" && committedTier !== "business") return;
-
-    const server = sub.billing?.toLowerCase();
-    const serverNorm = server === "monthly" || server === "annual" ? server : null;
-    const baseline = serverNorm ?? billing;
-    if (baseline === next) return;
-
-    void setTierViaApi(committedTier, { billingInterval: next, billingOnly: true });
+    if (next === "monthly" && annualLocked) {
+      showToast("Annual billing is locked and cannot switch back to monthly.");
+      return;
+    }
+    setPendingBilling(next);
   };
 
   const isCurrent = (id: ManagerSkuTier) => id === committedTier;
+  const isSelected = (id: ManagerSkuTier) => id === pendingTier;
+  const hasPlanChange = pendingTier !== committedTier;
+  const hasBillingChange =
+    pendingBilling !== committedBilling &&
+    pendingTier !== "free" &&
+    (pendingTier === committedTier ? committedTier === "pro" || committedTier === "business" : true);
+  const hasPendingChanges = hasPlanChange || hasBillingChange;
+
+  const confirmChanges = async () => {
+    if (!sub || !hasPendingChanges) return;
+    if (pendingTier === "free" && committedTier !== "free") {
+      if (!window.confirm("Confirm switch to Free plan? Paid features may be limited after you change.")) return;
+    }
+    if (hasPlanChange) {
+      if (pendingTier === "free") {
+        await setTierViaApi("free");
+        return;
+      }
+      const paidTarget = pendingTier as "pro" | "business";
+      if (!sub.stripeManaged) {
+        await startStripeCheckout(paidTarget, pendingBilling);
+        return;
+      }
+      await setTierViaApi(paidTarget, { billingInterval: pendingBilling });
+      return;
+    }
+    if (hasBillingChange && (committedTier === "pro" || committedTier === "business")) {
+      await setTierViaApi(committedTier, { billingInterval: pendingBilling, billingOnly: true });
+    }
+  };
 
   return (
     <ManagerPortalPageShell title="Plan">
@@ -309,10 +330,10 @@ export function ManagerPlan() {
           <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-sm">
             <button
               type="button"
-              disabled={billingSyncBusy}
+              disabled={billingSyncBusy || annualLocked}
               onClick={() => changeBillingInterval("monthly")}
               className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                billing === "monthly" ? "bg-primary text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                pendingBilling === "monthly" ? "bg-primary text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Monthly
@@ -322,19 +343,29 @@ export function ManagerPlan() {
               disabled={billingSyncBusy}
               onClick={() => changeBillingInterval("annual")}
               className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                billing === "annual" ? "bg-primary text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                pendingBilling === "annual" ? "bg-primary text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Annual
               <span
                 className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                  billing === "annual" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700"
+                  pendingBilling === "annual" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700"
                 }`}
               >
                 Save ~20%
               </span>
             </button>
           </div>
+          {hasPendingChanges ? (
+            <Button
+              type="button"
+              className="shrink-0 rounded-full px-5"
+              disabled={busyTier !== null || billingSyncBusy || billingPortalBusy}
+              onClick={() => void confirmChanges()}
+            >
+              Confirm changes
+            </Button>
+          ) : null}
         </div>
 
         {!sub ? (
@@ -347,8 +378,9 @@ export function ManagerPlan() {
           <div className="grid gap-5 lg:grid-cols-3">
             {MANAGER_PLAN_TIERS.map((t) => {
               const tierId = t.id as ManagerSkuTier;
-              const pb = billing === "monthly" ? t.monthly : t.annual;
+              const pb = pendingBilling === "monthly" ? t.monthly : t.annual;
               const current = isCurrent(tierId);
+              const selected = isSelected(tierId);
               const busyHere = busyTier === tierId;
 
               let ctaLabel = "";
@@ -374,26 +406,30 @@ export function ManagerPlan() {
                 }
                 showPrimary = false;
                 ctaDisabled = true;
+                if (selected && hasPendingChanges) {
+                  ctaLabel = "Selected (confirm above)";
+                  ctaDisabled = true;
+                }
               } else if (!sub.stripeManaged && (tierId === "pro" || tierId === "business")) {
-                ctaLabel = `Subscribe · ${tierLabel(tierId)}`;
+                ctaLabel = selected ? "Selected (confirm above)" : `Choose ${tierLabel(tierId)}`;
               } else if (sub.stripeManaged) {
                 if (tierRank(tierId) > tierRank(committedTier)) {
-                  ctaLabel = `Upgrade to ${tierLabel(tierId)}`;
+                  ctaLabel = selected ? "Selected (confirm above)" : `Select ${tierLabel(tierId)}`;
                 } else if (tierRank(tierId) < tierRank(committedTier)) {
-                  ctaLabel = `Switch to ${tierLabel(tierId)}`;
+                  ctaLabel = selected ? "Selected (confirm above)" : `Select ${tierLabel(tierId)}`;
                 } else {
                   ctaLabel = "Update on file";
                   ctaDisabled = true;
                 }
               } else {
-                ctaLabel = `Subscribe · ${tierLabel(tierId)}`;
+                ctaLabel = selected ? "Selected (confirm above)" : `Choose ${tierLabel(tierId)}`;
               }
 
               return (
                 <div
                   key={t.id}
                   className={`relative flex flex-col rounded-3xl border p-7 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.08)] transition-shadow ${
-                    current
+                    selected
                       ? "border-2 border-primary bg-primary/[0.07] shadow-[0_8px_28px_-10px_rgba(0,122,255,0.35)] ring-1 ring-primary/20"
                       : "border border-slate-200 bg-white hover:border-slate-300"
                   }`}
