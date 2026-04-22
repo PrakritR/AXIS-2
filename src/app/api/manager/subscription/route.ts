@@ -12,6 +12,9 @@ import {
   upgradeManagerAccountToBusiness,
   type ManagerSkuTier,
 } from "@/lib/manager-access";
+import { getStripe } from "@/lib/stripe";
+import { stripeSubscriptionPeriodEndSec } from "@/lib/stripe-subscription-helpers";
+import { META_SCHEDULED_BILLING, META_SCHEDULED_TIER } from "@/lib/stripe-subscription-metadata";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { reconcileManagerPurchaseWithStripe } from "@/lib/manager-stripe-subscription-sync";
 
@@ -62,10 +65,33 @@ export async function GET() {
     /** Treat missing tier row as Free in the plan UI when there is no paid Stripe subscription. */
     const isFree = base.isFree || (missingTier && !stripeManaged);
 
+    let cancelAtPeriodEnd = false;
+    let currentPeriodEnd: number | null = null;
+    let scheduledDowngrade: { tier: string; billing: string } | null = null;
+
+    if (stripeManaged && stripeSubscriptionId) {
+      try {
+        const stripe = getStripe();
+        const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+        cancelAtPeriodEnd = Boolean((sub as { cancel_at_period_end?: boolean }).cancel_at_period_end);
+        currentPeriodEnd = stripeSubscriptionPeriodEndSec(sub);
+        const st = sub.metadata?.[META_SCHEDULED_TIER]?.trim().toLowerCase();
+        const sb = sub.metadata?.[META_SCHEDULED_BILLING]?.trim().toLowerCase();
+        if ((st === "pro" || st === "business") && (sb === "monthly" || sb === "annual")) {
+          scheduledDowngrade = { tier: st, billing: sb };
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
     return NextResponse.json({
       ...base,
       isFree,
       stripeManaged,
+      cancelAtPeriodEnd,
+      currentPeriodEnd,
+      scheduledDowngrade,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

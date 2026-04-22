@@ -61,7 +61,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Set NEXT_PUBLIC_APP_URL to your site origin (no trailing slash)." }, { status: 500 });
     }
 
-    const basePath = baseRaw === "/owner" ? "/owner" : "/manager";
+    const basePath =
+      baseRaw === "/owner" ? "/owner" : baseRaw === "/pro" ? "/pro" : "/manager";
 
     const { data: profile, error: profileErr } = await supabaseAuth
       .from("profiles")

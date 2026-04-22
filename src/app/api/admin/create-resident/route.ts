@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
+import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -56,8 +57,11 @@ export async function POST(req: Request) {
       if (!existingId) {
         return NextResponse.json({ error: "Could not locate existing account for this email." }, { status: 400 });
       }
+      const pwCheck = await assertPasswordMatchesExistingAuthUser(normalEmail, password);
+      if (!pwCheck.ok) {
+        return NextResponse.json({ error: pwCheck.message }, { status: 401 });
+      }
       userId = existingId;
-      await supabase.auth.admin.updateUserById(userId, { password });
     } else {
       if (!created?.user) return NextResponse.json({ error: "Could not create user." }, { status: 400 });
       userId = created.user.id;

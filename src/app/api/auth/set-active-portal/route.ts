@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { AuthRole } from "@/components/auth/portal-switcher";
+import { PREVIEW_PORTAL_COOKIE, PREVIEW_UID_COOKIE } from "@/lib/auth/admin-preview";
 import { ACTIVE_PORTAL_COOKIE, getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -30,13 +31,17 @@ export async function POST(req: Request) {
     }
 
     const res = NextResponse.json({ ok: true });
+    const secure = process.env.NODE_ENV === "production";
     res.cookies.set(ACTIVE_PORTAL_COOKIE, role, {
       httpOnly: true,
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 365,
-      secure: process.env.NODE_ENV === "production",
+      secure,
     });
+    /** Drop admin preview so choosing Property portal / Resident / Owner is not hijacked by a prior Launch preview session. */
+    res.cookies.set(PREVIEW_UID_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0, secure });
+    res.cookies.set(PREVIEW_PORTAL_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0, secure });
     return res;
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

@@ -436,7 +436,7 @@ export function ProAccountLinksPanel({
                 type="text"
                 value={axisInput}
                 onChange={(e) => setAxisInput(e.target.value)}
-                placeholder={mode === "owner" ? "e.g. axis-owner-abc123" : "e.g. axis-mgr-abc123"}
+                placeholder={mode === "owner" ? "e.g. axis-owner-abc123" : "e.g. AXIS-1A2B3C4D"}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
             </label>

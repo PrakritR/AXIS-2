@@ -11,6 +11,7 @@ import {
   readAvailabilityDateSetForStorageKey,
   startOfWeekMonday,
   toLocalDateStr,
+  WEEKDAY_LABELS,
   writeAvailabilityDateSetForStorageKey,
 } from "@/lib/demo-admin-scheduling";
 
@@ -19,8 +20,6 @@ type CalendarMode = "day" | "week" | "month";
 /** Half-hour slots shown in the grid (9:00–17:30 local); matches demo slot indexing from 8:00. */
 const SLOT_ROW_START = 2;
 const SLOT_ROW_END = 18;
-
-const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri"] as const;
 
 function addDays(d: Date, n: number): Date {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
@@ -48,10 +47,10 @@ function buildMonthCells(year: number, month: number): (number | null)[] {
   return cells;
 }
 
-function formatWeekRangeMonFri(monday: Date): string {
-  const fri = addDays(monday, 4);
+function formatWeekRangeMonSun(monday: Date): string {
+  const sunday = addDays(monday, 6);
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-  return `${monday.toLocaleDateString(undefined, opts)}–${fri.toLocaleDateString(undefined, { ...opts, year: "numeric" })}`;
+  return `${monday.toLocaleDateString(undefined, opts)}–${sunday.toLocaleDateString(undefined, { ...opts, year: "numeric" })}`;
 }
 
 function isInMonthPickRange(ds: string, pick: { start: string | null; end: string | null }): boolean {
@@ -67,7 +66,7 @@ function formatNavTitle(anchor: Date, mode: CalendarMode): string {
     return anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   }
   if (mode === "week") {
-    return formatWeekRangeMonFri(startOfWeekMonday(anchor));
+    return formatWeekRangeMonSun(startOfWeekMonday(anchor));
   }
   return anchor.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
 }
@@ -119,11 +118,11 @@ export function PortalCalendarPanels({
   }, [storageKey]);
 
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
-  const workWeekDates = useMemo(
-    () => [0, 1, 2, 3, 4].map((i) => addDays(weekMonday, i)),
+  const fullWeekDates = useMemo(
+    () => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)),
     [weekMonday],
   );
-  const workWeekDateStrs = useMemo(() => workWeekDates.map(toLocalDateStr), [workWeekDates]);
+  const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
 
   const meetings = useMemo<DemoMeeting[]>(() => [], []);
 
@@ -176,13 +175,13 @@ export function PortalCalendarPanels({
 
   const weekSlotCount = useMemo(() => {
     let n = 0;
-    for (const ds of workWeekDateStrs) {
+    for (const ds of fullWeekDateStrs) {
       for (const slot of slotRowIndices) {
         if (activeSlots.has(dateSlotKey(ds, slot))) n += 1;
       }
     }
     return n;
-  }, [activeSlots, workWeekDateStrs]);
+  }, [activeSlots, fullWeekDateStrs]);
 
   const shiftAnchor = (dir: -1 | 1) => {
     if (viewMode === "month") setAnchorDate((d) => addMonths(d, dir));
@@ -278,12 +277,12 @@ export function PortalCalendarPanels({
       ) : null}
 
       {viewMode === "week" ? (
-        <div className={PORTAL_CALENDAR_FRAME}>
-          <div className="grid grid-cols-[68px_repeat(5,minmax(0,1fr))] gap-px bg-slate-200">
+        <div className={`${PORTAL_CALENDAR_FRAME} overflow-x-auto`}>
+          <div className="grid min-w-[720px] grid-cols-[68px_repeat(7,minmax(0,1fr))] gap-px bg-slate-200">
             <div className="bg-slate-50" />
-            {workWeekDates.map((d, idx) => (
+            {fullWeekDates.map((d, idx) => (
               <div key={toLocalDateStr(d)} className="bg-slate-50 px-2 py-3 text-center">
-                <p className="text-sm font-semibold text-slate-900">{WEEKDAY_SHORT[idx]}</p>
+                <p className="text-sm font-semibold text-slate-900">{WEEKDAY_LABELS[idx]}</p>
                 <p className="text-xs text-slate-500">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
               </div>
             ))}
@@ -292,7 +291,7 @@ export function PortalCalendarPanels({
                 <div className="bg-white px-2 py-2 text-[11px] font-semibold text-slate-400">
                   {formatAvailabilitySlotLabel(slotIdx)}
                 </div>
-                {workWeekDateStrs.map((ds) => {
+                {fullWeekDateStrs.map((ds) => {
                   const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
                   return (
                     <div key={`${ds}-${slotIdx}`} className="relative min-h-[40px] bg-white p-1">
@@ -373,7 +372,7 @@ export function PortalCalendarPanels({
               ←
             </Button>
             <p className="min-w-0 flex-1 text-xs leading-snug text-slate-600 sm:text-sm">
-              <span className="font-semibold text-slate-800">Week of {formatWeekRangeMonFri(weekMonday)}</span>
+              <span className="font-semibold text-slate-800">Week of {formatWeekRangeMonSun(weekMonday)}</span>
             </p>
             <Button
               type="button"
@@ -390,21 +389,21 @@ export function PortalCalendarPanels({
       </div>
 
       <div
-        className="mt-4 grid grid-cols-[64px_repeat(5,minmax(0,1fr))] gap-1 rounded-[24px] border border-slate-200 bg-slate-50 p-3"
+        className="mt-4 grid min-w-[640px] grid-cols-[64px_repeat(7,minmax(0,1fr))] gap-1 overflow-x-auto rounded-[24px] border border-slate-200 bg-slate-50 p-3"
         onMouseLeave={() => setDragMode(null)}
         onMouseUp={() => setDragMode(null)}
       >
         <div />
-        {workWeekDates.map((d, idx) => (
+        {fullWeekDates.map((d, idx) => (
           <div key={toLocalDateStr(d)} className="px-1 py-2 text-center">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{WEEKDAY_SHORT[idx]}</p>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{WEEKDAY_LABELS[idx]}</p>
             <p className="text-[11px] font-semibold text-slate-700">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
           </div>
         ))}
         {slotRowIndices.map((slotIdx) => (
           <div key={slotIdx} className="contents">
             <div className="flex items-center text-[11px] font-medium text-slate-400">{formatAvailabilitySlotLabel(slotIdx)}</div>
-            {workWeekDateStrs.map((ds) => {
+            {fullWeekDateStrs.map((ds) => {
               const key = dateSlotKey(ds, slotIdx);
               const active = activeSlots.has(key);
               return (
@@ -438,7 +437,7 @@ export function PortalCalendarPanels({
           onClick={() => {
             if (!storageKey) return;
             const next = new Set(activeSlots);
-            for (const ds of workWeekDateStrs) {
+            for (const ds of fullWeekDateStrs) {
               for (const slot of slotRowIndices) {
                 next.delete(dateSlotKey(ds, slot));
               }
@@ -457,7 +456,7 @@ export function PortalCalendarPanels({
             if (!storageKey) return;
             const next = new Set(activeSlots);
             const templateSlots = [4, 5, 6, 12, 13];
-            for (const ds of workWeekDateStrs) {
+            for (const ds of fullWeekDateStrs) {
               for (const s of templateSlots) {
                 if (s >= SLOT_ROW_START && s <= SLOT_ROW_END) {
                   next.add(dateSlotKey(ds, s));

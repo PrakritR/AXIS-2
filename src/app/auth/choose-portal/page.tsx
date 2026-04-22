@@ -10,7 +10,7 @@ import { Suspense, useEffect, useState } from "react";
 
 const LABELS: Record<AuthRole, string> = {
   admin: "Admin portal",
-  manager: "Axis Property Portal (management)",
+  manager: "Property portal",
   resident: "Resident portal",
   owner: "Axis Property Portal (ownership)",
 };

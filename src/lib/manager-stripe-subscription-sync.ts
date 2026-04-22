@@ -2,7 +2,69 @@ import type Stripe from "stripe";
 import { getManagerPurchaseSku } from "@/lib/manager-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
-import { inferBillingFromStripePriceId, inferPaidTierFromStripePriceId } from "@/lib/stripe-price-ids";
+import {
+  inferBillingFromStripePriceId,
+  inferPaidTierFromStripePriceId,
+  stripePriceIdForPaidTier,
+  type PaidTier,
+  type StripeBilling,
+} from "@/lib/stripe-price-ids";
+import { META_SCHEDULED_BILLING, META_SCHEDULED_TIER } from "@/lib/stripe-subscription-metadata";
+
+function clearScheduleMetadata(meta: Record<string, string>): Record<string, string> {
+  const next = { ...meta };
+  delete next[META_SCHEDULED_TIER];
+  delete next[META_SCHEDULED_BILLING];
+  return next;
+}
+
+/**
+ * After a renewal invoice, apply a deferred downgrade stored on the subscription
+ * (`axis_scheduled_*` metadata) so the new period bills at the lower tier.
+ */
+export async function applyScheduledDowngradeAfterInvoicePaid(
+  subscriptionId: string,
+  billingReason: string | null | undefined,
+): Promise<void> {
+  if (billingReason !== "subscription_cycle") return;
+
+  const stripe = getStripe();
+  let sub: Stripe.Subscription;
+  try {
+    sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ["items.data.price"] });
+  } catch {
+    return;
+  }
+
+  const st = sub.metadata?.[META_SCHEDULED_TIER]?.trim().toLowerCase();
+  const sb = sub.metadata?.[META_SCHEDULED_BILLING]?.trim().toLowerCase();
+  if (st !== "pro" && st !== "business") return;
+  if (sb !== "monthly" && sb !== "annual") return;
+
+  const item = sub.items.data[0];
+  if (!item?.id) return;
+
+  const targetPaid = st as PaidTier;
+  const targetBilling = sb as StripeBilling;
+  const newPriceId = stripePriceIdForPaidTier(targetPaid, targetBilling)?.trim();
+  if (!newPriceId) return;
+
+  const currentPriceId = typeof item.price === "string" ? item.price : item.price?.id;
+  if (currentPriceId === newPriceId) {
+    const meta = clearScheduleMetadata({ ...(sub.metadata ?? {}) });
+    await stripe.subscriptions.update(subscriptionId, { metadata: meta });
+    await reconcileManagerPurchaseByStripeSubscriptionId(subscriptionId);
+    return;
+  }
+
+  const meta = clearScheduleMetadata({ ...(sub.metadata ?? {}) });
+  await stripe.subscriptions.update(subscriptionId, {
+    items: [{ id: item.id, price: newPriceId }],
+    proration_behavior: "none",
+    metadata: meta,
+  });
+  await reconcileManagerPurchaseByStripeSubscriptionId(subscriptionId);
+}
 
 /** Reconcile the row that owns this Stripe subscription id (webhook-safe). */
 export async function reconcileManagerPurchaseByStripeSubscriptionId(subscriptionId: string): Promise<void> {

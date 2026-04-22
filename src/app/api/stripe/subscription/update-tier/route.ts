@@ -2,18 +2,34 @@ import { NextResponse } from "next/server";
 import { getManagerPurchaseSku, setManagerPurchaseTier, type ManagerSkuTier } from "@/lib/manager-access";
 import {
   inferBillingFromStripePriceId,
+  inferPaidTierFromStripePriceId,
   stripePriceIdForPaidTier,
   type PaidTier,
   type StripeBilling,
 } from "@/lib/stripe-price-ids";
+import { META_SCHEDULED_BILLING, META_SCHEDULED_TIER } from "@/lib/stripe-subscription-metadata";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
+import { reconcileManagerPurchaseWithStripe } from "@/lib/manager-stripe-subscription-sync";
+import { stripeSubscriptionPeriodEndSec } from "@/lib/stripe-subscription-helpers";
 
 export const runtime = "nodejs";
 
 function isSku(s: string): s is ManagerSkuTier {
   return s === "free" || s === "pro" || s === "business";
+}
+
+function paidTierRank(t: PaidTier): number {
+  if (t === "pro") return 1;
+  return 2;
+}
+
+function clearScheduleMetadata(meta: Record<string, string>): Record<string, string> {
+  const next = { ...meta };
+  delete next[META_SCHEDULED_TIER];
+  delete next[META_SCHEDULED_BILLING];
+  return next;
 }
 
 export async function POST(req: Request) {
@@ -26,7 +42,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => null)) as { tier?: string; billing?: string } | null;
+    const body = (await req.json().catch(() => null)) as
+      | { tier?: string; billing?: string; resume?: boolean; action?: string }
+      | null;
+
+    if (body?.resume === true || body?.action === "resume") {
+      const { stripeSubscriptionId } = await getManagerPurchaseSku(user.id);
+      if (!stripeSubscriptionId) {
+        return NextResponse.json({ error: "No active subscription to resume." }, { status: 400 });
+      }
+      const stripe = getStripe();
+      const existing = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+      const meta = clearScheduleMetadata({ ...(existing.metadata ?? {}) });
+      await stripe.subscriptions.update(stripeSubscriptionId, {
+        cancel_at_period_end: false,
+        metadata: meta,
+      });
+      await reconcileManagerPurchaseWithStripe(user.id);
+      return NextResponse.json({ ok: true, resumed: true });
+    }
+
     const tierRaw = typeof body?.tier === "string" ? body.tier.toLowerCase().trim() : "";
     if (!isSku(tierRaw)) {
       return NextResponse.json({ error: "tier must be free, pro, or business." }, { status: 400 });
@@ -41,6 +76,13 @@ export async function POST(req: Request) {
     const supabase = createSupabaseServiceRoleClient();
 
     if (!stripeSubscriptionId) {
+      if (targetTier === "free") {
+        const result = await setManagerPurchaseTier(user.id, "free");
+        if (!result.ok) {
+          return NextResponse.json({ error: result.error }, { status: 400 });
+        }
+        return NextResponse.json({ ok: true, stripeManaged: false, tier: "free" });
+      }
       const result = await setManagerPurchaseTier(user.id, targetTier);
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: 400 });
@@ -53,22 +95,14 @@ export async function POST(req: Request) {
     if (targetTier === "free") {
       try {
         const existing = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-        const terminal = existing.status === "canceled" || existing.status === "incomplete_expired";
+        const st = (existing as { status?: string }).status;
+        const terminal = st === "canceled" || st === "incomplete_expired";
         if (!terminal) {
-          try {
-            await stripe.subscriptions.cancel(stripeSubscriptionId);
-          } catch (cancelErr: unknown) {
-            const msg = cancelErr instanceof Error ? cancelErr.message : String(cancelErr);
-            const code =
-              typeof cancelErr === "object" && cancelErr !== null && "code" in cancelErr
-                ? String((cancelErr as { code?: string }).code)
-                : "";
-            const benign =
-              code === "resource_missing" ||
-              /\bcanceled\b/i.test(msg) ||
-              msg.toLowerCase().includes("no such subscription");
-            if (!benign) throw cancelErr;
-          }
+          const meta = clearScheduleMetadata({ ...(existing.metadata ?? {}) });
+          await stripe.subscriptions.update(stripeSubscriptionId, {
+            cancel_at_period_end: true,
+            metadata: meta,
+          });
         }
       } catch (e: unknown) {
         const code =
@@ -76,17 +110,14 @@ export async function POST(req: Request) {
         const msg = e instanceof Error ? e.message : String(e);
         const missing = code === "resource_missing" || msg.toLowerCase().includes("no such subscription");
         if (!missing) throw e;
-        /* Subscription already removed in Stripe — still clear our row below. */
       }
 
-      const { error } = await supabase
-        .from("manager_purchases")
-        .update({ tier: "free", billing: "free", stripe_subscription_id: null })
-        .eq("user_id", user.id);
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-      return NextResponse.json({ ok: true, stripeManaged: false, tier: "free" });
+      return NextResponse.json({
+        ok: true,
+        stripeManaged: true,
+        cancelAtPeriodEnd: true,
+        message: "Subscription will end at the close of your current billing period. You keep paid features until then.",
+      });
     }
 
     const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
@@ -100,7 +131,6 @@ export async function POST(req: Request) {
     const currentBilling: StripeBilling = billingGuess === "annual" ? "annual" : "monthly";
 
     const targetPaid: PaidTier = targetTier === "business" ? "business" : "pro";
-    /** Explicit billing from client (monthly/annual toggle); otherwise keep Stripe subscription interval. */
     const targetBilling: StripeBilling = billingRequested ?? currentBilling;
 
     const newPriceId = stripePriceIdForPaidTier(targetPaid, targetBilling)?.trim();
@@ -113,22 +143,58 @@ export async function POST(req: Request) {
       );
     }
 
+    const currentPaidTier = inferPaidTierFromStripePriceId(currentPriceId);
+
+    if (currentPaidTier && paidTierRank(targetPaid) < paidTierRank(currentPaidTier)) {
+      const periodEnd = stripeSubscriptionPeriodEndSec(sub);
+      const meta = {
+        ...(sub.metadata ?? {}),
+        [META_SCHEDULED_TIER]: targetPaid,
+        [META_SCHEDULED_BILLING]: targetBilling,
+      };
+      await stripe.subscriptions.update(stripeSubscriptionId, {
+        metadata: meta,
+        cancel_at_period_end: false,
+      });
+      await reconcileManagerPurchaseWithStripe(user.id);
+      return NextResponse.json({
+        ok: true,
+        stripeManaged: true,
+        scheduledDowngrade: true,
+        scheduledTier: targetPaid,
+        scheduledBilling: targetBilling,
+        effectiveAt: periodEnd,
+        message: `Your plan will change to ${targetPaid} (${targetBilling}) at the start of your next billing cycle.`,
+      });
+    }
+
     if (currentPriceId === newPriceId) {
+      const meta = clearScheduleMetadata({ ...(sub.metadata ?? {}) });
+      await stripe.subscriptions.update(stripeSubscriptionId, { metadata: meta });
       await supabase.from("manager_purchases").update({ tier: targetPaid, billing: targetBilling }).eq("user_id", user.id);
       return NextResponse.json({ ok: true, stripeManaged: true, tier: targetPaid, billing: targetBilling });
     }
 
+    const isUpgradeTier = currentPaidTier === null || paidTierRank(targetPaid) > paidTierRank(currentPaidTier);
+    const sameTierDifferentPrice =
+      currentPaidTier !== null &&
+      paidTierRank(targetPaid) === paidTierRank(currentPaidTier) &&
+      currentPriceId !== newPriceId;
+    const monthlyToAnnualSameTier =
+      sameTierDifferentPrice && currentBilling === "monthly" && targetBilling === "annual";
+    const useProration = isUpgradeTier || monthlyToAnnualSameTier;
+
     const switchingMonthlyToAnnual = currentBilling === "monthly" && targetBilling === "annual";
-    /** Optional Stripe Coupon ID (e.g. $20 off) applied when moving from monthly to annual — create in Dashboard with desired rules. */
     const annualSwitchCoupon = process.env.STRIPE_COUPON_SWITCH_TO_ANNUAL?.trim();
+
+    const meta = clearScheduleMetadata({ ...(sub.metadata ?? {}) });
 
     await stripe.subscriptions.update(stripeSubscriptionId, {
       items: [{ id: item.id, price: newPriceId }],
-      /** Credits unused monthly time toward the annual invoice; invoice lines show the breakdown. */
-      proration_behavior: "create_prorations",
-      ...(switchingMonthlyToAnnual && annualSwitchCoupon
-        ? { discounts: [{ coupon: annualSwitchCoupon }] }
-        : {}),
+      proration_behavior: useProration ? "create_prorations" : "none",
+      cancel_at_period_end: false,
+      metadata: meta,
+      ...(switchingMonthlyToAnnual && annualSwitchCoupon ? { discounts: [{ coupon: annualSwitchCoupon }] } : {}),
     });
 
     const { error: upErr } = await supabase
@@ -140,7 +206,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: upErr.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, stripeManaged: true, tier: targetPaid, billing: targetBilling });
+    await reconcileManagerPurchaseWithStripe(user.id);
+
+    return NextResponse.json({
+      ok: true,
+      stripeManaged: true,
+      tier: targetPaid,
+      billing: targetBilling,
+      message: useProration
+        ? "Plan updated — Stripe will invoice any proration to your saved payment method."
+        : "Billing interval updated.",
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });

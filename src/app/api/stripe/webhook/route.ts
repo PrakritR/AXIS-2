@@ -3,10 +3,12 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import {
+  applyScheduledDowngradeAfterInvoicePaid,
   reconcileManagerPurchaseByStripeSubscriptionId,
   reconcileManagerPurchaseWithStripe,
 } from "@/lib/manager-stripe-subscription-sync";
 import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-session";
+import { stripeInvoiceSubscriptionId } from "@/lib/stripe-subscription-helpers";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -83,6 +85,19 @@ export async function POST(req: Request) {
       } catch (e) {
         // eslint-disable-next-line no-console -- webhook persistence
         console.error("[stripe webhook] recordPaidManagerCheckoutSession", e);
+      }
+    }
+    /* Requires `invoice.paid` in the Stripe webhook destination (Dashboard → Developers → Webhooks). */
+    if (event.type === "invoice.paid") {
+      const inv = event.data.object as Stripe.Invoice;
+      const subId = stripeInvoiceSubscriptionId(inv);
+      if (subId) {
+        try {
+          await applyScheduledDowngradeAfterInvoicePaid(subId, inv.billing_reason ?? null);
+        } catch (e) {
+          // eslint-disable-next-line no-console -- webhook persistence
+          console.error("[stripe webhook] invoice.paid scheduled downgrade", e);
+        }
       }
     }
     if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {

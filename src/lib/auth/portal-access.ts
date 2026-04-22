@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
+import type { AuthRole } from "@/components/auth/portal-switcher";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getServerSessionProfile, type ServerProfile } from "@/lib/auth/server-profile";
 
@@ -83,10 +83,6 @@ export async function assertAdminPortalAccess() {
   const ctx = await getPortalAccessContext();
   if (!ctx.user) redirect("/auth/sign-in");
   if (!hasAdminRole(ctx)) redirect("/auth/sign-in");
-  if (ctx.roles.length > 1 && ctx.effectiveRole === null) {
-    redirect(`/auth/choose-portal?next=${encodeURIComponent("/admin/dashboard")}`);
-  }
-  if (ctx.effectiveRole !== "admin") {
-    redirect(portalDashboardPath(ctx.effectiveRole ?? "resident"));
-  }
+  /** Admin routes use profile_roles admin membership only. Do not require `axis_active_portal=admin`:
+   *  multi-role admin+manager users otherwise bounce /admin → /pro → /admin when preview cookies are unset. */
 }

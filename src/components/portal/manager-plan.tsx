@@ -22,6 +22,10 @@ type SubPayload = {
   isFree: boolean;
   isLegacyUnlimited: boolean;
   stripeManaged?: boolean;
+  cancelAtPeriodEnd?: boolean;
+  /** Unix seconds from Stripe.Subscription.current_period_end */
+  currentPeriodEnd?: number | null;
+  scheduledDowngrade?: { tier: string; billing: string } | null;
 };
 
 /** Effective plan for UI selection — unknown / missing tier row defaults to Free (not Pro). */
@@ -68,6 +72,7 @@ export function ManagerPlan() {
   const [busyTier, setBusyTier] = useState<ManagerSkuTier | null>(null);
   const [billingSyncBusy, setBillingSyncBusy] = useState(false);
   const [billingPortalBusy, setBillingPortalBusy] = useState(false);
+  const [resumeBusy, setResumeBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -257,15 +262,22 @@ export function ManagerPlan() {
           ...(tier !== "free" && sub?.stripeManaged ? { billing: opts?.billingInterval ?? pendingBilling } : {}),
         }),
       });
-      const body = (await res.json()) as { error?: string };
+      const body = (await res.json()) as {
+        error?: string;
+        message?: string;
+        scheduledDowngrade?: boolean;
+        cancelAtPeriodEnd?: boolean;
+      };
       if (!res.ok) {
         showToast(body.error ?? "Could not update plan.");
         return;
       }
-      if (opts?.billingOnly) {
+      if (body.message) {
+        showToast(body.message);
+      } else if (opts?.billingOnly) {
         const lab = opts.billingInterval === "annual" ? "annual" : "monthly";
         showToast(`Billing switched to ${lab} — charged to your saved card with proration.`);
-      } else {
+      } else if (!body.scheduledDowngrade && !body.cancelAtPeriodEnd) {
         showToast(`Plan updated to ${tierLabel(tier)}.`);
       }
       await load();
@@ -275,6 +287,31 @@ export function ManagerPlan() {
     } finally {
       setBusyTier(null);
       setBillingSyncBusy(false);
+    }
+  };
+
+  const resumeSubscription = async () => {
+    if (!sub?.stripeManaged || resumeBusy) return;
+    flushSync(() => setResumeBusy(true));
+    try {
+      const res = await fetch("/api/stripe/subscription/update-tier", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resume: true }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        showToast(body.error ?? "Could not resume subscription.");
+        return;
+      }
+      showToast("Subscription resumed — renewal will continue as normal.");
+      await load();
+      startTransition(() => router.refresh());
+    } catch {
+      showToast("Network error.");
+    } finally {
+      setResumeBusy(false);
     }
   };
 
@@ -300,10 +337,37 @@ export function ManagerPlan() {
     (pendingTier === committedTier ? committedTier === "pro" || committedTier === "business" : true);
   const hasPendingChanges = hasPlanChange || hasBillingChange;
 
+  const periodEndLabel = (unix: number | null | undefined) => {
+    if (unix == null || typeof unix !== "number") return "the end of your billing period";
+    return new Date(unix * 1000).toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
   const confirmChanges = async () => {
     if (!sub || !hasPendingChanges) return;
+    if (
+      hasPlanChange &&
+      sub.stripeManaged &&
+      pendingTier !== "free" &&
+      tierRank(pendingTier) < tierRank(committedTier)
+    ) {
+      if (
+        !window.confirm(
+          "This downgrade is scheduled for your next billing renewal. You keep your current plan and limits until then. Continue?",
+        )
+      ) {
+        return;
+      }
+    }
     if (pendingTier === "free" && committedTier !== "free") {
-      if (!window.confirm("Confirm switch to Free plan? Paid features may be limited after you change.")) return;
+      const msg = sub.stripeManaged
+        ? `Cancel your paid subscription? You keep Pro or Business features until ${periodEndLabel(sub.currentPeriodEnd ?? null)}, then the account moves to Free.`
+        : "Confirm switch to Free plan? Paid features may be limited after you change.";
+      if (!window.confirm(msg)) return;
     }
     if (hasPlanChange) {
       if (pendingTier === "free") {
@@ -393,7 +457,7 @@ export function ManagerPlan() {
                   showPrimary = false;
                   ctaDisabled = true;
                 } else {
-                  ctaLabel = "Switch to Free";
+                  ctaLabel = sub.stripeManaged ? "Cancel plan (end of period)" : "Switch to Free";
                   showPrimary = false;
                 }
               } else if (current) {
@@ -478,13 +542,43 @@ export function ManagerPlan() {
           </div>
         )}
 
+        {sub?.stripeManaged && (sub.scheduledDowngrade || sub.cancelAtPeriodEnd) ? (
+          <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-5 py-4 text-sm text-amber-950">
+            {sub.cancelAtPeriodEnd ? (
+              <p>
+                <span className="font-semibold">Cancellation scheduled.</span> Paid access continues through{" "}
+                {periodEndLabel(sub.currentPeriodEnd ?? null)}. You can resume before then.
+              </p>
+            ) : null}
+            {sub.scheduledDowngrade ? (
+              <p className={sub.cancelAtPeriodEnd ? "mt-2" : ""}>
+                <span className="font-semibold">Downgrade scheduled.</span> Your workspace stays on{" "}
+                {tierLabel(committedTier)} until {periodEndLabel(sub.currentPeriodEnd ?? null)}, then moves to{" "}
+                {tierLabel(sub.scheduledDowngrade.tier as ManagerSkuTier)} ({sub.scheduledDowngrade.billing}).
+              </p>
+            ) : null}
+            {sub.cancelAtPeriodEnd ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3 rounded-full"
+                disabled={resumeBusy}
+                onClick={() => void resumeSubscription()}
+              >
+                {resumeBusy ? "Resuming…" : "Resume subscription"}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-5 py-4 text-sm text-slate-600">
           <span className="font-semibold text-slate-900">Billing: </span>
           {sub?.stripeManaged ? (
             <>
-              Plan changes and switching between monthly and annual use your{" "}
-              <span className="font-medium text-slate-800">saved card on file</span> — no checkout. Open Stripe to replace the card or download
-              invoices.
+              Upgrades charge your saved card (Stripe invoices any proration). Downgrades to a lower paid tier start at your{" "}
+              <span className="font-medium text-slate-800">next renewal</span>. Canceling ends paid access after the current period — use{" "}
+              <span className="font-medium text-slate-800">Cancel plan</span> on Free or the button below. First-time paid signup opens Stripe
+              Checkout.
             </>
           ) : (
             <>
@@ -506,6 +600,30 @@ export function ManagerPlan() {
           >
             Manage payment method & invoices
           </Button>
+          {sub?.stripeManaged && !sub.isFree && !sub.cancelAtPeriodEnd ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="ml-2 mt-2 inline-flex rounded-full border-rose-200 px-4 py-2 text-[13px] text-rose-800 hover:bg-rose-50 sm:mt-0"
+              disabled={busyTier !== null || billingSyncBusy || billingPortalBusy}
+              onClick={() => {
+                setPendingTier("free");
+                void (async () => {
+                  if (
+                    !window.confirm(
+                      `Cancel your paid subscription? You keep ${tierLabel(committedTier)} features until ${periodEndLabel(sub.currentPeriodEnd ?? null)}, then the account becomes Free.`,
+                    )
+                  ) {
+                    setPendingTier(committedTier);
+                    return;
+                  }
+                  await setTierViaApi("free");
+                })();
+              }}
+            >
+              Cancel plan
+            </Button>
+          ) : null}
         </div>
       </div>
     </ManagerPortalPageShell>

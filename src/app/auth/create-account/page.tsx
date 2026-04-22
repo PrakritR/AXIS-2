@@ -421,7 +421,7 @@ function CreateAccountContent() {
               <Input
                 id="mgr-id-input"
                 className="mt-1.5 font-mono"
-                placeholder="MGR-XXXXXXXX"
+                placeholder="AXIS-XXXXXXXX"
                 value={managerIdInput}
                 onChange={(e) => setManagerIdInput(e.target.value)}
               />

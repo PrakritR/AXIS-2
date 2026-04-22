@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isValidAdminRegisterKey } from "@/lib/auth/resolve-portal-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
+import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -43,8 +44,11 @@ export async function POST(req: Request) {
       if (!existing) {
         return NextResponse.json({ error: "Could not locate existing account for this email." }, { status: 400 });
       }
+      const pwCheck = await assertPasswordMatchesExistingAuthUser(normalEmail, password);
+      if (!pwCheck.ok) {
+        return NextResponse.json({ error: pwCheck.message }, { status: 401 });
+      }
       userId = existing.id;
-      await supabase.auth.admin.updateUserById(userId, { password });
     } else {
       if (!data.user) {
         return NextResponse.json({ error: "Could not create user." }, { status: 400 });
