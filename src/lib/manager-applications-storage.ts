@@ -1,4 +1,5 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
 const KEY = "axis_manager_applications_v1";
 export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
@@ -60,4 +61,20 @@ export function appendManagerApplicationRow(row: DemoApplicantRow): void {
   const rows = readManagerApplicationRows();
   if (rows.some((r) => r.id === row.id)) return;
   writeManagerApplicationRows([...rows, row]);
+}
+
+/**
+ * Returns the application answers with the manager's final property / room placement
+ * applied on top of the original applicant submission.
+ */
+export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "application" | "assignedPropertyId" | "assignedRoomChoice">):
+  | Partial<RentalWizardFormState>
+  | undefined {
+  if (!row.application) return undefined;
+  const next: Partial<RentalWizardFormState> = { ...row.application };
+  const propertyId = row.assignedPropertyId?.trim();
+  const roomChoice = row.assignedRoomChoice?.trim();
+  if (propertyId) next.propertyId = propertyId;
+  if (roomChoice) next.roomChoice1 = roomChoice;
+  return next;
 }

@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
@@ -27,6 +28,7 @@ import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-ap
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   MANAGER_APPLICATIONS_EVENT,
+  effectiveApplicationForRow,
   readManagerApplicationRows,
   writeManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
@@ -34,7 +36,10 @@ import {
   MANAGER_PORTFOLIO_REFRESH_EVENTS,
   applicationVisibleToPortalUser,
   buildManagerPropertyFilterOptions,
+  collectAccessiblePropertyIds,
+  type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
+import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "@/lib/rental-application/data";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -42,6 +47,100 @@ function countByBucket(rows: DemoApplicantRow[]) {
     c[r.bucket] += 1;
   }
   return c;
+}
+
+function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucket, assignedRoomChoice?: string) {
+  const roomLabel = getRoomChoiceLabel(assignedRoomChoice ?? row.assignedRoomChoice ?? "");
+  if (bucket === "approved") return roomLabel ? `Approved · ${roomLabel}` : "Approved";
+  if (bucket === "rejected") return "Rejected";
+  return roomLabel ? `Submitted · ${roomLabel}` : "Submitted";
+}
+
+function ManagerApplicationPlacementEditor({
+  row,
+  propertyOptions,
+  onSave,
+}: {
+  row: DemoApplicantRow;
+  propertyOptions: ManagerPropertyFilterOption[];
+  onSave: (propertyId: string, roomChoice: string) => void;
+}) {
+  const initialPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  const initialRoomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
+  const [propertyId, setPropertyId] = useState(initialPropertyId);
+  const [roomChoice, setRoomChoice] = useState(initialRoomChoice);
+
+  useEffect(() => {
+    setPropertyId(row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "");
+    setRoomChoice(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "");
+  }, [row]);
+
+  const roomOptions = useMemo(() => (propertyId ? getRoomOptionsForProperty(propertyId) : []), [propertyId]);
+
+  useEffect(() => {
+    if (!roomChoice) return;
+    if (!roomOptions.some((opt) => opt.value === roomChoice)) {
+      setRoomChoice("");
+    }
+  }, [roomChoice, roomOptions]);
+
+  const applicantChoices = [
+    row.application?.roomChoice1?.trim(),
+    row.application?.roomChoice2?.trim(),
+    row.application?.roomChoice3?.trim(),
+  ].filter(Boolean) as string[];
+
+  return (
+    <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Final placement</p>
+          <p className="mt-1 text-sm text-slate-600">Only the assigned house and room can be changed here. The rest of the application stays locked.</p>
+        </div>
+        <div className="grid flex-1 gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">House</span>
+            <Select value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
+              <option value="">Select property</option>
+              {propertyOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Room</span>
+            <Select value={roomChoice} onChange={(e) => setRoomChoice(e.target.value)} disabled={!propertyId || roomOptions.length === 0}>
+              <option value="">{propertyId ? "Select room" : "Select house first"}</option>
+              {roomOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600">
+        <p>
+          <span className="font-medium text-slate-800">Applicant choices:</span>{" "}
+          {applicantChoices.length ? applicantChoices.map((choice) => getRoomChoiceLabel(choice)).filter(Boolean).join(" · ") : "No room choices saved."}
+        </p>
+        <p>
+          <span className="font-medium text-slate-800">Current assignment:</span>{" "}
+          {propertyId && roomChoice ? `${getPropertyById(propertyId)?.title ?? propertyId} · ${getRoomChoiceLabel(roomChoice)}` : "Not assigned yet"}
+        </p>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} disabled={!propertyId || !roomChoice} onClick={() => onSave(propertyId, roomChoice)}>
+          Save placement
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function ManagerApplications() {
@@ -82,6 +181,20 @@ export function ManagerApplications() {
   }, []);
 
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId, portfolioTick]);
+  const placementPropertyOptions = useMemo(() => {
+    if (!userId) return [];
+    return [...collectAccessiblePropertyIds(userId)]
+      .map((id) => {
+        const property = getPropertyById(id);
+        if (!property) return null;
+        return {
+          id,
+          label: property.title?.trim() || property.address?.trim() || id,
+        };
+      })
+      .filter((value): value is ManagerPropertyFilterOption => Boolean(value))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [userId, portfolioTick]);
 
   const scopedRows = useMemo(() => {
     if (!authReady) return [];
@@ -111,7 +224,7 @@ export function ManagerApplications() {
   }, [showToast]);
 
   const setRowBucket = (id: string, nextBucket: ManagerApplicationBucket) => {
-    const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket } : r));
+    const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket, stage: stageLabelForRow(r, nextBucket) } : r));
     persist(next);
     setExpandedId(null);
     setBucket(nextBucket);
@@ -123,6 +236,32 @@ export function ManagerApplications() {
           : "Moved to Pending.";
     showToast(msg);
   };
+
+  const savePlacement = useCallback(
+    (id: string, propertyId: string, roomChoice: string) => {
+      const property = getPropertyById(propertyId);
+      const roomLabel = getRoomChoiceLabel(roomChoice);
+      if (!property || !roomLabel) {
+        showToast("Select a valid house and room.");
+        return;
+      }
+      const next = rows.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              property: property.title?.trim() || row.property,
+              propertyId,
+              assignedPropertyId: propertyId,
+              assignedRoomChoice: roomChoice,
+              stage: stageLabelForRow(row, row.bucket, roomChoice),
+            }
+          : row,
+      );
+      persist(next);
+      showToast("Assigned house and room saved.");
+    },
+    [rows, persist, showToast],
+  );
 
   const deleteApplication = (id: string) => {
     persist(rows.filter((r) => r.id !== id));
@@ -230,9 +369,14 @@ export function ManagerApplications() {
 
                           {row.application ? (
                             <div className="mt-4 max-h-[min(70vh,520px)] overflow-y-auto rounded-xl border border-slate-200/80 bg-white p-4">
+                              <ManagerApplicationPlacementEditor row={row} propertyOptions={placementPropertyOptions} onSave={(propertyId, roomChoice) => savePlacement(row.id, propertyId, roomChoice)} />
                               <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Application on file</p>
                               <div className="mt-3">
-                                <ManagerApplicationReadonlyReview partial={row.application} />
+                                <ManagerApplicationReadonlyReview
+                                  partial={effectiveApplicationForRow(row) ?? row.application}
+                                  assignedPropertyId={row.assignedPropertyId}
+                                  assignedRoomChoice={row.assignedRoomChoice}
+                                />
                               </div>
                             </div>
                           ) : null}

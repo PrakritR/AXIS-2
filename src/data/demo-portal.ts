@@ -38,6 +38,10 @@ export type DemoApplicantRow = {
   application?: RentalWizardFormState;
   /** Listing id from the rental application (for filtering). */
   propertyId?: string;
+  /** Manager-selected final property placement. */
+  assignedPropertyId?: string;
+  /** Manager-selected final room placement. */
+  assignedRoomChoice?: string;
   /** Listing owner scope — who should receive this application in the portal. */
   managerUserId?: string | null;
 };

@@ -37,13 +37,28 @@ function Row({ k, v }: { k: string; v: ReactNode }) {
 }
 
 /** Read-only review matching the rental application “Review” step (step 11). */
-export function ManagerApplicationReadonlyReview({ partial }: { partial: Partial<RentalWizardFormState> }) {
+export function ManagerApplicationReadonlyReview({
+  partial,
+  assignedPropertyId,
+  assignedRoomChoice,
+}: {
+  partial: Partial<RentalWizardFormState>;
+  assignedPropertyId?: string;
+  assignedRoomChoice?: string;
+}) {
   const form: RentalWizardFormState = { ...createInitialRentalWizardState(), ...partial };
   const prop = getPropertyById(form.propertyId);
   const roomLabel = (id: string) => getRoomChoiceLabel(id);
+  const assignedProperty = assignedPropertyId ? getPropertyById(assignedPropertyId) : undefined;
 
   return (
     <div className="space-y-4">
+      {assignedPropertyId || assignedRoomChoice ? (
+        <ReviewSection title="Manager final placement">
+          <Row k="Assigned property" v={displayOrDash(assignedProperty?.title)} />
+          <Row k="Assigned room" v={displayOrDash(roomLabel(assignedRoomChoice ?? ""))} />
+        </ReviewSection>
+      ) : null}
       <ReviewSection title="Group application">
         <Row k="Applying as group" v={form.applyingAsGroup === "yes" ? "Yes" : form.applyingAsGroup === "no" ? "No" : "—"} />
         {form.applyingAsGroup === "yes" ? (

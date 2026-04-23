@@ -9,7 +9,7 @@ import {
   type ManagerLeaseBucket,
 } from "@/data/demo-portal";
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
-import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import { effectiveApplicationForRow, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { clearUploadedOwnLease, readUploadedOwnLease, saveUploadedOwnLease } from "@/lib/resident-lease-upload";
 
@@ -140,7 +140,7 @@ function demoRowToPipeline(seed: DemoManagerLeaseDraftRow): LeasePipelineRow {
   const apps = readManagerApplicationRows();
   const appId = DEMO_APPLICATION_IDS[seed.id];
   const appRow = appId ? apps.find((a) => a.id === appId) : apps.find((a) => a.email?.toLowerCase() === email.toLowerCase());
-  const application = appRow?.application;
+  const application = appRow ? effectiveApplicationForRow(appRow) : undefined;
 
   return normalizeLeasePipelineRow({
     id: seed.id,
@@ -208,7 +208,7 @@ function syncApprovedApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] 
         notes: "Created from approved application.",
         updatedAtIso: iso,
         applicationId: app.id,
-        application: app.application,
+        application: effectiveApplicationForRow(app),
         generatedHtml: null,
         generatedAtIso: null,
         managerUploadedPdf: null,
@@ -226,7 +226,12 @@ function enrichFromApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] {
     if (!r.applicationId) return r;
     const app = apps.find((a) => a.id === r.applicationId);
     if (!app?.application) return r;
-    return { ...r, application: app.application, residentName: app.name || r.residentName };
+    return {
+      ...r,
+      unit: app.property || r.unit,
+      application: effectiveApplicationForRow(app),
+      residentName: app.name || r.residentName,
+    };
   });
 }
 
