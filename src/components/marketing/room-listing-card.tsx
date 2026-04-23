@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import type { RoomListingRow } from "@/lib/room-listings-catalog";
+import { roomAvailabilityTextClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 
 const SLIDE_GRADS = [
@@ -115,6 +116,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
   const bedLabel =
     row.propertyBeds === 0 ? "Studio" : `${row.propertyBeds} bedroom${row.propertyBeds === 1 ? "" : "s"}`;
   const bathLabel = `${row.propertyBaths} bathroom${row.propertyBaths === 1 ? "" : "s"}`;
+  const availabilityTone = roomAvailabilityTone(row.availabilityRaw);
 
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_10px_40px_-18px_rgba(15,23,42,0.2)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_50px_-14px_rgba(15,23,42,0.25)]">
@@ -219,7 +221,11 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
           </Link>
         </div>
 
-        <p className="mt-3 text-center text-[11px] font-medium text-emerald-700 sm:text-left">{row.availabilityLabel}</p>
+        <p
+          className={`mt-3 text-center text-[11px] font-medium sm:text-left ${roomAvailabilityTextClasses(availabilityTone)}`}
+        >
+          {row.availabilityLabel}
+        </p>
       </div>
     </article>
   );

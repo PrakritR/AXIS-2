@@ -32,6 +32,8 @@ export type RoomListingRow = {
   listingTags: readonly string[];
   /** Shown on image overlay, e.g. "$775" or "$750–$875" */
   priceOverlayLabel: string;
+  /** Raw listing availability string (for traffic-light styling on search cards). */
+  availabilityRaw: string;
 };
 
 function streetUpperFromProperty(p: MockProperty): string {
@@ -44,8 +46,8 @@ function headlineAddressFromProperty(p: MockProperty): string {
 }
 
 function descriptionBlurb(p: MockProperty, room: ListingRoomRow): string {
-  const detail = room.detail.replace(/\s+/g, " ").trim();
-  const extra = detail.length > 80 ? `${detail.slice(0, 80)}…` : detail;
+  const notes = (room.modal.roomNotes ?? room.detail).replace(/\s+/g, " ").trim();
+  const extra = notes.length > 80 ? `${notes.slice(0, 80)}…` : notes;
   if (p.tagline && extra) return `${p.tagline} ${extra}`;
   return p.tagline || extra || "Seattle shared home with furnished rooms and common areas.";
 }
@@ -76,13 +78,17 @@ function formatRoomTitle(floorLabel: string, roomName: string): string {
 }
 
 function availabilityLabel(room: ListingRoomRow): string {
-  const a = room.availability.toLowerCase();
+  const raw = room.availability.trim();
+  const a = raw.toLowerCase();
+  if (/\bunavailable\b|not available|no longer available/i.test(a)) return raw;
+  if (/available\s+after/i.test(raw)) return raw;
+  if (/\bwaitlist\b|available soon\b/i.test(a)) return raw;
   if (a.includes("available")) return "1 available";
-  return room.availability;
+  return raw;
 }
 
 function bathroomHintFromRoom(room: ListingRoomRow): string {
-  const blob = `${room.detail} ${room.modal.setupLine}`.toLowerCase();
+  const blob = `${room.modal.roomNotes ?? room.detail} ${room.modal.setupLine} ${(room.modal.roomAmenityLabels ?? []).join(" ")}`.toLowerCase();
   if (/\ben[- ]?suite\b|private bath|private\b/.test(blob)) return "Private bath";
   if (/\bshared\b.*\bbath\b|\bshares bathroom\b/.test(blob)) {
     const m = blob.match(/(\d+)[- ]?person/);
@@ -95,7 +101,14 @@ function bathroomHintFromRoom(room: ListingRoomRow): string {
 
 export function roomMatchesBathroomFilter(room: ListingRoomRow, bathroomId: string): boolean {
   if (bathroomId === "any") return true;
-  const blob = [room.detail, room.modal.setupLine, ...room.modal.includedTags].join(" ").toLowerCase();
+  const blob = [
+    room.modal.roomNotes ?? room.detail,
+    room.modal.setupLine,
+    ...room.modal.includedTags,
+    ...(room.modal.roomAmenityLabels ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
   if (bathroomId === "private") {
     return /\bprivate\b|en[- ]?suite|private bath/.test(blob);
   }
@@ -159,6 +172,7 @@ export function filterRoomListings(
           descriptionBlurb: descriptionBlurb(p, room),
           listingTags: listingTags(p),
           priceOverlayLabel: priceOverlayLabelForProperty(p),
+          availabilityRaw: room.availability,
         });
       }
     }

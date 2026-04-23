@@ -1,9 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
-import { APPLICATION_FEE_PROMO_WAIVE_CODE, removePendingApplicationFeeCharge } from "@/lib/household-charges";
 import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
 import { LEASE_TERM_OPTIONS, getPropertyById, getRoomChoiceLabel, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
@@ -76,13 +74,11 @@ export type WizardStepsProps = {
   errors: RentalWizardErrors;
   propertyOptions: { value: string; label: string }[];
   patch: (p: Partial<RentalWizardFormState>) => void;
-  mergeErrors: (partial: RentalWizardErrors) => void;
   applicationFeeGate: {
     needsFee: boolean;
     paid: boolean;
     displayLabel: string;
     amount: number;
-    waived: boolean;
   };
   setPhone: (next: string) => void;
   setLandlordPhone: (next: string) => void;
@@ -106,7 +102,7 @@ function maskSsnReview(ssn: string) {
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, propertyOptions, patch, goToStep, mergeErrors, applicationFeeGate } = p;
+  const { step, form, errors, propertyOptions, patch, goToStep, applicationFeeGate } = p;
 
   if (step === 1) {
     return (
@@ -242,9 +238,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </div>
         {form.hasCosigner === "yes" ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 text-sm leading-relaxed text-slate-700">
-            After you pay the listing&apos;s application fee (or waive it with promo <span className="font-mono font-semibold">FEEWAIVE</span> on
-            the last step), you&apos;ll receive an <strong className="text-slate-900">Application ID</strong> to share with your co-signer so they
-            can link their information to yours.
+            After you pay the listing&apos;s application fee on the last step, you&apos;ll receive an{" "}
+            <strong className="text-slate-900">Application ID</strong> to share with your co-signer so they can link their information to yours.
           </div>
         ) : null}
       </div>
@@ -352,7 +347,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <Select
             id="leaseTerm"
             value={form.leaseTerm}
-            onChange={(e) => patch({ leaseTerm: e.target.value })}
+            onChange={(e) => {
+              const v = e.target.value;
+              patch(v === "Month-to-Month" ? { leaseTerm: v, leaseEnd: "" } : { leaseTerm: v });
+            }}
             className={errors.leaseTerm ? "border-red-400 ring-2 ring-red-100" : ""}
           >
             <option value="">Select lease length</option>
@@ -363,9 +361,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             ))}
           </Select>
           <FieldError msg={errors.leaseTerm} />
+          {form.leaseTerm === "Month-to-Month" ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-950">
+              Month-to-month leases include an additional <span className="font-semibold">$25</span> charge to rent.
+            </p>
+          ) : null}
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className={form.leaseTerm === "Month-to-Month" ? "space-y-2" : "grid gap-4 sm:grid-cols-2"}>
           <div className="space-y-2">
             <Label htmlFor="leaseStart" required>
               Lease start date
@@ -379,28 +382,21 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             />
             <FieldError msg={errors.leaseStart} />
           </div>
-          <div className="space-y-2">
-            {form.leaseTerm === "Month-to-Month" ? (
-              <Label htmlFor="leaseEnd" optional>
-                Lease end date
-              </Label>
-            ) : (
+          {form.leaseTerm !== "Month-to-Month" ? (
+            <div className="space-y-2">
               <Label htmlFor="leaseEnd" required>
                 Lease end date
               </Label>
-            )}
-            {form.leaseTerm === "Month-to-Month" ? (
-              <p className="text-xs text-slate-500">Not required for month-to-month; add an end date if you have a planned move-out.</p>
-            ) : null}
-            <Input
-              id="leaseEnd"
-              type="date"
-              value={form.leaseEnd}
-              onChange={(e) => patch({ leaseEnd: e.target.value })}
-              className={errors.leaseEnd ? "border-red-400 ring-2 ring-red-100" : ""}
-            />
-            <FieldError msg={errors.leaseEnd} />
-          </div>
+              <Input
+                id="leaseEnd"
+                type="date"
+                value={form.leaseEnd}
+                onChange={(e) => patch({ leaseEnd: e.target.value })}
+                className={errors.leaseEnd ? "border-red-400 ring-2 ring-red-100" : ""}
+              />
+              <FieldError msg={errors.leaseEnd} />
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -1210,7 +1206,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Row k="3rd choice room" v={displayOrDash(roomLabel(form.roomChoice3))} />
             <Row k="Lease term" v={displayOrDash(form.leaseTerm)} />
             <Row k="Lease start" v={displayOrDash(form.leaseStart)} />
-            <Row k="Lease end" v={displayOrDash(form.leaseEnd)} />
+            {form.leaseTerm !== "Month-to-Month" ? <Row k="Lease end" v={displayOrDash(form.leaseEnd)} /> : null}
           </ReviewSection>
           {prop?.listingSubmission?.v === 1 ? (
             <ReviewSection title="Housing charges (this listing)" stepTarget={3}>
@@ -1328,7 +1324,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const utilLabel = sub ? utilitiesListingEstimateLabel(sub) : "—";
     const channels = listingApplicationFeeChannels(sub);
     const gate = applicationFeeGate;
-    const feeDecisionNeeded = gate.needsFee && !gate.waived && !gate.paid;
+    const feeDecisionNeeded = gate.needsFee && !gate.paid;
     const showStripeInstructions =
       channels.stripe && (!channels.zelle || form.applicationFeePayChannel === "stripe") && feeDecisionNeeded;
     const showZelleInstructions =
@@ -1341,28 +1337,18 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <StepIntro className="mt-2">
             Dollar amounts shown here come from this listing&apos;s published manager settings (not invented by the application). If a line
             shows “—”, the property has not published that fee yet — confirm with the manager. When an application fee applies, you must pay it
-            (your manager marks it received in this demo) or enter promo code <span className="font-mono font-semibold">FEEWAIVE</span> before
-            you can submit and receive an Application ID. Submitting also creates other move-in lines in your resident portal; there is no live
-            card charge here. If this listing offers both Zelle and a tracked portal payment for the fee, choose how you will pay below before
-            your manager marks it received.
+            (your manager marks it received in this demo) before you can submit and receive an Application ID. Submitting also creates other
+            move-in lines in your resident portal; there is no live card charge here. If this listing offers both Zelle and a tracked portal
+            payment for the fee, choose how you will pay below before your manager marks it received.
           </StepIntro>
         </div>
         {gate.needsFee ? (
           <div
             className={`rounded-2xl border px-4 py-3 text-sm ${
-              gate.waived
-                ? "border-violet-200 bg-violet-50/70 text-violet-950"
-                : gate.paid
-                  ? "border-emerald-200 bg-emerald-50/70 text-emerald-950"
-                  : "border-amber-200 bg-amber-50/70 text-amber-950"
+              gate.paid ? "border-emerald-200 bg-emerald-50/70 text-emerald-950" : "border-amber-200 bg-amber-50/70 text-amber-950"
             }`}
           >
-            {gate.waived ? (
-              <p>
-                <span className="font-semibold">Fee waived.</span> You applied promo {APPLICATION_FEE_PROMO_WAIVE_CODE}. You can submit the
-                application.
-              </p>
-            ) : gate.paid ? (
+            {gate.paid ? (
               <p>
                 <span className="font-semibold">Application fee paid.</span> Your manager marked this fee received. You can submit the
                 application.
@@ -1375,7 +1361,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 ) : (
                   <>Pay or settle the amount using the path you selected below, then ask your </>
                 )}
-                manager to mark the fee paid in Payments, or use promo {APPLICATION_FEE_PROMO_WAIVE_CODE} to waive it in this demo.
+                manager to mark the fee paid in Payments.
               </p>
             )}
           </div>
@@ -1453,48 +1439,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 Send to <span className="font-mono font-semibold">{sub.zelleContact.trim()}</span>. Include your name and preferred unit in the
                 memo. Your manager will mark the charge paid when funds are received.
               </p>
-            </div>
-          ) : null}
-          {gate.needsFee ? (
-            <div className="mt-5 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-              <Label htmlFor="applicationFeePromoCode" optional>
-                Promo code (waive application fee)
-              </Label>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                <Input
-                  id="applicationFeePromoCode"
-                  className="sm:flex-1"
-                  value={form.applicationFeePromoCode}
-                  onChange={(e) => {
-                    mergeErrors({ applicationFeePromoCode: "" });
-                    patch({ applicationFeePromoCode: e.target.value });
-                  }}
-                  placeholder="FEEWAIVE"
-                  autoComplete="off"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="min-h-[44px] shrink-0 sm:min-w-[120px]"
-                  onClick={() => {
-                    const code = form.applicationFeePromoCode.trim().toUpperCase();
-                    if (code !== APPLICATION_FEE_PROMO_WAIVE_CODE) {
-                      mergeErrors({
-                        applicationFeePromoCode: `Invalid code. Enter ${APPLICATION_FEE_PROMO_WAIVE_CODE} to waive the application fee in this demo.`,
-                      });
-                      return;
-                    }
-                    if (form.propertyId.trim()) {
-                      removePendingApplicationFeeCharge(form.email, form.propertyId.trim());
-                    }
-                    mergeErrors({ applicationFeePromoCode: "" });
-                    patch({ applicationFeeWaivedByPromo: true, applicationFeePromoCode: "" });
-                  }}
-                >
-                  Apply code
-                </Button>
-              </div>
-              <FieldError msg={errors.applicationFeePromoCode} />
             </div>
           ) : null}
           <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">

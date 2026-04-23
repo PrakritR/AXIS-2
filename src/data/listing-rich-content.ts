@@ -16,12 +16,19 @@ export type ListingRoomModal = {
   photoUrls?: string[];
   /** Uploaded room video (data URL or https) — replaces placeholder when present */
   videoSrc?: string | null;
+  /** Floor / level from manager form (full line in modal). */
+  floorLine?: string;
+  /** Manager “Room details” textarea — full notes for modal & catalog blurbs. */
+  roomNotes?: string;
 };
 
 export type ListingRoomRow = {
   id: string;
   name: string;
+  /** Short subtitle under the room name in listing tables (not full manager notes). */
   detail: string;
+  /** Monthly utilities estimate label from submission (shown in modal). */
+  utilitiesEstimate?: string;
   price: string;
   availability: string;
   modal: ListingRoomModal;

@@ -37,10 +37,12 @@ import {
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
 import {
-  LISTING_AMENITY_PRESETS,
+  BATHROOM_EXTRA_AMENITY_PRESETS,
+  HOUSE_WIDE_AMENITY_PRESETS,
   ROOM_AMENITY_PRESETS,
   ROOM_AVAILABILITY_OPTIONS,
   ROOM_FURNISHING_OPTIONS,
+  SHARED_SPACE_AMENITY_PRESETS,
   furnishingSelectState,
   mergeToggleLine,
   splitLineList,
@@ -49,7 +51,9 @@ import {
 const selectInputCls =
   "min-h-[44px] w-full rounded-xl border border-black/[0.08] bg-black/[0.04] px-3.5 py-2.5 text-[14px] text-[#1d1d1f] outline-none transition focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/20";
 
-const LISTING_AMENITY_LABEL_SET = new Set(LISTING_AMENITY_PRESETS.map((p) => p.label));
+const HOUSE_WIDE_AMENITY_LABEL_SET = new Set(HOUSE_WIDE_AMENITY_PRESETS.map((p) => p.label));
+const SHARED_SPACE_AMENITY_LABEL_SET = new Set(SHARED_SPACE_AMENITY_PRESETS.map((p) => p.label));
+const BATHROOM_EXTRA_AMENITY_LABEL_SET = new Set(BATHROOM_EXTRA_AMENITY_PRESETS.map((p) => p.label));
 const ROOM_AMENITY_LABEL_SET = new Set(ROOM_AMENITY_PRESETS.map((p) => p.label));
 
 /** Lines in `fullText` that are not preset labels (free-form additions). */
@@ -1183,7 +1187,7 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-bath"
             title="Bathrooms"
-            description="Group the public listing by bathroom: assign each bedroom to the bath row it uses. A room can use a private suite bath and still share a whole-house hall bath — use “Whole-house” for the common one. Two+ rooms on the same row are a shared bath."
+            description="Group the public listing by bathroom: assign each bedroom to the bath row it uses. A room can use a private suite bath and still share a whole-house hall bath — use “Whole-house” for the common one. Add finishes (dual vanities, walk-in shower, etc.) under Bathroom amenities."
           >
               <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                 <p className="text-sm text-slate-500">Shown in the Bathrooms section on the public listing.</p>
@@ -1293,6 +1297,50 @@ export function ManagerAddListingForm({
                           </div>
                         )}
                       </div>
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="Finishes and fixtures for this bathroom only (beyond shower / toilet / tub above).">
+                          Bathroom amenities
+                        </FieldLabel>
+                        <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2">
+                          {BATHROOM_EXTRA_AMENITY_PRESETS.map((p) => {
+                            const on = splitLineList(b.amenitiesText ?? "").includes(p.label);
+                            return (
+                              <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-slate-300"
+                                  checked={on}
+                                  onChange={(e) =>
+                                    setBath(i, {
+                                      amenitiesText: mergeToggleLine(b.amenitiesText ?? "", p.label, e.target.checked),
+                                    })
+                                  }
+                                />
+                                <span className="font-medium text-slate-800">{p.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="One per line — merged with the checkboxes above on the public listing.">
+                          Additional bathroom details
+                        </FieldLabel>
+                        <Textarea
+                          className="mt-2 min-h-[56px]"
+                          value={extraLinesOutsidePresetSet(b.amenitiesText ?? "", BATHROOM_EXTRA_AMENITY_LABEL_SET)}
+                          onChange={(e) =>
+                            setBath(i, {
+                              amenitiesText: setExtraLinesPreservingPresets(
+                                b.amenitiesText ?? "",
+                                e.target.value,
+                                BATHROOM_EXTRA_AMENITY_LABEL_SET,
+                              ),
+                            })
+                          }
+                          placeholder="e.g. Bluetooth speaker mirror, towel warmer…"
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1305,7 +1353,7 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-shared"
             title="Shared spaces"
-            description="Add each common area (kitchen, laundry, yard, etc.), then choose which bedrooms have access. A room can access multiple spaces."
+            description="Add each common area (kitchen, laundry, yard, etc.), then choose which bedrooms have access. Put appliances and in-space equipment (dishwasher, fridge, desk, TV, etc.) in Space amenities — not the house-wide Amenities step."
           >
               <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                 <p className="text-sm text-slate-500">Shown as separate rows on the public listing.</p>
@@ -1338,12 +1386,58 @@ export function ManagerAddListingForm({
                           />
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel hint="Rules, hours, equipment, parking for guests, etc.">Details</FieldLabel>
+                          <FieldLabel hint="Rules, hours, parking for guests, policies — not individual appliances (those go below).">
+                            Details
+                          </FieldLabel>
                           <Textarea
                             className="min-h-[72px]"
                             value={sp.detail}
                             onChange={(e) => setSharedSpace(i, { detail: e.target.value })}
                             placeholder="How the space works, what’s included, any house rules."
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <FieldLabel hint="Kitchen appliances, shared desk, TV, etc. — only for this space.">
+                            Space amenities
+                          </FieldLabel>
+                          <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {SHARED_SPACE_AMENITY_PRESETS.map((p) => {
+                              const on = splitLineList(sp.amenitiesText ?? "").includes(p.label);
+                              return (
+                                <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-slate-300"
+                                    checked={on}
+                                    onChange={(e) =>
+                                      setSharedSpace(i, {
+                                        amenitiesText: mergeToggleLine(sp.amenitiesText ?? "", p.label, e.target.checked),
+                                      })
+                                    }
+                                  />
+                                  <span className="font-medium text-slate-800">{p.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <FieldLabel hint="One per line — merged with the checkboxes above on the public listing.">
+                            Additional space amenities
+                          </FieldLabel>
+                          <Textarea
+                            className="mt-2 min-h-[56px]"
+                            value={extraLinesOutsidePresetSet(sp.amenitiesText ?? "", SHARED_SPACE_AMENITY_LABEL_SET)}
+                            onChange={(e) =>
+                              setSharedSpace(i, {
+                                amenitiesText: setExtraLinesPreservingPresets(
+                                  sp.amenitiesText ?? "",
+                                  e.target.value,
+                                  SHARED_SPACE_AMENITY_LABEL_SET,
+                                ),
+                              })
+                            }
+                            placeholder="e.g. Coffee machine, garbage disposal, ice maker…"
                           />
                         </div>
                         <div className="sm:col-span-2">
@@ -1405,8 +1499,10 @@ export function ManagerAddListingForm({
             title="Amenities"
             description={
               <>
-                House-wide amenities for the listing grid. Per-room features and furnishing belong in{" "}
-                <span className="font-medium text-slate-800">Rooms</span> above.
+                Building-wide and neighborhood amenities for the main listing grid. Kitchen appliances, shared desk, TV, and similar belong in{" "}
+                <span className="font-medium text-slate-800">Shared spaces</span>; bathroom finishes in{" "}
+                <span className="font-medium text-slate-800">Bathrooms</span>; bedroom items in{" "}
+                <span className="font-medium text-slate-800">Rooms</span>.
               </>
             }
           >
@@ -1423,7 +1519,7 @@ export function ManagerAddListingForm({
               <div>
                 <FieldLabel hint="Tap to add common amenities; anything else goes in the box below.">Common amenities</FieldLabel>
                 <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {LISTING_AMENITY_PRESETS.map((p) => {
+                  {HOUSE_WIDE_AMENITY_PRESETS.map((p) => {
                     const on = splitLineList(sub.amenitiesText).includes(p.label);
                     return (
                       <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -1448,11 +1544,11 @@ export function ManagerAddListingForm({
                 <FieldLabel hint="One per line — merged with the checkboxes above on the public listing.">Additional amenities</FieldLabel>
                 <Textarea
                   className="mt-2 min-h-[100px]"
-                  value={extraLinesOutsidePresetSet(sub.amenitiesText, LISTING_AMENITY_LABEL_SET)}
+                  value={extraLinesOutsidePresetSet(sub.amenitiesText, HOUSE_WIDE_AMENITY_LABEL_SET)}
                   onChange={(e) =>
                     setSub((s) => ({
                       ...s,
-                      amenitiesText: setExtraLinesPreservingPresets(s.amenitiesText, e.target.value, LISTING_AMENITY_LABEL_SET),
+                      amenitiesText: setExtraLinesPreservingPresets(s.amenitiesText, e.target.value, HOUSE_WIDE_AMENITY_LABEL_SET),
                     }))
                   }
                   placeholder="Anything not in the list above — community room, sauna, piano, etc."

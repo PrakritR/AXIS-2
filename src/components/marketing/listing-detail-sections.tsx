@@ -278,14 +278,9 @@ export function ListingDetailSections({
                     Shared spaces
                   </h3>
                   <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
-                    Laundry, kitchen, living areas, and more. Highlights are
-                    under{" "}
-                    <span className="font-semibold text-slate-800">Info</span>.
-                    Open the{" "}
-                    <span className="font-semibold text-slate-800">
-                      Details
-                    </span>{" "}
-                    button for a tour video placeholder and photo strip.
+                    Laundry, kitchen, living areas, and more. Open{" "}
+                    <span className="font-semibold text-slate-800">Details</span> for the full description, room access,
+                    amenities, and photos.
                   </p>
                   <div className="mt-4 md:overflow-x-auto sm:mt-5">
                     <SharedTableInteractive
@@ -323,14 +318,13 @@ export function ListingDetailSections({
                     Amenities
                   </h2>
                   <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Shared spaces and house features
+                    Building-wide & neighborhood
                   </p>
                   <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
-                    Same layout as rooms. Use{" "}
-                    <span className="font-semibold text-slate-800">
-                      Details
-                    </span>{" "}
-                    for a short amenity note.
+                    Kitchen appliances, shared desks, and bathroom finishes are listed under{" "}
+                    <span className="font-semibold text-slate-800">Shared spaces</span> and{" "}
+                    <span className="font-semibold text-slate-800">Bathrooms</span> above. Use{" "}
+                    <span className="font-semibold text-slate-800">Details</span> on a row for more context.
                   </p>
                   <div className="mt-5 md:overflow-x-auto">
                     <AmenitiesTableInteractive

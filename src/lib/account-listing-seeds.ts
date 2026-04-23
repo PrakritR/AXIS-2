@@ -14,12 +14,16 @@ function sharedSpaces(prefix: string, ids: string[]): ManagerListingSubmissionV1
       id: `${prefix}-shared-kitchen`,
       name: "Shared kitchen + living area",
       detail: "Shared kitchen, dining, and lounge spaces for residents.",
+      amenitiesText: ["Refrigerator", "Microwave", "Oven / range", "Dishwasher", "Desk / workspace", "TV in common area", "Living / lounge seating"].join(
+        "\n",
+      ),
       roomAccessIds: ids,
     },
     {
       id: `${prefix}-shared-laundry`,
       name: "In-unit laundry",
       detail: "Laundry is available in the home.",
+      amenitiesText: "",
       roomAccessIds: ids,
     },
   ];
@@ -30,6 +34,7 @@ function bathrooms(prefix: string, count: number, ids: string[]): ManagerListing
     id: `${prefix}-bath-${i + 1}`,
     name: i === 0 ? "Full bath" : `Bathroom ${i + 1}`,
     location: i === 0 ? "Main level" : `Floor ${(i % 3) + 1}`,
+    amenitiesText: "",
     shower: true,
     toilet: true,
     bathtub: i === 0,
@@ -79,7 +84,9 @@ function baseSubmission(input: {
     hoaMonthly: "",
     otherMonthlyFees: "$25/month for month-to-month leases.",
     sharedSpaces: input.sharedSpaces ?? sharedSpaces(input.prefix, ids),
-    amenitiesText: input.amenitiesText ?? "Fully furnished rooms\nIn-unit laundry\nShared kitchen\nShared lounge\nBi-monthly cleaning\nWalkable location",
+    amenitiesText:
+      input.amenitiesText ??
+      "Walkable neighborhood\nNear public transit\nPeriodic cleaning included\nWiFi\nIn-unit laundry\nSome utilities included in rent",
     zellePaymentsEnabled: false,
     zelleContact: "",
     applicationFeeStripeEnabled: true,
@@ -186,24 +193,27 @@ function buildSeeds(managerUserId: string): MockProperty[] {
         {
           id: "seed-4709a-shared-living",
           name: "Living area",
-          detail: "Shared lounge and everyday common space for the household.",
+          detail: "Shared lounge and everyday common space for the household. HVAC is centralized; living area is cooled/heated with the house.",
+          amenitiesText: ["TV in common area", "Living / lounge seating"].join("\n"),
           roomAccessIds: aRoomIds,
         },
         {
           id: "seed-4709a-shared-kitchen",
           name: "Kitchen",
           detail: "Full shared kitchen for cooking, storage, and shared meals.",
+          amenitiesText: ["Refrigerator", "Microwave", "Oven / range", "Dishwasher", "Desk / workspace", "Shared printer"].join("\n"),
           roomAccessIds: aRoomIds,
         },
         {
           id: "seed-4709a-shared-laundry",
           name: "Laundry",
           detail: "Shared laundry for residents (layout varies by floor).",
+          amenitiesText: "",
           roomAccessIds: aRoomIds,
         },
       ],
       amenitiesText:
-        "Walkable Location\nIn-Unit Laundry (Washer & Dryer)\nBi-monthly Cleaning (Twice a Month)\nWiFi\nA/C in Living Room Only\nPublic Transportation\nRefrigerator\nMicrowave\nStove\nOven\nDishwasher\nStreet Parking\nDesk\nBed\nHeating\nAC",
+        "Walkable neighborhood\nIn-unit laundry\nPeriodic cleaning included\nWiFi\nAir conditioning\nNear public transit\nParking available",
     }),
     baseSubmission({
       prefix: "seed-4709b",
@@ -260,24 +270,27 @@ function buildSeeds(managerUserId: string): MockProperty[] {
         {
           id: "seed-4709b-shared-living",
           name: "Living area",
-          detail: "Shared lounge and everyday common space for the household.",
+          detail: "Shared lounge and everyday common space for the household. HVAC is centralized; living area is cooled/heated with the house.",
+          amenitiesText: ["TV in common area", "Living / lounge seating"].join("\n"),
           roomAccessIds: bRoomIds,
         },
         {
           id: "seed-4709b-shared-kitchen",
           name: "Kitchen",
           detail: "Full shared kitchen for cooking, storage, and shared meals.",
+          amenitiesText: ["Refrigerator", "Microwave", "Oven / range", "Dishwasher", "Desk / workspace", "Shared printer"].join("\n"),
           roomAccessIds: bRoomIds,
         },
         {
           id: "seed-4709b-shared-laundry",
           name: "Laundry",
           detail: "Shared laundry for residents (layout varies by floor).",
+          amenitiesText: "",
           roomAccessIds: bRoomIds,
         },
       ],
       amenitiesText:
-        "Walkable Location\nIn-Unit Laundry (Washer & Dryer)\nBi-monthly Cleaning (Twice a Month)\nWiFi\nA/C in Living Room Only\nPublic Transportation\nRefrigerator\nMicrowave\nStove\nOven\nDishwasher\nStreet Parking\nDesk\nBed\nHeating\nAC",
+        "Walkable neighborhood\nIn-unit laundry\nPeriodic cleaning included\nWiFi\nAir conditioning\nNear public transit\nParking available",
     }),
     baseSubmission({
       prefix: "seed-5259-brooklyn",
@@ -343,24 +356,27 @@ function buildSeeds(managerUserId: string): MockProperty[] {
         {
           id: "seed-5259-brooklyn-shared-living",
           name: "Living area",
-          detail: "Shared lounge and everyday common space for the household.",
+          detail: "Shared lounge and everyday common space for the household. HVAC is centralized; living area is cooled/heated with the house.",
+          amenitiesText: ["TV in common area", "Living / lounge seating"].join("\n"),
           roomAccessIds: brooklynRoomIds,
         },
         {
           id: "seed-5259-brooklyn-shared-kitchen",
           name: "Kitchen",
           detail: "Full shared kitchen for cooking, storage, and shared meals.",
+          amenitiesText: ["Refrigerator", "Microwave", "Oven / range", "Dishwasher", "Desk / workspace", "Shared printer"].join("\n"),
           roomAccessIds: brooklynRoomIds,
         },
         {
           id: "seed-5259-brooklyn-shared-laundry",
           name: "Laundry",
           detail: "Shared laundry for residents (layout varies by floor).",
+          amenitiesText: "",
           roomAccessIds: brooklynRoomIds,
         },
       ],
       amenitiesText:
-        "Walkable Location\nIn-Unit Laundry (Washer & Dryer)\nBi-monthly Cleaning (Twice a Month)\nWiFi\nA/C in Living Room Only\nPublic Transportation\nRefrigerator\nMicrowave\nStove\nOven\nDishwasher\nPackage Storage\nStreet Parking\nDesk\nBed\nHeating",
+        "Walkable neighborhood\nIn-unit laundry\nPeriodic cleaning included\nWiFi\nAir conditioning\nNear public transit\nParking available\nPackage Storage",
     }),
   ];
 

@@ -1,16 +1,12 @@
-/** Preset labels stored as lines in `amenitiesText` / `roomAmenitiesText` (toggle sync in form). */
+/** Preset labels stored as lines in `amenitiesText` / `roomAmenitiesText` / shared & bath amenity fields (toggle sync in form). */
 
-export const LISTING_AMENITY_PRESETS = [
+/** Whole-property / neighborhood / building — shown only on the final Amenities step. */
+export const HOUSE_WIDE_AMENITY_PRESETS = [
   { id: "wifi", label: "WiFi" },
   { id: "in-unit-laundry", label: "In-unit laundry" },
   { id: "in-building-laundry", label: "In-building laundry" },
   { id: "heating", label: "Heating" },
   { id: "ac", label: "Air conditioning" },
-  { id: "dishwasher", label: "Dishwasher" },
-  { id: "microwave", label: "Microwave" },
-  { id: "oven-range", label: "Oven / range" },
-  { id: "fridge", label: "Refrigerator" },
-  { id: "desk", label: "Desk" },
   { id: "bike-storage", label: "Bike storage" },
   { id: "ev-charging", label: "EV charging" },
   { id: "elevator", label: "Elevator" },
@@ -26,6 +22,44 @@ export const LISTING_AMENITY_PRESETS = [
   { id: "transit", label: "Near public transit" },
   { id: "parking-available", label: "Parking available" },
 ] as const;
+
+/**
+ * Kitchen appliances, workspace, and common-area items — use on Shared spaces rows (not the house-wide grid).
+ * Labels here are stripped from legacy `amenitiesText` on the public listing so they appear under the right space.
+ */
+export const SHARED_SPACE_AMENITY_PRESETS = [
+  { id: "dishwasher", label: "Dishwasher" },
+  { id: "microwave", label: "Microwave" },
+  { id: "oven-range", label: "Oven / range" },
+  { id: "fridge", label: "Refrigerator" },
+  { id: "desk", label: "Desk / workspace" },
+  { id: "tv-common", label: "TV in common area" },
+  { id: "lounge-seating", label: "Living / lounge seating" },
+  { id: "printer", label: "Shared printer" },
+] as const;
+
+/** Fixtures & finishes specific to a bathroom row. */
+export const BATHROOM_EXTRA_AMENITY_PRESETS = [
+  { id: "dual-vanity", label: "Dual vanities" },
+  { id: "walk-in-shower", label: "Walk-in / large shower" },
+  { id: "soaking-tub", label: "Soaking tub" },
+  { id: "heated-floor", label: "Heated floors" },
+  { id: "bath-window", label: "Window / natural light" },
+  { id: "vent-fan", label: "Exhaust fan" },
+  { id: "storage", label: "Built-in storage / linen" },
+] as const;
+
+/** @deprecated Use HOUSE_WIDE_AMENITY_PRESETS — kept as alias for older imports/tests. */
+export const LISTING_AMENITY_PRESETS = [
+  ...HOUSE_WIDE_AMENITY_PRESETS,
+  ...SHARED_SPACE_AMENITY_PRESETS,
+] as const;
+
+/** Labels that used to live on the house amenity list and should not duplicate on the main grid when present in legacy `amenitiesText`. */
+export const LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS = new Set([
+  ...SHARED_SPACE_AMENITY_PRESETS.map((p) => p.label),
+  "Desk", // legacy label before "Desk / workspace"
+]);
 
 export const ROOM_AMENITY_PRESETS = [
   { id: "closet", label: "Walk-in closet" },

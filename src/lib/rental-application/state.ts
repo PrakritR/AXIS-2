@@ -74,8 +74,6 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     digitalSignature: "",
     dateSigned: todayISO(),
     applicationFeeAcknowledged: false,
-    applicationFeePromoCode: "",
-    applicationFeeWaivedByPromo: false,
     applicationFeePayChannel: "stripe",
   };
 }

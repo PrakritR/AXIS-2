@@ -13,8 +13,21 @@ import type {
   ListingSharedRow,
 } from "@/data/listing-rich-content";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
 
-function AvailabilityPill({ text }: { text: string }) {
+function AvailabilityPill({ text, variant = "default" }: { text: string; variant?: "default" | "room" }) {
+  if (variant === "room") {
+    const tone = roomAvailabilityTone(text);
+    const { wrap, dot } = roomAvailabilityPillClasses(tone);
+    return (
+      <span
+        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-xs ${wrap}`}
+      >
+        <span className={`h-1 w-1 shrink-0 rounded-full sm:h-1.5 sm:w-1.5 ${dot}`} />
+        {text}
+      </span>
+    );
+  }
   const t = text.toLowerCase();
   const green = t.includes("available") || t.includes("included");
   return (
@@ -35,6 +48,23 @@ function formatBathroomIncludes(r: ListingBathroomRow): string {
   if (r.toilet) parts.push("Toilet");
   if (r.bathtub) parts.push("Bathtub");
   return parts.length ? parts.join(", ") : "—";
+}
+
+/** True when furnishing is only a comma list of items already covered by room-amenity chips. */
+function furnishingDuplicatesAmenityPills(furnish: string, amenities: readonly string[]): boolean {
+  const t = furnish.trim();
+  if (!t || amenities.length === 0) return false;
+  const pool = amenities.join(" ").toLowerCase();
+  const segments = t.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+  if (segments.length === 0) return false;
+  return segments.every((seg) => {
+    const words = seg
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length > 1 && w !== "and");
+    if (words.length === 0) return true;
+    return words.every((w) => pool.includes(w));
+  });
 }
 
 function DetailsButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
@@ -151,7 +181,28 @@ function ListingDetailModal({
           <div className="p-6 pb-8 sm:p-8">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.floorLabel.toUpperCase()}</p>
             <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.room.name}</h2>
-            <p className="mt-2 text-sm text-slate-600">{state.room.detail}</p>
+            <div className="mt-3 space-y-2 text-sm text-slate-600">
+              {state.room.modal.floorLine ? (
+                <p>
+                  <span className="font-semibold text-slate-800">Floor / level: </span>
+                  {state.room.modal.floorLine}
+                </p>
+              ) : null}
+              {state.room.utilitiesEstimate ? (
+                <p>
+                  <span className="font-semibold text-slate-800">Utilities estimate: </span>
+                  {state.room.utilitiesEstimate}
+                </p>
+              ) : null}
+              {state.room.modal.roomNotes ? (
+                <div>
+                  <p className="font-semibold text-slate-800">Room details</p>
+                  <p className="mt-1 whitespace-pre-wrap leading-relaxed text-slate-700">{state.room.modal.roomNotes}</p>
+                </div>
+              ) : (
+                <p className="text-slate-500">No extra room notes from the listing manager.</p>
+              )}
+            </div>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Monthly rent</p>
@@ -164,7 +215,7 @@ function ListingDetailModal({
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Status</p>
                 <div className="mt-2">
-                  <AvailabilityPill text={state.room.availability} />
+                  <AvailabilityPill text={state.room.availability} variant="room" />
                 </div>
               </div>
             </div>
@@ -194,18 +245,21 @@ function ListingDetailModal({
                 />
               )}
             </div>
-            <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>
-              <p className="mt-1 text-sm text-slate-600">This room includes the following features:</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {state.room.modal.includedTags.map((t) => (
-                  <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
-                    {t}
-                  </span>
-                ))}
+            {state.room.modal.includedTags.length > 0 ? (
+              <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Highlights</p>
+                <p className="mt-1 text-sm text-slate-600">Bathroom setup and other notes not repeated below.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {state.room.modal.includedTags.map((t) => (
+                    <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
+                      {t}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
-            {state.room.modal.furnishingDetail ? (
+            ) : null}
+            {state.room.modal.furnishingDetail &&
+            !furnishingDuplicatesAmenityPills(state.room.modal.furnishingDetail, state.room.modal.roomAmenityLabels ?? []) ? (
               <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/70 p-5">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-950/90">Furnishing</p>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{state.room.modal.furnishingDetail}</p>
@@ -480,7 +534,7 @@ function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpe
             <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <p className="text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
-              <AvailabilityPill text={r.availability} />
+              <AvailabilityPill text={r.availability} variant="room" />
             </div>
             <DetailsButton className="mt-2.5 w-full" onClick={() => onOpen(r)} />
           </div>
@@ -504,7 +558,7 @@ function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpe
                 <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
               </div>
               <p className="text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
-              <AvailabilityPill text={r.availability} />
+              <AvailabilityPill text={r.availability} variant="room" />
               <DetailsButton onClick={() => onOpen(r)} />
             </div>
           ))}
@@ -559,6 +613,26 @@ export function BathroomTableInteractive({ rows, listingPropertyId }: { rows: Li
   );
 }
 
+/** Table-only: avoid long room lists and full manager notes — full text stays in the modal. */
+function sharedSpaceAccessSummary(detail: string): string {
+  const t = detail.trim();
+  if (!t || t === "Select room access in manager form") return "Set room access in listing editor";
+  const prefix = "Room access:";
+  if (!t.startsWith(prefix)) {
+    return t.length > 72 ? `${t.slice(0, 69)}…` : t;
+  }
+  const rest = t.slice(prefix.length).trim();
+  const parts = rest.split(",").map((s) => s.trim()).filter(Boolean);
+  const n = parts.length;
+  if (n === 0) return "Room access TBD";
+  if (n <= 2) return t.length > 80 ? `${t.slice(0, 77)}…` : t;
+  return `${n} listed bedrooms have access`;
+}
+
+function sharedSpaceInfoSummary(useNote: string): string {
+  return useNote.trim() ? "With listing" : "—";
+}
+
 export function SharedTableInteractive({ rows, listingPropertyId }: { rows: ListingSharedRow[]; listingPropertyId: string }) {
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -568,15 +642,15 @@ export function SharedTableInteractive({ rows, listingPropertyId }: { rows: List
         {rows.map((r) => (
           <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
             <p className="text-sm font-semibold text-slate-900">{r.name}</p>
-            <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
-            <p className="mt-1.5 text-xs text-slate-700 sm:text-sm">{r.useNote}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{sharedSpaceAccessSummary(r.detail)}</p>
+            <p className="mt-2 text-xs text-slate-600 sm:text-sm">{sharedSpaceInfoSummary(r.useNote)}</p>
             <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "shared", row: r })} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[520px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Space</span>
             <span>Info</span>
             <span className="w-[80px] sm:w-[88px]" />
@@ -584,13 +658,13 @@ export function SharedTableInteractive({ rows, listingPropertyId }: { rows: List
           {rows.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div>
                 <p className="text-sm font-semibold text-slate-900">{r.name}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{sharedSpaceAccessSummary(r.detail)}</p>
               </div>
-              <p className="text-xs text-slate-700 sm:text-sm">{r.useNote}</p>
+              <p className="text-xs text-slate-600 sm:text-sm">{sharedSpaceInfoSummary(r.useNote)}</p>
               <DetailsButton onClick={() => setModal({ kind: "shared", row: r })} />
             </div>
           ))}
@@ -618,26 +692,22 @@ export function LeaseBasicsTableInteractive({ rows, listingPropertyId }: { rows:
                 <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
               </div>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <p className="text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
-              <AvailabilityPill text={r.status} />
-            </div>
+            <p className="mt-2 text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
             <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "lease", row: r })} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Item</span>
             <span>Price</span>
-            <span>Status</span>
             <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
           </div>
           {rows.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div className="flex min-w-0 items-start gap-2">
                 <span className="shrink-0 text-base leading-none" aria-hidden>
@@ -649,7 +719,6 @@ export function LeaseBasicsTableInteractive({ rows, listingPropertyId }: { rows:
                 </div>
               </div>
               <p className="text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
-              <AvailabilityPill text={r.status} />
               <DetailsButton onClick={() => setModal({ kind: "lease", row: r })} />
             </div>
           ))}
@@ -673,7 +742,6 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {c.strikethrough ? <span className="text-xs text-slate-400 line-through">{c.strikethrough}</span> : null}
               <p className="text-xs font-semibold text-slate-900 sm:text-sm">{c.price}</p>
-              {c.promo ? <AvailabilityPill text={c.promo} /> : null}
             </div>
             <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "bundle", row: c })} />
           </div>
@@ -681,16 +749,15 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Bundle</span>
             <span>Price</span>
-            <span>Offer</span>
             <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
           </div>
           {rows.map((c) => (
             <div
               key={c.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div>
                 <p className="text-sm font-semibold text-slate-900">{c.label}</p>
@@ -700,7 +767,6 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
                 {c.strikethrough ? <span className="mr-1.5 text-slate-400 line-through">{c.strikethrough}</span> : null}
                 <span>{c.price}</span>
               </div>
-              <div>{c.promo ? <AvailabilityPill text={c.promo} /> : <span className="text-xs text-slate-500">—</span>}</div>
               <DetailsButton onClick={() => setModal({ kind: "bundle", row: c })} />
             </div>
           ))}

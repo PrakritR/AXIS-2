@@ -63,7 +63,7 @@ export function ManagerApplicationReadonlyReview({ partial }: { partial: Partial
         <Row k="3rd choice room" v={displayOrDash(roomLabel(form.roomChoice3))} />
         <Row k="Lease term" v={displayOrDash(form.leaseTerm)} />
         <Row k="Lease start" v={displayOrDash(form.leaseStart)} />
-        <Row k="Lease end" v={displayOrDash(form.leaseEnd)} />
+        {form.leaseTerm !== "Month-to-Month" ? <Row k="Lease end" v={displayOrDash(form.leaseEnd)} /> : null}
       </ReviewSection>
       {prop?.listingSubmission?.v === 1 ? (
         <ReviewSection title="Housing charges (listing)">

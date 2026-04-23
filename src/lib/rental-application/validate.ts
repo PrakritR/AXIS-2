@@ -91,9 +91,6 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
     if (!mtm) {
       const dre = validateDateRequired(end, "Lease end date");
       if (!dre.ok) e.leaseEnd = dre.message;
-    } else if (end) {
-      const dre = validateDateRequired(end, "Lease end date");
-      if (!dre.ok) e.leaseEnd = dre.message;
     }
     const sd = parseLocalDate(start);
     const ed = parseLocalDate(end);
@@ -102,7 +99,7 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
       const sMid = Date.UTC(sd.getFullYear(), sd.getMonth(), sd.getDate());
       if (sMid < today.getTime()) e.leaseStart = "Lease start date cannot be in the past.";
     }
-    if (sd && ed && !e.leaseStart && !e.leaseEnd) {
+    if (!mtm && sd && ed && !e.leaseStart && !e.leaseEnd) {
       if (ed.getTime() <= sd.getTime()) e.leaseEnd = "Lease end date must be after lease start date.";
     }
     const avail = getDemoRoomAvailabilityMessage(f.roomChoice1, start);

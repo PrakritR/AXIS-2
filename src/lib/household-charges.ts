@@ -11,9 +11,6 @@ import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/d
 
 export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
-/** Promo code entered on the rental application (step 12) to waive the listing application fee. */
-export const APPLICATION_FEE_PROMO_WAIVE_CODE = "FEEWAIVE";
-
 const STORAGE_KEY = "axis_household_charges_v1";
 
 /** When no manager Supabase session, work-order pass-through charges use this scope so Payments still lists them. */

@@ -59,6 +59,8 @@ export type ManagerBathroomSubmission = {
   id: string;
   name: string;
   location: string;
+  /** Extra finishes & fixtures for this bathroom (preset lines + free text). */
+  amenitiesText: string;
   shower: boolean;
   toilet: boolean;
   bathtub: boolean;
@@ -82,6 +84,8 @@ export type ManagerSharedSpaceSubmission = {
   name: string;
   /** Longer description / rules / hours. */
   detail: string;
+  /** Equipment & finishes for this space only (e.g. kitchen appliances). Preset lines + free text. */
+  amenitiesText: string;
   /** Rooms with access (same room may have access to multiple shared spaces). */
   roomAccessIds: string[];
 };
@@ -251,6 +255,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       id: legacyBath.id,
       name: legacyBath.name ?? "",
       location: legacyBath.location ?? "",
+      amenitiesText:
+        typeof (legacyBath as ManagerBathroomSubmission & { amenitiesText?: string }).amenitiesText === "string"
+          ? (legacyBath as ManagerBathroomSubmission & { amenitiesText: string }).amenitiesText
+          : "",
       shower: legacyBath.shower ?? true,
       toilet: legacyBath.toilet ?? true,
       bathtub: legacyBath.bathtub ?? false,
@@ -269,6 +277,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         id: rid("sspace"),
         name: "Shared areas",
         detail: legacySharedText,
+        amenitiesText: "",
         roomAccessIds: rooms.map((r) => r.id),
       },
     ];
@@ -277,6 +286,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       id: ss.id,
       name: ss.name ?? "",
       detail: ss.detail ?? "",
+      amenitiesText:
+        typeof (ss as ManagerSharedSpaceSubmission & { amenitiesText?: string }).amenitiesText === "string"
+          ? (ss as ManagerSharedSpaceSubmission & { amenitiesText: string }).amenitiesText
+          : "",
       roomAccessIds: Array.isArray(ss.roomAccessIds) ? [...ss.roomAccessIds] : [],
     }));
   }
@@ -371,6 +384,7 @@ export function emptyBathroom(index: number): ManagerBathroomSubmission {
     id: rid("bath"),
     name: index === 0 ? "Full bath (hall)" : `Bathroom ${index + 1}`,
     location: "",
+    amenitiesText: "",
     shower: true,
     toilet: true,
     bathtub: index === 0,
@@ -385,6 +399,7 @@ export function emptySharedSpace(index: number): ManagerSharedSpaceSubmission {
     id: rid("sspace"),
     name: index === 0 ? "Kitchen & dining" : `Shared space ${index + 1}`,
     detail: "",
+    amenitiesText: "",
     roomAccessIds: [],
   };
 }

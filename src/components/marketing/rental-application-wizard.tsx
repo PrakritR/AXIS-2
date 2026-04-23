@@ -113,7 +113,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
   useEffect(() => {
     if (!draftReady || step !== 12) return;
-    if (form.applicationFeeWaivedByPromo) return;
     const email = form.email.trim();
     const pid = form.propertyId.trim();
     if (!email.includes("@") || !pid) return;
@@ -125,16 +124,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       residentUserId: feeStepUserId,
       propertyId: pid,
     });
-  }, [
-    draftReady,
-    step,
-    form.applicationFeeWaivedByPromo,
-    form.email,
-    form.fullLegalName,
-    form.propertyId,
-    feeStepUserId,
-    chargeTick,
-  ]);
+  }, [draftReady, step, form.email, form.fullLegalName, form.propertyId, feeStepUserId, chargeTick]);
 
   const propertyOptions = useMemo(() => {
     const base = getPropertySelectOptions();
@@ -259,10 +249,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     return true;
   }, [form, showToast]);
 
-  const mergeErrors = useCallback((partial: RentalWizardErrors) => {
-    setErrors((prev) => ({ ...prev, ...partial }));
-  }, []);
-
   const applicationFeeGate = useMemo(() => {
     const pid = form.propertyId.trim();
     const email = form.email.trim();
@@ -270,8 +256,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     const needsFee = Boolean(pid && email.includes("@") && amount > 0);
     const charge = pid && email ? findApplicationFeeCharge(email, pid, feeStepUserId) : undefined;
     const paid = charge?.status === "paid";
-    return { needsFee, paid, displayLabel, amount, waived: form.applicationFeeWaivedByPromo };
-  }, [form.propertyId, form.email, form.applicationFeeWaivedByPromo, feeStepUserId, chargeTick]);
+    return { needsFee, paid, displayLabel, amount };
+  }, [form.propertyId, form.email, feeStepUserId, chargeTick]);
 
   const handleContinue = () => {
     if (step === 12) {
@@ -296,24 +282,19 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         const pid = form.propertyId.trim();
         const { amount } = listingApplicationFeeAmount(pid);
         const needsFee = amount > 0;
-        if (needsFee && !form.applicationFeeWaivedByPromo) {
+        if (needsFee) {
           const appFee = findApplicationFeeCharge(form.email, pid, residentUserId);
           if (!appFee || appFee.status !== "paid") {
-            showToast(
-              "The application fee for this listing must be marked paid (resident portal Payments) before you can submit, unless you apply promo code FEEWAIVE."
-            );
+            showToast("The application fee for this listing must be marked paid (resident portal Payments) before you can submit.");
             return;
           }
         }
-        recordApplicationCharges(
-          {
-            residentEmail: form.email,
-            residentName: form.fullLegalName,
-            residentUserId,
-            propertyId: form.propertyId,
-          },
-          { skipApplicationFee: Boolean(form.applicationFeeWaivedByPromo) }
-        );
+        recordApplicationCharges({
+          residentEmail: form.email,
+          residentName: form.fullLegalName,
+          residentUserId,
+          propertyId: form.propertyId,
+        });
         clearRentalWizardDraft();
         const nextInitial = createInitialRentalWizardState();
         setForm(nextInitial);
@@ -446,7 +427,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 errors={errors}
                 propertyOptions={propertyOptions}
                 patch={patchForm}
-                mergeErrors={mergeErrors}
                 applicationFeeGate={applicationFeeGate}
                 setPhone={setPhone}
                 setLandlordPhone={setLandlordPhone}

@@ -7,6 +7,7 @@ import type {
   ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS, splitLineList } from "@/data/manager-listing-presets";
 import { parseMonthlyRent } from "@/lib/listings-search";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import {
@@ -64,6 +65,19 @@ function splitAmenities(text: string): AmenityItem[] {
   }));
 }
 
+/** House grid: drop lines that belong in shared-space / kitchen presets (including legacy single “Amenities” list). */
+function houseWideAmenityItems(amenitiesText: string): AmenityItem[] {
+  const items = splitAmenities(amenitiesText);
+  return items.filter((a) => !LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS.has(a.label));
+}
+
+/** If the main amenities field still lists kitchen-style lines, show them on the matching shared space for backwards compatibility. */
+function legacySharedLabelsFromHouseAmenities(sub: ManagerListingSubmissionV1, spaceName: string): string[] {
+  const n = spaceName.toLowerCase();
+  if (!/kitchen|dining|galley|pantry|eat\b|cook/.test(n)) return [];
+  return splitLineList(sub.amenitiesText).filter((l) => LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS.has(l));
+}
+
 function splitRoomAmenityLines(text: string): string[] {
   return text
     .split(/[\n,]+/)
@@ -117,16 +131,54 @@ function roomSetupLine(room: ManagerRoomSubmission, sub: ManagerListingSubmissio
   return "Bathroom not linked — assign rooms in Bathrooms step.";
 }
 
-function roomTags(room: ManagerRoomSubmission, sub: ManagerListingSubmissionV1): string[] {
-  const base = ["Bed", "Desk", "Heating"];
-  if (roomHasPrivateBath(room.id, sub)) base.push("Private bath");
-  else if (sub.bathrooms.some((b) => !b.allResidents && (b.assignedRoomIds ?? []).includes(room.id))) base.push("Shared bath");
-  if (sub.bathrooms.some((b) => b.name.trim() && b.allResidents)) base.push("House hall bath");
-  const extra = room.detail
+/** One-line hint under the room name on listing cards — avoid repeating floor + detail. */
+function roomListingTableSubtitle(r: ManagerRoomSubmission): string {
+  const util = r.utilitiesEstimate?.trim();
+  if (util) return `Utilities ~ ${util}`;
+  return "Open Details for layout, notes & photos";
+}
+
+/** Modal “What’s included” pills — bathroom situation + detail snippets only (no Bed/Desk/Heating; those live under amenities / furnishing). */
+function roomModalIncludedTags(room: ManagerRoomSubmission, sub: ManagerListingSubmissionV1, amenityLabels: string[]): string[] {
+  const amenityLc = new Set(amenityLabels.map((a) => a.toLowerCase()));
+  const floorNorm = room.floor.trim().toLowerCase();
+  const tags: string[] = [];
+
+  if (roomHasPrivateBath(room.id, sub)) tags.push("Private bath");
+  else if (sub.bathrooms.some((b) => !b.allResidents && (b.assignedRoomIds ?? []).includes(room.id))) tags.push("Shared bath");
+  if (sub.bathrooms.some((b) => b.name.trim() && b.allResidents)) tags.push("House hall bath");
+
+  const genericOnly = (segment: string): boolean => {
+    const meaningful = segment
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length > 1 && w !== "and");
+    if (meaningful.length === 0) return true;
+    const generic = new Set(["bed", "desk", "heating", "ac", "wifi"]);
+    return meaningful.every((w) => generic.has(w));
+  };
+
+  const roomNameNorm = room.name.trim().toLowerCase();
+  const floorRoomLabel =
+    room.floor.trim() && room.name.trim() ? `${room.floor.trim()} - ${room.name.trim()}`.toLowerCase() : "";
+
+  const extras = room.detail
     .split(/[,;]/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0 && s.length < 40);
-  return [...new Set([...base, ...extra])].slice(0, 12);
+
+  for (const e of extras) {
+    const el = e.toLowerCase();
+    if (amenityLc.has(el)) continue;
+    if (floorNorm && el === floorNorm) continue;
+    if (floorRoomLabel && el.replace(/\s+/g, " ") === floorRoomLabel) continue;
+    if (roomNameNorm && el === roomNameNorm) continue;
+    if (genericOnly(e)) continue;
+    if ((el.includes("private") && el.includes("bath")) && tags.includes("Private bath")) continue;
+    tags.push(e);
+  }
+
+  return [...new Set(tags)].slice(0, 12);
 }
 
 function bathroomUsedByLabel(b: ManagerBathroomSubmission, sub: ManagerListingSubmissionV1): string {
@@ -153,12 +205,13 @@ function buildListingFloorCard(
     const setup = roomSetupLine(r, sub);
     const furnish = r.furnishing?.trim();
     const amenityLabels = splitRoomAmenityLines(r.roomAmenitiesText ?? "");
-    const utilNote = r.utilitiesEstimate?.trim() ? ` · Utilities ~ ${r.utilitiesEstimate.trim()}` : "";
-    const baseTags = roomTags(r, sub);
+    const utilRaw = r.utilitiesEstimate?.trim();
+    const baseTags = roomModalIncludedTags(r, sub, amenityLabels);
     return {
       id: r.id,
       name: r.name.trim(),
-      detail: `${r.floor.trim() || "—"} · ${r.detail.trim() || "See room details below."}${utilNote}`,
+      detail: roomListingTableSubtitle(r),
+      utilitiesEstimate: utilRaw || undefined,
       price: `$${r.monthlyRent}/month`,
       availability: r.availability.trim() || "Available now",
       modal: {
@@ -173,6 +226,8 @@ function buildListingFloorCard(
         roomAmenityLabels: amenityLabels.length ? amenityLabels : undefined,
         photoUrls: r.photoDataUrls.length ? r.photoDataUrls : undefined,
         videoSrc: r.videoDataUrl,
+        floorLine: r.floor.trim() || undefined,
+        roomNotes: r.detail.trim() || undefined,
       },
     };
   });
@@ -347,6 +402,8 @@ export function listingRichFromManagerSubmission(
       if (b.shower) tags.push("Shower");
       if (b.toilet) tags.push("Toilet");
       if (b.bathtub) tags.push("Bathtub");
+      const extra = splitRoomAmenityLines(b.amenitiesText ?? "");
+      const mergedTags = [...tags, ...extra];
       return {
         id: b.id,
         name: b.name.trim(),
@@ -362,7 +419,7 @@ export function listingRichFromManagerSubmission(
             : b.allResidents
               ? "Marked as a whole-house / hall bathroom for all listed bedrooms."
               : "Select which rooms use this bathroom in the manager form.",
-          includedTags: tags.length ? tags : ["Restroom"],
+          includedTags: mergedTags.length ? mergedTags : ["Restroom"],
           photoCaptions: ["Photo 1", "Photo 2", "Photo 3"],
         },
       };
@@ -393,6 +450,10 @@ export function listingRichFromManagerSubmission(
     sharedFromForm.length > 0
       ? sharedFromForm.map((s) => {
           const access = sharedSpaceAccessLine(s.roomAccessIds ?? [], sub);
+          const spaceAmenities = splitRoomAmenityLines(s.amenitiesText ?? "");
+          const legacyFromHouse = legacySharedLabelsFromHouseAmenities(sub, s.name);
+          const merged = [...new Set([...spaceAmenities, ...legacyFromHouse])];
+          const includedTags = merged.length > 0 ? ["Common area", ...merged] : ["Common area"];
           return {
             id: s.id,
             name: s.name.trim(),
@@ -404,7 +465,7 @@ export function listingRichFromManagerSubmission(
               tourEyebrow: "Space tour",
               tourTitle: s.name.trim(),
               tourSubtitle: s.detail.trim() || "Shared area for residents.",
-              includedTags: ["Common area"],
+              includedTags,
               photoCaptions: ["Common area"],
             },
           };
@@ -530,7 +591,7 @@ export function listingRichFromManagerSubmission(
     });
   }
 
-  const amenities = splitAmenities(sub.amenitiesText);
+  const amenities = houseWideAmenityItems(sub.amenitiesText);
 
   const mids = rooms.map((r) => r.monthlyRent).filter((n) => n > 0);
   const mid = mids.length ? mids.reduce((a, b) => a + b, 0) / mids.length : parseMonthlyRent(property.rentLabel) ?? 875;
@@ -570,7 +631,7 @@ export function listingRichFromManagerSubmission(
                 {
                   id: "r-fallback",
                   name: property.unitLabel || "Room",
-                  detail: sub.houseOverview.trim().slice(0, 160) || "No room details yet — add rooms in the listing editor.",
+                  detail: "Open Details for listing description & next steps",
                   price: property.rentLabel,
                   availability: "See manager",
                   modal: {
@@ -579,6 +640,7 @@ export function listingRichFromManagerSubmission(
                     tourTitle: "Video placeholder",
                     tourSubtitle: "Upload a room video in the manager form.",
                     includedTags: ["See listing"],
+                    roomNotes: sub.houseOverview.trim() || undefined,
                   },
                 },
               ],
