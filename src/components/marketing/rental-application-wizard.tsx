@@ -571,8 +571,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Save your Application ID</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-700">
               Use this ID when you create your resident account (open signup below with it filled in). Share it with a co-signer if they apply
-              separately. Until your application is approved, your account can use <strong>Dashboard</strong>, <strong>Profile</strong>, and{" "}
-              <strong>Inbox</strong> only; lease and payments unlock after approval.
+              separately. After signup, your account stays limited to <strong>Dashboard</strong>, <strong>Profile</strong>, and <strong>Inbox</strong>{" "}
+              until the manager marks your application fee paid and approves your application. Stripe payments are marked paid automatically after
+              checkout.
             </p>
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Application ID</p>

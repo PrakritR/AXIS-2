@@ -122,7 +122,7 @@ export function ResidentDashboard({
   return (
     <ManagerPortalPageShell title="Dashboard">
       <p className="rounded-2xl border border-amber-200/70 bg-amber-50/90 px-4 py-2.5 text-sm font-medium text-amber-950">
-        Application under review
+        Application in progress — your manager must mark the application fee paid and approve your application before the full resident portal unlocks.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

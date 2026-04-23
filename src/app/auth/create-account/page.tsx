@@ -332,8 +332,8 @@ function CreateAccountContent() {
           </>
         ) : role === "resident" ? (
           <>
-            Use your application email and Application ID. After signup, an Axis manager can mark your application
-            approved so the full resident portal unlocks.
+            Use your application email and Application ID. After signup, your resident portal stays limited until an
+            Axis manager marks your application fee paid and approves your application.
           </>
         ) : role === "manager" ? (
           <>

@@ -40,6 +40,7 @@ import {
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "@/lib/rental-application/data";
+import { findApplicationFeeCharge } from "@/lib/household-charges";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -224,6 +225,18 @@ export function ManagerApplications() {
   }, [showToast]);
 
   const setRowBucket = (id: string, nextBucket: ManagerApplicationBucket) => {
+    if (nextBucket === "approved") {
+      const row = rows.find((r) => r.id === id);
+      const email = row?.email?.trim();
+      const propertyId = row?.propertyId?.trim();
+      if (row && email && propertyId) {
+        const feeCharge = findApplicationFeeCharge(email, propertyId);
+        if (feeCharge?.status === "pending") {
+          showToast("Mark the application fee paid in Payments before approving this application.");
+          return;
+        }
+      }
+    }
     const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket, stage: stageLabelForRow(r, nextBucket) } : r));
     persist(next);
     setExpandedId(null);
