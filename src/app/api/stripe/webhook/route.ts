@@ -71,20 +71,22 @@ export async function POST(req: Request) {
     if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
       const session = event.data.object as Stripe.Checkout.Session;
       logCheckoutCompleted(session);
-      try {
-        await recordPaidManagerCheckoutSession(session);
-        const uid = session.metadata?.userId?.trim();
-        if (uid) {
-          try {
-            await reconcileManagerPurchaseWithStripe(uid);
-          } catch (reconcileErr) {
-            // eslint-disable-next-line no-console -- webhook persistence
-            console.error("[stripe webhook] reconcileManagerPurchaseWithStripe", reconcileErr);
+      if (session.metadata?.purpose !== "rental_application_fee") {
+        try {
+          await recordPaidManagerCheckoutSession(session);
+          const uid = session.metadata?.userId?.trim();
+          if (uid) {
+            try {
+              await reconcileManagerPurchaseWithStripe(uid);
+            } catch (reconcileErr) {
+              // eslint-disable-next-line no-console -- webhook persistence
+              console.error("[stripe webhook] reconcileManagerPurchaseWithStripe", reconcileErr);
+            }
           }
+        } catch (e) {
+          // eslint-disable-next-line no-console -- webhook persistence
+          console.error("[stripe webhook] recordPaidManagerCheckoutSession", e);
         }
-      } catch (e) {
-        // eslint-disable-next-line no-console -- webhook persistence
-        console.error("[stripe webhook] recordPaidManagerCheckoutSession", e);
       }
     }
     /* Requires `invoice.paid` in the Stripe webhook destination (Dashboard → Developers → Webhooks). */

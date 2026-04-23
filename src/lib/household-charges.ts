@@ -471,7 +471,9 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     statusLabel: c.status === "paid" ? "Paid" : "Pending",
     notes:
       c.kind === "application_fee"
-        ? "Application fee — open Details and tap Mark as paid when you receive Zelle or another payment."
+        ? c.status === "paid"
+          ? "Application fee paid by Stripe."
+          : "Application fee pending — mark as paid after you receive the Zelle payment."
         : c.kind === "work_order_charge"
           ? "Work order pass-through — resident is billed this amount; mark as paid when you receive Zelle or other payment."
           : c.zelleContactSnapshot

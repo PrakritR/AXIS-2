@@ -196,8 +196,8 @@ export function ResidentPaymentsPanel() {
                             </div>
                           ) : (
                             <p className="leading-relaxed">
-                              Your manager records payment when they receive it (Zelle, check, or portal billing). Live card charges are not
-                              processed here.
+                              Stripe application-fee payments are marked paid automatically. Other charges are updated by your manager when they
+                              receive payment.
                             </p>
                           )}
                           {row.status === "paid" && row.paidAt ? (

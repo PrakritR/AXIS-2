@@ -758,8 +758,8 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 id="edit-zelle"
-                title="Zelle & application-fee options"
-                description="When Zelle is on, you can still offer card checkout (Stripe) for the fee—applicants pick how they pay on the apply flow when both are available."
+                title="Application fee payment methods"
+                description="Choose whether applicants can pay the application fee by Stripe, Zelle, or both."
               >
                 <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
                   <input
@@ -775,10 +775,10 @@ export function ManagerAddListingForm({
                       }));
                     }}
                   />
-                  <span className="text-sm font-medium text-slate-800">Accept application fees and rent through Zelle</span>
+                  <span className="text-sm font-medium text-slate-800">Enable Zelle</span>
                 </label>
                 <div>
-                  <FieldLabel hint="Phone number or email for your Zelle account (shown to applicants when Zelle is enabled).">Zelle phone or email</FieldLabel>
+                  <FieldLabel hint="Shown to applicants if they choose Zelle.">Zelle phone or email</FieldLabel>
                   <Input
                     value={sub.zelleContact ?? ""}
                     onChange={(e) => setSub((s) => ({ ...s, zelleContact: e.target.value }))}
@@ -788,13 +788,6 @@ export function ManagerAddListingForm({
                 </div>
                 {sub.zellePaymentsEnabled ? (
                   <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800">Application fee payment options</p>
-                      <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-                        If both are on, applicants pick card (Stripe) or Zelle before they submit. If only one is on, that path is used automatically. After they apply, they get an
-                        Application ID; they can create an account, and you approve before they get full resident portal access.
-                      </p>
-                    </div>
                     <label className="flex cursor-pointer items-start gap-3">
                       <input
                         type="checkbox"
@@ -807,7 +800,7 @@ export function ManagerAddListingForm({
                           }))
                         }
                       />
-                      <span className="text-sm font-medium text-slate-800">Offer card payment (Stripe) for the application fee</span>
+                      <span className="text-sm font-medium text-slate-800">Stripe</span>
                     </label>
                     <label className="flex cursor-pointer items-start gap-3">
                       <input
@@ -821,7 +814,7 @@ export function ManagerAddListingForm({
                           }))
                         }
                       />
-                      <span className="text-sm font-medium text-slate-800">Offer Zelle for the application fee</span>
+                      <span className="text-sm font-medium text-slate-800">Zelle</span>
                     </label>
                   </div>
                 ) : null}

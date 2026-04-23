@@ -86,8 +86,6 @@ export type WizardStepsProps = {
     displayLabel: string;
     amount: number;
   };
-  /** Step 12: fee paid via Stripe in this session; user still must tap Submit to file the application. */
-  stripeFeeReadyForSubmit?: boolean;
   setPhone: (next: string) => void;
   setLandlordPhone: (next: string) => void;
   setPrevLandlordPhone: (next: string) => void;
@@ -110,7 +108,7 @@ function maskSsnReview(ssn: string) {
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, propertyOptions, patch, goToStep, applicationFeeGate, stripeFeeReadyForSubmit } = p;
+  const { step, form, errors, propertyOptions, patch, goToStep, applicationFeeGate } = p;
 
   if (step === 1) {
     return (
@@ -1300,183 +1298,95 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const prop = form.propertyId ? getPropertyById(form.propertyId) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const appFeeLabel = sub?.applicationFee?.trim() || (applicationFeeGate.needsFee ? applicationFeeGate.displayLabel : "—");
-    const rentLabel = sub ? applicantFirstChoiceRentLabel(sub, form.roomChoice1) : "—";
-    const sdDisplay = sub ? formatListingFeeDisplay(sub.securityDeposit ?? "") : "—";
-    const moveInRaw = sub?.moveInFee?.trim() ?? "";
-    const signingLabel = sub ? paymentAtSigningPriceLabel(sub) : "—";
-    const signingIncludesText = sub ? paymentAtSigningIncludedLabels(sub) : "";
-    const utilLabel = sub ? utilitiesListingEstimateLabel(sub) : "—";
     const channels = listingApplicationFeeChannels(sub);
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
-    const gate = applicationFeeGate;
-    const feeDecisionNeeded = gate.needsFee && !gate.paid;
-    const showStripeInstructions =
-      channels.stripe && (!channels.zelle || form.applicationFeePayChannel === "stripe") && feeDecisionNeeded;
-    const showZelleInstructions =
-      channels.zelle && (!channels.stripe || form.applicationFeePayChannel === "zelle") && feeDecisionNeeded;
-    const showChannelPick = channels.stripe && channels.zelle && feeDecisionNeeded;
+    const showChannelPick = applicationFeeGate.needsFee && channels.stripe && channels.zelle;
+    const showZelleInstructions = applicationFeeGate.needsFee && payChannel === "zelle" && sub?.zelleContact?.trim();
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Application fee & housing charges</h2>
-          <StepIntro className="mt-2">
-            Amounts below come from this listing. “—” means you should confirm the number with the property manager. Stripe opens a payment step
-            before your application is filed; Zelle requires your manager to confirm receipt before submit.
-          </StepIntro>
+          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Application fee</h2>
+          <StepIntro className="mt-2">Choose how you want to pay the application fee.</StepIntro>
         </div>
-        {gate.needsFee ? (
-          <div
-            className={`rounded-2xl border px-4 py-3 text-sm ${
-              gate.paid ? "border-emerald-200 bg-emerald-50/70 text-emerald-950" : "border-amber-200 bg-amber-50/70 text-amber-950"
-            }`}
-          >
-            {gate.paid ? (
-              <p>
-                <span className="font-semibold">Application fee paid.</span>{" "}
-                {payChannel === "stripe" && stripeFeeReadyForSubmit ? (
-                  <>Tap <strong>Submit application</strong> below to file your application.</>
-                ) : (
-                  <>You can submit your application.</>
-                )}
+        {applicationFeeGate.needsFee ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-5 sm:p-6">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Application fee</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900">{appFeeLabel}</p>
+            {applicationFeeGate.paid ? (
+              <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
+                Paid
               </p>
-            ) : (
-              <p>
-                <span className="font-semibold">Application fee required.</span>{" "}
-                {payChannel === "zelle" ? (
-                  <>
-                    Send the application fee via <strong>Zelle</strong> to the contact below, confirm on this page that you sent it, then wait for
-                    your manager to mark the fee paid before you can submit your application.
-                  </>
-                ) : (
-                  <>
-                    Pay with <strong>Stripe</strong> when you tap <strong>Pay application fee</strong>. After the fee is recorded, tap{" "}
-                    <strong>Submit application</strong> to file your application—your application is not sent until that second step.
-                  </>
-                )}
-              </p>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
-            This listing does not publish a positive application fee amount, so no fee payment is required before submit.
+            No application fee is required for this listing.
           </div>
         )}
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-5 sm:p-6">
-          <p className="text-3xl font-bold tabular-nums text-slate-900">{appFeeLabel}</p>
-          <p className="mt-1 text-sm text-slate-600">Non-refundable application fee (per this listing).</p>
-          <div className="mt-4 rounded-xl border border-slate-200/80 bg-white/80 px-4 py-3 text-sm text-slate-700">
-            <p className="font-semibold text-slate-900">Also recorded for move-in (pending until paid)</p>
-            <ul className="mt-2 list-inside list-disc space-y-1 text-slate-600">
-              <li>
-                Monthly rent: <span className="font-medium text-slate-800">{rentLabel}</span>{" "}
-                <span className="text-xs text-slate-500">
-                  (your first-choice room when set, otherwise this listing&apos;s rent range)
+        {showChannelPick ? (
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
+            <p className="text-sm font-semibold text-slate-900">Payment method</p>
+            <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+              <input
+                type="checkbox"
+                name="application-fee-channel-stripe"
+                className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
+                checked={form.applicationFeePayChannel === "stripe"}
+                onChange={() => patch({ applicationFeePayChannel: "stripe" })}
+              />
+              <span>
+                <span className="text-sm font-semibold text-slate-900">Stripe</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                  Pay now with card.
                 </span>
-              </li>
-              <li>
-                Security deposit: <span className="font-medium text-slate-800">{sdDisplay}</span>
-              </li>
-              {moveInRaw ? (
-                <li>
-                  Move-in fee: <span className="font-medium text-slate-800">{formatListingFeeDisplay(moveInRaw)}</span>
-                </li>
-              ) : null}
-              {utilLabel.trim() && utilLabel !== "—" ? <li>Utilities (estimate, by room): {utilLabel}</li> : null}
-            </ul>
-            <p className="mt-3 border-t border-slate-200/90 pt-3 text-sm leading-snug text-slate-700">
-              <span className="font-semibold text-slate-900">Estimated due at lease signing: </span>
-              <span className="tabular-nums font-semibold text-slate-900">{signingLabel}</span>
-              {signingIncludesText ? (
-                <span className="text-slate-600">
-                  {" "}
-                  — On this listing, that total covers {signingIncludesText}.
+              </span>
+            </label>
+            <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+              <input
+                type="checkbox"
+                name="application-fee-channel-zelle"
+                className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
+                checked={form.applicationFeePayChannel === "zelle"}
+                onChange={() => patch({ applicationFeePayChannel: "zelle" })}
+              />
+              <span>
+                <span className="text-sm font-semibold text-slate-900">Zelle</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                  Submit now and manager sees the fee as pending.
                 </span>
-              ) : null}
+              </span>
+            </label>
+          </div>
+        ) : null}
+        {applicationFeeGate.needsFee && channels.stripe && !channels.zelle ? (
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700">
+            <span className="font-semibold text-slate-900">Payment method:</span> Stripe
+          </div>
+        ) : null}
+        {applicationFeeGate.needsFee && channels.zelle && !channels.stripe ? (
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700">
+            <span className="font-semibold text-slate-900">Payment method:</span> Zelle
+          </div>
+        ) : null}
+        {applicationFeeGate.needsFee && payChannel === "stripe" ? (
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700">
+            Pay with Stripe and your application will submit after payment succeeds.
+          </div>
+        ) : null}
+        {showZelleInstructions ? (
+          <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/60 px-4 py-4 text-sm text-emerald-950">
+            <p className="font-semibold">Send by Zelle</p>
+            <p className="mt-2 rounded-lg border border-emerald-300/80 bg-white px-3 py-2 font-mono text-base font-bold tracking-tight">
+              {sub!.zelleContact!.trim()}
+            </p>
+            <p className="mt-2 leading-relaxed">
+              When you submit, we&apos;ll ask you to confirm that you already sent the Zelle payment.
             </p>
           </div>
-          {showChannelPick ? (
-            <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-white px-4 py-4">
-              <p className="text-sm font-semibold text-slate-900">How will you pay the application fee?</p>
-              <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                <input
-                  type="radio"
-                  name="application-fee-channel"
-                  className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
-                  checked={form.applicationFeePayChannel === "stripe"}
-                  onChange={() => patch({ applicationFeePayChannel: "stripe", applicationFeeZelleSentConfirmed: false })}
-                />
-                <span>
-                  <span className="text-sm font-semibold text-slate-900">Pay with Stripe</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
-                    Opens a Stripe payment step, then you submit the application after the fee is recorded (demo simulates checkout).
-                  </span>
-                </span>
-              </label>
-              <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                <input
-                  type="radio"
-                  name="application-fee-channel"
-                  className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
-                  checked={form.applicationFeePayChannel === "zelle"}
-                  onChange={() => patch({ applicationFeePayChannel: "zelle", applicationFeeZelleSentConfirmed: false })}
-                />
-                <span>
-                  <span className="text-sm font-semibold text-slate-900">Zelle</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
-                    Send from your bank&apos;s Zelle screen using the household contact shown below.
-                  </span>
-                </span>
-              </label>
-            </div>
-          ) : null}
-          {showStripeInstructions ? (
-            <div className="mt-4 rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Stripe payment</p>
-              <p className="mt-1 leading-relaxed">
-                Tap <strong>Pay application fee</strong> to open the payment screen. Use the same email as on this application so your payment
-                matches your file.
-              </p>
-            </div>
-          ) : null}
-          {showZelleInstructions && sub?.zelleContact?.trim() ? (
-            <div className="mt-4 space-y-4">
-              <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
-                <p className="font-semibold">Zelle payment — send to this number or email</p>
-                <p className="mt-2 rounded-lg border border-emerald-300/80 bg-white px-3 py-2 font-mono text-base font-bold tracking-tight">
-                  {sub.zelleContact.trim()}
-                </p>
-                <p className="mt-2 leading-relaxed">
-                  Include your name and preferred unit in the memo. Your property manager marks the fee paid in their portal when funds arrive. You
-                  cannot file your application until that fee shows as paid.
-                </p>
-              </div>
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-primary"
-                  checked={form.applicationFeeZelleSentConfirmed}
-                  onChange={(e) => patch({ applicationFeeZelleSentConfirmed: e.target.checked })}
-                />
-                <span className="text-sm font-medium leading-snug text-slate-800">
-                  I confirm I have sent the application fee via Zelle to{" "}
-                  <span className="font-mono font-semibold">{sub.zelleContact.trim()}</span> from my bank&apos;s Zelle screen.
-                </span>
-              </label>
-              <FieldError msg={errors.applicationFeeZelleSentConfirmed} />
-            </div>
-          ) : null}
-          <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-primary"
-              checked={form.applicationFeeAcknowledged}
-              onChange={(e) => patch({ applicationFeeAcknowledged: e.target.checked })}
-            />
-            <span className="text-sm font-medium leading-snug text-slate-800">
-              I understand the application fee is non-refundable and agree to these housing charge amounts as stated for this listing.
-            </span>
-          </label>
-          <FieldError msg={errors.applicationFeeAcknowledged} />
+        ) : null}
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm text-slate-700">
+          Manager view:
+          <span className="ml-1 font-medium text-slate-900">{payChannel === "stripe" ? "Paid" : "Pending"}</span>
         </div>
       </div>
     );
