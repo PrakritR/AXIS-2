@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { getPropertyById } from "@/lib/rental-application/data";
+import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
@@ -40,10 +40,7 @@ function Row({ k, v }: { k: string; v: ReactNode }) {
 export function ManagerApplicationReadonlyReview({ partial }: { partial: Partial<RentalWizardFormState> }) {
   const form: RentalWizardFormState = { ...createInitialRentalWizardState(), ...partial };
   const prop = getPropertyById(form.propertyId);
-  const roomLabel = (id: string) => {
-    const r = getPropertyById(id);
-    return r ? `${r.buildingName} · ${r.unitLabel}` : "";
-  };
+  const roomLabel = (id: string) => getRoomChoiceLabel(id);
 
   return (
     <div className="space-y-4">

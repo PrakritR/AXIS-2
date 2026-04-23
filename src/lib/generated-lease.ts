@@ -9,7 +9,7 @@
  */
 
 import type { MockProperty } from "@/data/types";
-import { getPropertyById } from "@/lib/rental-application/data";
+import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { loadRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
@@ -82,6 +82,19 @@ function findSubmissionRoomRent(sub: ManagerListingSubmissionV1 | undefined, uni
   return undefined;
 }
 
+function submissionRoomRentFromChoice(
+  sub: ManagerListingSubmissionV1 | undefined,
+  roomChoice1: string | undefined | null,
+): string | undefined {
+  if (!sub?.rooms?.length || !roomChoice1) return undefined;
+  const { listingRoomId } = parseRoomChoiceValue(String(roomChoice1));
+  if (!listingRoomId) return undefined;
+  const normalized = normalizeManagerListingSubmissionV1(sub);
+  const hit = normalized.rooms.find((r) => r.id === listingRoomId);
+  if (!hit || hit.monthlyRent <= 0) return undefined;
+  return `$${hit.monthlyRent.toFixed(2)} / month`;
+}
+
 export type LeaseGenerationContext = {
   application: Partial<RentalWizardFormState>;
   leasedRoom: MockProperty | undefined;
@@ -111,6 +124,7 @@ export function rentSummaryFromApplication(application: Partial<RentalWizardForm
     const room = ctx.leasedRoom;
     const list = ctx.listingProperty;
     const monthlyRent =
+      submissionRoomRentFromChoice(ctx.submission, application.roomChoice1) ??
       (room && findSubmissionRoomRent(ctx.submission, room.unitLabel)) ??
       room?.rentLabel ??
       list?.rentLabel ??
@@ -162,6 +176,7 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   const cityZip = [room?.neighborhood ?? list?.neighborhood, room?.zip ?? list?.zip].filter(Boolean).join(", ");
 
   const monthlyRent =
+    submissionRoomRentFromChoice(sub, a.roomChoice1) ??
     (room && findSubmissionRoomRent(sub, room.unitLabel)) ??
     room?.rentLabel ??
     list?.rentLabel ??

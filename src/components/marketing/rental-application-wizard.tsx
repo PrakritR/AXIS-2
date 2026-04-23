@@ -14,7 +14,7 @@ import {
   recordApplicationCharges,
 } from "@/lib/household-charges";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { getPropertyById, getPropertySelectOptions, getRoomOptionsForProperty } from "@/lib/rental-application/data";
+import { getPropertyById, getPropertySelectOptions, getRoomOptionsForProperty, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import { resolveApplicationFeePayChannel } from "@/lib/rental-application/application-fee-channel";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
@@ -172,7 +172,13 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
     setForm((prev) => {
       const opts = getRoomOptionsForProperty(pid).filter((o) => o.value);
-      const room1 = opts.some((o) => o.value === pid) ? pid : opts[0]?.value ?? "";
+      let room1 = opts[0]?.value ?? "";
+      const lr = listingRoomId.trim();
+      if (lr) {
+        const composite = `${pid}${LISTING_ROOM_CHOICE_SEP}${lr}`;
+        const hit = opts.find((o) => o.value === composite);
+        if (hit) room1 = hit.value;
+      }
 
       let notes = prev.additionalNotes;
       if (roomName || floor || roomPrice) {

@@ -1022,8 +1022,10 @@ export function ManagerAddListingForm({
                           value={furnishState.select}
                           onChange={(e) => {
                             const v = e.target.value;
-                            if (v === "__custom__") setRoom(i, { furnishing: furnishState.custom });
-                            else setRoom(i, { furnishing: v });
+                            if (v === "__custom__") {
+                              const c = furnishState.custom;
+                              setRoom(i, { furnishing: c.trim().length > 0 ? c : " " });
+                            } else setRoom(i, { furnishing: v });
                           }}
                         >
                           {ROOM_FURNISHING_OPTIONS.map((o) => (

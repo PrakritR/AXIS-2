@@ -199,7 +199,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         typeof legacyRoom.utilitiesEstimate === "string" && legacyRoom.utilitiesEstimate.length > 0
           ? legacyRoom.utilitiesEstimate
           : fallbackUtil,
-      furnishing: typeof legacyRoom.furnishing === "string" ? legacyRoom.furnishing : "",
+      furnishing: (() => {
+        const f = typeof legacyRoom.furnishing === "string" ? legacyRoom.furnishing : "";
+        return f.trim().length === 0 ? "" : f;
+      })(),
       roomAmenitiesText:
         typeof (legacyRoom as ManagerRoomSubmission & { roomAmenitiesText?: unknown }).roomAmenitiesText === "string"
           ? (legacyRoom as ManagerRoomSubmission & { roomAmenitiesText: string }).roomAmenitiesText

@@ -77,8 +77,11 @@ type FurnishingSelectValue = (typeof ROOM_FURNISHING_OPTIONS)[number]["value"];
 
 /** For select: known preset, custom text, or empty */
 export function furnishingSelectState(furnishing: string): { select: FurnishingSelectValue; custom: string } {
-  const t = furnishing.trim();
-  if (!t) return { select: "", custom: "" };
+  const raw = typeof furnishing === "string" ? furnishing : "";
+  if (raw.length === 0) return { select: "", custom: "" };
+  const t = raw.trim();
   if (FURNISHING_KNOWN.has(t)) return { select: t as FurnishingSelectValue, custom: "" };
+  /** Whitespace-only keeps "custom" selected (preset → Custom with no typed text yet uses a space draft). */
+  if (t.length === 0) return { select: "__custom__", custom: "" };
   return { select: "__custom__", custom: t };
 }

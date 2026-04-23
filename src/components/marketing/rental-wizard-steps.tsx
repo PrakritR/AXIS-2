@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { APPLICATION_FEE_PROMO_WAIVE_CODE, removePendingApplicationFeeCharge } from "@/lib/household-charges";
 import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
-import { LEASE_TERM_OPTIONS, getPropertyById, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
+import { LEASE_TERM_OPTIONS, getPropertyById, getRoomChoiceLabel, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
@@ -1158,10 +1158,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
 
   if (step === 11) {
     const prop = getPropertyById(form.propertyId);
-    const roomLabel = (id: string) => {
-      const r = getPropertyById(id);
-      return r ? `${r.buildingName} · ${r.unitLabel}` : "";
-    };
+    const roomLabel = (id: string) => getRoomChoiceLabel(id);
     const ReviewSection = ({
       title,
       stepTarget,
