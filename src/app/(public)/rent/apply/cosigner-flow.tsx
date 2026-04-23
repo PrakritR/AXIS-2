@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/input";
 import { clearCosignerDraft, loadCosignerDraft, saveCosignerDraft } from "@/lib/rental-application/drafts";
 import { todayISO } from "@/lib/rental-application/state";
 import {
@@ -51,7 +50,6 @@ type CosignerFields = {
   consentCredit: boolean;
   signature: string;
   dateSigned: string;
-  notes: string;
 };
 
 function emptyCosigner(): CosignerFields {
@@ -83,7 +81,6 @@ function emptyCosigner(): CosignerFields {
     consentCredit: false,
     signature: "",
     dateSigned: todayISO(),
-    notes: "",
   };
 }
 
@@ -657,14 +654,6 @@ export function CosignerApplyFlow({
                     clearError("dateSigned");
                   }}
                   className={`${inputClass} ${err("dateSigned")}`}
-                />
-              </Field>
-              <Field label="Additional notes" optional>
-                <Textarea
-                  value={f.notes}
-                  onChange={(e) => patchField(setF, "notes", e.target.value)}
-                  placeholder="Optional context for our team"
-                  className={inputClass}
                 />
               </Field>
             </div>
