@@ -217,6 +217,26 @@ function CreateAccountContent() {
 
     setBusy(true);
     try {
+      if (role === "resident") {
+        const res = await fetch("/api/auth/register-resident", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+            applicationId: applicationId.trim(),
+          }),
+        });
+        const body = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          showToast(body.error ?? "Could not create resident account.");
+          return;
+        }
+        showToast("Resident account created. Sign in with your email.");
+        router.push("/auth/sign-in");
+        return;
+      }
+
       const supabase = createSupabaseBrowserClient();
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
