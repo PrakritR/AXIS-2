@@ -8,37 +8,6 @@ function roomIds(prefix: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) => `${prefix}-room-${i + 1}`);
 }
 
-function makeRooms({
-  prefix,
-  count,
-  rents,
-  availability,
-  detail,
-  utilities = "$175/month utilities (WiFi, cleaning, water, trash).",
-}: {
-  prefix: string;
-  count: number;
-  rents: number[];
-  availability: string;
-  detail: string;
-  utilities?: string;
-}): ManagerListingSubmissionV1["rooms"] {
-  const floors = ["Floor 1", "Floor 2", "Floor 3"];
-  return roomIds(prefix, count).map((id, i) => ({
-    id,
-    name: `Room ${i + 1}`,
-    floor: floors[i % floors.length]!,
-    monthlyRent: rents[i % rents.length]!,
-    availability,
-    detail,
-    furnishing: "Fully furnished room with bed, desk, heating/AC.",
-    roomAmenitiesText: "Bed\nDesk\nHeating/AC\nFurnished",
-    photoDataUrls: [],
-    videoDataUrl: null,
-    utilitiesEstimate: utilities,
-  }));
-}
-
 function sharedSpaces(prefix: string, ids: string[]): ManagerListingSubmissionV1["sharedSpaces"] {
   return [
     {
@@ -148,13 +117,18 @@ function buildSeeds(managerUserId: string): MockProperty[] {
     { id: bRoomIds[7]!, name: "Room 8", floor: "Third Floor", monthlyRent: 800, availability: "Available now", detail: "Third Floor", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
     { id: bRoomIds[8]!, name: "Room 9", floor: "Third Floor", monthlyRent: 800, availability: "Available now", detail: "Third Floor", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
   ];
-  const brooklynRooms = makeRooms({
-    prefix: "seed-5259-brooklyn",
-    count: 9,
-    rents: [865, 825, 800],
-    availability: "Many rooms open starting April 2026; some spring/summer date windows are limited.",
-    detail: "Furnished room near UW with bathroom groups based on room share.",
-  });
+  const brooklynRoomIds = roomIds("seed-5259-brooklyn", 9);
+  const brooklynRooms: ManagerListingSubmissionV1["rooms"] = [
+    { id: brooklynRoomIds[0]!, name: "Room 1", floor: "2-Person Bathroom Share", monthlyRent: 865, availability: "Available after April 10, 2026", detail: "2-Bedroom Share (Rooms 1 & 2) · Shares bathroom with Room 2", furnishing: "Bed, desk, and heating.", roomAmenitiesText: "Desk\nBed\nHeating", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: brooklynRoomIds[1]!, name: "Room 2", floor: "2-Person Bathroom Share", monthlyRent: 865, availability: "Available after April 10, 2026", detail: "2-Bedroom Share (Rooms 1 & 2) · Shares bathroom with Room 1", furnishing: "Bed, desk, and heating.", roomAmenitiesText: "Desk\nBed\nHeating", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: brooklynRoomIds[2]!, name: "Room 3", floor: "3-Person Bathroom Share", monthlyRent: 825, availability: "Available April 10, 2026-May 15, 2026 and after August 14, 2026", detail: "3-Bedroom Share (Rooms 3, 4 & 5) · Shares bathroom with Rooms 4 and 5", furnishing: "Bed, desk, and heating.", roomAmenitiesText: "Desk\nBed\nHeating", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: brooklynRoomIds[3]!, name: "Room 4", floor: "3-Person Bathroom Share", monthlyRent: 825, availability: "Available April 10, 2026-May 15, 2026 and after August 14, 2026", detail: "3-Bedroom Share (Rooms 3, 4 & 5) · Shares bathroom with Rooms 3 and 5", furnishing: "Bed, desk, and heating.", roomAmenitiesText: "Desk\nBed\nHeating", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: brooklynRoomIds[4]!, name: "Room 5", floor: "3-Person Bathroom Share", monthlyRent: 825, availability: "Available after April 10, 2026", detail: "3-Bedroom Share (Rooms 3, 4 & 5) · Shares bathroom with Rooms 3 and 4", furnishing: "Bed, desk, and heating.", roomAmenitiesText: "Desk\nBed\nHeating", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: brooklynRoomIds[5]!, name: "Room 6", floor: "4-Person Bathroom Share", monthlyRent: 800, availability: "Available after April 10, 2026", detail: "4-Bedroom Share (Rooms 6, 7, 8 & 9) · Shares bathroom with Rooms 7, 8, and 9", furnishing: "Bed, desk, and heating.", roomAmenitiesText: "Desk\nBed\nHeating", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: brooklynRoomIds[6]!, name: "Room 7", floor: "4-Person Bathroom Share", monthlyRent: 800, availability: "Available after April 10, 2026", detail: "4-Bedroom Share (Rooms 6, 7, 8 & 9) · Shares bathroom with Rooms 6, 8, and 9", furnishing: "Bed, desk, and heating.", roomAmenitiesText: "Desk\nBed\nHeating", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: brooklynRoomIds[7]!, name: "Room 8", floor: "4-Person Bathroom Share", monthlyRent: 800, availability: "Available after April 10, 2026", detail: "4-Bedroom Share (Rooms 6, 7, 8 & 9) · Shares bathroom with Rooms 6, 7, and 9", furnishing: "Bed, desk, and heating.", roomAmenitiesText: "Desk\nBed\nHeating", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: brooklynRoomIds[8]!, name: "Room 9", floor: "4-Person Bathroom Share", monthlyRent: 800, availability: "Available after April 10, 2026", detail: "4-Bedroom Share (Rooms 6, 7, 8 & 9) · Shares bathroom with Rooms 6, 7, and 8", furnishing: "Bed, desk, and heating.", roomAmenitiesText: "Desk\nBed\nHeating", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+  ];
 
   const submissions = [
     baseSubmission({
@@ -314,45 +288,79 @@ function buildSeeds(managerUserId: string): MockProperty[] {
       tagline: "University District shared housing near UW, transit, and food.",
       overview:
         "Shared housing near UW with 9 bedrooms and 3 bathrooms. Furnished rooms, grouped shared bathrooms, in-unit laundry, package storage, and walkable access to transit and food.",
-      leaseTerms: "3, 9, 12-month, or month-to-month leases (+$25/month). Deposit is $600.",
+      leaseTerms:
+        "Four lease options available: 3-month, 9-month, and 12-month, plus month-to-month with an extra $25/month charge. Start and end dates are flexible — you choose the window that works for you.",
+      applicationFee: "$50",
       securityDeposit: "$600",
-      costs: "2-person bath share: $865/month. 3-person share: $825/month. 4-person share: $800/month. Utilities are $175/month.",
+      moveInFee: "First month rent + $600 deposit",
+      costs: "Flat fee: $175/month — includes cleaning (bi-monthly), WiFi, water & trash.",
       rooms: brooklynRooms,
       bundles: [
         {
+          id: "seed-5259-brooklyn-bundle-house",
+          label: "Full house",
+          price: "$7,225/mo",
+          strikethrough: "$7,405/mo",
+          promo: "Promo rate",
+          roomsLine: "All 9 rooms.",
+          includedRoomIds: brooklynRooms.map((r) => r.id),
+        },
+        {
           id: "seed-5259-brooklyn-bundle-2",
-          label: "2-room bundle",
-          price: "From $865/month per room",
+          label: "Rooms 1 + 2 rental",
+          price: "$1,730/mo",
           strikethrough: "",
-          promo: "Group leasing.",
-          roomsLine: "2-person bathroom share.",
+          promo: "",
+          roomsLine: "Room 1 · Room 2",
           includedRoomIds: brooklynRooms.slice(0, 2).map((r) => r.id),
         },
         {
           id: "seed-5259-brooklyn-bundle-3",
-          label: "3-room bundle",
-          price: "From $825/month per room",
+          label: "Rooms 3-5 rental",
+          price: "$2,475/mo",
           strikethrough: "",
-          promo: "Group leasing.",
-          roomsLine: "3-person bathroom share.",
+          promo: "",
+          roomsLine: "Room 3 · Room 4 · Room 5",
           includedRoomIds: brooklynRooms.slice(2, 5).map((r) => r.id),
         },
         {
-          id: "seed-5259-brooklyn-bundle-house",
-          label: "Full house",
-          price: "~$7,200/month",
+          id: "seed-5259-brooklyn-bundle-4",
+          label: "Rooms 6 - 9 rental",
+          price: "$3,200/mo",
           strikethrough: "",
-          promo: "Whole-house option.",
-          roomsLine: "All 9 rooms.",
-          includedRoomIds: brooklynRooms.map((r) => r.id),
+          promo: "",
+          roomsLine: "Room 6 · Room 7 · Room 8 · Room 9",
+          includedRoomIds: brooklynRooms.slice(5, 9).map((r) => r.id),
         },
       ],
       quickFacts: [
-        { id: "seed-5259-brooklyn-qf-type", label: "Type", value: "Shared Housing" },
-        { id: "seed-5259-brooklyn-qf-location", label: "Location", value: "University District near UW" },
+        { id: "seed-5259-brooklyn-qf-neighborhood", label: "Neighborhood", value: "Seattle" },
         { id: "seed-5259-brooklyn-qf-beds", label: "Bedrooms", value: "9" },
         { id: "seed-5259-brooklyn-qf-baths", label: "Bathrooms", value: "3" },
+        { id: "seed-5259-brooklyn-qf-type", label: "Type", value: "Shared housing" },
       ],
+      sharedSpaces: [
+        {
+          id: "seed-5259-brooklyn-shared-living",
+          name: "Living area",
+          detail: "Shared lounge and everyday common space for the household.",
+          roomAccessIds: brooklynRoomIds,
+        },
+        {
+          id: "seed-5259-brooklyn-shared-kitchen",
+          name: "Kitchen",
+          detail: "Full shared kitchen for cooking, storage, and shared meals.",
+          roomAccessIds: brooklynRoomIds,
+        },
+        {
+          id: "seed-5259-brooklyn-shared-laundry",
+          name: "Laundry",
+          detail: "Shared laundry for residents (layout varies by floor).",
+          roomAccessIds: brooklynRoomIds,
+        },
+      ],
+      amenitiesText:
+        "Walkable Location\nIn-Unit Laundry (Washer & Dryer)\nBi-monthly Cleaning (Twice a Month)\nWiFi\nA/C in Living Room Only\nPublic Transportation\nRefrigerator\nMicrowave\nStove\nOven\nDishwasher\nPackage Storage\nStreet Parking\nDesk\nBed\nHeating",
     }),
   ];
 
@@ -431,6 +439,8 @@ export function ensureAccountListingSeeds(userId: string | null, email: string |
   const current4709a = existing.find((p) => p.id === "mgr-seed-4709a-8th-ave-ne");
   const updated4709b = seeds.find((p) => p.id === "mgr-seed-4709b-8th-ave-ne");
   const current4709b = existing.find((p) => p.id === "mgr-seed-4709b-8th-ave-ne");
+  const updatedBrooklyn = seeds.find((p) => p.id === "mgr-seed-5259-brooklyn-ave-ne");
+  const currentBrooklyn = existing.find((p) => p.id === "mgr-seed-5259-brooklyn-ave-ne");
   let changed = false;
   if (
     updated4709a &&
@@ -448,6 +458,15 @@ export function ensureAccountListingSeeds(userId: string | null, email: string |
   ) {
     removeExtraListing(updated4709b.id);
     appendExtraListing(updated4709b, userId);
+    changed = true;
+  }
+  if (
+    updatedBrooklyn &&
+    currentBrooklyn &&
+    currentBrooklyn.listingSubmission?.rooms?.[0]?.floor !== "2-Person Bathroom Share"
+  ) {
+    removeExtraListing(updatedBrooklyn.id);
+    appendExtraListing(updatedBrooklyn, userId);
     changed = true;
   }
 
