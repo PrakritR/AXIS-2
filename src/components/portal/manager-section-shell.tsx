@@ -24,13 +24,29 @@ export function PortalPropertyFilterPill({
   propertyOptions,
   propertyValue,
   onPropertyChange,
+  residentOptions,
+  residentValue,
+  onResidentChange,
+  applicationOptions,
+  applicationValue,
+  onApplicationChange,
 }: {
   applications?: boolean;
   residents?: boolean;
   propertyOptions?: ManagerPropertyFilterOption[];
   propertyValue?: string;
   onPropertyChange?: (propertyId: string) => void;
+  residentOptions?: ManagerPropertyFilterOption[];
+  residentValue?: string;
+  onResidentChange?: (residentId: string) => void;
+  applicationOptions?: ManagerPropertyFilterOption[];
+  applicationValue?: string;
+  onApplicationChange?: (applicationId: string) => void;
 }) {
+  const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
+  const hasResidentPick = Boolean(residents && residentOptions && residentOptions.length > 0 && onResidentChange);
+  const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
+  if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
     <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
       <PortalPropertyFilter
@@ -39,6 +55,12 @@ export function PortalPropertyFilterPill({
         propertyOptions={propertyOptions}
         propertyValue={propertyValue}
         onPropertyChange={onPropertyChange}
+        residentOptions={residentOptions}
+        residentValue={residentValue}
+        onResidentChange={onResidentChange}
+        applicationOptions={applicationOptions}
+        applicationValue={applicationValue}
+        onApplicationChange={onApplicationChange}
       />
     </div>
   );
@@ -51,37 +73,74 @@ export function PortalPropertyFilter({
   propertyOptions,
   propertyValue = "",
   onPropertyChange,
+  residentOptions,
+  residentValue = "",
+  onResidentChange,
+  applicationOptions,
+  applicationValue = "",
+  onApplicationChange,
 }: {
   applications?: boolean;
   residents?: boolean;
   propertyOptions?: ManagerPropertyFilterOption[];
   propertyValue?: string;
   onPropertyChange?: (propertyId: string) => void;
+  residentOptions?: ManagerPropertyFilterOption[];
+  residentValue?: string;
+  onResidentChange?: (residentId: string) => void;
+  applicationOptions?: ManagerPropertyFilterOption[];
+  applicationValue?: string;
+  onApplicationChange?: (applicationId: string) => void;
 }) {
   const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
+  const hasResidentPick = Boolean(residents && residentOptions && residentOptions.length > 0 && onResidentChange);
+  const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
+  if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <select
-        className={selectClass}
-        aria-label="Properties"
-        value={hasPropertyPick ? propertyValue : ""}
-        onChange={(e) => onPropertyChange?.(e.target.value)}
-      >
-        <option value="">All your properties</option>
-        {propertyOptions?.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      {residents ? (
-        <select className={selectClass} aria-label="Residents">
-          <option>All residents</option>
+      {hasPropertyPick ? (
+        <select
+          className={selectClass}
+          aria-label="Properties"
+          value={propertyValue}
+          onChange={(e) => onPropertyChange?.(e.target.value)}
+        >
+          <option value="">All your properties</option>
+          {propertyOptions?.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
         </select>
       ) : null}
-      {applications ? (
-        <select className={selectClass} aria-label="Applications">
-          <option>All applications</option>
+      {hasResidentPick ? (
+        <select
+          className={selectClass}
+          aria-label="Residents"
+          value={residentValue}
+          onChange={(e) => onResidentChange?.(e.target.value)}
+        >
+          <option value="">All residents</option>
+          {residentOptions?.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {hasApplicationPick ? (
+        <select
+          className={selectClass}
+          aria-label="Applications"
+          value={applicationValue}
+          onChange={(e) => onApplicationChange?.(e.target.value)}
+        >
+          <option value="">All applications</option>
+          {applicationOptions?.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
         </select>
       ) : null}
     </div>

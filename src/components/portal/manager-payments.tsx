@@ -30,6 +30,8 @@ export function ManagerPayments({ tab = "ledger" }: { tab?: "ledger" | "payouts"
   const [hcTick, setHcTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [payoutsOpen, setPayoutsOpen] = useState(false);
+  const [propertyFilter, setPropertyFilter] = useState("");
+  const [residentFilter, setResidentFilter] = useState("");
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -91,6 +93,30 @@ export function ManagerPayments({ tab = "ledger" }: { tab?: "ledger" | "payouts"
     return [...fromHc, ...mergeManagerPaymentLedger()];
   }, [userId, hcTick]);
 
+  const propertyOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const row of mergedRows) {
+      const key = row.propertyName.trim();
+      if (!key) continue;
+      if (!seen.has(key)) seen.set(key, key);
+    }
+    return [...seen.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [mergedRows]);
+
+  const residentOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const row of mergedRows) {
+      const key = row.residentName.trim();
+      if (!key) continue;
+      if (!seen.has(key)) seen.set(key, key);
+    }
+    return [...seen.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [mergedRows]);
+
   const counts = useMemo(() => {
     const c: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
     for (const r of mergedRows) {
@@ -104,7 +130,14 @@ export function ManagerPayments({ tab = "ledger" }: { tab?: "ledger" | "payouts"
     [counts],
   );
 
-  const rowsForBucket = useMemo(() => mergedRows.filter((r) => r.bucket === bucket), [mergedRows, bucket]);
+  const rowsForBucket = useMemo(() => {
+    return mergedRows.filter((r) => {
+      if (r.bucket !== bucket) return false;
+      if (propertyFilter && r.propertyName !== propertyFilter) return false;
+      if (residentFilter && r.residentName !== residentFilter) return false;
+      return true;
+    });
+  }, [mergedRows, bucket, propertyFilter, residentFilter]);
 
   if (tab === "payouts") {
     return (
@@ -124,7 +157,15 @@ export function ManagerPayments({ tab = "ledger" }: { tab?: "ledger" | "payouts"
       title="Payments"
       titleAside={
         <>
-          <PortalPropertyFilterPill residents />
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+            residents
+            residentOptions={residentOptions}
+            residentValue={residentFilter}
+            onResidentChange={setResidentFilter}
+          />
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => setPayoutsOpen(true)}>
             Payouts
           </Button>
