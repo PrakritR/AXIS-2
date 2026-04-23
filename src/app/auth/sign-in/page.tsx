@@ -24,6 +24,19 @@ function friendlyAuthError(raw: string): string {
   return raw;
 }
 
+async function tryResidentAutoConfirm(email: string): Promise<boolean> {
+  try {
+    const res = await fetch("/api/auth/confirm-resident-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 function SignInForm() {
   const { showToast } = useAppUi();
   const router = useRouter();
@@ -42,10 +55,20 @@ function SignInForm() {
     setBusy(true);
     try {
       const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.auth.signInWithPassword({
+      let { error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
+      if (error?.message.toLowerCase().includes("email not confirmed")) {
+        const repaired = await tryResidentAutoConfirm(email);
+        if (repaired) {
+          const retry = await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          });
+          error = retry.error;
+        }
+      }
       if (error) {
         showToast(friendlyAuthError(error.message));
         setBusy(false);

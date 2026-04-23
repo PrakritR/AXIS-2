@@ -51,6 +51,7 @@ export async function POST(req: Request) {
       if (!existingId) {
         return NextResponse.json({ error: "Could not locate existing account for this email." }, { status: 400 });
       }
+      await supabase.auth.admin.updateUserById(existingId, { email_confirm: true });
       const pwCheck = await assertPasswordMatchesExistingAuthUser(normalEmail, password);
       if (!pwCheck.ok) {
         return NextResponse.json({ error: pwCheck.message }, { status: 401 });
