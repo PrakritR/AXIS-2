@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveAppOrigin } from "@/lib/app-url";
 import { stripePriceIdForPaidTier } from "@/lib/stripe-price-ids";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
@@ -56,10 +57,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-    if (!appUrl) {
-      return NextResponse.json({ error: "Set NEXT_PUBLIC_APP_URL to your site origin (no trailing slash)." }, { status: 500 });
-    }
+    const appUrl = resolveAppOrigin(req);
 
     const basePath =
       baseRaw === "/owner" ? "/owner" : baseRaw === "/pro" ? "/pro" : "/manager";

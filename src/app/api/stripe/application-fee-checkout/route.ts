@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getManagerPurchaseSku } from "@/lib/manager-access";
 import { platformFeeCents } from "@/lib/platform-fees";
+import { resolveAppOrigin } from "@/lib/app-url";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 
@@ -46,10 +47,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid amount (must be between $1.00 and $1000.00)." }, { status: 400 });
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-    if (!appUrl) {
-      return NextResponse.json({ error: "Set NEXT_PUBLIC_APP_URL to your site origin (no trailing slash)." }, { status: 500 });
-    }
+    const appUrl = resolveAppOrigin(req);
 
     const supabase = createSupabaseServiceRoleClient();
     const { data: profile, error: profileErr } = await supabase

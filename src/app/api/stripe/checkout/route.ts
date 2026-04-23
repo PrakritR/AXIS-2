@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveAppOrigin } from "@/lib/app-url";
 import { generateManagerId } from "@/lib/manager-id";
 import { normalizeProMonthlyPromoInput, PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
 import { stripePriceIdForPaidTier } from "@/lib/stripe-price-ids";
@@ -59,10 +60,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-    if (!appUrl) {
-      return NextResponse.json({ error: "Set NEXT_PUBLIC_APP_URL to your site origin (no trailing slash)." }, { status: 500 });
-    }
+    const appUrl = resolveAppOrigin(req);
 
     const email = typeof body.email === "string" ? body.email.trim() : "";
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";

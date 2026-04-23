@@ -2,7 +2,7 @@ import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submissio
 
 export type ApplicationFeePayChannel = "stripe" | "zelle";
 
-/** Which application-fee paths this listing exposes in the rental wizard (demo: “Stripe” = portal-tracked fee line). */
+/** Which application-fee paths this listing exposes in the rental wizard. */
 export function listingApplicationFeeChannels(sub: ManagerListingSubmissionV1 | undefined): {
   stripe: boolean;
   zelle: boolean;

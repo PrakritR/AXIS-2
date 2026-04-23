@@ -73,7 +73,7 @@ export type RentalWizardFormState = {
   applicationFeeAcknowledged: boolean;
   /**
    * Step 12 — how the applicant will satisfy the listing application fee when the listing offers both portal tracking and Zelle.
-   * “stripe” names the tracked fee line (no live card capture in this demo).
+   * “stripe” uses a Stripe Checkout Session for the application fee.
    */
   applicationFeePayChannel: "stripe" | "zelle";
   /** Step 12 — applicant attests they sent the fee via Zelle (manager must still mark the charge paid). */
