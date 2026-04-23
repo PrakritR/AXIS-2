@@ -1,5 +1,6 @@
 import type { MockProperty } from "@/data/types";
 import type {
+  ManagerBathroomRoomAccessKind,
   ManagerBathroomSubmission,
   ManagerBundleRow,
   ManagerListingSubmissionV1,
@@ -71,26 +72,56 @@ function splitRoomAmenityLines(text: string): string[] {
     .slice(0, 24);
 }
 
+function accessKindClause(kind: ManagerBathroomRoomAccessKind | undefined): string {
+  if (kind === "ensuite") return " — noted en suite for this bathroom";
+  if (kind === "shared") return " — noted shared with other rooms on this bathroom";
+  if (kind === "hall") return " — noted hall / common access";
+  return "";
+}
+
 function roomHasPrivateBath(roomId: string, sub: ManagerListingSubmissionV1): boolean {
-  return sub.bathrooms.some((b) => b.assignedRoomIds?.length === 1 && b.assignedRoomIds[0] === roomId);
+  return sub.bathrooms.some((b) => {
+    if (b.allResidents) return false;
+    const ids = b.assignedRoomIds ?? [];
+    return ids.length === 1 && ids[0] === roomId;
+  });
 }
 
 function roomSetupLine(room: ManagerRoomSubmission, sub: ManagerListingSubmissionV1): string {
-  const baths = sub.bathrooms.filter((b) => b.assignedRoomIds?.includes(room.id));
-  if (baths.length === 0) return "Bathroom not linked — assign rooms in Bathrooms step.";
-  const b = baths[0]!;
-  if (b.assignedRoomIds.length === 1) return "Private bathroom";
-  const otherNames = b.assignedRoomIds
-    .filter((id) => id !== room.id)
-    .map((id) => sub.rooms.find((r) => r.id === id)?.name?.trim())
-    .filter(Boolean);
-  return otherNames.length ? `Shared bathroom · with ${otherNames.join(", ")}` : "Shared bathroom";
+  const wholeHouse = sub.bathrooms.filter((b) => b.name.trim() && b.allResidents);
+  const direct = sub.bathrooms.filter((b) => b.name.trim() && !b.allResidents && (b.assignedRoomIds ?? []).includes(room.id));
+
+  if (direct.length > 0) {
+    const b = direct[0]!;
+    const ids = b.assignedRoomIds ?? [];
+    const kind = b.accessKindByRoomId?.[room.id];
+    let line: string;
+    if (ids.length === 1) line = "Private bathroom (en suite to this room)";
+    else {
+      const otherNames = ids
+        .filter((id) => id !== room.id)
+        .map((id) => sub.rooms.find((r) => r.id === id)?.name?.trim())
+        .filter(Boolean);
+      line = otherNames.length ? `Shared bathroom · with ${otherNames.join(", ")}` : "Shared bathroom";
+    }
+    line += accessKindClause(kind);
+    if (wholeHouse.length > 0) {
+      line += ` · Whole-house bath: ${wholeHouse.map((x) => x.name.trim()).join(", ")}`;
+    }
+    return line;
+  }
+
+  if (wholeHouse.length > 0) {
+    return `Whole-house / hall bath: ${wholeHouse.map((b) => b.name.trim()).join(", ")}`;
+  }
+  return "Bathroom not linked — assign rooms in Bathrooms step.";
 }
 
 function roomTags(room: ManagerRoomSubmission, sub: ManagerListingSubmissionV1): string[] {
   const base = ["Bed", "Desk", "Heating"];
   if (roomHasPrivateBath(room.id, sub)) base.push("Private bath");
-  else if (sub.bathrooms.some((b) => b.assignedRoomIds?.includes(room.id))) base.push("Shared bath");
+  else if (sub.bathrooms.some((b) => !b.allResidents && (b.assignedRoomIds ?? []).includes(room.id))) base.push("Shared bath");
+  if (sub.bathrooms.some((b) => b.name.trim() && b.allResidents)) base.push("House hall bath");
   const extra = room.detail
     .split(/[,;]/)
     .map((s) => s.trim())
@@ -99,10 +130,60 @@ function roomTags(room: ManagerRoomSubmission, sub: ManagerListingSubmissionV1):
 }
 
 function bathroomUsedByLabel(b: ManagerBathroomSubmission, sub: ManagerListingSubmissionV1): string {
+  if (b.allResidents) {
+    const named = sub.rooms.filter((r) => r.name.trim()).map((r) => r.name.trim());
+    return named.length ? `All listed bedrooms (${named.join(", ")})` : "All listed bedrooms";
+  }
   const names = (b.assignedRoomIds ?? [])
     .map((id) => sub.rooms.find((r) => r.id === id)?.name?.trim())
     .filter(Boolean);
   return names.length ? names.join(", ") : "";
+}
+
+function buildListingFloorCard(
+  cardKey: string,
+  floorLabel: string,
+  rs: ManagerRoomSubmission[],
+  sub: ManagerListingSubmissionV1,
+  property: MockProperty,
+): ListingFloorCard {
+  const rents = rs.map((r) => r.monthlyRent).filter((n) => n > 0);
+  const from = rents.length ? Math.min(...rents) : parseMonthlyRent(property.rentLabel) ?? 800;
+  const roomRows: ListingRoomRow[] = rs.map((r) => {
+    const setup = roomSetupLine(r, sub);
+    const furnish = r.furnishing?.trim();
+    const amenityLabels = splitRoomAmenityLines(r.roomAmenitiesText ?? "");
+    const utilNote = r.utilitiesEstimate?.trim() ? ` · Utilities ~ ${r.utilitiesEstimate.trim()}` : "";
+    const baseTags = roomTags(r, sub);
+    return {
+      id: r.id,
+      name: r.name.trim(),
+      detail: `${r.floor.trim() || "—"} · ${r.detail.trim() || "See room details below."}${utilNote}`,
+      price: `$${r.monthlyRent}/month`,
+      availability: r.availability.trim() || "Available now",
+      modal: {
+        setupLine: setup,
+        tourEyebrow: "Room tour",
+        tourTitle: r.videoDataUrl ? "Uploaded video" : "Video tour",
+        tourSubtitle: r.videoDataUrl
+          ? "Video submitted with property application."
+          : "Add a video in the manager form to replace this placeholder.",
+        includedTags: baseTags,
+        furnishingDetail: furnish || undefined,
+        roomAmenityLabels: amenityLabels.length ? amenityLabels : undefined,
+        photoUrls: r.photoDataUrls.length ? r.photoDataUrls : undefined,
+        videoSrc: r.videoDataUrl,
+      },
+    };
+  });
+  return {
+    cardKey,
+    floorLabel,
+    fromPrice: `$${from}/month`,
+    roomCount: rs.length,
+    remainingNote: `${rs.length} room${rs.length === 1 ? "" : "s"} in this group`,
+    rooms: roomRows,
+  };
 }
 
 function sharedSpaceAccessLine(ids: string[], sub: ManagerListingSubmissionV1): string {
@@ -216,51 +297,48 @@ export function listingRichFromManagerSubmission(
 ): ListingRichContent {
   const sub = normalizeManagerListingSubmissionV1(incoming);
   const rooms = sub.rooms.filter((r) => r.name.trim());
-  const floorsMap = new Map<string, typeof rooms>();
-  for (const r of rooms) {
-    const fl = r.floor.trim() || "Floor plan";
-    if (!floorsMap.has(fl)) floorsMap.set(fl, []);
-    floorsMap.get(fl)!.push(r);
-  }
+  const namedBaths = sub.bathrooms.filter((b) => b.name.trim());
+  const specificBaths = namedBaths.filter((b) => !b.allResidents);
+  const hasSpecificAssignments = specificBaths.some((b) => (b.assignedRoomIds ?? []).length > 0);
 
-  const floorPlans: ListingFloorCard[] = [...floorsMap.entries()].map(([floorLabel, rs]) => {
-    const rents = rs.map((r) => r.monthlyRent).filter((n) => n > 0);
-    const from = rents.length ? Math.min(...rents) : parseMonthlyRent(property.rentLabel) ?? 800;
-    const roomRows: ListingRoomRow[] = rs.map((r) => {
-      const setup = roomSetupLine(r, sub);
-      const furnish = r.furnishing?.trim();
-      const amenityLabels = splitRoomAmenityLines(r.roomAmenitiesText ?? "");
-      const utilNote = r.utilitiesEstimate?.trim() ? ` · Utilities ~ ${r.utilitiesEstimate.trim()}` : "";
-      const baseTags = roomTags(r, sub);
+  let floorPlansSectionTitle: string | undefined;
+  let floorPlans: ListingFloorCard[];
+
+  if (hasSpecificAssignments) {
+    floorPlansSectionTitle = "Rooms by bathroom";
+    const used = new Set<string>();
+    const groups: ListingFloorCard[] = [];
+    for (const b of specificBaths) {
+      const ids = b.assignedRoomIds ?? [];
+      const rs = rooms.filter((r) => ids.includes(r.id));
+      for (const r of rs) used.add(r.id);
+      if (rs.length === 0) continue;
+      const loc = b.location.trim();
+      const label = loc ? `${b.name.trim()} · ${loc}` : b.name.trim();
+      groups.push(buildListingFloorCard(b.id, label, rs, sub, property));
+    }
+    const orphans = rooms.filter((r) => !used.has(r.id));
+    if (orphans.length > 0) {
+      groups.push(buildListingFloorCard("rooms-other", "Other bedrooms (bathroom not specified)", orphans, sub, property));
+    }
+    floorPlans = groups;
+  } else {
+    const floorsMap = new Map<string, typeof rooms>();
+    for (const r of rooms) {
+      const fl = r.floor.trim() || "Floor plan";
+      if (!floorsMap.has(fl)) floorsMap.set(fl, []);
+      floorsMap.get(fl)!.push(r);
+    }
+    let idx = 0;
+    floorPlans = [...floorsMap.entries()].map(([floorLabel, rs]) => {
+      idx += 1;
+      const card = buildListingFloorCard(`floor-${idx}-${floorLabel}`, floorLabel, rs, sub, property);
       return {
-        id: r.id,
-        name: r.name.trim(),
-        detail: `${r.floor.trim() || "—"} · ${r.detail.trim() || "See room details below."}${utilNote}`,
-        price: `$${r.monthlyRent}/month`,
-        availability: r.availability.trim() || "Available now",
-        modal: {
-          setupLine: setup,
-          tourEyebrow: "Room tour",
-          tourTitle: r.videoDataUrl ? "Uploaded video" : "Video tour",
-          tourSubtitle: r.videoDataUrl
-            ? "Video submitted with property application."
-            : "Add a video in the manager form to replace this placeholder.",
-          includedTags: baseTags,
-          furnishingDetail: furnish || undefined,
-          roomAmenityLabels: amenityLabels.length ? amenityLabels : undefined,
-          photoUrls: r.photoDataUrls.length ? r.photoDataUrls : undefined,
-          videoSrc: r.videoDataUrl,
-        },
+        ...card,
+        remainingNote: `${rs.length} room${rs.length === 1 ? "" : "s"} on this floor`,
       };
     });
-    return {
-      floorLabel,
-      fromPrice: `$${from}/month`,
-      roomCount: rs.length,
-      remainingNote: `${rs.length} room${rs.length === 1 ? "" : "s"} on this floor`,
-      rooms: roomRows,
-    };
-  });
+  }
 
   let bathrooms: ListingBathroomRow[] = sub.bathrooms
     .filter((b) => b.name.trim())
@@ -276,12 +354,14 @@ export function listingRichFromManagerSubmission(
         shower: b.shower,
         toilet: b.toilet,
         bathtub: b.bathtub,
-        availability: b.assignedRoomIds?.length ? "Assigned" : "—",
+        availability: b.allResidents ? "All rooms" : b.assignedRoomIds?.length ? "Assigned" : "—",
         modal: {
           eyebrow: "Bathroom",
           setupCard: bathroomUsedByLabel(b, sub)
             ? `Used by: ${bathroomUsedByLabel(b, sub)}`
-            : "Select which rooms use this bathroom in the manager form.",
+            : b.allResidents
+              ? "Marked as a whole-house / hall bathroom for all listed bedrooms."
+              : "Select which rooms use this bathroom in the manager form.",
           includedTags: tags.length ? tags : ["Restroom"],
           photoCaptions: ["Photo 1", "Photo 2", "Photo 3"],
         },
@@ -477,6 +557,7 @@ export function listingRichFromManagerSubmission(
     heroOverview: overview || undefined,
     houseRulesBody: rules || undefined,
     priceRangeLabel: mids.length ? `from $${low}–$${high}/mo` : "—",
+    floorPlansSectionTitle: floorPlansSectionTitle ?? undefined,
     floorPlans:
       floorPlans.length > 0
         ? floorPlans

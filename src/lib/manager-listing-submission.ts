@@ -52,6 +52,9 @@ export type ManagerBundleRow = {
   includedRoomIds?: string[];
 };
 
+/** How a room uses a specific bathroom row (optional; improves listing copy). */
+export type ManagerBathroomRoomAccessKind = "ensuite" | "shared" | "hall";
+
 export type ManagerBathroomSubmission = {
   id: string;
   name: string;
@@ -59,8 +62,18 @@ export type ManagerBathroomSubmission = {
   shower: boolean;
   toilet: boolean;
   bathtub: boolean;
-  /** Which rooms use this bathroom (exclusive: a room should appear on at most one bathroom). */
+  /**
+   * Which rooms use this bathroom. Exclusive across bathrooms that are **not** `allResidents`
+   * (a listed room should appear on at most one of those rows).
+   */
   assignedRoomIds: string[];
+  /**
+   * Hall / whole-house bath everyone shares — no per-room checkboxes; listing shows all bedrooms.
+   * Does not claim room ids, so rooms can still be assigned to their suite / shared bath rows.
+   */
+  allResidents?: boolean;
+  /** Optional per-room situation for this bathroom (only meaningful when the room is checked). */
+  accessKindByRoomId?: Partial<Record<string, ManagerBathroomRoomAccessKind>>;
 };
 
 export type ManagerSharedSpaceSubmission = {
@@ -220,6 +233,17 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     if (assignedRoomIds.length === 0 && legacyBath.sharedByRooms?.trim()) {
       assignedRoomIds = matchRoomIdsFromLegacyNames(legacyBath.sharedByRooms, rooms);
     }
+    const allResidents = Boolean((legacyBath as ManagerBathroomSubmission).allResidents);
+    const rawAccess = (legacyBath as ManagerBathroomSubmission).accessKindByRoomId;
+    let accessKindByRoomId: ManagerBathroomSubmission["accessKindByRoomId"] = undefined;
+    if (!allResidents && rawAccess && typeof rawAccess === "object") {
+      const next: Partial<Record<string, ManagerBathroomRoomAccessKind>> = {};
+      for (const [k, v] of Object.entries(rawAccess)) {
+        if (v === "ensuite" || v === "shared" || v === "hall") next[k] = v;
+      }
+      accessKindByRoomId = Object.keys(next).length ? next : undefined;
+    }
+
     return {
       id: legacyBath.id,
       name: legacyBath.name ?? "",
@@ -227,7 +251,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       shower: legacyBath.shower ?? true,
       toilet: legacyBath.toilet ?? true,
       bathtub: legacyBath.bathtub ?? false,
-      assignedRoomIds,
+      assignedRoomIds: allResidents ? [] : assignedRoomIds,
+      allResidents,
+      accessKindByRoomId: allResidents ? undefined : accessKindByRoomId,
     };
   });
 
@@ -346,6 +372,8 @@ export function emptyBathroom(index: number): ManagerBathroomSubmission {
     toilet: true,
     bathtub: index === 0,
     assignedRoomIds: [],
+    allResidents: false,
+    accessKindByRoomId: undefined,
   };
 }
 

@@ -233,7 +233,7 @@ export function ListingDetailSections({
               <section id="floor-plans" className={sectionScroll}>
                 <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
                   <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                    Floor plans
+                    {rich.floorPlansSectionTitle ?? "Floor plans"}
                   </h2>
                   <p className="text-xs font-medium text-slate-500 sm:text-sm">
                     {roomCount} rooms listed
@@ -242,7 +242,7 @@ export function ListingDetailSections({
                 <div className="space-y-5">
                   {rich.floorPlans.map((f) => (
                     <InteractiveFloorPlanCard
-                      key={f.floorLabel}
+                      key={f.cardKey ?? f.floorLabel}
                       floor={f}
                       listingPropertyId={property.id}
                     />

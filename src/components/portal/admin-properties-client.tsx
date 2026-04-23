@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ListingPublicPreviewModal } from "@/components/portal/listing-public-preview-modal";
 import { PropertyRequestEditForm } from "@/components/portal/property-request-edit-form";
-import { PROPERTY_PIPELINE_EVENT, approvePendingManagerProperty } from "@/lib/demo-property-pipeline";
+import {
+  PROPERTY_PIPELINE_EVENT,
+  approvePendingManagerProperty,
+  republishManagerListingAfterReview,
+} from "@/lib/demo-property-pipeline";
 import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import {
@@ -32,7 +36,7 @@ import {
 } from "@/lib/demo-admin-property-inventory";
 
 const KPI_LABELS = [
-  "Pending approval",
+  "Pending review",
   "Request change",
   "Listed",
   "Unlisted",
@@ -40,7 +44,7 @@ const KPI_LABELS = [
 ] as const;
 
 const EMPTY_COPY: Record<AdminPropertyBucketIndex, string> = {
-  0: "No properties awaiting approval.",
+  0: "No properties awaiting review.",
   1: "No properties awaiting edits.",
   2: "No listed properties.",
   3: "No unlisted properties.",
@@ -99,7 +103,7 @@ function StatusPill({
 function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: "green" | "amber" | "slate" | "rose" } {
   switch (bucket) {
     case 0:
-      return { label: "Pending approval", variant: "amber" };
+      return { label: "Pending review", variant: "amber" };
     case 1:
       return { label: "Changes requested", variant: "amber" };
     case 2:
@@ -216,20 +220,32 @@ function AdminPropertyPreviewModal({
               type="button"
               className="rounded-full"
               onClick={() => {
+                if (row.adminRefId.startsWith("mgr-")) {
+                  const id = row.listingId ?? row.adminRefId;
+                  const ok = republishManagerListingAfterReview(id);
+                  run(ok ? "Listing approved — live on Rent with Axis again." : "Could not publish listing.", ok);
+                  return;
+                }
                 const created = approvePendingManagerProperty(row.adminRefId);
                 run(created ? `Approved and listed: ${created.title}` : "Approved.", Boolean(created));
               }}
             >
               Approve
             </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setComposeEdit("pending")}>
-              Request edit
-            </Button>
+            {row.adminRefId.startsWith("mgr-") ? null : (
+              <Button type="button" variant="outline" className="rounded-full" onClick={() => setComposeEdit("pending")}>
+                Request edit
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
-              onClick={() => run("Declined submission.", movePendingToRejected(row.adminRefId))}
+              onClick={() =>
+                row.adminRefId.startsWith("mgr-")
+                  ? run("Listing removed from catalog.", moveListedToRejected(row.listingId ?? row.adminRefId))
+                  : run("Declined submission.", movePendingToRejected(row.adminRefId))
+              }
             >
               REJECT
             </Button>

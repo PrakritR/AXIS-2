@@ -287,10 +287,28 @@ export function updateExtraListingFromSubmission(
   const prev = list[idx]!;
   const next = buildMockPropertyFromDraft(pendingLike, listingId);
   const owner = next.managerUserId ?? managerUserId;
-  list[idx] = { ...next, managerUserId: owner, adminPublishLive: prev.adminPublishLive };
+  /** Any manager edit takes the listing off the public catalog until admin approves again. */
+  list[idx] = { ...next, managerUserId: owner, adminPublishLive: false };
   map[managerUserId] = list;
   writeExtrasMap(map);
   return true;
+}
+
+/** Sets a manager `mgr-*` listing live on the rent catalog again after admin review. */
+export function republishManagerListingAfterReview(listingId: string): boolean {
+  if (!listingId.startsWith("mgr-")) return false;
+  const map = readExtrasMap();
+  for (const uid of Object.keys(map)) {
+    const list = map[uid]!;
+    const idx = list.findIndex((p) => p.id === listingId);
+    if (idx === -1) continue;
+    const cur = list[idx]!;
+    list[idx] = { ...cur, adminPublishLive: true };
+    map[uid] = list;
+    writeExtrasMap(map);
+    return true;
+  }
+  return false;
 }
 
 /** Publish from an admin-bucket row (no stored submission — listing uses defaults until edited). */

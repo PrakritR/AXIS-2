@@ -28,6 +28,8 @@ export type ListingRoomRow = {
 };
 
 export type ListingFloorCard = {
+  /** Stable React key when cards are built from bathrooms (defaults to floorLabel). */
+  cardKey?: string;
   floorLabel: string;
   fromPrice: string;
   roomCount: number;
@@ -106,6 +108,8 @@ export type ListingRichContent = {
   /** House rules / community guidelines for the listing (House rules tab). */
   houseRulesBody?: string;
   priceRangeLabel: string;
+  /** Section title above room cards (e.g. bathroom grouping vs floor plan). */
+  floorPlansSectionTitle?: string;
   floorPlans: ListingFloorCard[];
   bathrooms: ListingBathroomRow[];
   sharedSpaces: ListingSharedRow[];

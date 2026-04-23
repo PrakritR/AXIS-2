@@ -184,9 +184,13 @@ export function ManagerProperties() {
             setEditListingContext(null);
           }}
           onSubmitted={() => {
-            showToast(
-              editListingContext ? "Listing saved." : "Listing submitted for admin approval. It will appear on public search after approval.",
-            );
+            if (editListingContext?.mode !== "listed") {
+              showToast(
+                editListingContext
+                  ? "Submission saved."
+                  : "Listing submitted for admin approval. It will appear on public search after approval.",
+              );
+            }
             refreshPending();
             void loadSku();
             setFormOpen(false);

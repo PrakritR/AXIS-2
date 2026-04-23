@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { Children, useEffect, useRef, useState } from "react";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -27,6 +27,7 @@ import {
   emptyRoom,
   emptySharedSpace,
   PAYMENT_AT_SIGNING_OPTIONS,
+  type ManagerBathroomRoomAccessKind,
   type ManagerBathroomSubmission,
   type ManagerBundleRow,
   type ManagerListingSubmissionV1,
@@ -120,6 +121,20 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: stri
     <div className="mb-1.5">
       <p className="text-xs font-semibold text-slate-800">{children}</p>
       {hint ? <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+/** In CSS grid rows, bottom-aligns the control with siblings when label/hint blocks differ in height. */
+function GridField({ children }: { children: React.ReactNode }) {
+  const parts = Children.toArray(children);
+  if (parts.length !== 2) {
+    return <>{children}</>;
+  }
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0">{parts[0]}</div>
+      <div className="mt-auto w-full shrink-0">{parts[1]}</div>
     </div>
   );
 }
@@ -232,10 +247,16 @@ export function ManagerAddListingForm({
     setSub((s) => ({
       ...s,
       rooms: s.rooms.filter((_, j) => j !== i),
-      bathrooms: s.bathrooms.map((b) => ({
-        ...b,
-        assignedRoomIds: (b.assignedRoomIds ?? []).filter((id) => id !== removedId),
-      })),
+      bathrooms: s.bathrooms.map((b) => {
+        const assignedRoomIds = (b.assignedRoomIds ?? []).filter((id) => id !== removedId);
+        let accessKindByRoomId = b.accessKindByRoomId;
+        if (accessKindByRoomId?.[removedId]) {
+          accessKindByRoomId = { ...accessKindByRoomId };
+          delete accessKindByRoomId[removedId];
+          if (Object.keys(accessKindByRoomId).length === 0) accessKindByRoomId = undefined;
+        }
+        return { ...b, assignedRoomIds, accessKindByRoomId };
+      }),
       sharedSpaces: s.sharedSpaces.map((ss) => ({
         ...ss,
         roomAccessIds: (ss.roomAccessIds ?? []).filter((id) => id !== removedId),
@@ -245,19 +266,44 @@ export function ManagerAddListingForm({
 
   const toggleBathroomRoom = (bathIndex: number, roomId: string, on: boolean) => {
     setSub((s) => {
+      if (s.bathrooms[bathIndex]?.allResidents) return s;
       const nextBathrooms = s.bathrooms.map((b, bi) => {
         if (bi === bathIndex) {
           const set = new Set(b.assignedRoomIds ?? []);
           if (on) set.add(roomId);
           else set.delete(roomId);
-          return { ...b, assignedRoomIds: s.rooms.map((r) => r.id).filter((id) => set.has(id)) };
+          const nextIds = s.rooms.map((r) => r.id).filter((id) => set.has(id));
+          let access = b.accessKindByRoomId;
+          if (!on && access?.[roomId]) {
+            access = { ...access };
+            delete access[roomId];
+            if (Object.keys(access).length === 0) access = undefined;
+          }
+          return { ...b, assignedRoomIds: nextIds, accessKindByRoomId: access };
         }
-        if (on) {
+        if (on && !b.allResidents) {
           return { ...b, assignedRoomIds: (b.assignedRoomIds ?? []).filter((id) => id !== roomId) };
         }
         return b;
       });
       return { ...s, bathrooms: nextBathrooms };
+    });
+  };
+
+  const setBathRoomAccessKind = (bathIndex: number, roomId: string, value: "" | ManagerBathroomRoomAccessKind) => {
+    setSub((s) => {
+      const bathrooms = [...s.bathrooms];
+      const b = bathrooms[bathIndex];
+      if (!b || b.allResidents) return s;
+      if (!(b.assignedRoomIds ?? []).includes(roomId)) return s;
+      const nextAccess: Partial<Record<string, ManagerBathroomRoomAccessKind>> = { ...(b.accessKindByRoomId ?? {}) };
+      if (!value) delete nextAccess[roomId];
+      else nextAccess[roomId] = value;
+      bathrooms[bathIndex] = {
+        ...b,
+        accessKindByRoomId: Object.keys(nextAccess).length ? nextAccess : undefined,
+      };
+      return { ...s, bathrooms };
     });
   };
 
@@ -491,6 +537,7 @@ export function ManagerAddListingForm({
           showToast("Could not save changes.");
           return;
         }
+        showToast("Listing saved. It is pending admin review before it appears on Rent with Axis again.");
         onSubmitted();
         return;
       }
@@ -605,14 +652,14 @@ export function ManagerAddListingForm({
                 <FieldLabel>Street address *</FieldLabel>
                 <Input value={sub.address} onChange={(e) => setSub((s) => ({ ...s, address: e.target.value }))} />
               </div>
-              <div>
-                <FieldLabel>ZIP *</FieldLabel>
+              <GridField>
+                <FieldLabel hint="Postal code for search and maps.">ZIP *</FieldLabel>
                 <Input value={sub.zip} onChange={(e) => setSub((s) => ({ ...s, zip: e.target.value }))} maxLength={10} />
-              </div>
-              <div>
-                <FieldLabel>Neighborhood *</FieldLabel>
+              </GridField>
+              <GridField>
+                <FieldLabel hint="Area name as you want it on the listing.">Neighborhood *</FieldLabel>
                 <Input value={sub.neighborhood} onChange={(e) => setSub((s) => ({ ...s, neighborhood: e.target.value }))} />
-              </div>
+              </GridField>
               <div className="sm:col-span-2">
                 <FieldLabel>Listing tagline</FieldLabel>
                 <Input value={sub.tagline} onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))} placeholder="Short headline for search cards" />
@@ -665,19 +712,19 @@ export function ManagerAddListingForm({
                 title="Published fees"
                 description="Shown on your listing and on the rental application when relevant."
               >
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
+                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                  <GridField>
                     <FieldLabel hint='e.g. "$50" or "Waived"'>Application fee</FieldLabel>
                     <Input value={sub.applicationFee} onChange={(e) => setSub((s) => ({ ...s, applicationFee: e.target.value }))} placeholder="$50 or Waived" />
-                  </div>
-                  <div>
-                    <FieldLabel>Security deposit</FieldLabel>
+                  </GridField>
+                  <GridField>
+                    <FieldLabel hint='e.g. "$500" or "—"'>Security deposit</FieldLabel>
                     <Input value={sub.securityDeposit} onChange={(e) => setSub((s) => ({ ...s, securityDeposit: e.target.value }))} placeholder="$500" />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <FieldLabel>Move-in fee</FieldLabel>
-                    <Input value={sub.moveInFee} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} placeholder="$100 or —" />
-                  </div>
+                  </GridField>
+                  <GridField>
+                    <FieldLabel hint='e.g. "$200" or "—"'>Move-in fee</FieldLabel>
+                    <Input value={sub.moveInFee} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} placeholder="$200 or —" />
+                  </GridField>
                 </div>
               </ListingSubsection>
 
@@ -708,7 +755,7 @@ export function ManagerAddListingForm({
               <ListingSubsection
                 id="edit-zelle"
                 title="Zelle & application-fee options"
-                description="When Zelle is on, you can still offer the default portal-tracked fee line—applicants pick how they pay on the apply flow."
+                description="When Zelle is on, you can still offer card checkout (Stripe) for the fee—applicants pick how they pay on the apply flow when both are available."
               >
                 <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
                   <input
@@ -740,8 +787,8 @@ export function ManagerAddListingForm({
                     <div>
                       <p className="text-xs font-semibold text-slate-800">Application fee payment options</p>
                       <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-                        When both are enabled, applicants choose Portal / tracked payment or Zelle before submitting. They still receive an Application ID and can sign up at Create
-                        account—you approve applications before full resident portal access.
+                        If both are on, applicants pick card (Stripe) or Zelle before they submit. If only one is on, that path is used automatically. After they apply, they get an
+                        Application ID; they can create an account, and you approve before they get full resident portal access.
                       </p>
                     </div>
                     <label className="flex cursor-pointer items-start gap-3">
@@ -756,7 +803,7 @@ export function ManagerAddListingForm({
                           }))
                         }
                       />
-                      <span className="text-sm font-medium text-slate-800">Offer portal / tracked payment for the application fee</span>
+                      <span className="text-sm font-medium text-slate-800">Offer card payment (Stripe) for the application fee</span>
                     </label>
                     <label className="flex cursor-pointer items-start gap-3">
                       <input
@@ -804,14 +851,14 @@ export function ManagerAddListingForm({
                       <FieldLabel hint="Shown in the Bundle column.">Bundle name</FieldLabel>
                       <Input value={bundle.label} onChange={(e) => setBundle(i, { label: e.target.value })} placeholder="e.g. Standard lease package" />
                     </div>
-                    <div>
+                    <GridField>
                       <FieldLabel hint="e.g. from $899/mo">Price line</FieldLabel>
                       <Input value={bundle.price} onChange={(e) => setBundle(i, { price: e.target.value })} placeholder="from $899/mo" />
-                    </div>
-                    <div>
-                      <FieldLabel>Optional compare-at price</FieldLabel>
+                    </GridField>
+                    <GridField>
+                      <FieldLabel hint='Shown with a strikethrough when set (e.g. "$999/mo").'>Optional compare-at price</FieldLabel>
                       <Input value={bundle.strikethrough} onChange={(e) => setBundle(i, { strikethrough: e.target.value })} placeholder="$999/mo" />
-                    </div>
+                    </GridField>
                     <div className="sm:col-span-2">
                       <FieldLabel hint="Shown as the Offer column when set.">Offer / promo</FieldLabel>
                       <Input value={bundle.promo} onChange={(e) => setBundle(i, { promo: e.target.value })} placeholder="First month concession, etc." />
@@ -871,18 +918,18 @@ export function ManagerAddListingForm({
                 <Textarea className="min-h-[80px]" value={sub.houseCostsDetail} onChange={(e) => setSub((s) => ({ ...s, houseCostsDetail: e.target.value }))} />
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div>
-                  <FieldLabel>Parking (monthly)</FieldLabel>
+                <GridField>
+                  <FieldLabel hint="Leave blank or $0 to hide on the listing.">Parking (monthly)</FieldLabel>
                   <Input value={sub.parkingMonthly} onChange={(e) => setSub((s) => ({ ...s, parkingMonthly: e.target.value }))} placeholder="$150 or —" />
-                </div>
-                <div>
-                  <FieldLabel>HOA / community</FieldLabel>
+                </GridField>
+                <GridField>
+                  <FieldLabel hint="Leave blank or $0 to hide on the listing.">HOA / community</FieldLabel>
                   <Input value={sub.hoaMonthly} onChange={(e) => setSub((s) => ({ ...s, hoaMonthly: e.target.value }))} placeholder="$0 = not shown on listing" />
-                </div>
-                <div>
-                  <FieldLabel>Other fees</FieldLabel>
+                </GridField>
+                <GridField>
+                  <FieldLabel hint="Any other recurring line item.">Other fees</FieldLabel>
                   <Input value={sub.otherMonthlyFees} onChange={(e) => setSub((s) => ({ ...s, otherMonthlyFees: e.target.value }))} />
-                </div>
+                </GridField>
               </div>
             </div>
           </FormSection>
@@ -925,38 +972,40 @@ export function ManagerAddListingForm({
                       </div>
                     </div>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <FieldLabel>Room name *</FieldLabel>
+                      <GridField>
+                        <FieldLabel hint="Shown on the listing and in room pickers.">Room name *</FieldLabel>
                         <Input value={room.name} onChange={(e) => setRoom(i, { name: e.target.value })} placeholder="Room 12A" />
-                      </div>
-                      <div>
-                        <FieldLabel>Floor / level</FieldLabel>
+                      </GridField>
+                      <GridField>
+                        <FieldLabel hint="Optional — e.g. first floor, garden level.">Floor / level</FieldLabel>
                         <Input value={room.floor} onChange={(e) => setRoom(i, { floor: e.target.value })} placeholder="First floor" />
-                      </div>
-                      <div>
-                        <FieldLabel>Monthly rent ($) *</FieldLabel>
+                      </GridField>
+                      <GridField>
+                        <FieldLabel hint="Whole dollars per month.">Monthly rent ($) *</FieldLabel>
                         <Input
                           inputMode="decimal"
                           value={room.monthlyRent || ""}
                           onChange={(e) => setRoom(i, { monthlyRent: Number(e.target.value) || 0 })}
                           placeholder="775"
                         />
-                      </div>
-                      <div>
+                      </GridField>
+                      <GridField>
                         <FieldLabel hint="Pick a preset or type your own.">Availability</FieldLabel>
-                        <Input
-                          value={room.availability}
-                          onChange={(e) => setRoom(i, { availability: e.target.value })}
-                          list={`room-avail-${room.id}`}
-                          placeholder="Available now"
-                        />
-                        <datalist id={`room-avail-${room.id}`}>
-                          {ROOM_AVAILABILITY_OPTIONS.map((opt) => (
-                            <option key={opt} value={opt} />
-                          ))}
-                        </datalist>
-                      </div>
-                      <div>
+                        <div>
+                          <Input
+                            value={room.availability}
+                            onChange={(e) => setRoom(i, { availability: e.target.value })}
+                            list={`room-avail-${room.id}`}
+                            placeholder="Available now"
+                          />
+                          <datalist id={`room-avail-${room.id}`}>
+                            {ROOM_AVAILABILITY_OPTIONS.map((opt) => (
+                              <option key={opt} value={opt} />
+                            ))}
+                          </datalist>
+                        </div>
+                      </GridField>
+                      <GridField>
                         <FieldLabel hint="Monthly estimate for this room (used on the listing and in signing totals).">
                           Utilities (estimate)
                         </FieldLabel>
@@ -965,8 +1014,8 @@ export function ManagerAddListingForm({
                           onChange={(e) => setRoom(i, { utilitiesEstimate: e.target.value })}
                           placeholder="e.g. $175/mo"
                         />
-                      </div>
-                      <div>
+                      </GridField>
+                      <GridField>
                         <FieldLabel hint="Preset or describe what is included in this room.">Furnishing</FieldLabel>
                         <select
                           className={selectInputCls}
@@ -983,7 +1032,7 @@ export function ManagerAddListingForm({
                             </option>
                           ))}
                         </select>
-                      </div>
+                      </GridField>
                       {furnishState.select === "__custom__" ? (
                         <div className="sm:col-span-2">
                           <FieldLabel hint="Shown on the listing when furnishing is not a simple preset.">Custom furnishing details</FieldLabel>
@@ -1132,7 +1181,7 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-bath"
             title="Bathrooms"
-            description="For each bathroom, select which rooms use it. One room per bathroom means a private / en-suite bath — you do not need to repeat that in the room block."
+            description="Group the public listing by bathroom: assign each bedroom to the bath row it uses. A room can use a private suite bath and still share a whole-house hall bath — use “Whole-house” for the common one. Two+ rooms on the same row are a shared bath."
           >
               <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                 <p className="text-sm text-slate-500">Shown in the Bathrooms section on the public listing.</p>
@@ -1177,22 +1226,70 @@ export function ManagerAddListingForm({
                         Bathtub
                       </label>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Selecting a room here unchecks it from other bathrooms. One room alone means private / en-suite.">
+                        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                          <input
+                            type="checkbox"
+                            className="mt-1 h-4 w-4 rounded border-slate-300"
+                            checked={Boolean(b.allResidents)}
+                            onChange={(e) => {
+                              const on = e.target.checked;
+                              setBath(i, {
+                                allResidents: on,
+                                assignedRoomIds: on ? [] : (b.assignedRoomIds ?? []),
+                                accessKindByRoomId: on ? undefined : b.accessKindByRoomId,
+                              });
+                            }}
+                          />
+                          <span className="text-sm font-medium text-slate-800">
+                            Whole-house / hall bathroom — all listed bedrooms use it (no per-room checkboxes)
+                          </span>
+                        </label>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="For non–whole-house baths: checking a room here removes it from other bath rows (except whole-house). Use the situation menu for en suite vs shared wording on the listing.">
                           Used by these rooms
                         </FieldLabel>
-                        <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-                          {sub.rooms.map((room) => (
-                            <label key={`${b.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300"
-                                checked={(b.assignedRoomIds ?? []).includes(room.id)}
-                                onChange={(e) => toggleBathroomRoom(i, room.id, e.target.checked)}
-                              />
-                              <span className="font-medium text-slate-800">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
-                            </label>
-                          ))}
-                        </div>
+                        {b.allResidents ? (
+                          <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
+                            This bathroom applies to every named room on the listing. Add another bathroom row for suite or shared setups between specific rooms.
+                          </p>
+                        ) : (
+                          <div className="mt-2 space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                            {sub.rooms.map((room) => {
+                              const checked = (b.assignedRoomIds ?? []).includes(room.id);
+                              return (
+                                <div key={`${b.id}-${room.id}`} className="rounded-lg border border-slate-200/80 bg-white p-2.5">
+                                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 shrink-0 rounded border-slate-300"
+                                      checked={checked}
+                                      onChange={(e) => toggleBathroomRoom(i, room.id, e.target.checked)}
+                                    />
+                                    <span className="font-medium text-slate-800">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
+                                  </label>
+                                  {checked ? (
+                                    <div className="mt-2 pl-6">
+                                      <label className="block text-[11px] font-semibold text-slate-600">Bathroom situation for this room</label>
+                                      <select
+                                        className={`${selectInputCls} mt-1 text-xs`}
+                                        value={b.accessKindByRoomId?.[room.id] ?? ""}
+                                        onChange={(e) =>
+                                          setBathRoomAccessKind(i, room.id, e.target.value as "" | ManagerBathroomRoomAccessKind)
+                                        }
+                                      >
+                                        <option value="">Optional — auto from shared vs private</option>
+                                        <option value="ensuite">En suite (private to this room)</option>
+                                        <option value="shared">Shared (other checked rooms use it too)</option>
+                                        <option value="hall">Hall / common (not private to this room)</option>
+                                      </select>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

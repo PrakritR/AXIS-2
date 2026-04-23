@@ -76,10 +76,10 @@ function deferCatalogMutation(fn: () => void) {
 }
 
 /** Matches manager-facing stages: bucket 1 is admin “request change” / pre-list work (shown as Approved). */
-const MANAGER_TAB_LABELS = ["Pending", "Approved", "Listed", "Unlisted", "Rejected"] as const;
+const MANAGER_TAB_LABELS = ["Pending review", "Approved", "Listed", "Unlisted", "Rejected"] as const;
 
 const EMPTY_COPY: Record<AdminPropertyBucketIndex, string> = {
-  0: "No submissions in pending approval.",
+  0: "Nothing awaiting review.",
   1: "Nothing in this stage.",
   2: "No listed properties.",
   3: "No unlisted properties.",
@@ -87,7 +87,7 @@ const EMPTY_COPY: Record<AdminPropertyBucketIndex, string> = {
 };
 
 const BANNER_COPY: Record<AdminPropertyBucketIndex, string> = {
-  0: "Pending listings are reviewed by Axis admin. You can edit your submission, but only admin can approve it for publication.",
+  0: "New submissions and edited live listings appear here until Axis admin approves them. The public Rent with Axis catalog only shows listings after approval.",
   1: "Axis admin has approved moving forward but requested changes before the listing goes live. Revise and resubmit from here.",
   2: "Live on Rent with Axis — published listings you can unlist or remove.",
   3: "These listings are off the public site. You can relist or delete them from your queue.",
@@ -146,7 +146,7 @@ function StatusPill({
 function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: "green" | "amber" | "slate" | "rose" } {
   switch (bucket) {
     case 0:
-      return { label: "Pending approval", variant: "amber" };
+      return { label: "Pending review", variant: "amber" };
     case 1:
       return { label: "Approved · edits requested", variant: "amber" };
     case 2:
@@ -199,6 +199,10 @@ function ManagerPropertyInlineDetails({
   const editorInitial = useMemo(() => {
     if (!listingEditorOpen || !managerUserId || !row) return null;
     if (bucket === 0) {
+      if (row.adminRefId.startsWith("mgr-")) {
+        const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.adminRefId);
+        return p ? submissionForListedEdit(p) : null;
+      }
       const p = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
       return p ? submissionForPendingEdit(p) : null;
     }
@@ -227,10 +231,18 @@ function ManagerPropertyInlineDetails({
       return;
     }
     if (bucket === 0) {
-      const hit = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
-      if (!hit) {
-        showToast("Could not load this submission.");
-        return;
+      if (row.adminRefId.startsWith("mgr-")) {
+        const hit = readExtraListingsForUser(managerUserId).find((x) => x.id === row.adminRefId);
+        if (!hit) {
+          showToast("Could not load this listing.");
+          return;
+        }
+      } else {
+        const hit = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
+        if (!hit) {
+          showToast("Could not load this submission.");
+          return;
+        }
       }
     }
     if (bucket === 2 && row.listingId) {
@@ -257,24 +269,31 @@ function ManagerPropertyInlineDetails({
       {bucket === 0 ? (
         <>
           <p className="text-xs text-slate-500">
-            Listing approval is handled by Axis admin. Edit below without leaving this preview; only admin can approve, request changes, or reject a listing.
+            {row.adminRefId.startsWith("mgr-")
+              ? "This listing was edited and is off the public site until Axis admin approves it again. You can keep editing here."
+              : "Listing approval is handled by Axis admin. Edit below without leaving this preview; only admin can approve, request changes, or reject a listing."}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={openInlineEditor}>
-              Edit submission
+              {row.adminRefId.startsWith("mgr-") ? "Edit listing" : "Edit submission"}
             </Button>
             <Button
               type="button"
               variant="outline"
               className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
               onClick={() => {
+                if (row.adminRefId.startsWith("mgr-")) {
+                  if (!window.confirm("Permanently delete this listing from your catalog?")) return;
+                  deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(row.adminRefId, managerUserId)));
+                  return;
+                }
                 if (!window.confirm("Delete this pending submission? You can create a new listing later.")) return;
                 deferCatalogMutation(() =>
                   run("Submission deleted.", deletePendingSubmissionForManager(row.adminRefId, managerUserId)),
                 );
               }}
             >
-              Delete submission
+              {row.adminRefId.startsWith("mgr-") ? "Delete listing" : "Delete submission"}
             </Button>
           </div>
         </>
@@ -431,13 +450,18 @@ function ManagerPropertyInlineDetails({
           showToast={showToast}
           skuTier={skuTier}
           propCountBeforeSubmit={countManagerManagedPropertiesForUser(managerUserId)}
-          editPendingId={bucket === 0 ? row.adminRefId : null}
-          editListingId={bucket === 2 && row.listingId ? row.listingId : null}
+          editPendingId={bucket === 0 && !row.adminRefId.startsWith("mgr-") ? row.adminRefId : null}
+          editListingId={
+            bucket === 2 && row.listingId
+              ? row.listingId
+              : bucket === 0 && row.adminRefId.startsWith("mgr-")
+                ? (row.listingId ?? row.adminRefId)
+                : null
+          }
           initialSubmission={editorInitial}
           onClose={() => setListingEditorOpen(false)}
           onSubmitted={() => {
             setListingEditorOpen(false);
-            showToast("Listing saved.");
             onUpdated();
           }}
         />

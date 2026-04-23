@@ -10,6 +10,7 @@ import {
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
   removeExtraListing,
+  republishManagerListingAfterReview,
   submitManagerPendingProperty,
   takePendingManagerProperty,
   type ManagerPendingPropertyRow,
@@ -192,17 +193,20 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
 export function adminKpiCounts(forManagerUserId?: string | null): [number, number, number, number, number] {
   try {
     if (forManagerUserId) {
+      const extras = readExtraListingsForUser(forManagerUserId);
       const pending = readPendingManagerPropertiesForUser(forManagerUserId).length;
+      const awaitingReapproval = extras.filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive !== true).length;
       const side = readSide(forManagerUserId);
-      const listed = readExtraListingsForUser(forManagerUserId).filter(
-        (p) => p?.id?.startsWith("mgr-") && p.adminPublishLive === true,
-      ).length;
-      return [pending, side.requestChange.length, listed, side.unlisted.length, side.rejected.length];
+      const listed = extras.filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive === true).length;
+      return [pending + awaitingReapproval, side.requestChange.length, listed, side.unlisted.length, side.rejected.length];
     }
     const pending = readAllPendingManagerProperties().length;
+    const awaitingReapproval = readAllExtraListings().filter(
+      (p) => p?.id?.startsWith("mgr-") && p.adminPublishLive !== true,
+    ).length;
     const side = readSide();
-    const listed = readAllExtraListings().filter((p) => p?.id?.startsWith("mgr-")).length;
-    return [pending, side.requestChange.length, listed, side.unlisted.length, side.rejected.length];
+    const listed = readAllExtraListings().filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive === true).length;
+    return [pending + awaitingReapproval, side.requestChange.length, listed, side.unlisted.length, side.rejected.length];
   } catch {
     return [0, 0, 0, 0, 0];
   }
@@ -217,7 +221,12 @@ export function readAdminPropertyRows(
     const pendingSource = forManagerUserId
       ? readPendingManagerPropertiesForUser(forManagerUserId)
       : readAllPendingManagerProperties();
-    return pendingSource.map(pendingToAdminRow);
+    const pendingRows = pendingSource.map(pendingToAdminRow);
+    const awaitingExtras = forManagerUserId
+      ? readExtraListingsForUser(forManagerUserId).filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true)
+      : readAllExtraListings().filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true);
+    const awaitingRows = awaitingExtras.map((p) => mockToAdminRow(p, p.id));
+    return [...pendingRows, ...awaitingRows];
   }
   if (bucket === 1) return side.requestChange.map((r) => normalizeAdminPropertyRow(r));
   if (bucket === 2) {
