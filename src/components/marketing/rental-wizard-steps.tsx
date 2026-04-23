@@ -1320,8 +1320,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Application fee & housing charges</h2>
           <StepIntro className="mt-2">
-            Amounts below come from this listing. “—” means you should confirm the number with the property manager. For the application fee,
-            use Stripe on this page when offered, or Zelle if you choose that path instead.
+            Amounts below come from this listing. “—” means you should confirm the number with the property manager. Stripe opens a payment step
+            before your application is filed; Zelle requires your manager to confirm receipt before submit.
           </StepIntro>
         </div>
         {gate.needsFee ? (
@@ -1344,8 +1344,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <span className="font-semibold">Application fee required.</span>{" "}
                 {payChannel === "zelle" ? (
                   <>
-                    Submit your application with the button below, then send this fee via <strong>Zelle</strong> using the contact shown. Your
-                    manager marks it received when the payment arrives.
+                    Send the application fee via <strong>Zelle</strong> to the contact below, confirm on this page that you sent it, then wait for
+                    your manager to mark the fee paid before you can submit your application.
                   </>
                 ) : (
                   <>
@@ -1403,12 +1403,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   name="application-fee-channel"
                   className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
                   checked={form.applicationFeePayChannel === "stripe"}
-                  onChange={() => patch({ applicationFeePayChannel: "stripe" })}
+                  onChange={() => patch({ applicationFeePayChannel: "stripe", applicationFeeZelleSentConfirmed: false })}
                 />
                 <span>
                   <span className="text-sm font-semibold text-slate-900">Pay with Stripe</span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
-                    Card payment through Stripe when you tap Pay and submit (this demo records the fee as paid immediately).
+                    Opens a Stripe payment step, then you submit the application after the fee is recorded (demo simulates checkout).
                   </span>
                 </span>
               </label>
@@ -1418,7 +1418,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   name="application-fee-channel"
                   className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
                   checked={form.applicationFeePayChannel === "zelle"}
-                  onChange={() => patch({ applicationFeePayChannel: "zelle" })}
+                  onChange={() => patch({ applicationFeePayChannel: "zelle", applicationFeeZelleSentConfirmed: false })}
                 />
                 <span>
                   <span className="text-sm font-semibold text-slate-900">Zelle</span>
@@ -1433,18 +1433,36 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <div className="mt-4 rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm text-slate-700">
               <p className="font-semibold text-slate-900">Stripe payment</p>
               <p className="mt-1 leading-relaxed">
-                The application fee is collected through Stripe when you tap <strong>Pay and submit</strong>. Use the same email as on this
-                application so your payment matches your file.
+                Tap <strong>Pay application fee</strong> to open the payment screen. Use the same email as on this application so your payment
+                matches your file.
               </p>
             </div>
           ) : null}
           {showZelleInstructions && sub?.zelleContact?.trim() ? (
-            <div className="mt-4 rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
-              <p className="font-semibold">Zelle payment</p>
-              <p className="mt-1 leading-relaxed">
-                Send to <span className="font-mono font-semibold">{sub.zelleContact.trim()}</span>. Include your name and preferred unit in the
-                memo. Your manager will mark the charge paid when funds are received.
-              </p>
+            <div className="mt-4 space-y-4">
+              <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
+                <p className="font-semibold">Zelle payment — send to this number or email</p>
+                <p className="mt-2 rounded-lg border border-emerald-300/80 bg-white px-3 py-2 font-mono text-base font-bold tracking-tight">
+                  {sub.zelleContact.trim()}
+                </p>
+                <p className="mt-2 leading-relaxed">
+                  Include your name and preferred unit in the memo. Your property manager marks the fee paid in their portal when funds arrive. You
+                  cannot file your application until that fee shows as paid.
+                </p>
+              </div>
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-primary"
+                  checked={form.applicationFeeZelleSentConfirmed}
+                  onChange={(e) => patch({ applicationFeeZelleSentConfirmed: e.target.checked })}
+                />
+                <span className="text-sm font-medium leading-snug text-slate-800">
+                  I confirm I have sent the application fee via Zelle to{" "}
+                  <span className="font-mono font-semibold">{sub.zelleContact.trim()}</span> from my bank&apos;s Zelle screen.
+                </span>
+              </label>
+              <FieldError msg={errors.applicationFeeZelleSentConfirmed} />
             </div>
           ) : null}
           <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">

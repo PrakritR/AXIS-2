@@ -72,6 +72,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const [feeStepUserId, setFeeStepUserId] = useState<string | null>(null);
   /** After Stripe fee succeeds on step 12, user must click again to file the application (fee must be paid before submit). */
   const [stripeFeeReadyForSubmit, setStripeFeeReadyForSubmit] = useState(false);
+  /** Full-screen step-12 panel that simulates opening Stripe Checkout before recording payment in the demo. */
+  const [stripeCheckoutOpen, setStripeCheckoutOpen] = useState(false);
   const [postSubmit, setPostSubmit] = useState<{ applicationId: string } | null>(null);
 
   const listingPrefillKey = useMemo(() => {
@@ -154,10 +156,14 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
   useEffect(() => {
     setStripeFeeReadyForSubmit(false);
+    setStripeCheckoutOpen(false);
   }, [form.propertyId, form.email, form.applicationFeePayChannel]);
 
   useEffect(() => {
-    if (step !== 12) setStripeFeeReadyForSubmit(false);
+    if (step !== 12) {
+      setStripeFeeReadyForSubmit(false);
+      setStripeCheckoutOpen(false);
+    }
   }, [step]);
 
   useEffect(() => {
@@ -262,11 +268,23 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     if (payChannel === "stripe") {
+      if (stripeCheckoutOpen) return "Complete payment (demo)";
       const feeRecorded = applicationFeeGate.paid || stripeFeeReadyForSubmit;
       return feeRecorded ? "Submit application" : "Pay application fee";
     }
+    if (payChannel === "zelle") {
+      return applicationFeeGate.paid ? "Submit application" : "Refresh payment status";
+    }
     return "Submit application";
-  }, [step, form.propertyId, form.email, form.applicationFeePayChannel, stripeFeeReadyForSubmit, applicationFeeGate.paid]);
+  }, [
+    step,
+    form.propertyId,
+    form.email,
+    form.applicationFeePayChannel,
+    stripeFeeReadyForSubmit,
+    stripeCheckoutOpen,
+    applicationFeeGate.paid,
+  ]);
 
   const handleContinue = () => {
     if (step === 12) {
@@ -307,12 +325,13 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           const applicationId = makeNewApplicationId();
           const listing =
             prop ?? readAllExtraListings().find((p) => p.id === pid);
+          const feeCharge = findApplicationFeeCharge(form.email, pid, residentUserId);
           appendManagerApplicationRow({
             id: applicationId,
             name: form.fullLegalName.trim() || "Applicant",
             property: (listing?.title?.trim() || pid.trim()) || "Listing",
             propertyId: pid || undefined,
-            managerUserId: listing?.managerUserId ?? null,
+            managerUserId: listing?.managerUserId ?? feeCharge?.managerUserId ?? prop?.managerUserId ?? null,
             stage: "Submitted",
             bucket: "pending",
             detail: `Submitted ${new Date().toLocaleString()}`,
@@ -326,6 +345,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           setStep(1);
           setErrors({});
           setStripeFeeReadyForSubmit(false);
+          setStripeCheckoutOpen(false);
           setPostSubmit({ applicationId });
           showToast("Application submitted.");
         };
@@ -340,26 +360,51 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
           if (!stripeFeeReadyForSubmit) {
             let charge = findApplicationFeeCharge(form.email, pid, residentUserId);
-            if (charge?.status !== "paid") {
-              const marked = markApplicationFeePaidAfterStripe(form.email, pid, residentUserId);
-              charge = findApplicationFeeCharge(form.email, pid, residentUserId);
-              if (!marked || charge?.status !== "paid") {
-                showToast("Pay the application fee with Stripe before submitting.");
-                return;
-              }
-              setStripeFeeReadyForSubmit(true);
-              setChargeTick((n) => n + 1);
-              showToast("Application fee paid. Tap Submit application to send your application.");
+            if (charge?.status === "paid") {
+              finalizeSubmit();
               return;
             }
-            finalizeSubmit();
+            if (!stripeCheckoutOpen) {
+              setStripeCheckoutOpen(true);
+              if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+              return;
+            }
+            const marked = markApplicationFeePaidAfterStripe(form.email, pid, residentUserId);
+            charge = findApplicationFeeCharge(form.email, pid, residentUserId);
+            if (!marked || charge?.status !== "paid") {
+              showToast("Payment could not be recorded. Try again or use the same email as on this application.");
+              return;
+            }
+            setStripeCheckoutOpen(false);
+            setStripeFeeReadyForSubmit(true);
+            setChargeTick((n) => n + 1);
+            showToast("Application fee paid. Tap Submit application to send your application.");
             return;
           }
 
           const charge = findApplicationFeeCharge(form.email, pid, residentUserId);
           if (!charge || charge.status !== "paid") {
             setStripeFeeReadyForSubmit(false);
-            showToast("Application fee is not paid. Pay with Stripe first.");
+            showToast("Application fee is not paid. Complete Stripe payment first.");
+            return;
+          }
+          finalizeSubmit();
+          return;
+        }
+
+        if (needsFee && payChannel === "zelle") {
+          ensurePendingApplicationFeeCharge({
+            residentEmail: form.email,
+            residentName: form.fullLegalName,
+            residentUserId,
+            propertyId: pid,
+          });
+          const charge = findApplicationFeeCharge(form.email, pid, residentUserId);
+          if (!charge || charge.status !== "paid") {
+            setChargeTick((n) => n + 1);
+            showToast(
+              "Your manager must confirm your Zelle payment on their Payments tab before your application can be filed. Tap Refresh payment status after they mark it paid.",
+            );
             return;
           }
           finalizeSubmit();
@@ -400,6 +445,11 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const handleBack = () => {
     if (step <= 1) return;
     if (step === 12) {
+      if (stripeCheckoutOpen) {
+        setStripeCheckoutOpen(false);
+        if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
       setStep(11);
       setErrors({});
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -412,6 +462,17 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
   const meta = STEP_META[step - 1];
   const progressPct = Math.round((step / RENTAL_WIZARD_STEP_COUNT) * 100);
+
+  const stripePaymentSummary = useMemo(() => {
+    const pid = form.propertyId.trim();
+    const prop = pid ? getPropertyById(pid) : undefined;
+    const { displayLabel } = listingApplicationFeeAmount(pid);
+    return {
+      title: prop?.title?.trim() || prop?.buildingName?.trim() || "Selected listing",
+      displayLabel,
+      email: form.email.trim(),
+    };
+  }, [form.propertyId, form.email]);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
@@ -494,23 +555,50 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             </div>
 
             <div className="pt-8">
-              <RentalWizardStepBody
-                step={step}
-                form={form}
-                errors={errors}
-                propertyOptions={propertyOptions}
-                patch={patchForm}
-                applicationFeeGate={applicationFeeGate}
-                stripeFeeReadyForSubmit={stripeFeeReadyForSubmit}
-                setPhone={setPhone}
-                setLandlordPhone={setLandlordPhone}
-                setPrevLandlordPhone={setPrevLandlordPhone}
-                setSupervisorPhone={setSupervisorPhone}
-                setRef1Phone={setRef1Phone}
-                setRef2Phone={setRef2Phone}
-                setSsn={setSsn}
-                goToStep={goToStep}
-              />
+              {step === 12 && stripeCheckoutOpen ? (
+                <div className="space-y-6">
+                  <div className="rounded-2xl border-2 border-[#635bff]/25 bg-gradient-to-b from-white to-slate-50/90 p-6 sm:p-8">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#635bff]">Stripe checkout (demo)</p>
+                    <h2 className="mt-2 text-xl font-bold text-slate-900">Pay application fee</h2>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                      This step simulates opening Stripe&apos;s payment page. No real card is charged. Tap <strong>Complete payment (demo)</strong> in
+                      the footer to record the fee, then use <strong>Submit application</strong> on the next screen to file your application.
+                    </p>
+                    <div className="mt-6 rounded-xl border border-slate-200 bg-white px-5 py-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Listing</p>
+                      <p className="mt-1 font-medium text-slate-900">{stripePaymentSummary.title}</p>
+                      <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Amount due</p>
+                      <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900">{stripePaymentSummary.displayLabel}</p>
+                      <p className="mt-3 text-xs text-slate-500">Matches application email: {stripePaymentSummary.email || "—"}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-sm font-semibold text-primary underline underline-offset-2"
+                    onClick={() => setStripeCheckoutOpen(false)}
+                  >
+                    ← Back to fee summary
+                  </button>
+                </div>
+              ) : (
+                <RentalWizardStepBody
+                  step={step}
+                  form={form}
+                  errors={errors}
+                  propertyOptions={propertyOptions}
+                  patch={patchForm}
+                  applicationFeeGate={applicationFeeGate}
+                  stripeFeeReadyForSubmit={stripeFeeReadyForSubmit}
+                  setPhone={setPhone}
+                  setLandlordPhone={setLandlordPhone}
+                  setPrevLandlordPhone={setPrevLandlordPhone}
+                  setSupervisorPhone={setSupervisorPhone}
+                  setRef1Phone={setRef1Phone}
+                  setRef2Phone={setRef2Phone}
+                  setSsn={setSsn}
+                  goToStep={goToStep}
+                />
+              )}
             </div>
 
             <div className="mt-10 flex flex-col-reverse gap-3 border-t border-slate-100 pt-8 sm:flex-row sm:items-center sm:justify-between">

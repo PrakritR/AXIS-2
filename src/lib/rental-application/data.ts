@@ -1,6 +1,6 @@
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
-import { readExtraListings } from "@/lib/demo-property-pipeline";
+import { readAllExtraListings, readExtraListings } from "@/lib/demo-property-pipeline";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 
 export const LEASE_TERM_OPTIONS = ["3-Month", "9-Month", "12-Month", "Month-to-Month", "Custom"] as const;
@@ -51,7 +51,11 @@ export function getPropertyById(id: string): MockProperty | undefined {
   const base = id.trim();
   if (!base) return undefined;
   const { propertyId } = parseRoomChoiceValue(base);
-  return mockProperties.find((p) => p.id === propertyId) ?? readExtraListings().find((p) => p.id === propertyId);
+  return (
+    mockProperties.find((p) => p.id === propertyId) ??
+    readExtraListings().find((p) => p.id === propertyId) ??
+    readAllExtraListings().find((p) => p.id === propertyId)
+  );
 }
 
 /** Rooms for the selected listing: manager submission rooms, else legacy one-row-per-unit in the same building. */

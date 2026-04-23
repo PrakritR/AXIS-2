@@ -10,7 +10,9 @@ import {
   validateStateAbbrev,
   validateZip,
 } from "@/app/(public)/rent/apply/apply-validation";
-import { getDemoRoomAvailabilityMessage } from "./data";
+import { listingApplicationFeeAmount } from "@/lib/household-charges";
+import { listingApplicationFeeChannels, resolveApplicationFeePayChannel } from "@/lib/rental-application/application-fee-channel";
+import { getDemoRoomAvailabilityMessage, getPropertyById } from "./data";
 import type { RentalWizardErrors, RentalWizardFormState } from "./types";
 import { digitsOnly, parseMoneyInput } from "./masks";
 
@@ -236,6 +238,19 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
   if (step === 12) {
     if (!f.applicationFeeAcknowledged) {
       e.applicationFeeAcknowledged = "Confirm the application fee to submit.";
+    }
+    const pid = f.propertyId.trim();
+    const email = f.email.trim();
+    const { amount } = listingApplicationFeeAmount(pid);
+    const needsFee = Boolean(pid && email.includes("@") && amount > 0);
+    if (needsFee) {
+      const prop = getPropertyById(pid);
+      const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+      const channels = listingApplicationFeeChannels(sub);
+      const payChannel = resolveApplicationFeePayChannel(sub, f.applicationFeePayChannel);
+      if (channels.zelle && payChannel === "zelle" && !f.applicationFeeZelleSentConfirmed) {
+        e.applicationFeeZelleSentConfirmed = "Confirm that you sent the application fee via Zelle using the contact shown.";
+      }
     }
     return e;
   }

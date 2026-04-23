@@ -9,6 +9,7 @@ import {
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
 } from "@/lib/demo-property-pipeline";
+import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readProRelationships } from "@/lib/pro-relationships";
 
 /** Property ids from this user's listings plus pending rows and account-link assignments. */
@@ -22,6 +23,15 @@ export function collectAccessiblePropertyIds(userId: string): Set<string> {
     }
   }
   return s;
+}
+
+/** Whether an application row should appear for this portal user. */
+export function applicationVisibleToPortalUser(row: DemoApplicantRow, userId: string | null): boolean {
+  if (!userId) return false;
+  if (row.managerUserId && row.managerUserId === userId) return true;
+  const pid = row.propertyId?.trim();
+  if (pid && collectAccessiblePropertyIds(userId).has(pid)) return true;
+  return false;
 }
 
 export type ManagerPropertyFilterOption = { id: string; label: string };
@@ -48,18 +58,22 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
     }
   }
 
+  for (const row of readManagerApplicationRows()) {
+    if (!applicationVisibleToPortalUser(row, userId)) continue;
+    const pid = row.propertyId?.trim();
+    if (pid && !labelById.has(pid)) {
+      labelById.set(pid, row.property.trim() || pid);
+    }
+  }
+
   return [...labelById.entries()]
     .map(([id, label]) => ({ id, label }))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
 }
 
-/** Whether an application row should appear for this portal user. */
-export function applicationVisibleToPortalUser(row: DemoApplicantRow, userId: string | null): boolean {
-  if (!userId) return false;
-  if (row.managerUserId && row.managerUserId === userId) return true;
-  const pid = row.propertyId?.trim();
-  if (pid && collectAccessiblePropertyIds(userId).has(pid)) return true;
-  return false;
-}
-
-export const MANAGER_PORTFOLIO_REFRESH_EVENTS = [PROPERTY_PIPELINE_EVENT, "axis-pro-relationships", "storage"] as const;
+export const MANAGER_PORTFOLIO_REFRESH_EVENTS = [
+  PROPERTY_PIPELINE_EVENT,
+  "axis-pro-relationships",
+  "storage",
+  MANAGER_APPLICATIONS_EVENT,
+] as const;

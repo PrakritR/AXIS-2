@@ -76,6 +76,8 @@ export type RentalWizardFormState = {
    * “stripe” names the tracked fee line (no live card capture in this demo).
    */
   applicationFeePayChannel: "stripe" | "zelle";
+  /** Step 12 — applicant attests they sent the fee via Zelle (manager must still mark the charge paid). */
+  applicationFeeZelleSentConfirmed: boolean;
 };
 
 /** Field and step-level messages (string keys so consent booleans can still surface errors). */
