@@ -39,6 +39,7 @@ export async function POST(req: Request) {
     });
 
     let userId: string;
+    let reusedExistingAuthUser = false;
 
     if (cErr) {
       const isAlreadyExists =
@@ -57,6 +58,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: pwCheck.message }, { status: 401 });
       }
       userId = existingId;
+      reusedExistingAuthUser = true;
     } else {
       if (!created?.user) {
         return NextResponse.json({ error: "Could not create user." }, { status: 400 });
@@ -83,7 +85,7 @@ export async function POST(req: Request) {
 
     await ensureProfileRoleRow(supabase, userId, "resident");
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, reusedExistingAuthUser });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });

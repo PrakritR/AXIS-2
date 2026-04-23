@@ -22,6 +22,11 @@ type ManagerCheckoutPreview = {
   fullName: string | null;
 };
 
+type ExistingEmailStatus = {
+  exists: boolean;
+  roles: string[];
+};
+
 function CreateAccountContent() {
   const { showToast } = useAppUi();
   const router = useRouter();
@@ -41,6 +46,8 @@ function CreateAccountContent() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [managerIdInput, setManagerIdInput] = useState("");
+  const [emailStatus, setEmailStatus] = useState<ExistingEmailStatus | null>(null);
+  const [emailStatusLoading, setEmailStatusLoading] = useState(false);
 
   useEffect(() => {
     setRole(sessionIdFromUrl ? "manager" : roleFromUrl);
@@ -55,6 +62,37 @@ function CreateAccountContent() {
   useEffect(() => {
     if (applicationIdFromUrl) setApplicationId(applicationIdFromUrl);
   }, [applicationIdFromUrl]);
+
+  useEffect(() => {
+    const normalEmail = email.trim().toLowerCase();
+    if (!normalEmail || !normalEmail.includes("@")) {
+      setEmailStatus(null);
+      setEmailStatusLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setEmailStatusLoading(true);
+
+    void fetch(`/api/auth/account-email-status?email=${encodeURIComponent(normalEmail)}`)
+      .then(async (res) => {
+        const body = (await res.json()) as ExistingEmailStatus & { error?: string };
+        if (!res.ok) throw new Error(body.error ?? "Could not check email.");
+        if (!cancelled) {
+          setEmailStatus({ exists: Boolean(body.exists), roles: Array.isArray(body.roles) ? body.roles : [] });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setEmailStatus(null);
+      })
+      .finally(() => {
+        if (!cancelled) setEmailStatusLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [email]);
 
   useEffect(() => {
     if (role !== "manager" || !sessionIdFromUrl) {
@@ -101,6 +139,21 @@ function CreateAccountContent() {
   const managerPostCheckout = role === "manager" && !!sessionIdFromUrl && !!checkoutPreview;
   const managerNeedsPricing = role === "manager" && !sessionIdFromUrl;
   const isAxisIntentSignup = sessionIdFromUrl.startsWith("axis_intent_");
+  const existingAccountRoles = useMemo(() => {
+    if (!emailStatus?.exists) return [];
+    return emailStatus.roles.filter((r) => r !== role);
+  }, [emailStatus, role]);
+  const reusingExistingAccount = Boolean(emailStatus?.exists);
+  const passwordLabel =
+    reusingExistingAccount && (role === "resident" || role === "owner" || role === "admin" || role === "manager")
+      ? "Password"
+      : "Create password";
+  const existingAccountHint =
+    reusingExistingAccount && existingAccountRoles.length
+      ? `This email already has Axis access for ${existingAccountRoles.map((r) => r[0]!.toUpperCase() + r.slice(1)).join(", ")}. Use the same password to add ${role} access to that login.`
+      : reusingExistingAccount
+        ? "This email already has an Axis login. Use the same password for that account."
+        : null;
 
   const submit = async () => {
     if (managerPostCheckout && checkoutPreview) {
@@ -227,12 +280,16 @@ function CreateAccountContent() {
             applicationId: applicationId.trim(),
           }),
         });
-        const body = (await res.json()) as { error?: string };
+        const body = (await res.json()) as { error?: string; reusedExistingAuthUser?: boolean };
         if (!res.ok) {
           showToast(body.error ?? "Could not create resident account.");
           return;
         }
-        showToast("Resident account created. Sign in with your email.");
+        showToast(
+          body.reusedExistingAuthUser
+            ? "Resident portal access added to your existing Axis login. Sign in with the same email and password."
+            : "Resident account created. Sign in with your email.",
+        );
         router.push("/auth/sign-in");
         return;
       }
@@ -368,6 +425,12 @@ function CreateAccountContent() {
       ) : null}
 
       <div className="mt-6 space-y-4">
+        {existingAccountHint ? (
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-medium leading-relaxed text-sky-950">
+            {existingAccountHint}
+          </div>
+        ) : null}
+
         {managerPostCheckout && checkoutPreview ? (
           <>
             <div>
@@ -406,7 +469,7 @@ function CreateAccountContent() {
             </div>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw">
-                Create password
+                {passwordLabel}
                 <Req />
               </label>
               <PasswordInput
@@ -465,7 +528,7 @@ function CreateAccountContent() {
             </div>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw-activate">
-                Create password <Req />
+                {passwordLabel} <Req />
               </label>
               <PasswordInput
                 id="mgr-pw-activate"
@@ -568,7 +631,7 @@ function CreateAccountContent() {
             </div>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="pw">
-                Create password
+                {passwordLabel}
                 <Req />
               </label>
               <PasswordInput
@@ -579,6 +642,7 @@ function CreateAccountContent() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+              {emailStatusLoading ? <p className="mt-1 text-xs text-slate-400">Checking for an existing Axis login…</p> : null}
             </div>
           </>
         )}
