@@ -388,11 +388,11 @@ const defaultLease: LeaseBasicRow[] = [
   {
     id: "lease-movein",
     icon: "🧾",
-    title: "Move-in fee",
+    title: "Move-in charges",
     detail: "From listing setup",
     price: "—",
     status: "At signing",
-    body: "Move-in fee is configured by the property manager on the listing. See the final lease for what it covers.",
+    body: "Move-in charges are configured by the property manager on the listing. See the final lease for what they cover.",
   },
   {
     id: "lease-signing",

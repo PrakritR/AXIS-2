@@ -136,13 +136,18 @@ function buildSeeds(managerUserId: string): MockProperty[] {
     { id: aRoomIds[8]!, name: "Room 9", floor: "First Floor - Room 9", monthlyRent: 750, availability: "Available after September 1, 2026", detail: "First Floor - Room 9", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
     { id: aRoomIds[9]!, name: "Room 10", floor: "First Floor - Room 10", monthlyRent: 875, availability: "Available after August 10, 2026", detail: "First Floor - Room 10 · Private bathroom", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC\nPrivate bathroom", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
   ];
-  const bRooms = makeRooms({
-    prefix: "seed-4709b",
-    count: 9,
-    rents: [775, 800],
-    availability: "Most rooms available now.",
-    detail: "Furnished shared-housing room with shared bathrooms across floors.",
-  });
+  const bRoomIds = roomIds("seed-4709b", 9);
+  const bRooms: ManagerListingSubmissionV1["rooms"] = [
+    { id: bRoomIds[0]!, name: "Room 1", floor: "First Floor", monthlyRent: 775, availability: "Available now", detail: "First Floor · Shares bathroom with the second floor as well", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: bRoomIds[1]!, name: "Room 2", floor: "Second Floor", monthlyRent: 800, availability: "Available now", detail: "Second Floor", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: bRoomIds[2]!, name: "Room 3", floor: "Second Floor", monthlyRent: 800, availability: "Available now", detail: "Second Floor", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: bRoomIds[3]!, name: "Room 4", floor: "Second Floor", monthlyRent: 800, availability: "Available now", detail: "Second Floor", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: bRoomIds[4]!, name: "Room 5", floor: "Second Floor", monthlyRent: 800, availability: "Available now", detail: "Second Floor", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: bRoomIds[5]!, name: "Room 6", floor: "Third Floor", monthlyRent: 800, availability: "Available now", detail: "Third Floor", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: bRoomIds[6]!, name: "Room 7", floor: "Third Floor", monthlyRent: 800, availability: "Available now", detail: "Third Floor", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: bRoomIds[7]!, name: "Room 8", floor: "Third Floor", monthlyRent: 800, availability: "Available now", detail: "Third Floor", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+    { id: bRoomIds[8]!, name: "Room 9", floor: "Third Floor", monthlyRent: 800, availability: "Available now", detail: "Third Floor", furnishing: "Bed, desk, heating and AC.", roomAmenitiesText: "Desk\nBed\nHeating\nAC", photoDataUrls: [], videoDataUrl: null, utilitiesEstimate: "$175/month" },
+  ];
   const brooklynRooms = makeRooms({
     prefix: "seed-5259-brooklyn",
     count: 9,
@@ -235,36 +240,70 @@ function buildSeeds(managerUserId: string): MockProperty[] {
       tagline: "Immediate shared-housing inventory in a walkable Seattle location.",
       overview:
         "Shared housing in a multi-floor home with 9 bedrooms and 2.5 bathrooms. Furnished rooms, shared bathrooms across floors, in-unit laundry, kitchen, and lounge.",
-      leaseTerms: "3, 9, 12-month, or month-to-month leases (+$25/month). Deposit is $500.",
+      leaseTerms:
+        "Four lease options available: 3-month, 9-month, and 12-month, plus month-to-month with an extra $25/month charge. Start and end dates are flexible — you choose the window that works for you.",
+      applicationFee: "$50",
       securityDeposit: "$500",
-      costs: "Rooms are $775-$800/month. Utilities are $175/month.",
+      moveInFee: "First month rent + $500 deposit",
+      costs: "Flat fee: $175/month — includes cleaning (bi-monthly), WiFi, water & trash.",
       rooms: bRooms,
       bundles: [
         {
-          id: "seed-4709b-bundle-floor",
-          label: "Floor group",
-          price: "Varies by floor",
-          strikethrough: "",
-          promo: "Floor group leasing available.",
-          roomsLine: "Group rooms by floor.",
-          includedRoomIds: [],
-        },
-        {
           id: "seed-4709b-bundle-house",
           label: "Full house",
-          price: "~$7,000/month",
-          strikethrough: "",
-          promo: "Promo full-house option.",
+          price: "$7,000/mo",
+          strikethrough: "$7,175/mo",
+          promo: "Promo rate",
           roomsLine: "All 9 rooms.",
           includedRoomIds: bRooms.map((r) => r.id),
         },
+        {
+          id: "seed-4709b-bundle-second",
+          label: "Second floor rental",
+          price: "$3,200/mo",
+          strikethrough: "",
+          promo: "",
+          roomsLine: "Room 2 · Room 3 · Room 4 · Room 5",
+          includedRoomIds: bRooms.slice(1, 5).map((r) => r.id),
+        },
+        {
+          id: "seed-4709b-bundle-third",
+          label: "Third floor rental",
+          price: "$3,200/mo",
+          strikethrough: "",
+          promo: "",
+          roomsLine: "Room 6 · Room 7 · Room 8 · Room 9",
+          includedRoomIds: bRooms.slice(5, 9).map((r) => r.id),
+        },
       ],
       quickFacts: [
-        { id: "seed-4709b-qf-type", label: "Type", value: "Shared Housing" },
-        { id: "seed-4709b-qf-layout", label: "Layout", value: "Multi-floor" },
+        { id: "seed-4709b-qf-neighborhood", label: "Neighborhood", value: "Seattle" },
         { id: "seed-4709b-qf-beds", label: "Bedrooms", value: "9" },
         { id: "seed-4709b-qf-baths", label: "Bathrooms", value: "2.5" },
+        { id: "seed-4709b-qf-type", label: "Type", value: "Shared housing" },
       ],
+      sharedSpaces: [
+        {
+          id: "seed-4709b-shared-living",
+          name: "Living area",
+          detail: "Shared lounge and everyday common space for the household.",
+          roomAccessIds: bRoomIds,
+        },
+        {
+          id: "seed-4709b-shared-kitchen",
+          name: "Kitchen",
+          detail: "Full shared kitchen for cooking, storage, and shared meals.",
+          roomAccessIds: bRoomIds,
+        },
+        {
+          id: "seed-4709b-shared-laundry",
+          name: "Laundry",
+          detail: "Shared laundry for residents (layout varies by floor).",
+          roomAccessIds: bRoomIds,
+        },
+      ],
+      amenitiesText:
+        "Walkable Location\nIn-Unit Laundry (Washer & Dryer)\nBi-monthly Cleaning (Twice a Month)\nWiFi\nA/C in Living Room Only\nPublic Transportation\nRefrigerator\nMicrowave\nStove\nOven\nDishwasher\nStreet Parking\nDesk\nBed\nHeating\nAC",
     }),
     baseSubmission({
       prefix: "seed-5259-brooklyn",
@@ -354,8 +393,8 @@ function buildSeeds(managerUserId: string): MockProperty[] {
       buildingId: "mgr-bld-4709b-8th-ave-ne",
       buildingName: "4709B 8th Ave NE",
       unitLabel: "9 rooms",
-      mapLat: 47.66415,
-      mapLng: -122.32082,
+      mapLat: 47.66348,
+      mapLng: -122.31962,
       listingSubmission: submissions[1],
       managerUserId,
       adminPublishLive: true,
@@ -390,6 +429,8 @@ export function ensureAccountListingSeeds(userId: string | null, email: string |
   const seeds = buildSeeds(userId);
   const updated4709a = seeds.find((p) => p.id === "mgr-seed-4709a-8th-ave-ne");
   const current4709a = existing.find((p) => p.id === "mgr-seed-4709a-8th-ave-ne");
+  const updated4709b = seeds.find((p) => p.id === "mgr-seed-4709b-8th-ave-ne");
+  const current4709b = existing.find((p) => p.id === "mgr-seed-4709b-8th-ave-ne");
   let changed = false;
   if (
     updated4709a &&
@@ -398,6 +439,15 @@ export function ensureAccountListingSeeds(userId: string | null, email: string |
   ) {
     removeExtraListing(updated4709a.id);
     appendExtraListing(updated4709a, userId);
+    changed = true;
+  }
+  if (
+    updated4709b &&
+    current4709b &&
+    current4709b.listingSubmission?.rooms?.[0]?.detail !== "First Floor · Shares bathroom with the second floor as well"
+  ) {
+    removeExtraListing(updated4709b.id);
+    appendExtraListing(updated4709b, userId);
     changed = true;
   }
 

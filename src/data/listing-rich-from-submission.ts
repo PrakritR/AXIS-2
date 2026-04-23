@@ -378,11 +378,11 @@ export function listingRichFromManagerSubmission(
     {
       id: "lease-movein",
       icon: "🧾",
-      title: "Move-in fee",
-      detail: "Administrative",
+      title: "Move-in charges",
+      detail: "At move-in",
       price: sub.moveInFee.trim() || "—",
       status: "At signing",
-      body: `Move-in fee: ${sub.moveInFee.trim() || "—"}.`,
+      body: `Move-in charges: ${sub.moveInFee.trim() || "—"}.`,
     },
     {
       id: "lease-signing",
