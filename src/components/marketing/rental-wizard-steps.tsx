@@ -86,6 +86,8 @@ export type WizardStepsProps = {
     displayLabel: string;
     amount: number;
   };
+  /** Step 12: fee paid via Stripe in this session; user still must tap Submit to file the application. */
+  stripeFeeReadyForSubmit?: boolean;
   setPhone: (next: string) => void;
   setLandlordPhone: (next: string) => void;
   setPrevLandlordPhone: (next: string) => void;
@@ -108,7 +110,7 @@ function maskSsnReview(ssn: string) {
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, propertyOptions, patch, goToStep, applicationFeeGate } = p;
+  const { step, form, errors, propertyOptions, patch, goToStep, applicationFeeGate, stripeFeeReadyForSubmit } = p;
 
   if (step === 1) {
     return (
@@ -1330,7 +1332,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           >
             {gate.paid ? (
               <p>
-                <span className="font-semibold">Application fee paid.</span> You can submit your application.
+                <span className="font-semibold">Application fee paid.</span>{" "}
+                {payChannel === "stripe" && stripeFeeReadyForSubmit ? (
+                  <>Tap <strong>Submit application</strong> below to file your application.</>
+                ) : (
+                  <>You can submit your application.</>
+                )}
               </p>
             ) : (
               <p>
@@ -1342,8 +1349,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   </>
                 ) : (
                   <>
-                    Pay with <strong>Stripe</strong> when you tap <strong>Pay and submit</strong>—your application is filed as soon as the fee
-                    is recorded.
+                    Pay with <strong>Stripe</strong> when you tap <strong>Pay application fee</strong>. After the fee is recorded, tap{" "}
+                    <strong>Submit application</strong> to file your application—your application is not sent until that second step.
                   </>
                 )}
               </p>
@@ -1390,10 +1397,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           {showChannelPick ? (
             <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-white px-4 py-4">
               <p className="text-sm font-semibold text-slate-900">How will you pay the application fee?</p>
-              <p className="text-xs leading-relaxed text-slate-600">
-                <strong>Stripe</strong> — pay on this page with <strong>Pay and submit</strong>. <strong>Zelle</strong> — submit first, then send
-                the fee from your bank; your manager confirms receipt.
-              </p>
               <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                 <input
                   type="radio"

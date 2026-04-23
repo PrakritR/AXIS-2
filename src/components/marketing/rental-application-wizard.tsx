@@ -5,7 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
-import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
+import { PROPERTY_PIPELINE_EVENT, readAllExtraListings, readExtraListings } from "@/lib/demo-property-pipeline";
 import {
   ensurePendingApplicationFeeCharge,
   findApplicationFeeCharge,
@@ -23,6 +23,7 @@ import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-app
 import { RENTAL_WIZARD_STEP_COUNT } from "@/lib/rental-application/types";
 import { maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
+import { appendManagerApplicationRow } from "@/lib/manager-applications-storage";
 import { RentalWizardStepBody } from "./rental-wizard-steps";
 
 function makeNewApplicationId(): string {
@@ -69,6 +70,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const [extrasTick, setExtrasTick] = useState(0);
   const [chargeTick, setChargeTick] = useState(0);
   const [feeStepUserId, setFeeStepUserId] = useState<string | null>(null);
+  /** After Stripe fee succeeds on step 12, user must click again to file the application (fee must be paid before submit). */
+  const [stripeFeeReadyForSubmit, setStripeFeeReadyForSubmit] = useState(false);
   const [postSubmit, setPostSubmit] = useState<{ applicationId: string } | null>(null);
 
   const listingPrefillKey = useMemo(() => {
@@ -148,6 +151,14 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     if (!draftReady) return;
     saveRentalWizardDraft(form);
   }, [draftReady, form]);
+
+  useEffect(() => {
+    setStripeFeeReadyForSubmit(false);
+  }, [form.propertyId, form.email, form.applicationFeePayChannel]);
+
+  useEffect(() => {
+    if (step !== 12) setStripeFeeReadyForSubmit(false);
+  }, [step]);
 
   useEffect(() => {
     if (!draftReady) return;
@@ -250,8 +261,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     const prop = pid ? getPropertyById(pid) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
-    return payChannel === "stripe" ? "Pay and submit" : "Submit application";
-  }, [step, form.propertyId, form.email, form.applicationFeePayChannel]);
+    if (payChannel === "stripe") {
+      const feeRecorded = applicationFeeGate.paid || stripeFeeReadyForSubmit;
+      return feeRecorded ? "Submit application" : "Pay application fee";
+    }
+    return "Submit application";
+  }, [step, form.propertyId, form.email, form.applicationFeePayChannel, stripeFeeReadyForSubmit, applicationFeeGate.paid]);
 
   const handleContinue = () => {
     if (step === 12) {
@@ -274,11 +289,82 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           /* ignore */
         }
         const pid = form.propertyId.trim();
+        const emailTrim = form.email.trim();
         const prop = pid ? getPropertyById(pid) : undefined;
         const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
         const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
         const { amount } = listingApplicationFeeAmount(pid);
-        const needsFee = amount > 0;
+        const needsFee = Boolean(pid && emailTrim.includes("@") && amount > 0);
+
+        const finalizeSubmit = () => {
+          recordApplicationCharges({
+            residentEmail: form.email,
+            residentName: form.fullLegalName,
+            residentUserId,
+            propertyId: form.propertyId,
+          });
+
+          const applicationId = makeNewApplicationId();
+          const listing =
+            prop ?? readAllExtraListings().find((p) => p.id === pid);
+          appendManagerApplicationRow({
+            id: applicationId,
+            name: form.fullLegalName.trim() || "Applicant",
+            property: (listing?.title?.trim() || pid.trim()) || "Listing",
+            propertyId: pid || undefined,
+            managerUserId: listing?.managerUserId ?? null,
+            stage: "Submitted",
+            bucket: "pending",
+            detail: `Submitted ${new Date().toLocaleString()}`,
+            email: emailTrim,
+            application: structuredClone(form),
+          });
+
+          clearRentalWizardDraft();
+          const nextInitial = createInitialRentalWizardState();
+          setForm(nextInitial);
+          setStep(1);
+          setErrors({});
+          setStripeFeeReadyForSubmit(false);
+          setPostSubmit({ applicationId });
+          showToast("Application submitted.");
+        };
+
+        if (needsFee && payChannel === "stripe") {
+          ensurePendingApplicationFeeCharge({
+            residentEmail: form.email,
+            residentName: form.fullLegalName,
+            residentUserId,
+            propertyId: pid,
+          });
+
+          if (!stripeFeeReadyForSubmit) {
+            let charge = findApplicationFeeCharge(form.email, pid, residentUserId);
+            if (charge?.status !== "paid") {
+              const marked = markApplicationFeePaidAfterStripe(form.email, pid, residentUserId);
+              charge = findApplicationFeeCharge(form.email, pid, residentUserId);
+              if (!marked || charge?.status !== "paid") {
+                showToast("Pay the application fee with Stripe before submitting.");
+                return;
+              }
+              setStripeFeeReadyForSubmit(true);
+              setChargeTick((n) => n + 1);
+              showToast("Application fee paid. Tap Submit application to send your application.");
+              return;
+            }
+            finalizeSubmit();
+            return;
+          }
+
+          const charge = findApplicationFeeCharge(form.email, pid, residentUserId);
+          if (!charge || charge.status !== "paid") {
+            setStripeFeeReadyForSubmit(false);
+            showToast("Application fee is not paid. Pay with Stripe first.");
+            return;
+          }
+          finalizeSubmit();
+          return;
+        }
 
         if (needsFee) {
           ensurePendingApplicationFeeCharge({
@@ -287,29 +373,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             residentUserId,
             propertyId: pid,
           });
-
-          if (payChannel === "stripe") {
-            const marked = markApplicationFeePaidAfterStripe(form.email, pid, residentUserId);
-            if (!marked) {
-              showToast("Payment could not be recorded. Check your email address and try again.");
-              return;
-            }
-          }
         }
 
-        recordApplicationCharges({
-          residentEmail: form.email,
-          residentName: form.fullLegalName,
-          residentUserId,
-          propertyId: form.propertyId,
-        });
-        clearRentalWizardDraft();
-        const nextInitial = createInitialRentalWizardState();
-        setForm(nextInitial);
-        setStep(1);
-        setErrors({});
-        setPostSubmit({ applicationId: makeNewApplicationId() });
-        showToast(payChannel === "stripe" && needsFee ? "Payment received. Application submitted." : "Application submitted.");
+        finalizeSubmit();
       })();
       return;
     }
@@ -435,6 +501,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 propertyOptions={propertyOptions}
                 patch={patchForm}
                 applicationFeeGate={applicationFeeGate}
+                stripeFeeReadyForSubmit={stripeFeeReadyForSubmit}
                 setPhone={setPhone}
                 setLandlordPhone={setLandlordPhone}
                 setPrevLandlordPhone={setPrevLandlordPhone}

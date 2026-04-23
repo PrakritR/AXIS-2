@@ -54,3 +54,10 @@ export function resetManagerApplicationRowsToDemo(): void {
   window.localStorage.removeItem(KEY);
   emit();
 }
+
+/** Append one application (e.g. after resident submit). Skips if the same id already exists. */
+export function appendManagerApplicationRow(row: DemoApplicantRow): void {
+  const rows = readManagerApplicationRows();
+  if (rows.some((r) => r.id === row.id)) return;
+  writeManagerApplicationRows([...rows, row]);
+}

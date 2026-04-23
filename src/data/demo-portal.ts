@@ -36,6 +36,10 @@ export type DemoApplicantRow = {
   email?: string;
   detail: string;
   application?: RentalWizardFormState;
+  /** Listing id from the rental application (for filtering). */
+  propertyId?: string;
+  /** Listing owner scope — who should receive this application in the portal. */
+  managerUserId?: string | null;
 };
 
 export const demoApplicantRows: DemoApplicantRow[] = [];

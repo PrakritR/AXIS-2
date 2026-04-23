@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
@@ -29,6 +30,11 @@ import {
   readManagerApplicationRows,
   writeManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
+import {
+  MANAGER_PORTFOLIO_REFRESH_EVENTS,
+  applicationVisibleToPortalUser,
+  buildManagerPropertyFilterOptions,
+} from "@/lib/manager-portfolio-access";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -40,9 +46,12 @@ function countByBucket(rows: DemoApplicantRow[]) {
 
 export function ManagerApplications() {
   const { showToast } = useAppUi();
+  const { userId, ready: authReady } = useManagerUserId();
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
+  const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [rows, setRows] = useState<DemoApplicantRow[]>([]);
+  const [portfolioTick, setPortfolioTick] = useState(0);
 
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
@@ -55,12 +64,31 @@ export function ManagerApplications() {
     };
   }, []);
 
+  useEffect(() => {
+    const bump = () => setPortfolioTick((n) => n + 1);
+    for (const ev of MANAGER_PORTFOLIO_REFRESH_EVENTS) {
+      window.addEventListener(ev, bump);
+    }
+    return () => {
+      for (const ev of MANAGER_PORTFOLIO_REFRESH_EVENTS) {
+        window.removeEventListener(ev, bump);
+      }
+    };
+  }, []);
+
   const persist = useCallback((next: DemoApplicantRow[]) => {
     setRows(next);
     writeManagerApplicationRows(next);
   }, []);
 
-  const counts = useMemo(() => countByBucket(rows), [rows]);
+  const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId, portfolioTick]);
+
+  const scopedRows = useMemo(() => {
+    if (!authReady) return [];
+    return rows.filter((r) => applicationVisibleToPortalUser(r, userId));
+  }, [rows, userId, authReady]);
+
+  const counts = useMemo(() => countByBucket(scopedRows), [scopedRows]);
   const tabs = useMemo(
     () =>
       [
@@ -71,7 +99,16 @@ export function ManagerApplications() {
     [counts],
   );
 
-  const rowsForBucket = useMemo(() => rows.filter((r) => r.bucket === bucket), [rows, bucket]);
+  const rowsForBucket = useMemo(() => {
+    const inBucket = scopedRows.filter((r) => r.bucket === bucket);
+    if (!propertyFilter.trim()) return inBucket;
+    return inBucket.filter((r) => r.propertyId === propertyFilter);
+  }, [scopedRows, bucket, propertyFilter]);
+
+  const refreshTable = useCallback(() => {
+    setRows(readManagerApplicationRows());
+    showToast("Refreshed.");
+  }, [showToast]);
 
   const setRowBucket = (id: string, nextBucket: ManagerApplicationBucket) => {
     const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket } : r));
@@ -98,8 +135,12 @@ export function ManagerApplications() {
       title="Applications"
       titleAside={
         <>
-          <PortalPropertyFilterPill />
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Refreshed.")}>
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={(id) => setPropertyFilter(id)}
+          />
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refreshTable}>
             Refresh
           </Button>
         </>
@@ -122,10 +163,20 @@ export function ManagerApplications() {
               </tr>
             </thead>
             <tbody>
-              {rowsForBucket.length === 0 ? (
+              {!authReady ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-12 text-center text-sm text-slate-500">
-                    {rows.length === 0 ? "No applications yet." : "No applications in this bucket."}
+                    Loading applications…
+                  </td>
+                </tr>
+              ) : rowsForBucket.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-slate-500">
+                    {scopedRows.length === 0
+                      ? "No applications yet for your listings and linked properties."
+                      : propertyFilter.trim()
+                        ? "No applications for this property in this tab."
+                        : "No applications in this tab."}
                   </td>
                 </tr>
               ) : (

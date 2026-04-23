@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -20,13 +21,25 @@ const selectClass =
 export function PortalPropertyFilterPill({
   applications,
   residents,
+  propertyOptions,
+  propertyValue,
+  onPropertyChange,
 }: {
   applications?: boolean;
   residents?: boolean;
+  propertyOptions?: ManagerPropertyFilterOption[];
+  propertyValue?: string;
+  onPropertyChange?: (propertyId: string) => void;
 }) {
   return (
     <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-      <PortalPropertyFilter applications={applications} residents={residents} />
+      <PortalPropertyFilter
+        applications={applications}
+        residents={residents}
+        propertyOptions={propertyOptions}
+        propertyValue={propertyValue}
+        onPropertyChange={onPropertyChange}
+      />
     </div>
   );
 }
@@ -35,14 +48,31 @@ export function PortalPropertyFilterPill({
 export function PortalPropertyFilter({
   applications,
   residents,
+  propertyOptions,
+  propertyValue = "",
+  onPropertyChange,
 }: {
   applications?: boolean;
   residents?: boolean;
+  propertyOptions?: ManagerPropertyFilterOption[];
+  propertyValue?: string;
+  onPropertyChange?: (propertyId: string) => void;
 }) {
+  const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <select className={selectClass} aria-label="Properties">
-        <option>All your properties</option>
+      <select
+        className={selectClass}
+        aria-label="Properties"
+        value={hasPropertyPick ? propertyValue : ""}
+        onChange={(e) => onPropertyChange?.(e.target.value)}
+      >
+        <option value="">All your properties</option>
+        {propertyOptions?.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
       </select>
       {residents ? (
         <select className={selectClass} aria-label="Residents">
