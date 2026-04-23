@@ -132,9 +132,9 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
     if (!sa.ok) e.currentState = sa.message;
     const z = validateZip(f.currentZip);
     if (!z.ok) e.currentZip = z.message;
-    if (f.currentLandlordPhone.trim()) {
-      const lp = validatePhone10(f.currentLandlordPhone);
-      if (!lp.ok) e.currentLandlordPhone = lp.message;
+    const curLdDigits = digitsOnly(f.currentLandlordPhone);
+    if (curLdDigits.length > 0 && curLdDigits.length !== 10) {
+      e.currentLandlordPhone = "Enter a complete 10-digit number or leave this blank.";
     }
     return e;
   }
@@ -149,9 +149,9 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
     if (!sa.ok) e.prevState = sa.message;
     const z = validateZip(f.prevZip);
     if (!z.ok) e.prevZip = z.message;
-    if (f.prevLandlordPhone.trim()) {
-      const lp = validatePhone10(f.prevLandlordPhone);
-      if (!lp.ok) e.prevLandlordPhone = lp.message;
+    const prevLdDigits = digitsOnly(f.prevLandlordPhone);
+    if (prevLdDigits.length > 0 && prevLdDigits.length !== 10) {
+      e.prevLandlordPhone = "Enter a complete 10-digit number or leave this blank.";
     }
     return e;
   }
@@ -160,14 +160,17 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
     if (!f.notEmployed) {
       const emp = validateRequired(f.employer, "Employer name");
       if (!emp.ok) e.employer = emp.message;
-      if (f.supervisorPhone.trim()) {
-        const sp = validatePhone10(f.supervisorPhone);
-        if (!sp.ok) e.supervisorPhone = sp.message;
+      const supDigits = digitsOnly(f.supervisorPhone);
+      if (supDigits.length > 0 && supDigits.length !== 10) {
+        e.supervisorPhone = "Enter a complete 10-digit number or leave this blank.";
       }
     }
-    if (!hasIncomeValue(f.monthlyIncome, f.annualIncome, f.otherIncome)) {
+    if (
+      !f.notEmployed &&
+      !hasIncomeValue(f.monthlyIncome, f.annualIncome, f.otherIncome)
+    ) {
       e._general =
-        "Enter at least one income amount (monthly, annual, or other income), or check “not currently employed” and add other income if applicable.";
+        "Enter at least one income amount (monthly, annual, or other). Amounts must be greater than zero.";
     }
     if (f.monthlyIncome.trim()) {
       const n = Number(parseMoneyInput(f.monthlyIncome));

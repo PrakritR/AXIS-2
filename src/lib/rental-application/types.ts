@@ -65,9 +65,6 @@ export type RentalWizardFormState = {
   bankruptcyDetails: string;
   criminalHistory: YesNo;
   criminalDetails: string;
-  additionalNotes: string;
-  /** Applicant’s expected all-in monthly utilities (budgeting); optional. Listing may also show a landlord estimate. */
-  expectedUtilitiesMonthly: string;
   consentCredit: boolean;
   consentTruth: boolean;
   digitalSignature: string;

@@ -11,6 +11,7 @@ import {
   findApplicationFeeCharge,
   HOUSEHOLD_CHARGES_EVENT,
   listingApplicationFeeAmount,
+  markApplicationFeePaidAfterStripe,
   recordApplicationCharges,
 } from "@/lib/household-charges";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -152,12 +153,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     if (!draftReady) return;
     const pid = searchParams.get("propertyId")?.trim();
     if (!pid) return;
-    const prop = getPropertyById(pid);
-    if (!prop) return;
 
-    const roomName = searchParams.get("roomName");
-    const floor = searchParams.get("floor") ?? "";
-    const roomPrice = searchParams.get("roomPrice") ?? "";
     const listingRoomId = searchParams.get("listingRoomId") ?? "";
 
     setForm((prev) => {
@@ -170,27 +166,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         if (hit) room1 = hit.value;
       }
 
-      let notes = prev.additionalNotes;
-      if (roomName || floor || roomPrice) {
-        const roomPart = [floor, roomName].filter(Boolean).join(" · ");
-        const line = `[Listing preference${listingRoomId ? ` · ref ${listingRoomId}` : ""}: ${[roomPart, roomPrice].filter(Boolean).join(" — ")}]`;
-        if (!notes.includes(line)) {
-          notes = notes.trim() ? `${line}\n\n${notes}` : line;
-        }
-      } else {
-        const line = `[Application started from: ${prop.title}]`;
-        if (!notes.includes(line)) {
-          notes = notes.trim() ? `${line}\n\n${notes}` : line;
-        }
-      }
-
       return {
         ...prev,
         propertyId: pid,
         roomChoice1: room1 || prev.roomChoice1,
         roomChoice2: "",
         roomChoice3: "",
-        additionalNotes: notes,
       };
     });
   }, [draftReady, listingPrefillKey]);
@@ -259,6 +240,19 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     return { needsFee, paid, displayLabel, amount };
   }, [form.propertyId, form.email, feeStepUserId, chargeTick]);
 
+  const primaryButtonLabel = useMemo(() => {
+    if (step !== 12) return "Continue";
+    const pid = form.propertyId.trim();
+    const email = form.email.trim();
+    const { amount } = listingApplicationFeeAmount(pid);
+    const needsFee = Boolean(pid && email.includes("@") && amount > 0);
+    if (!needsFee) return "Submit application";
+    const prop = pid ? getPropertyById(pid) : undefined;
+    const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+    const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
+    return payChannel === "stripe" ? "Pay and submit" : "Submit application";
+  }, [step, form.propertyId, form.email, form.applicationFeePayChannel]);
+
   const handleContinue = () => {
     if (step === 12) {
       if (!validateAllPrior()) return;
@@ -280,15 +274,29 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           /* ignore */
         }
         const pid = form.propertyId.trim();
+        const prop = pid ? getPropertyById(pid) : undefined;
+        const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+        const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
         const { amount } = listingApplicationFeeAmount(pid);
         const needsFee = amount > 0;
+
         if (needsFee) {
-          const appFee = findApplicationFeeCharge(form.email, pid, residentUserId);
-          if (!appFee || appFee.status !== "paid") {
-            showToast("The application fee for this listing must be marked paid (resident portal Payments) before you can submit.");
-            return;
+          ensurePendingApplicationFeeCharge({
+            residentEmail: form.email,
+            residentName: form.fullLegalName,
+            residentUserId,
+            propertyId: pid,
+          });
+
+          if (payChannel === "stripe") {
+            const marked = markApplicationFeePaidAfterStripe(form.email, pid, residentUserId);
+            if (!marked) {
+              showToast("Payment could not be recorded. Check your email address and try again.");
+              return;
+            }
           }
         }
+
         recordApplicationCharges({
           residentEmail: form.email,
           residentName: form.fullLegalName,
@@ -301,7 +309,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         setStep(1);
         setErrors({});
         setPostSubmit({ applicationId: makeNewApplicationId() });
-        showToast("Application submitted.");
+        showToast(payChannel === "stripe" && needsFee ? "Payment received. Application submitted." : "Application submitted.");
       })();
       return;
     }
@@ -381,10 +389,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>
             <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Save your Application ID</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-700">
-              Use this ID when you create your resident account (use the button below to open signup with it filled in). Share it with a
-              co-signer if they are filing separately. Other move-in charges from the listing appear under Payments in the resident portal; your
-              manager marks Zelle or offline payments as received. After signup, your manager approves your application before the full resident
-              portal unlocks.
+              Use this ID when you create your resident account (open signup below with it filled in). Share it with a co-signer if they apply
+              separately. Until your application is approved, your account can use <strong>Dashboard</strong>, <strong>Profile</strong>, and{" "}
+              <strong>Inbox</strong> only; lease and payments unlock after approval.
             </p>
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Application ID</p>
@@ -444,7 +451,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 Back
               </Button>
               <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={handleContinue}>
-                {step === 12 ? "Submit application" : "Continue"}
+                {primaryButtonLabel}
               </Button>
             </div>
           </div>

@@ -191,7 +191,6 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   const moveInFee = sub?.moveInFee ?? "—";
   const paySigning = sub ? paymentAtSigningPriceLabel(sub) : "—";
   const utilities = sub ? utilitiesListingEstimateLabel(sub) : "—";
-  const applicantUtilities = (a.expectedUtilitiesMonthly ?? "").trim();
   const leaseTermsBody = sub?.leaseTermsBody?.trim() || "Standard lease lengths and renewal as posted on the listing.";
   const houseOverview = sub?.houseOverview?.trim() || list?.tagline || "Shared housing as described on the listing.";
   const sharedSpaces = sharedSpacesLeaseParagraph(sub);
@@ -241,11 +240,7 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
 <p>Application fee (if applicable): <strong>${escapeHtml(appFee)}</strong>. Security deposit: <strong>${escapeHtml(secDep)}</strong>. Move-in fee: <strong>${escapeHtml(moveInFee)}</strong>. Amount due at or before signing / move-in: <strong>${escapeHtml(paySigning)}</strong>. These amounts reflect the listing and application you selected.</p>
 
 <h2>6. Utilities & services</h2>
-<p>Listing estimate for utilities / RUBS / house services: <strong>${escapeHtml(utilities)}</strong>. ${escapeHtml(costsDetail)}${
-    applicantUtilities
-      ? ` <strong>Resident stated expected monthly utilities (application):</strong> ${escapeHtml(applicantUtilities)}.`
-      : ""
-  }</p>
+<p>Listing estimate for utilities / RUBS / house services: <strong>${escapeHtml(utilities)}</strong>. ${escapeHtml(costsDetail)}</p>
 
 <h2>7. Use and occupancy</h2>
 <p>The Premises shall be used only as a private residence for <strong>${occupancy}</strong> named occupant(s). No unlawful use. Resident shall comply with all applicable laws, HOA rules if any, and posted house rules.</p>
@@ -304,7 +299,6 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   <tr><td>Monthly income (stated)</td><td>${monthlyIncome}</td></tr>
   <tr><td>Prior address (current street)</td><td>${dash(a.currentStreet)} ${dash(a.currentCity)}, ${dash(a.currentState)} ${dash(a.currentZip)}</td></tr>
   <tr><td>References (names)</td><td>${dash(a.ref1Name)}; ${dash(a.ref2Name)}</td></tr>
-  <tr><td>Additional notes</td><td>${dash(a.additionalNotes)}</td></tr>
 </table>
 
 <h2>23. Exhibits</h2>

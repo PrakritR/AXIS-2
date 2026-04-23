@@ -10,6 +10,16 @@ const residentPortalUnderReview: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
+    {
+      section: "inbox",
+      label: "Inbox",
+      tabs: [
+        { id: "unopened", label: "Unopened" },
+        { id: "opened", label: "Opened" },
+        { id: "sent", label: "Sent" },
+        { id: "trash", label: "Trash" },
+      ],
+    },
   ],
 };
 

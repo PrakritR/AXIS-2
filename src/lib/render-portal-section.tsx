@@ -401,17 +401,18 @@ export async function renderPortalSection(
     return <ResidentProfilePanel />;
   }
 
+  if (kind === "resident" && section === "inbox") {
+    if (!meta.tabs.length) notFound();
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+    }
+    const inboxTab = tabParts[0]!;
+    if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+    return <ResidentInboxPanel tabId={inboxTab} />;
+  }
+
   if (kind === "resident") {
     if (residentWorkspaceUnlocked) {
-      if (section === "inbox") {
-        if (!meta.tabs.length) notFound();
-        if (!tabParts?.length) {
-          redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
-        }
-        const inboxTab = tabParts[0]!;
-        if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
-        return <ResidentInboxPanel tabId={inboxTab} />;
-      }
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentLeasePanel />;
       if (section === "payments") return <ResidentPaymentsPanel />;

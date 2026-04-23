@@ -421,7 +421,7 @@ const defaultLease: LeaseBasicRow[] = [
     detail: "Listing or your estimate",
     price: "—",
     status: "Estimated",
-    body: "Landlords may publish a utilities estimate on the listing. You can also note your expected monthly utilities in the rental application.",
+    body: "Landlords may publish a utilities estimate on the listing.",
   },
 ];
 

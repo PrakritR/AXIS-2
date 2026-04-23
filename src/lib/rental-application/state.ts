@@ -67,8 +67,6 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     bankruptcyDetails: "",
     criminalHistory: null,
     criminalDetails: "",
-    additionalNotes: "",
-    expectedUtilitiesMonthly: "",
     consentCredit: false,
     consentTruth: false,
     digitalSignature: "",

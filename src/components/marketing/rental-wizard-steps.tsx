@@ -2,9 +2,15 @@
 
 import type { ReactNode } from "react";
 import { Input, Select, Textarea } from "@/components/ui/input";
-import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
+import { listingApplicationFeeChannels, resolveApplicationFeePayChannel } from "@/lib/rental-application/application-fee-channel";
 import { LEASE_TERM_OPTIONS, getPropertyById, getRoomChoiceLabel, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
-import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
+import {
+  applicantFirstChoiceRentLabel,
+  formatListingFeeDisplay,
+  paymentAtSigningIncludedLabels,
+  paymentAtSigningPriceLabel,
+  utilitiesListingEstimateLabel,
+} from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
 
@@ -754,8 +760,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Employment and income</h2>
           <StepIntro className="mt-3">
-            Income helps us confirm you can meet rent obligations. If you are between jobs, use Other income and explain in
-            notes on the next screens if needed.
+            Income helps us confirm you can meet rent obligations when you are employed—enter at least one positive amount
+            in the income section below. If you are not employed, income is optional; use Other income for benefits or support
+            if applicable, and explain gaps on the next screens if needed.
           </StepIntro>
         </div>
 
@@ -830,12 +837,16 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </div>
 
         <div className="space-y-4 rounded-2xl border border-slate-200 p-5 sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Income</p>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Income</p>
+            <StepIntro className="mt-2">
+              If you are employed, provide at least one of the amounts below (you do not need to fill all three). If you
+              checked &ldquo;not currently employed,&rdquo; all income fields are optional.
+            </StepIntro>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="monthlyIncome" optional>
-                Monthly gross income
-              </Label>
+              <Label htmlFor="monthlyIncome">Monthly gross income</Label>
               <Input
                 id="monthlyIncome"
                 inputMode="decimal"
@@ -848,9 +859,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <FieldError msg={errors.monthlyIncome} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="annualIncome" optional>
-                Annual gross income
-              </Label>
+              <Label htmlFor="annualIncome">Annual gross income</Label>
               <Input
                 id="annualIncome"
                 inputMode="decimal"
@@ -863,9 +872,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <FieldError msg={errors.annualIncome} />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="otherIncome" optional>
-                Other income
-              </Label>
+              <Label htmlFor="otherIncome">Other income</Label>
               <Input
                 id="otherIncome"
                 value={form.otherIncome}
@@ -1000,20 +1007,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </Label>
           <Textarea id="pets" value={form.pets} onChange={(e) => patch({ pets: e.target.value })} placeholder="Type, breed, weight, or write “None”" rows={2} />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="expectedUtilitiesMonthly" optional>
-            Expected monthly utilities (your estimate)
-          </Label>
-          <Input
-            id="expectedUtilitiesMonthly"
-            value={form.expectedUtilitiesMonthly}
-            onChange={(e) => patch({ expectedUtilitiesMonthly: e.target.value })}
-            placeholder="e.g. $120 or $95–140/mo (all-in electric, gas, internet…)"
-          />
-          <p className="text-xs text-slate-500">
-            Optional. The listing may show a separate landlord estimate; this helps your manager understand your budget.
-          </p>
-        </div>
 
         <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
           <Label required>Eviction history</Label>
@@ -1080,13 +1073,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <FieldError msg={errors.criminalDetails} />
             </div>
           ) : null}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="additionalNotes" optional>
-            Additional notes
-          </Label>
-          <Textarea id="additionalNotes" value={form.additionalNotes} onChange={(e) => patch({ additionalNotes: e.target.value })} rows={4} placeholder="Anything else we should know" />
         </div>
       </div>
     );
@@ -1215,9 +1201,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <Row k="Move-in fee" v={displayOrDash(prop.listingSubmission.moveInFee)} />
               <Row k="Payment due at signing" v={displayOrDash(paymentAtSigningPriceLabel(prop.listingSubmission))} />
               <Row k="Utilities (estimate, by room)" v={displayOrDash(utilitiesListingEstimateLabel(prop.listingSubmission))} />
-              {form.expectedUtilitiesMonthly.trim() ? (
-                <Row k="Your expected utilities / mo" v={displayOrDash(form.expectedUtilitiesMonthly)} />
-              ) : null}
             </ReviewSection>
           ) : (
             <ReviewSection title="Housing charges" stepTarget={3}>
@@ -1225,9 +1208,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 k="Listing fees"
                 v="This property has not published detailed fee lines yet. Confirm dollar amounts with the property manager before you pay or sign."
               />
-              {form.expectedUtilitiesMonthly.trim() ? (
-                <Row k="Your expected utilities / mo" v={displayOrDash(form.expectedUtilitiesMonthly)} />
-              ) : null}
             </ReviewSection>
           )}
           <ReviewSection title="Personal information" stepTarget={4}>
@@ -1301,7 +1281,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Row k="Eviction" v={form.evictionHistory === "yes" ? `Yes — ${form.evictionDetails}` : form.evictionHistory === "no" ? "No" : "—"} />
             <Row k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes — ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
             <Row k="Criminal history" v={form.criminalHistory === "yes" ? `Yes — ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
-            <Row k="Notes" v={displayOrDash(form.additionalNotes)} />
           </ReviewSection>
           <ReviewSection title="Consent" stepTarget={10}>
             <Row k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
@@ -1319,10 +1298,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const prop = form.propertyId ? getPropertyById(form.propertyId) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const appFeeLabel = sub?.applicationFee?.trim() || (applicationFeeGate.needsFee ? applicationFeeGate.displayLabel : "—");
-    const sdLabel = sub?.securityDeposit?.trim() || "—";
+    const rentLabel = sub ? applicantFirstChoiceRentLabel(sub, form.roomChoice1) : "—";
+    const sdDisplay = sub ? formatListingFeeDisplay(sub.securityDeposit ?? "") : "—";
+    const moveInRaw = sub?.moveInFee?.trim() ?? "";
     const signingLabel = sub ? paymentAtSigningPriceLabel(sub) : "—";
+    const signingIncludesText = sub ? paymentAtSigningIncludedLabels(sub) : "";
     const utilLabel = sub ? utilitiesListingEstimateLabel(sub) : "—";
     const channels = listingApplicationFeeChannels(sub);
+    const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     const gate = applicationFeeGate;
     const feeDecisionNeeded = gate.needsFee && !gate.paid;
     const showStripeInstructions =
@@ -1335,11 +1318,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Application fee & housing charges</h2>
           <StepIntro className="mt-2">
-            Dollar amounts shown here come from this listing&apos;s published manager settings (not invented by the application). If a line
-            shows “—”, the property has not published that fee yet — confirm with the manager. When an application fee applies, you must pay it
-            (your manager marks it received in this demo) before you can submit and receive an Application ID. Submitting also creates other
-            move-in lines in your resident portal; there is no live card charge here. If this listing offers both Zelle and a tracked portal
-            payment for the fee, choose how you will pay below before your manager marks it received.
+            Amounts below come from this listing. “—” means you should confirm the number with the property manager. For the application fee,
+            use Stripe on this page when offered, or Zelle if you choose that path instead.
           </StepIntro>
         </div>
         {gate.needsFee ? (
@@ -1350,18 +1330,22 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           >
             {gate.paid ? (
               <p>
-                <span className="font-semibold">Application fee paid.</span> Your manager marked this fee received. You can submit the
-                application.
+                <span className="font-semibold">Application fee paid.</span> You can submit your application.
               </p>
             ) : (
               <p>
                 <span className="font-semibold">Application fee required.</span>{" "}
-                {showZelleInstructions && !showStripeInstructions ? (
-                  <>Send the amount via Zelle using the contact below, then ask your </>
+                {payChannel === "zelle" ? (
+                  <>
+                    Submit your application with the button below, then send this fee via <strong>Zelle</strong> using the contact shown. Your
+                    manager marks it received when the payment arrives.
+                  </>
                 ) : (
-                  <>Pay or settle the amount using the path you selected below, then ask your </>
+                  <>
+                    Pay with <strong>Stripe</strong> when you tap <strong>Pay and submit</strong>—your application is filed as soon as the fee
+                    is recorded.
+                  </>
                 )}
-                manager to mark the fee paid in Payments.
               </p>
             )}
           </div>
@@ -1376,20 +1360,39 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <div className="mt-4 rounded-xl border border-slate-200/80 bg-white/80 px-4 py-3 text-sm text-slate-700">
             <p className="font-semibold text-slate-900">Also recorded for move-in (pending until paid)</p>
             <ul className="mt-2 list-inside list-disc space-y-1 text-slate-600">
-              <li>Security deposit: {sdLabel}</li>
-              {sub?.moveInFee?.trim() ? <li>Move-in fee: {sub.moveInFee.trim()}</li> : null}
-              <li>Payment due at signing: {signingLabel}</li>
-              {utilLabel.trim() && utilLabel !== "—" ? <li>Utilities (estimate, by room): {utilLabel}</li> : null}
-              {form.expectedUtilitiesMonthly.trim() ? (
-                <li>Your expected utilities / mo (from application): {form.expectedUtilitiesMonthly.trim()}</li>
+              <li>
+                Monthly rent: <span className="font-medium text-slate-800">{rentLabel}</span>{" "}
+                <span className="text-xs text-slate-500">
+                  (your first-choice room when set, otherwise this listing&apos;s rent range)
+                </span>
+              </li>
+              <li>
+                Security deposit: <span className="font-medium text-slate-800">{sdDisplay}</span>
+              </li>
+              {moveInRaw ? (
+                <li>
+                  Move-in fee: <span className="font-medium text-slate-800">{formatListingFeeDisplay(moveInRaw)}</span>
+                </li>
               ) : null}
+              {utilLabel.trim() && utilLabel !== "—" ? <li>Utilities (estimate, by room): {utilLabel}</li> : null}
             </ul>
+            <p className="mt-3 border-t border-slate-200/90 pt-3 text-sm leading-snug text-slate-700">
+              <span className="font-semibold text-slate-900">Estimated due at lease signing: </span>
+              <span className="tabular-nums font-semibold text-slate-900">{signingLabel}</span>
+              {signingIncludesText ? (
+                <span className="text-slate-600">
+                  {" "}
+                  — On this listing, that total covers {signingIncludesText}.
+                </span>
+              ) : null}
+            </p>
           </div>
           {showChannelPick ? (
             <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-white px-4 py-4">
               <p className="text-sm font-semibold text-slate-900">How will you pay the application fee?</p>
               <p className="text-xs leading-relaxed text-slate-600">
-                Pick one. No card is charged on this page—your manager confirms funds and marks the line paid in Payments.
+                <strong>Stripe</strong> — pay on this page with <strong>Pay and submit</strong>. <strong>Zelle</strong> — submit first, then send
+                the fee from your bank; your manager confirms receipt.
               </p>
               <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                 <input
@@ -1400,9 +1403,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   onChange={() => patch({ applicationFeePayChannel: "stripe" })}
                 />
                 <span>
-                  <span className="text-sm font-semibold text-slate-900">Portal / tracked payment</span>
+                  <span className="text-sm font-semibold text-slate-900">Pay with Stripe</span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
-                    Manager records receipt when ready (card-on-file elsewhere, ACH, cash, etc.—whatever your house uses).
+                    Card payment through Stripe when you tap Pay and submit (this demo records the fee as paid immediately).
                   </span>
                 </span>
               </label>
@@ -1425,10 +1428,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           ) : null}
           {showStripeInstructions ? (
             <div className="mt-4 rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Tracked application fee</p>
+              <p className="font-semibold text-slate-900">Stripe payment</p>
               <p className="mt-1 leading-relaxed">
-                Your manager marks this line paid in Payments after they verify the funds. Use the same email you used on this application so
-                the charge links to you.
+                The application fee is collected through Stripe when you tap <strong>Pay and submit</strong>. Use the same email as on this
+                application so your payment matches your file.
               </p>
             </div>
           ) : null}

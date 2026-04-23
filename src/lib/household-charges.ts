@@ -333,6 +333,24 @@ export function markHouseholdChargePaid(chargeId: string, managerUserId: string 
 }
 
 /**
+ * Marks the pending application-fee line paid after the applicant completes card payment (Stripe) in the apply flow.
+ * Demo: simulates an immediate successful charge so submit can proceed without a manager action.
+ */
+export function markApplicationFeePaidAfterStripe(residentEmail: string, propertyId: string, residentUserId: string | null): boolean {
+  const charge = findApplicationFeeCharge(residentEmail, propertyId, residentUserId);
+  if (!charge || charge.kind !== "application_fee") return false;
+  if (charge.status === "paid") return true;
+  const rows = readAll();
+  const i = rows.findIndex((r) => r.id === charge.id);
+  if (i === -1) return false;
+  const now = new Date().toISOString();
+  const next = [...rows];
+  next[i] = { ...next[i]!, status: "paid", paidAt: now, balanceLabel: "$0.00" };
+  writeAll(next);
+  return true;
+}
+
+/**
  * Called when an applicant completes the rental wizard (step 12).
  * Creates pending lines from the listing’s fee fields.
  */

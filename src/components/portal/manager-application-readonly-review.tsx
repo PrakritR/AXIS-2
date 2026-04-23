@@ -129,11 +129,9 @@ export function ManagerApplicationReadonlyReview({ partial }: { partial: Partial
       <ReviewSection title="Additional details">
         <Row k="Occupants" v={displayOrDash(form.occupancyCount)} />
         <Row k="Pets" v={displayOrDash(form.pets)} />
-        <Row k="Expected utilities / mo (applicant)" v={displayOrDash(form.expectedUtilitiesMonthly)} />
         <Row k="Eviction" v={form.evictionHistory === "yes" ? `Yes — ${form.evictionDetails}` : form.evictionHistory === "no" ? "No" : "—"} />
         <Row k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes — ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
         <Row k="Criminal history" v={form.criminalHistory === "yes" ? `Yes — ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
-        <Row k="Notes" v={displayOrDash(form.additionalNotes)} />
       </ReviewSection>
       <ReviewSection title="Consent & signature">
         <Row k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
