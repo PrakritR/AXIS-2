@@ -67,10 +67,9 @@ async function syncResidentApproval(row: DemoApplicantRow, nextBucket: ManagerAp
 }
 
 function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucket, assignedRoomChoice?: string) {
-  const roomLabel = getRoomChoiceLabel(assignedRoomChoice ?? row.assignedRoomChoice ?? "");
-  if (bucket === "approved") return roomLabel ? `Approved · ${roomLabel}` : "Approved";
+  if (bucket === "approved") return "Approved";
   if (bucket === "rejected") return "Rejected";
-  return roomLabel ? `Submitted · ${roomLabel}` : "Submitted";
+  return "Submitted";
 }
 
 function inferRoomRent(propertyId: string, roomChoice: string): number | null {
@@ -79,6 +78,33 @@ function inferRoomRent(propertyId: string, roomChoice: string): number | null {
   if (!match) return null;
   const rent = Number.parseFloat(match.label.replace(/[^0-9.]+/g, ""));
   return Number.isFinite(rent) && rent > 0 ? rent : null;
+}
+
+function roomSortKey(row: DemoApplicantRow): string {
+  return (
+    getRoomChoiceLabel(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "") ||
+    row.stage ||
+    ""
+  ).trim();
+}
+
+function displayRoomForRow(row: DemoApplicantRow): string {
+  return getRoomChoiceLabel(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "") || "—";
+}
+
+function sortApplicationRows(rows: DemoApplicantRow[], bucket: ManagerApplicationBucket): DemoApplicantRow[] {
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+  return [...rows].sort((a, b) => {
+    if (bucket === "approved") {
+      const propertyCmp = collator.compare(a.property || "", b.property || "");
+      if (propertyCmp !== 0) return propertyCmp;
+      const roomCmp = collator.compare(roomSortKey(a), roomSortKey(b));
+      if (roomCmp !== 0) return roomCmp;
+    }
+    const applicantCmp = collator.compare(a.name || "", b.name || "");
+    if (applicantCmp !== 0) return applicantCmp;
+    return collator.compare(a.id, b.id);
+  });
 }
 
 function ManagerApplicationPlacementEditor({
@@ -103,7 +129,28 @@ function ManagerApplicationPlacementEditor({
     setSignedRent(row.signedMonthlyRent && row.signedMonthlyRent > 0 ? String(row.signedMonthlyRent) : "");
   }, [row]);
 
-  const roomOptions = useMemo(() => (propertyId ? getRoomOptionsForProperty(propertyId) : []), [propertyId]);
+  const availablePropertyOptions = useMemo(() => {
+    return propertyOptions.filter((opt) => {
+      const hasAvailableRooms = getRoomOptionsForProperty(opt.id, {
+        leaseStart: row.application?.leaseStart,
+        leaseEnd: row.application?.leaseEnd,
+        excludeApplicationId: row.id,
+      }).length > 0;
+      return hasAvailableRooms || opt.id === propertyId;
+    });
+  }, [propertyId, propertyOptions, row.application?.leaseEnd, row.application?.leaseStart, row.id]);
+
+  const roomOptions = useMemo(
+    () =>
+      propertyId
+        ? getRoomOptionsForProperty(propertyId, {
+            leaseStart: row.application?.leaseStart,
+            leaseEnd: row.application?.leaseEnd,
+            excludeApplicationId: row.id,
+          })
+        : [],
+    [propertyId, row.application?.leaseEnd, row.application?.leaseStart, row.id],
+  );
 
   useEffect(() => {
     if (!roomChoice) return;
@@ -136,7 +183,7 @@ function ManagerApplicationPlacementEditor({
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">House</span>
             <Select value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
               <option value="">Select property</option>
-              {propertyOptions.map((opt) => (
+              {availablePropertyOptions.map((opt) => (
                 <option key={opt.id} value={opt.id}>
                   {opt.label}
                 </option>
@@ -177,6 +224,12 @@ function ManagerApplicationPlacementEditor({
         <p>
           <span className="font-medium text-slate-800">Current assignment:</span>{" "}
           {propertyId && roomChoice ? `${getPropertyById(propertyId)?.title ?? propertyId} · ${getRoomChoiceLabel(roomChoice)}` : "Not assigned yet"}
+        </p>
+        <p>
+          <span className="font-medium text-slate-800">Lease timing:</span>{" "}
+          {row.application?.leaseStart?.trim()
+            ? `${row.application.leaseStart}${row.application?.leaseEnd?.trim() ? ` to ${row.application.leaseEnd}` : ""}`
+            : "No lease dates submitted."}
         </p>
         <p>
           <span className="font-medium text-slate-800">Tenant rent snapshot:</span>{" "}
@@ -281,8 +334,8 @@ export function ManagerApplications() {
 
   const rowsForBucket = useMemo(() => {
     const inBucket = scopedRows.filter((r) => r.bucket === bucket);
-    if (!propertyFilter.trim()) return inBucket;
-    return inBucket.filter((r) => r.propertyId === propertyFilter);
+    const filtered = !propertyFilter.trim() ? inBucket : inBucket.filter((r) => r.propertyId === propertyFilter);
+    return sortApplicationRows(filtered, bucket);
   }, [scopedRows, bucket, propertyFilter]);
 
   const refreshTable = useCallback(() => {
@@ -419,7 +472,7 @@ export function ManagerApplications() {
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Stage</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
                 <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               </tr>
             </thead>
@@ -449,7 +502,7 @@ export function ManagerApplications() {
                         {row.email ? <p className="mt-0.5 text-xs text-slate-500">{row.email}</p> : null}
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.property}</td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.stage}</td>
+                      <td className={`${PORTAL_TABLE_TD} align-middle`}>{displayRoomForRow(row)}</td>
                       <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
                         <Button
                           type="button"

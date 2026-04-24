@@ -23,6 +23,12 @@ import {
 
 type CalendarMode = "day" | "week" | "month";
 type RecurrenceCadence = "once" | "weekly" | "biweekly" | "monthly";
+type DragSelection = {
+  dateStr: string;
+  weekday: number;
+  startSlot: number;
+  endSlotExclusive: number;
+};
 
 const SLOT_ROW_START = 0;
 const SLOT_ROW_END = SLOTS_PER_DAY - 1;
@@ -135,7 +141,7 @@ export function PortalCalendarPanels({
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [activeSlots, setActiveSlots] = useState<Set<string>>(() => new Set());
-  const [dragMode, setDragMode] = useState<"add" | "remove" | null>(null);
+  const [dragSelection, setDragSelection] = useState<DragSelection | null>(null);
   const [visibleStartSlot, setVisibleStartSlot] = useState(DEFAULT_VISIBLE_START_SLOT);
   const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE);
   const [blockModalOpen, setBlockModalOpen] = useState(false);
@@ -214,20 +220,6 @@ export function PortalCalendarPanels({
   const visibleSlotIndices = useMemo(
     () => slotRowIndices.filter((slot) => slot >= visibleStartSlot && slot < visibleEndSlotExclusive),
     [visibleEndSlotExclusive, visibleStartSlot],
-  );
-
-  const applySlot = useCallback(
-    (key: string, mode: "add" | "remove") => {
-      if (!storageKey) return;
-      setActiveSlots((current) => {
-        const next = new Set(current);
-        if (mode === "add") next.add(key);
-        else next.delete(key);
-        writeAvailabilityDateSetForStorageKey(next, storageKey);
-        return next;
-      });
-    },
-    [storageKey],
   );
 
   const reloadAvailability = useCallback(() => {
@@ -365,15 +357,68 @@ export function PortalCalendarPanels({
     );
   }, []);
 
+  const prefillBlockModal = useCallback(
+    (selection?: DragSelection | null) => {
+      const baseDate = selection ? new Date(`${selection.dateStr}T12:00:00`) : anchorDate;
+      const weekday = selection ? selection.weekday : mondayBasedDayIndex(baseDate);
+      setBlockWeekdays(viewMode === "day" && !selection ? [weekday] : selection ? [weekday] : [0, 1, 2, 3, 4]);
+      setBlockStartSlot(selection?.startSlot ?? visibleStartSlot);
+      setBlockEndSlotExclusive(
+        selection?.endSlotExclusive ?? Math.min(SLOTS_PER_DAY, visibleStartSlot + 2),
+      );
+      setBlockCadence(selection ? "once" : "weekly");
+      setBlockOccurrences(selection ? 1 : 4);
+      setBlockModalOpen(true);
+    },
+    [anchorDate, viewMode, visibleStartSlot],
+  );
+
   const openBlockModal = useCallback(() => {
-    const weekday = mondayBasedDayIndex(anchorDate);
-    setBlockWeekdays(viewMode === "day" ? [weekday] : [0, 1, 2, 3, 4]);
-    setBlockStartSlot(visibleStartSlot);
-    setBlockEndSlotExclusive(Math.min(SLOTS_PER_DAY, visibleStartSlot + 2));
-    setBlockCadence("weekly");
-    setBlockOccurrences(4);
-    setBlockModalOpen(true);
-  }, [anchorDate, viewMode, visibleStartSlot]);
+    prefillBlockModal(null);
+  }, [prefillBlockModal]);
+
+  const startDragSelection = useCallback((dateStr: string, weekday: number, slotIdx: number) => {
+    setDragSelection({
+      dateStr,
+      weekday,
+      startSlot: slotIdx,
+      endSlotExclusive: slotIdx + 1,
+    });
+  }, []);
+
+  const extendDragSelection = useCallback((dateStr: string, slotIdx: number) => {
+    setDragSelection((current) => {
+      if (!current || current.dateStr !== dateStr) return current;
+      const start = Math.min(current.startSlot, slotIdx);
+      const end = Math.max(current.startSlot, slotIdx) + 1;
+      return {
+        ...current,
+        startSlot: start,
+        endSlotExclusive: end,
+      };
+    });
+  }, []);
+
+  const finishDragSelection = useCallback(() => {
+    if (!dragSelection) return;
+    prefillBlockModal(dragSelection);
+    setDragSelection(null);
+  }, [dragSelection, prefillBlockModal]);
+
+  const cancelDragSelection = useCallback(() => {
+    setDragSelection(null);
+  }, []);
+
+  const isSlotInDragSelection = useCallback(
+    (dateStr: string, slotIdx: number) =>
+      Boolean(
+        dragSelection &&
+          dragSelection.dateStr === dateStr &&
+          slotIdx >= dragSelection.startSlot &&
+          slotIdx < dragSelection.endSlotExclusive,
+      ),
+    [dragSelection],
+  );
 
   const applyRecurringBlock = useCallback(() => {
     if (blockWeekdays.length === 0 || blockEndSlotExclusive <= blockStartSlot) return;
@@ -469,9 +514,9 @@ export function PortalCalendarPanels({
 
           <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-xs font-semibold text-slate-600">Create recurring blocks for multiple days, then drag on the calendar for quick touch-ups.</p>
+              <p className="text-xs font-semibold text-slate-600">Drag to define a time block, then edit it before saving. Use Create block for recurring schedules.</p>
             </div>
-            <div className="overflow-x-auto" onMouseLeave={() => setDragMode(null)} onMouseUp={() => setDragMode(null)}>
+            <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
               <div className="grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] gap-px bg-slate-200 text-xs">
                 <div className="bg-slate-50 px-2 py-2 font-bold uppercase tracking-[0.12em] text-slate-400">Time</div>
                 {fullWeekDates.map((d) => {
@@ -492,29 +537,26 @@ export function PortalCalendarPanels({
                     {fullWeekDateStrs.map((ds) => {
                       const key = dateSlotKey(ds, slotIdx);
                       const active = activeSlots.has(key);
+                      const selected = isSlotInDragSelection(ds, slotIdx);
                       const meeting = meetingBySlotKey.get(key);
                       const isMeetingStart = meeting?.startSlot === slotIdx;
                       return (
                         <button
                           key={key}
                           type="button"
-                          onMouseDown={() => {
-                            const nextMode = active ? "remove" : "add";
-                            setDragMode(nextMode);
-                            applySlot(key, nextMode);
-                          }}
-                          onMouseEnter={() => {
-                            if (dragMode) applySlot(key, dragMode);
-                          }}
-                          onMouseUp={() => setDragMode(null)}
+                          onMouseDown={() => startDragSelection(ds, fullWeekDateStrs.indexOf(ds), slotIdx)}
+                          onMouseEnter={() => extendDragSelection(ds, slotIdx)}
+                          onMouseUp={finishDragSelection}
                           className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
                             meeting
                               ? `${meeting.color} ring-1 ring-inset`
+                              : selected
+                                ? "bg-primary/[0.14] text-primary ring-2 ring-inset ring-primary/35"
                               : active
                                 ? "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300"
                                 : "bg-white text-transparent hover:bg-primary/[0.07] hover:text-primary"
                           }`}
-                          aria-label={`${active ? "Close" : "Open"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
+                          aria-label={`Select ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
                         >
                           {meeting ? (
                             isMeetingStart ? (
@@ -524,6 +566,8 @@ export function PortalCalendarPanels({
                             ) : (
                               <span className="block truncate opacity-70">{meeting.statusLabel}</span>
                             )
+                          ) : selected ? (
+                            "Selected"
                           ) : active ? (
                             "Open"
                           ) : (
@@ -539,7 +583,7 @@ export function PortalCalendarPanels({
           </div>
         </Card>
 
-        <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => setBlockModalOpen(false)}>
+        <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => { setBlockModalOpen(false); setDragSelection(null); }}>
           <div className="space-y-5">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">{blockSummary}</div>
 
@@ -846,9 +890,10 @@ export function PortalCalendarPanels({
         </Button>
       </div>
 
-      <div className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3" onMouseLeave={() => setDragMode(null)} onMouseUp={() => setDragMode(null)}>
+      <div className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
         {fullWeekDates.map((d) => {
           const ds = toLocalDateStr(d);
+          const weekday = mondayBasedDayIndex(d);
           return (
             <div key={ds} className="rounded-2xl border border-slate-200 bg-white p-3">
               <div className="mb-3">
@@ -859,27 +904,25 @@ export function PortalCalendarPanels({
                 {visibleSlotIndices.map((slotIdx) => {
                   const key = dateSlotKey(ds, slotIdx);
                   const active = activeSlots.has(key);
+                  const selected = isSlotInDragSelection(ds, slotIdx);
                   return (
                     <button
                       key={key}
                       type="button"
-                      onMouseDown={() => {
-                        const nextMode = active ? "remove" : "add";
-                        setDragMode(nextMode);
-                        applySlot(key, nextMode);
-                      }}
-                      onMouseEnter={() => {
-                        if (dragMode) applySlot(key, dragMode);
-                      }}
-                      onMouseUp={() => setDragMode(null)}
+                      onMouseDown={() => startDragSelection(ds, weekday, slotIdx)}
+                      onMouseEnter={() => extendDragSelection(ds, slotIdx)}
+                      onMouseUp={finishDragSelection}
                       className={`flex min-h-10 items-center justify-between rounded-xl border px-3 text-left text-xs font-semibold transition ${
+                        selected
+                          ? "border-primary/40 bg-primary/[0.12] text-primary"
+                          : 
                         active
                           ? "border-emerald-300 bg-emerald-100 text-emerald-900"
                           : "border-slate-100 bg-slate-50 text-slate-500 hover:border-primary/20 hover:bg-primary/[0.06]"
                       }`}
                     >
                       <span>{formatAvailabilitySlotLabel(slotIdx)}</span>
-                      <span>{active ? "Open" : ""}</span>
+                      <span>{selected ? "Selected" : active ? "Open" : ""}</span>
                     </button>
                   );
                 })}
@@ -904,7 +947,7 @@ export function PortalCalendarPanels({
         {availabilityCard}
       </div>
 
-      <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => setBlockModalOpen(false)}>
+      <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => { setBlockModalOpen(false); setDragSelection(null); }}>
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">{blockSummary}</div>
 

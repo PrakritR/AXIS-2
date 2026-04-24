@@ -5,6 +5,7 @@ import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { adminLeaseKpiCounts, type AdminLeaseBucketIndex } from "@/lib/demo-admin-leases";
+import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
   LEASE_PIPELINE_EVENT,
   appendLeaseThreadMessage,
@@ -23,6 +24,10 @@ import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/po
 import { PORTAL_DATA_TABLE_WRAP, PORTAL_DATA_TABLE_SCROLL, PORTAL_TABLE_DETAIL_ROW, PORTAL_TABLE_TR } from "@/components/portal/portal-data-table";
 
 const KPI_LABELS = ["Manager review", "Admin review", "With resident", "Signed"] as const;
+
+function naturalLabelSort(a: string, b: string) {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
 
 function DocIcon({ className }: { className?: string }) {
   return (
@@ -272,6 +277,7 @@ function LeasePipelineAdminDetail({
 export function AdminLeasesClient() {
   const { showToast } = useAppUi();
   const [activeBucket, setActiveBucket] = useState<AdminLeaseBucketIndex>(0);
+  const [propertyFilter, setPropertyFilter] = useState("");
   const [tick, setTick] = useState(0);
   const [expandedLeaseId, setExpandedLeaseId] = useState<string | null>(null);
 
@@ -301,11 +307,24 @@ export function AdminLeasesClient() {
 
   const allRows = useMemo(() => safeReadLeasePipeline(), [tick]);
   const kpiValues = useMemo(() => safeAdminLeaseKpiCounts(), [tick]);
+  const propertyOptions = useMemo(
+    () =>
+      [...new Set(allRows.map((row) => row.unit).filter((unit) => unit && unit !== "—"))]
+        .sort(naturalLabelSort)
+        .map((unit) => ({ id: unit, label: unit })),
+    [allRows],
+  );
 
   const rows = useMemo(() => {
     const want = ADMIN_INDEX_TO_PIPELINE[activeBucket];
-    return allRows.filter((r) => r.bucket === want);
-  }, [allRows, activeBucket]);
+    return allRows.filter((r) => r.bucket === want && (!propertyFilter || r.unit === propertyFilter));
+  }, [allRows, activeBucket, propertyFilter]);
+
+  useEffect(() => {
+    if (propertyFilter && !propertyOptions.some((option) => option.id === propertyFilter)) {
+      setPropertyFilter("");
+    }
+  }, [propertyFilter, propertyOptions]);
 
   useEffect(() => {
     if (expandedLeaseId && !rows.some((r) => r.id === expandedLeaseId)) {
@@ -317,9 +336,16 @@ export function AdminLeasesClient() {
     <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Leases</h1>
-        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-          Refresh
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
+          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

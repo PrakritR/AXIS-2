@@ -253,8 +253,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   }
 
   if (step === 3) {
-    const rooms = roomSelectOptionsWithNone(form.propertyId).filter((o) => o.value !== "");
-    const roomsWithNone = roomSelectOptionsWithNone(form.propertyId);
+    const roomOptionParams = {
+      leaseStart: form.leaseStart,
+      leaseEnd: form.leaseEnd,
+    };
+    const rooms = roomSelectOptionsWithNone(form.propertyId, roomOptionParams).filter((o) => o.value !== "");
+    const roomsWithNone = roomSelectOptionsWithNone(form.propertyId, roomOptionParams);
     return (
       <div className="space-y-8">
         <div>

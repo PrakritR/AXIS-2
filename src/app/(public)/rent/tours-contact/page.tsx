@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
+import { PROPERTY_PIPELINE_EVENT, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
 import Link from "next/link";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 
@@ -69,6 +70,20 @@ function groupByBuilding(properties: MockProperty[]): BuildingGroup[] {
 export default function ToursContactPage() {
   const { showToast } = useAppUi();
   const [tab, setTab] = useState<Tab>("tour");
+  const [extras, setExtras] = useState<MockProperty[]>([]);
+
+  useEffect(() => {
+    const sync = () => setExtras(readExtraListingsPublic());
+    sync();
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  const publicProperties = useMemo(() => [...mockProperties, ...extras], [extras]);
 
   return (
     <div className="min-h-screen px-4 py-12 sm:py-16">
@@ -88,9 +103,9 @@ export default function ToursContactPage() {
 
         <div key={tab} className="animate-fade-in">
           {tab === "tour" ? (
-            <TourFlow onSuccess={() => showToast("Tour booked.")} />
+            <TourFlow properties={publicProperties} onSuccess={() => showToast("Tour booked.")} />
           ) : (
-            <MessageFlow onSuccess={() => showToast("Message sent.")} />
+            <MessageFlow properties={publicProperties} onSuccess={() => showToast("Message sent.")} />
           )}
         </div>
       </div>
@@ -101,8 +116,9 @@ export default function ToursContactPage() {
 /* ────────────────────────────────────────────────────────────
    TOUR FLOW
 ──────────────────────────────────────────────────────────── */
-function TourFlow({ onSuccess }: { onSuccess: () => void }) {
+function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuccess: () => void }) {
   const [step, setStep] = useState<TourStep>(1);
+  const [submitted, setSubmitted] = useState(false);
   const [step1Phase, setStep1Phase] = useState<"property" | "room">("property");
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<MockProperty | null>(null);
@@ -110,8 +126,7 @@ function TourFlow({ onSuccess }: { onSuccess: () => void }) {
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
-
-  const buildings = useMemo(() => groupByBuilding(mockProperties), []);
+  const buildings = useMemo(() => groupByBuilding(properties), [properties]);
 
   const canContinue1 = selectedProperty !== null;
   const canContinue2 = selectedDay !== null && selectedTime !== null;
@@ -121,6 +136,50 @@ function TourFlow({ onSuccess }: { onSuccess: () => void }) {
     { n: 2, label: "Date & time" },
     { n: 3, label: "Your details" },
   ];
+
+  if (submitted) {
+    return (
+      <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-white p-7 shadow-sm">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-5">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Meeting request sent</p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">Axis team has your request</h2>
+          <p className="mt-3 text-sm leading-relaxed text-slate-700">
+            Your meeting request was sent to the Axis team. Check your email for the meeting link and next steps.
+          </p>
+          {selectedProperty ? (
+            <p className="mt-3 text-sm font-medium text-slate-800">
+              Requested tour: {selectedProperty.title}
+              {selectedDay && selectedTime ? ` · ${MONTHS[calMonth]} ${selectedDay}, ${calYear} · ${selectedTime}` : ""}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSubmitted(false);
+              setStep(1);
+              setStep1Phase("property");
+              setSelectedBuildingId(null);
+              setSelectedProperty(null);
+              setSelectedDay(null);
+              setSelectedTime(null);
+            }}
+            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Request another meeting
+          </button>
+          <Link
+            href="/rent/listings"
+            className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
+          >
+            Back to listings
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-4 rounded-3xl border border-slate-200/80 bg-white p-7 shadow-sm">
@@ -214,7 +273,10 @@ function TourFlow({ onSuccess }: { onSuccess: () => void }) {
             time={selectedTime}
             month={calMonth}
             year={calYear}
-            onSubmit={onSuccess}
+            onSubmit={() => {
+              setSubmitted(true);
+              onSuccess();
+            }}
           />
         )}
       </div>
@@ -279,6 +341,11 @@ function Step1({
     return (
       <div className="space-y-3">
         <p className="text-sm text-slate-500">Choose a property to tour. You&apos;ll pick a specific room next.</p>
+        {buildings.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            No listed housing is available for tours right now.
+          </div>
+        ) : null}
         {buildings.map((b) => {
           const count = b.units.length;
           return (
@@ -505,9 +572,9 @@ function Step3({
 /* ────────────────────────────────────────────────────────────
    MESSAGE FLOW
 ──────────────────────────────────────────────────────────── */
-function MessageFlow({ onSuccess }: { onSuccess: () => void }) {
+function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuccess: () => void }) {
   const { showToast } = useAppUi();
-  const buildings = useMemo(() => groupByBuilding(mockProperties), []);
+  const buildings = useMemo(() => groupByBuilding(properties), [properties]);
   const [topic, setTopic] = useState("");
   const [otherTopicDetail, setOtherTopicDetail] = useState("");
   const [msgPhase, setMsgPhase] = useState<"building" | "room">("building");
