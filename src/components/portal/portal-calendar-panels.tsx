@@ -124,6 +124,7 @@ export function PortalCalendarPanels({
   const [dragMode, setDragMode] = useState<"add" | "remove" | null>(null);
   const [visibleStartSlot, setVisibleStartSlot] = useState(0);
   const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(24);
+  const [futureWeekCount, setFutureWeekCount] = useState(4);
 
   useEffect(() => {
     if (!storageKey) return;
@@ -142,6 +143,7 @@ export function PortalCalendarPanels({
   const monthYear = anchorDate.getFullYear();
   const monthIndex = anchorDate.getMonth();
   const monthCells = useMemo(() => buildMonthCells(monthYear, monthIndex), [monthYear, monthIndex]);
+  const today = useMemo(() => new Date(), []);
 
   const monthBlocksCount = useMemo(() => {
     let n = 0;
@@ -178,6 +180,15 @@ export function PortalCalendarPanels({
     if (!storageKey) return;
     setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
   }, [storageKey]);
+
+  const writeAvailability = useCallback(
+    (next: Set<string>) => {
+      if (!storageKey) return;
+      writeAvailabilityDateSetForStorageKey(next, storageKey);
+      setActiveSlots(next);
+    },
+    [storageKey],
+  );
 
   const prevRefreshSig = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -249,9 +260,73 @@ export function PortalCalendarPanels({
     else setAnchorDate((d) => addDays(d, dir));
   };
 
+  const jumpToToday = useCallback(() => {
+    setAnchorDate(new Date(today));
+    setMonthPick({ start: null, end: null });
+  }, [today]);
+
   const shiftAvailabilityWeek = useCallback((dir: -1 | 1) => {
     setAnchorDate((d) => addDays(d, dir * 7));
   }, []);
+
+  const replaceWeekFromPattern = useCallback(
+    (next: Set<string>, sourceWeekDates: Date[], targetWeekDates: Date[]) => {
+      for (const targetDate of targetWeekDates) {
+        const targetDateStr = toLocalDateStr(targetDate);
+        for (const slot of slotRowIndices) {
+          next.delete(dateSlotKey(targetDateStr, slot));
+        }
+      }
+
+      sourceWeekDates.forEach((sourceDate, idx) => {
+        const sourceDateStr = toLocalDateStr(sourceDate);
+        const targetDateStr = toLocalDateStr(targetWeekDates[idx]!);
+        for (const slot of slotRowIndices) {
+          if (activeSlots.has(dateSlotKey(sourceDateStr, slot))) {
+            next.add(dateSlotKey(targetDateStr, slot));
+          }
+        }
+      });
+    },
+    [activeSlots],
+  );
+
+  const copyPreviousWeek = useCallback(() => {
+    const previousWeekDates = fullWeekDates.map((date) => addDays(date, -7));
+    const next = new Set(activeSlots);
+    replaceWeekFromPattern(next, previousWeekDates, fullWeekDates);
+    writeAvailability(next);
+  }, [activeSlots, fullWeekDates, replaceWeekFromPattern, writeAvailability]);
+
+  const applyCurrentWeekToFutureWeeks = useCallback(() => {
+    const weeks = Math.max(1, futureWeekCount);
+    const next = new Set(activeSlots);
+    for (let weekOffset = 1; weekOffset <= weeks; weekOffset += 1) {
+      const targetWeekDates = fullWeekDates.map((date) => addDays(date, weekOffset * 7));
+      replaceWeekFromPattern(next, fullWeekDates, targetWeekDates);
+    }
+    writeAvailability(next);
+  }, [activeSlots, fullWeekDates, futureWeekCount, replaceWeekFromPattern, writeAvailability]);
+
+  const futureWeeksControl = (
+    <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1">
+      <span className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Repeat</span>
+      <select
+        className="h-8 rounded-full border border-slate-200 bg-white px-2 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25"
+        value={String(futureWeekCount)}
+        onChange={(e) => setFutureWeekCount(Number.parseInt(e.target.value, 10) || 4)}
+      >
+        {[1, 2, 4, 8, 12].map((weeks) => (
+          <option key={weeks} value={weeks}>
+            {weeks} week{weeks === 1 ? "" : "s"}
+          </option>
+        ))}
+      </select>
+      <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={applyCurrentWeekToFutureWeeks}>
+        Apply forward
+      </Button>
+    </div>
+  );
 
   if (!storageKey) {
     return (
@@ -298,18 +373,23 @@ export function PortalCalendarPanels({
 
           <div className="flex flex-wrap gap-2 xl:justify-end">
             {timeWindowControl}
+            <Button type="button" variant="outline" className="rounded-full" onClick={jumpToToday}>
+              Today
+            </Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
+              Copy previous week
+            </Button>
+            {futureWeeksControl}
             <Button
               type="button"
               variant="outline"
               className="rounded-full"
               onClick={() => {
-                if (!storageKey) return;
                 const next = new Set(activeSlots);
                 for (const ds of fullWeekDateStrs) {
                   for (const slot of slotRowIndices) next.delete(dateSlotKey(ds, slot));
                 }
-                writeAvailabilityDateSetForStorageKey(next, storageKey);
-                setActiveSlots(next);
+                writeAvailability(next);
               }}
             >
               Clear week
@@ -319,7 +399,6 @@ export function PortalCalendarPanels({
               variant="outline"
               className="rounded-full"
               onClick={() => {
-                if (!storageKey) return;
                 const next = new Set(activeSlots);
                 const templateSlots = [4, 5, 6, 12, 13];
                 for (const ds of fullWeekDateStrs) {
@@ -327,8 +406,7 @@ export function PortalCalendarPanels({
                     if (s >= SLOT_ROW_START && s <= SLOT_ROW_END) next.add(dateSlotKey(ds, s));
                   }
                 }
-                writeAvailabilityDateSetForStorageKey(next, storageKey);
-                setActiveSlots(next);
+                writeAvailability(next);
               }}
             >
               Apply template
@@ -417,6 +495,9 @@ export function PortalCalendarPanels({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white p-0.5">
+              <Button type="button" variant="outline" className="h-9 rounded-full px-3 text-xs" onClick={jumpToToday}>
+                Today
+              </Button>
               <Button type="button" variant="outline" className="h-9 rounded-full px-3 text-xs" onClick={() => shiftAnchor(-1)}>
                 ←
               </Button>
@@ -437,6 +518,7 @@ export function PortalCalendarPanels({
               {viewMode === "month" ? monthBlocksCount : meetings.length} blocks
             </div>
             {viewMode !== "month" ? timeWindowControl : null}
+            {viewMode !== "month" ? futureWeeksControl : null}
           </div>
         </div>
       </div>
@@ -576,6 +658,14 @@ export function PortalCalendarPanels({
               type="button"
               variant="outline"
               className="h-9 shrink-0 rounded-full px-3 text-sm"
+              onClick={jumpToToday}
+            >
+              Today
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 rounded-full px-3 text-sm"
               onClick={() => shiftAvailabilityWeek(-1)}
               aria-label="Previous week"
             >
@@ -598,6 +688,12 @@ export function PortalCalendarPanels({
         <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open slots</div>
       </div>
       <div className="mt-3">{timeWindowControl}</div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
+          Copy previous week
+        </Button>
+        {futureWeeksControl}
+      </div>
 
       <div
         className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3"
@@ -652,15 +748,13 @@ export function PortalCalendarPanels({
           variant="outline"
           className="rounded-full"
           onClick={() => {
-            if (!storageKey) return;
             const next = new Set(activeSlots);
             for (const ds of fullWeekDateStrs) {
               for (const slot of slotRowIndices) {
                 next.delete(dateSlotKey(ds, slot));
               }
             }
-            writeAvailabilityDateSetForStorageKey(next, storageKey);
-            setActiveSlots(next);
+            writeAvailability(next);
           }}
         >
           Clear this week
@@ -670,7 +764,6 @@ export function PortalCalendarPanels({
           variant="outline"
           className="rounded-full"
           onClick={() => {
-            if (!storageKey) return;
             const next = new Set(activeSlots);
             const templateSlots = [4, 5, 6, 12, 13];
             for (const ds of fullWeekDateStrs) {
@@ -680,8 +773,7 @@ export function PortalCalendarPanels({
                 }
               }
             }
-            writeAvailabilityDateSetForStorageKey(next, storageKey);
-            setActiveSlots(next);
+            writeAvailability(next);
           }}
         >
           Apply template
