@@ -231,12 +231,18 @@ export function isStartInsideAvailability(isoStart: string): boolean {
 
 export type PartnerInquiryStatus = "pending" | "accepted" | "declined";
 
+export type PartnerInquiryWindow = {
+  start: string;
+  end: string;
+};
+
 export type PartnerInquiry = {
   id: string;
   name: string;
   email: string;
   phone: string;
   notes: string;
+  requestedWindows?: PartnerInquiryWindow[];
   proposedStart: string;
   proposedEnd: string;
   status: PartnerInquiryStatus;
@@ -260,8 +266,12 @@ export function readPartnerInquiries(): PartnerInquiry[] {
 
 export function appendPartnerInquiry(payload: Omit<PartnerInquiry, "id" | "status" | "createdAt">) {
   const rows = readPartnerInquiries();
+  const normalizedWindows = normalizePartnerInquiryWindows(payload);
   const row: PartnerInquiry = {
     ...payload,
+    requestedWindows: normalizedWindows,
+    proposedStart: normalizedWindows[0]?.start ?? payload.proposedStart,
+    proposedEnd: normalizedWindows[0]?.end ?? payload.proposedEnd,
     id: crypto.randomUUID(),
     status: "pending",
     createdAt: new Date().toISOString(),
@@ -275,7 +285,14 @@ export function updatePartnerInquiry(id: string, patch: Partial<PartnerInquiry>)
   const idx = rows.findIndex((r) => r.id === id);
   if (idx === -1) return false;
   const next = [...rows];
-  next[idx] = { ...next[idx]!, ...patch };
+  const merged = { ...next[idx]!, ...patch };
+  const normalizedWindows = normalizePartnerInquiryWindows(merged);
+  next[idx] = {
+    ...merged,
+    requestedWindows: normalizedWindows,
+    proposedStart: normalizedWindows[0]?.start ?? merged.proposedStart,
+    proposedEnd: normalizedWindows[0]?.end ?? merged.proposedEnd,
+  };
   writeJson(INQ_KEY, next);
   return true;
 }
@@ -331,6 +348,19 @@ export function declinePartnerInquiry(id: string) {
   return updatePartnerInquiry(id, { status: "declined" });
 }
 
+export function getPartnerInquiryWindows(row: PartnerInquiry): PartnerInquiryWindow[] {
+  return normalizePartnerInquiryWindows(row);
+}
+
+export function formatPartnerInquiryWindowsLabel(row: PartnerInquiry) {
+  const windows = getPartnerInquiryWindows(row);
+  if (windows.length === 0) return "—";
+  if (windows.length === 1) {
+    return formatRangeLabel(windows[0]!.start, windows[0]!.end);
+  }
+  return `${windows.length} requested windows`;
+}
+
 export function formatRangeLabel(isoStart: string, isoEnd: string) {
   try {
     const a = new Date(isoStart);
@@ -341,4 +371,33 @@ export function formatRangeLabel(isoStart: string, isoEnd: string) {
   } catch {
     return "—";
   }
+}
+
+function normalizePartnerInquiryWindows(row: Pick<PartnerInquiry, "requestedWindows" | "proposedStart" | "proposedEnd">) {
+  const requested = Array.isArray(row.requestedWindows)
+    ? row.requestedWindows
+        .filter(
+          (window) =>
+            typeof window?.start === "string" &&
+            typeof window?.end === "string" &&
+            !Number.isNaN(new Date(window.start).getTime()) &&
+            !Number.isNaN(new Date(window.end).getTime()),
+        )
+        .map((window) => ({ start: window.start, end: window.end }))
+    : [];
+
+  if (requested.length > 0) {
+    return requested.sort((a, b) => a.start.localeCompare(b.start));
+  }
+
+  if (
+    typeof row.proposedStart === "string" &&
+    typeof row.proposedEnd === "string" &&
+    !Number.isNaN(new Date(row.proposedStart).getTime()) &&
+    !Number.isNaN(new Date(row.proposedEnd).getTime())
+  ) {
+    return [{ start: row.proposedStart, end: row.proposedEnd }];
+  }
+
+  return [];
 }

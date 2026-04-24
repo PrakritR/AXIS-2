@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
   appendPartnerInquiry,
@@ -62,7 +61,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
+  const [selectedSlotKeys, setSelectedSlotKeys] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -86,14 +85,32 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   const selectedDateStr =
     selectedDay != null ? dateStrFromCalendar(calYear, calMonth, selectedDay) : null;
   const openSlots = selectedDateStr ? getOpenSlotIndicesForDateStr(selectedDateStr) : [];
+  const selectedWindows = useMemo(
+    () =>
+      selectedSlotKeys
+        .map((key) => {
+          const [dateStr, slotText] = key.split(":");
+          const slotIndex = Number.parseInt(slotText ?? "", 10);
+          if (!dateStr || !Number.isFinite(slotIndex)) return null;
+          return {
+            key,
+            dateStr,
+            slotIndex,
+            start: localDateAtSlotStart(dateStr, slotIndex),
+          };
+        })
+        .filter((window): window is { key: string; dateStr: string; slotIndex: number; start: Date } => Boolean(window))
+        .sort((a, b) => a.start.getTime() - b.start.getTime()),
+    [selectedSlotKeys],
+  );
 
-  const canContinue = selectedDateStr != null && selectedSlotIndex != null;
+  const canContinue = selectedWindows.length > 0;
   const daysInMonth = getDaysInMonth(calYear, calMonth);
   const firstDay = getFirstDayOfMonth(calYear, calMonth);
 
   const resetPickers = () => {
     setSelectedDay(null);
-    setSelectedSlotIndex(null);
+    setSelectedSlotKeys([]);
   };
 
   const submit = () => {
@@ -103,21 +120,27 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
       showToast("Please enter your name and email.");
       return;
     }
-    if (selectedDateStr == null || selectedSlotIndex == null) {
-      showToast("Please go back and choose a time.");
+    if (selectedWindows.length === 0) {
+      showToast("Please go back and choose at least one time.");
       return;
     }
-    const start = localDateAtSlotStart(selectedDateStr, selectedSlotIndex);
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const requestedWindows = selectedWindows.map((window) => {
+      const end = new Date(window.start.getTime() + 30 * 60 * 1000);
+      return {
+        start: window.start.toISOString(),
+        end: end.toISOString(),
+      };
+    });
     appendPartnerInquiry({
       name: n,
       email: em,
       phone: phone.trim(),
       notes: notes.trim(),
-      proposedStart: start.toISOString(),
-      proposedEnd: end.toISOString(),
+      requestedWindows,
+      proposedStart: requestedWindows[0]!.start,
+      proposedEnd: requestedWindows[0]!.end,
     });
-    showToast("Request sent. You will receive a confirmation once our team accepts the slot.");
+    showToast("Request sent. Your proposed windows are now in the Axis calendar.");
     setStep(1);
     setName("");
     setEmail("");
@@ -125,6 +148,13 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
     setNotes("");
     resetPickers();
     bump();
+  };
+
+  const toggleSlot = (dateStr: string, slotIndex: number) => {
+    const key = `${dateStr}:${slotIndex}`;
+    setSelectedSlotKeys((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
   };
 
   const steps = [
@@ -172,7 +202,8 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
               </p>
             ) : (
               <p className="text-sm text-slate-600">
-                Only highlighted days and times match what your Axis contact published in the admin portal.
+                Pick one or more 30-minute windows that work for you. Only highlighted days and times match what
+                your Axis contact published in the admin portal.
               </p>
             )}
 
@@ -233,7 +264,6 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                       disabled={!open || isPast}
                       onClick={() => {
                         setSelectedDay(day);
-                        setSelectedSlotIndex(null);
                       }}
                       className={`aspect-square rounded-xl text-sm font-medium transition-all ${
                         isSelected
@@ -259,34 +289,81 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                   <p className="text-sm text-slate-500">No open half-hour blocks on this day.</p>
                 ) : (
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-                    {openSlots.map((slotIndex) => (
+                    {openSlots.map((slotIndex) => {
+                      const slotKey = `${selectedDateStr}:${slotIndex}`;
+                      const isSelected = selectedSlotKeys.includes(slotKey);
+                      return (
                       <button
                         key={slotIndex}
                         type="button"
-                        onClick={() => setSelectedSlotIndex(slotIndex)}
+                        onClick={() => toggleSlot(selectedDateStr, slotIndex)}
                         className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
-                          selectedSlotIndex === slotIndex
+                          isSelected
                             ? "border-primary bg-primary text-white"
                             : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
                         }`}
                       >
                         {formatAvailabilitySlotLabel(slotIndex)}
                       </button>
-                    ))}
+                    );
+                    })}
                   </div>
                 )}
+              </div>
+            ) : null}
+
+            {selectedWindows.length > 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-800">
+                    {selectedWindows.length} requested {selectedWindows.length === 1 ? "window" : "windows"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSlotKeys([])}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+                  >
+                    Clear all
+                  </button>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedWindows.map((window) => (
+                    <button
+                      key={window.key}
+                      type="button"
+                      onClick={() => toggleSlot(window.dateStr, window.slotIndex)}
+                      className="rounded-full border border-primary/20 bg-primary/[0.08] px-3 py-1.5 text-xs font-semibold text-primary"
+                    >
+                      {window.start.toLocaleDateString(undefined, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                      })}{" "}
+                      · {formatAvailabilitySlotLabel(window.slotIndex)} ×
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
           </div>
         ) : (
           <div className="space-y-5">
-            {selectedDateStr != null && selectedSlotIndex != null ? (
+            {selectedWindows.length > 0 ? (
               <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm">
-                <p className="font-semibold text-slate-800">Selected time</p>
-                <p className="mt-0.5 text-slate-600">
-                  {MONTHS[calMonth]} {selectedDay}, {calYear} · {formatAvailabilitySlotLabel(selectedSlotIndex)} (
-                  one hour hold)
-                </p>
+                <p className="font-semibold text-slate-800">Requested windows</p>
+                <div className="mt-2 space-y-1 text-slate-600">
+                  {selectedWindows.map((window) => (
+                    <p key={window.key}>
+                      {window.start.toLocaleDateString(undefined, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}{" "}
+                      · {formatAvailabilitySlotLabel(window.slotIndex)}–{formatAvailabilitySlotLabel(window.slotIndex + 1)}
+                    </p>
+                  ))}
+                </div>
               </div>
             ) : null}
 

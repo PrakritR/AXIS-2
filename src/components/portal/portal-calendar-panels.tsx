@@ -8,9 +8,13 @@ import {
   dateHasAvailability,
   dateSlotKey,
   formatAvailabilitySlotLabel,
+  getPartnerInquiryWindows,
+  readPartnerInquiries,
+  readPlannedEvents,
   readAvailabilityDateSetForStorageKey,
   startOfWeekMonday,
   toLocalDateStr,
+  ADMIN_AVAILABILITY_STORAGE_KEY,
   writeAvailabilityDateSetForStorageKey,
 } from "@/lib/demo-admin-scheduling";
 
@@ -71,11 +75,13 @@ function formatNavTitle(anchor: Date, mode: CalendarMode): string {
 }
 
 type DemoMeeting = {
+  id: string;
   dateStr: string;
   startSlot: number;
   span: number;
   title: string;
   color: string;
+  statusLabel?: string;
 };
 
 const slotRowIndices = Array.from(
@@ -138,7 +144,45 @@ export function PortalCalendarPanels({
   );
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
 
-  const meetings = useMemo<DemoMeeting[]>(() => [], []);
+  const meetings = useMemo<DemoMeeting[]>(() => {
+    if (storageKey !== ADMIN_AVAILABILITY_STORAGE_KEY) return [];
+
+    const planned = readPlannedEvents().map((event) => {
+      const start = new Date(event.start);
+      const end = new Date(event.end);
+      const mins = Math.max(30, end.getTime() - start.getTime());
+      return {
+        id: `planned-${event.id}`,
+        dateStr: toLocalDateStr(start),
+        startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes() - 8 * 60) / 30)),
+        span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
+        title: event.title,
+        color: "border-sky-300 bg-sky-100 text-sky-950",
+        statusLabel: "Confirmed",
+      } satisfies DemoMeeting;
+    });
+
+    const pending = readPartnerInquiries()
+      .filter((row) => row.status === "pending")
+      .flatMap((row) =>
+        getPartnerInquiryWindows(row).map((window, index) => {
+          const start = new Date(window.start);
+          const end = new Date(window.end);
+          const mins = Math.max(30, end.getTime() - start.getTime());
+          return {
+            id: `inquiry-${row.id}-${index}`,
+            dateStr: toLocalDateStr(start),
+            startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes() - 8 * 60) / 30)),
+            span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
+            title: `${row.name} request`,
+            color: "border-amber-300 bg-amber-100 text-amber-950",
+            statusLabel: "Requested",
+          } satisfies DemoMeeting;
+        }),
+      );
+
+    return [...planned, ...pending];
+  }, [storageKey, activeSlots, calendarRefreshSignal]);
 
   const monthYear = anchorDate.getFullYear();
   const monthIndex = anchorDate.getMonth();
@@ -211,6 +255,16 @@ export function PortalCalendarPanels({
     }
     return n;
   }, [activeSlots, fullWeekDateStrs]);
+
+  const meetingBySlotKey = useMemo(() => {
+    const map = new Map<string, DemoMeeting>();
+    for (const meeting of meetings) {
+      for (let offset = 0; offset < meeting.span; offset += 1) {
+        map.set(dateSlotKey(meeting.dateStr, meeting.startSlot + offset), meeting);
+      }
+    }
+    return map;
+  }, [meetings]);
 
   const timeWindowControl = (
     <div className="flex flex-wrap items-center gap-2">
@@ -450,6 +504,8 @@ export function PortalCalendarPanels({
                   {fullWeekDateStrs.map((ds) => {
                     const key = dateSlotKey(ds, slotIdx);
                     const active = activeSlots.has(key);
+                    const meeting = meetingBySlotKey.get(key);
+                    const isMeetingStart = meeting?.startSlot === slotIdx;
                     return (
                       <button
                         key={key}
@@ -464,13 +520,27 @@ export function PortalCalendarPanels({
                         }}
                         onMouseUp={() => setDragMode(null)}
                         className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
-                          active
+                          meeting
+                            ? `${meeting.color} ring-1 ring-inset`
+                            : active
                             ? "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300"
                             : "bg-white text-transparent hover:bg-primary/[0.07] hover:text-primary"
                         }`}
                         aria-label={`${active ? "Close" : "Open"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
                       >
-                        {active ? "Open" : "Add"}
+                        {meeting ? (
+                          isMeetingStart ? (
+                            <span className="block truncate">
+                              {meeting.statusLabel}: {meeting.title}
+                            </span>
+                          ) : (
+                            <span className="block truncate opacity-70">{meeting.statusLabel}</span>
+                          )
+                        ) : active ? (
+                          "Open"
+                        ) : (
+                          "Add"
+                        )}
                       </button>
                     );
                   })}
