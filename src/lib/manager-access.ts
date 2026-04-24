@@ -126,6 +126,20 @@ export async function getManagerSubscriptionTier(userId: string): Promise<"free"
   }
 }
 
+export async function getManagerSubscriptionTierByManagerId(managerId: string): Promise<"free" | "paid" | null> {
+  const normalized = managerId.trim();
+  if (!normalized) return null;
+  try {
+    const supabase = createSupabaseServiceRoleClient();
+    const { data } = await supabase.from("manager_purchases").select("tier").eq("manager_id", normalized).maybeSingle();
+    if (!data?.tier) return null;
+    if (String(data.tier).toLowerCase() === "free") return "free";
+    return "paid";
+  } catch {
+    return null;
+  }
+}
+
 /** Raw tier + billing from manager_purchases (service role). */
 export async function getManagerPurchaseSku(userId: string): Promise<{
   tier: string | null;

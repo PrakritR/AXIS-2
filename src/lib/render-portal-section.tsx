@@ -36,8 +36,8 @@ import type { ReactNode } from "react";
 import type { PreviewPortal } from "@/lib/auth/preview-types";
 import { getPortalAccessContext } from "@/lib/auth/portal-access";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
-import { getManagerSubscriptionTier, managerSectionAllowedForTier } from "@/lib/manager-access";
-import { residentHasFullPortalAccess } from "@/lib/resident-portal-access";
+import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId, managerSectionAllowedForTier } from "@/lib/manager-access";
+import { residentHasFullPortalAccess, residentHasPaymentsPortalAccess } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
@@ -75,12 +75,25 @@ export async function renderPortalSection(
   }
 
   const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
+  const residentManagerTier =
+    kind === "resident" && residentCtx?.profile?.manager_id?.trim()
+      ? await getManagerSubscriptionTierByManagerId(residentCtx.profile.manager_id.trim())
+      : null;
+  const residentPaymentsUnlocked =
+    kind === "resident"
+      ? residentHasPaymentsPortalAccess({
+          applicationApproved: residentCtx?.profile?.application_approved ?? false,
+          role: residentCtx?.profile?.role,
+          email: residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null,
+        })
+      : false;
   const residentWorkspaceUnlocked =
     kind === "resident"
       ? residentHasFullPortalAccess({
           applicationApproved: residentCtx?.profile?.application_approved ?? false,
           role: residentCtx?.profile?.role,
           email: residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null,
+          managerSubscriptionTier: residentManagerTier,
         })
       : false;
   const meta = findSection(def, section);
@@ -370,6 +383,7 @@ export async function renderPortalSection(
         displayName={profile?.full_name ?? profile?.email ?? "Resident"}
         residentEmail={profile?.email ?? residentCtx?.user?.email ?? ""}
         residentUserId={profile?.id ?? residentCtx?.user?.id ?? null}
+        managerSubscriptionTier={residentManagerTier}
       />
     );
   }
@@ -390,7 +404,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident") {
-    if (residentWorkspaceUnlocked) {
+    if (residentWorkspaceUnlocked || (residentPaymentsUnlocked && section === "payments")) {
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentLeasePanel />;
       if (section === "payments") return <ResidentPaymentsPanel />;

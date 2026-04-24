@@ -47,6 +47,7 @@ export function ResidentDashboard({
   displayName = "Resident",
   residentEmail = "",
   residentUserId = null,
+  managerSubscriptionTier = null,
 }: {
   applicationApproved?: boolean;
   /** Shown when full portal is unlocked via env allowlist but DB approval is still false. */
@@ -54,6 +55,7 @@ export function ResidentDashboard({
   displayName?: string;
   residentEmail?: string;
   residentUserId?: string | null;
+  managerSubscriptionTier?: "free" | "paid" | null;
 }) {
   const email = residentEmail.trim().toLowerCase();
   const [applicationStatus, setApplicationStatus] = useState<ResidentApplicationStatus>(applicationApproved ? "approved" : "pending");
@@ -63,6 +65,7 @@ export function ResidentDashboard({
   const [balanceDue, setBalanceDue] = useState("—");
   const openWorkOrders = 0;
   const inboxUnread = 0;
+  const managerIsFree = managerSubscriptionTier === "free";
 
   useEffect(() => {
     const sync = () => {
@@ -119,7 +122,13 @@ export function ResidentDashboard({
       return {
         tone: statusTone("approved"),
         title: "Resident portal active",
-        body: applicationProperty ? `${displayName} is approved for ${applicationProperty}.` : `${displayName} is approved and can use the full resident portal.`,
+        body: managerIsFree
+          ? applicationProperty
+            ? `${displayName} is approved for ${applicationProperty}. Payments are available now. Lease and work orders stay hidden on the manager's Free plan.`
+            : `${displayName} is approved. Payments are available now. Lease and work orders stay hidden on the manager's Free plan.`
+          : applicationProperty
+            ? `${displayName} is approved for ${applicationProperty}.`
+            : `${displayName} is approved and can use the full resident portal.`,
       };
     }
 
@@ -138,7 +147,7 @@ export function ResidentDashboard({
         ? `Your application fee (${pendingFeeLabel}) is still pending confirmation. Your manager must mark it paid and approve the application before the full resident portal unlocks.`
         : "Your application has been submitted and is still pending manager review. Full resident portal access unlocks after approval.",
     };
-  }, [applicationProperty, applicationStatus, displayName, pendingFeeLabel, showTestAccessNote]);
+  }, [applicationProperty, applicationStatus, displayName, managerIsFree, pendingFeeLabel, showTestAccessNote]);
 
   if (applicationStatus === "approved") {
     return (
@@ -166,19 +175,10 @@ export function ResidentDashboard({
             </Link>
           </p>
         ) : null}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={`grid gap-3 sm:grid-cols-2 ${managerIsFree ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
           <StatCard label="Account status">
             <p className="text-lg font-semibold text-slate-900">Active</p>
             <p className="mt-1 text-sm text-slate-500">Resident access is live.</p>
-          </StatCard>
-          <StatCard label="Lease">
-            <p className="text-lg font-semibold text-slate-900">Active</p>
-            <Link
-              href="/resident/lease"
-              className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
-            >
-              Open
-            </Link>
           </StatCard>
           <StatCard label="Payment due">
             <p className="text-lg font-semibold tabular-nums text-slate-900">{balanceDue}</p>
@@ -189,15 +189,28 @@ export function ResidentDashboard({
               Open
             </Link>
           </StatCard>
-          <StatCard label="Work orders">
-            <p className="text-lg font-semibold text-slate-900">{openWorkOrders} open</p>
-            <Link
-              href="/resident/work-orders"
-              className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
-            >
-              Open
-            </Link>
-          </StatCard>
+          {!managerIsFree ? (
+            <StatCard label="Lease">
+              <p className="text-lg font-semibold text-slate-900">Active</p>
+              <Link
+                href="/resident/lease"
+                className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
+              >
+                Open
+              </Link>
+            </StatCard>
+          ) : null}
+          {!managerIsFree ? (
+            <StatCard label="Work orders">
+              <p className="text-lg font-semibold text-slate-900">{openWorkOrders} open</p>
+              <Link
+                href="/resident/work-orders"
+                className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
+              >
+                Open
+              </Link>
+            </StatCard>
+          ) : null}
           <StatCard label="Home" muted>
             <p className="text-sm font-medium text-slate-800">{applicationProperty ?? "Your unit"}</p>
           </StatCard>
