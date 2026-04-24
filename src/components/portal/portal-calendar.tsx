@@ -1,23 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
-import { demoManagerHouseRows } from "@/data/demo-portal";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
   managerPropertyAvailabilityStorageKey,
 } from "@/lib/demo-admin-scheduling";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { ensureAccountListingSeeds } from "@/lib/account-listing-seeds";
+import { readExtraListingsForUser, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 
 const selectClassName =
   "h-10 min-w-[12rem] max-w-full rounded-full border border-slate-200/90 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25";
 
 function ManagerCalendarPropertyFilter({
+  properties,
   value,
   onChange,
 }: {
+  properties: { id: string; name: string }[];
   value: string;
   onChange: (propertyId: string) => void;
 }) {
@@ -34,7 +37,7 @@ function ManagerCalendarPropertyFilter({
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">Select a house</option>
-          {demoManagerHouseRows.map((p) => (
+          {properties.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
@@ -51,9 +54,47 @@ function ManagerCalendarPropertyFilter({
 }
 
 export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
-  const { userId, ready: authReady } = useManagerUserId();
+  const { userId, email, ready: authReady } = useManagerUserId();
   const [calendarRefreshSignal, setCalendarRefreshSignal] = useState(0);
   const [calendarPropertyId, setCalendarPropertyId] = useState<string>("");
+  const [propertyTick, setPropertyTick] = useState(0);
+
+  useEffect(() => {
+    if (portal !== "manager" || !userId || !email) return;
+    if (ensureAccountListingSeeds(userId, email)) {
+      setPropertyTick((n) => n + 1);
+    }
+  }, [portal, userId, email]);
+
+  useEffect(() => {
+    if (portal !== "manager") return;
+    const bump = () => setPropertyTick((n) => n + 1);
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
+      window.removeEventListener("storage", bump);
+    };
+  }, [portal]);
+
+  const managerProperties = useMemo(() => {
+    if (portal !== "manager" || !userId) return [];
+    void propertyTick;
+    return readExtraListingsForUser(userId)
+      .map((property) => ({
+        id: property.id,
+        name: property.title?.trim() || property.buildingName?.trim() || property.address?.trim() || property.id,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }, [portal, userId, propertyTick]);
+
+  useEffect(() => {
+    if (portal !== "manager") return;
+    if (!calendarPropertyId) return;
+    if (!managerProperties.some((property) => property.id === calendarPropertyId)) {
+      setCalendarPropertyId("");
+    }
+  }, [portal, calendarPropertyId, managerProperties]);
 
   const storageKey = useMemo(() => {
     if (portal === "admin") return ADMIN_AVAILABILITY_STORAGE_KEY;
@@ -65,9 +106,9 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   const tourScopeLabel = useMemo(() => {
     if (portal !== "manager") return undefined;
     if (!calendarPropertyId) return undefined;
-    const name = demoManagerHouseRows.find((p) => p.id === calendarPropertyId)?.name;
+    const name = managerProperties.find((p) => p.id === calendarPropertyId)?.name;
     return name ? `Tours · ${name}` : undefined;
-  }, [portal, calendarPropertyId]);
+  }, [portal, calendarPropertyId, managerProperties]);
 
   const reloadAvailability = () => setCalendarRefreshSignal((n) => n + 1);
 
@@ -81,7 +122,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
           </Button>
         }
         filterRow={
-          <ManagerCalendarPropertyFilter value={calendarPropertyId} onChange={setCalendarPropertyId} />
+          <ManagerCalendarPropertyFilter properties={managerProperties} value={calendarPropertyId} onChange={setCalendarPropertyId} />
         }
       >
         <p className="text-sm text-slate-500">Loading calendar…</p>
@@ -98,7 +139,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
           </Button>
         }
         filterRow={
-          <ManagerCalendarPropertyFilter value={calendarPropertyId} onChange={setCalendarPropertyId} />
+          <ManagerCalendarPropertyFilter properties={managerProperties} value={calendarPropertyId} onChange={setCalendarPropertyId} />
         }
       >
         <p className="text-sm text-slate-600">Sign in to manage your availability.</p>
@@ -116,7 +157,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
       }
       filterRow={
         portal === "manager" ? (
-          <ManagerCalendarPropertyFilter value={calendarPropertyId} onChange={setCalendarPropertyId} />
+          <ManagerCalendarPropertyFilter properties={managerProperties} value={calendarPropertyId} onChange={setCalendarPropertyId} />
         ) : undefined
       }
     >
