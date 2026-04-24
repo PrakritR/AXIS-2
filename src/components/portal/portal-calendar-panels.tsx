@@ -16,9 +16,9 @@ import {
 
 type CalendarMode = "day" | "week" | "month";
 
-/** Half-hour slots shown in the grid (9:00–17:30 local); matches demo slot indexing from 8:00. */
-const SLOT_ROW_START = 2;
-const SLOT_ROW_END = 18;
+/** Half-hour slots shown in the grid (8:00–19:30 local); matches demo slot indexing from 8:00. */
+const SLOT_ROW_START = 0;
+const SLOT_ROW_END = 23;
 
 function addDays(d: Date, n: number): Date {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
@@ -83,6 +83,14 @@ const slotRowIndices = Array.from(
   (_, i) => SLOT_ROW_START + i,
 );
 
+function formatSlotEndLabel(slotIndexExclusive: number): string {
+  const mins = 8 * 60 + slotIndexExclusive * 30;
+  const h24 = Math.floor(mins / 60);
+  const m = mins % 60;
+  const d = new Date(2000, 0, 1, h24, m);
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
 /**
  * Manager + admin shared calendar: schedule card (day/week/month) + availability paint grid.
  * `storageKey` must be non-null for reads/writes (caller handles manager auth).
@@ -114,6 +122,8 @@ export function PortalCalendarPanels({
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [activeSlots, setActiveSlots] = useState<Set<string>>(() => new Set());
   const [dragMode, setDragMode] = useState<"add" | "remove" | null>(null);
+  const [visibleStartSlot, setVisibleStartSlot] = useState(0);
+  const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(24);
 
   useEffect(() => {
     if (!storageKey) return;
@@ -144,6 +154,11 @@ export function PortalCalendarPanels({
     }
     return n;
   }, [monthYear, monthIndex, activeSlots]);
+
+  const visibleSlotIndices = useMemo(
+    () => slotRowIndices.filter((slot) => slot >= visibleStartSlot && slot < visibleEndSlotExclusive),
+    [visibleEndSlotExclusive, visibleStartSlot],
+  );
 
   const applySlot = useCallback(
     (key: string, mode: "add" | "remove") => {
@@ -185,6 +200,48 @@ export function PortalCalendarPanels({
     }
     return n;
   }, [activeSlots, fullWeekDateStrs]);
+
+  const timeWindowControl = (
+    <div className="flex flex-wrap items-center gap-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Show</p>
+      <select
+        className="h-9 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25"
+        value={String(visibleStartSlot)}
+        onChange={(e) => {
+          const nextStart = Number.parseInt(e.target.value, 10);
+          if (!Number.isFinite(nextStart)) return;
+          setVisibleStartSlot(nextStart);
+          setVisibleEndSlotExclusive((current) => (current <= nextStart ? Math.min(nextStart + 1, 24) : current));
+        }}
+      >
+        {slotRowIndices.map((slot) => (
+          <option key={`start-${slot}`} value={slot}>
+            {formatAvailabilitySlotLabel(slot)}
+          </option>
+        ))}
+      </select>
+      <span className="text-sm font-medium text-slate-500">to</span>
+      <select
+        className="h-9 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25"
+        value={String(visibleEndSlotExclusive)}
+        onChange={(e) => {
+          const nextEnd = Number.parseInt(e.target.value, 10);
+          if (!Number.isFinite(nextEnd)) return;
+          setVisibleEndSlotExclusive(nextEnd);
+          setVisibleStartSlot((current) => (current >= nextEnd ? Math.max(0, nextEnd - 1) : current));
+        }}
+      >
+        {slotRowIndices
+          .map((slot) => slot + 1)
+          .filter((slot) => slot > visibleStartSlot)
+          .map((slot) => (
+            <option key={`end-${slot}`} value={slot}>
+              {formatSlotEndLabel(slot)}
+            </option>
+          ))}
+      </select>
+    </div>
+  );
 
   const shiftAnchor = (dir: -1 | 1) => {
     if (viewMode === "month") setAnchorDate((d) => addMonths(d, dir));
@@ -240,6 +297,7 @@ export function PortalCalendarPanels({
           </div>
 
           <div className="flex flex-wrap gap-2 xl:justify-end">
+            {timeWindowControl}
             <Button
               type="button"
               variant="outline"
@@ -291,7 +349,7 @@ export function PortalCalendarPanels({
               <div className="bg-slate-50 px-2 py-2 font-bold uppercase tracking-[0.12em] text-slate-400">Time</div>
               {fullWeekDates.map((d) => {
                 const ds = toLocalDateStr(d);
-                const count = slotRowIndices.reduce(
+                const count = visibleSlotIndices.reduce(
                   (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
                   0,
                 );
@@ -306,7 +364,7 @@ export function PortalCalendarPanels({
                 );
               })}
 
-              {slotRowIndices.map((slotIdx) => (
+              {visibleSlotIndices.map((slotIdx) => (
                 <Fragment key={slotIdx}>
                   <div className="flex min-h-9 items-center bg-white px-2 font-semibold text-slate-500">
                     {formatAvailabilitySlotLabel(slotIdx)}
@@ -378,6 +436,7 @@ export function PortalCalendarPanels({
             <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600">
               {viewMode === "month" ? monthBlocksCount : meetings.length} blocks
             </div>
+            {viewMode !== "month" ? timeWindowControl : null}
           </div>
         </div>
       </div>
@@ -438,7 +497,7 @@ export function PortalCalendarPanels({
                     <p className="text-xs text-slate-500">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
                   </div>
                   <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-px bg-slate-100">
-                    {slotRowIndices.map((slotIdx) => {
+                    {visibleSlotIndices.map((slotIdx) => {
                       const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
                       return (
                         <Fragment key={`${ds}-${slotIdx}`}>
@@ -474,7 +533,7 @@ export function PortalCalendarPanels({
                 {anchorDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
               </p>
             </div>
-            {slotRowIndices.map((slotIdx) => {
+            {visibleSlotIndices.map((slotIdx) => {
               const ds = toLocalDateStr(anchorDate);
               const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
               return (
@@ -538,6 +597,7 @@ export function PortalCalendarPanels({
         </div>
         <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open slots</div>
       </div>
+      <div className="mt-3">{timeWindowControl}</div>
 
       <div
         className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3"
@@ -553,7 +613,7 @@ export function PortalCalendarPanels({
                 <p className="text-xs font-semibold text-slate-500">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                {slotRowIndices.map((slotIdx) => {
+                {visibleSlotIndices.map((slotIdx) => {
                   const key = dateSlotKey(ds, slotIdx);
                   const active = activeSlots.has(key);
                   return (
