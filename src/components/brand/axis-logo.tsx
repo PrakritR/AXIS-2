@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { useId } from "react";
 
 const markTileClass =
-  "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-sky-200/90 bg-[linear-gradient(165deg,#f0f9ff_0%,#e0f2fe_42%,#dbeafe_100%)] shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_8px_22px_rgba(56,146,255,0.18)]";
+  "flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-slate-200/90 bg-white/92 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.2)]";
 
 export type AxisLogoVariant = "default" | "portalHeader" | "adminHeader";
 
@@ -31,9 +31,9 @@ function AxisLogoGlyph({ className = "" }: { className?: string }) {
           y2="18.75"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0%" stopColor="#e0f2fe" />
-          <stop offset="45%" stopColor="#7dd3fc" />
-          <stop offset="100%" stopColor="#007aff" />
+          <stop offset="0%" stopColor="#8fc3ff" />
+          <stop offset="45%" stopColor="#4da3ff" />
+          <stop offset="100%" stopColor="#0a84ff" />
         </linearGradient>
       </defs>
       {/* A */}
@@ -84,7 +84,7 @@ export function AxisHeaderMarkTile({ children, className = "" }: { children: Rea
 export function AxisLogoMarkSoft({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-sky-200/80 bg-[linear-gradient(165deg,#f8fcff_0%,#e8f4ff_50%,#dff0ff_100%)] shadow-[0_1px_0_rgba(255,255,255,0.95)_inset,0_6px_18px_rgba(56,146,255,0.14)] ${className}`}
+      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-slate-200/80 bg-white/95 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.16)] ${className}`}
       aria-hidden
     >
       <AxisLogoGlyph />
@@ -95,7 +95,7 @@ export function AxisLogoMarkSoft({ className = "" }: { className?: string }) {
 export function AxisLogoWordmark() {
   return (
     <span className="leading-[1.08]">
-      <span className="block text-[16px] font-bold tracking-tight text-[#0f172a]">AXIS</span>
+      <span className="block text-[16px] font-semibold tracking-[-0.03em] text-[#0f172a]">AXIS</span>
       <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Housing</span>
     </span>
   );

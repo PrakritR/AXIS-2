@@ -4,15 +4,15 @@ type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline";
 
 const variants: Record<Variant, string> = {
   primary:
-    "text-white shadow-[0_4px_18px_rgba(0,122,255,0.24)] hover:shadow-[0_8px_26px_-8px_rgba(0,122,255,0.44)] hover:brightness-[1.03] active:scale-[0.99] active:brightness-[0.98]",
+    "text-white shadow-[0_10px_30px_-18px_rgba(10,132,255,0.65)] hover:bg-[#0077ed] hover:shadow-[0_16px_36px_-20px_rgba(10,132,255,0.55)] active:scale-[0.99]",
   secondary:
-    "bg-slate-950 text-white shadow-sm hover:bg-slate-800 hover:shadow-md active:scale-[0.99]",
+    "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.6)] hover:bg-slate-800 active:scale-[0.99]",
   ghost:
-    "bg-transparent text-primary hover:bg-primary/[0.08] active:scale-[0.99]",
+    "bg-transparent text-slate-700 hover:bg-slate-100 hover:text-slate-950 active:scale-[0.99]",
   danger:
-    "bg-danger text-white shadow-sm hover:bg-red-500 hover:shadow-md active:scale-[0.99]",
+    "bg-danger text-white shadow-[0_10px_24px_-18px_rgba(255,59,48,0.65)] hover:bg-red-500 active:scale-[0.99]",
   outline:
-    "border border-slate-200 bg-white text-slate-900 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:shadow-md active:scale-[0.99]",
+    "border border-slate-200/90 bg-white/95 text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-300 hover:bg-slate-50 active:scale-[0.99]",
 };
 
 export function Button({
@@ -32,7 +32,7 @@ export function Button({
       style={
         isPrimary
           ? {
-              background: "linear-gradient(135deg, var(--primary), var(--primary-alt))",
+              background: "var(--primary)",
               ...style,
             }
           : style

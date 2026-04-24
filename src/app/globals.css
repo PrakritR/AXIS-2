@@ -1,18 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  /* Portal blue system */
-  --background: #ffffff;
+  --background: #f5f5f7;
   --foreground: #1d1d1f;
   --muted: #6e6e73;
-  --border: rgba(0, 0, 0, 0.08);
-  --card: rgba(255, 255, 255, 0.72);
-  --primary: #007aff;
-  --primary-alt: #339cff;
+  --border: rgba(15, 23, 42, 0.08);
+  --card: rgba(255, 255, 255, 0.9);
+  --primary: #0a84ff;
+  --primary-alt: #4da3ff;
   --primary-foreground: #ffffff;
-  --accent: rgba(0, 122, 255, 0.08);
-  --auth-input-bg: rgba(0, 0, 0, 0.04);
-  --ring: rgba(0, 122, 255, 0.28);
+  --accent: rgba(10, 132, 255, 0.08);
+  --auth-input-bg: rgba(15, 23, 42, 0.03);
+  --ring: rgba(10, 132, 255, 0.24);
   --danger: #ff3b30;
   --announce: #1d1d1f;
 }
@@ -31,7 +30,7 @@
   --color-danger: var(--danger);
   --color-announce: var(--announce);
   --color-auth-input-bg: var(--auth-input-bg);
-  --font-sans: "Inter", "Inter Fallback", -apple-system, BlinkMacSystemFont, "SF Pro Display", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
 }
 
 html {
@@ -43,7 +42,7 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -60,6 +59,15 @@ body {
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  letter-spacing: 0;
 }
 
 button,
@@ -174,7 +182,7 @@ html {
   transform: translateY(0);
 }
 
-/* ── Ambient orbs (very slow drift) ── */
+/* ── Ambient motion helpers ── */
 @keyframes motion-orb-drift {
   0%,
   100% {

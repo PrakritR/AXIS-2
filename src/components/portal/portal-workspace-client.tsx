@@ -76,7 +76,7 @@ export function PortalWorkspaceClient({
         }
       >
         {model.kpis.map((k) => (
-          <Card key={k.label} className="border-slate-200/80 bg-white p-5 shadow-sm">
+          <Card key={k.label} className="border-slate-200/80 bg-white p-5">
             <p className={PORTAL_KPI_VALUE}>{k.value}</p>
             <p className={PORTAL_KPI_LABEL}>{k.label}</p>
             {k.hint ? <p className="mt-2 text-sm text-muted">{k.hint}</p> : null}
@@ -117,7 +117,7 @@ export function PortalWorkspaceClient({
       ) : null}
 
       {!isCompactPortalShell && model.notes ? (
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-950">{model.notes}</div>
+        <div className="rounded-[24px] border border-amber-200/80 bg-amber-50/80 px-5 py-4 text-sm text-amber-950">{model.notes}</div>
       ) : null}
 
       {!isCompactPortalShell ? (

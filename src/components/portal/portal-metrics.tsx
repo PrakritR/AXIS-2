@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /** Outer white “card” wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
-  "rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_14px_50px_-38px_rgba(15,23,42,0.24)] sm:p-6";
+  "rounded-[28px] border border-slate-200/80 bg-white/92 p-4 shadow-[0_18px_50px_-42px_rgba(15,23,42,0.2)] backdrop-blur-sm sm:p-6";
 
 /** Calendar week grid outer frame (matches manager calendar chrome). */
 export const PORTAL_CALENDAR_FRAME = "overflow-hidden rounded-2xl border border-slate-200 bg-slate-200";
@@ -24,7 +24,7 @@ export function PortalSegmentedControl<T extends string>({
 }) {
   const pad = size === "sm" ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-sm";
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1" role="tablist" aria-label="View">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1" role="tablist" aria-label="View">
       {options.map((opt) => {
         const disabled = optionDisabled?.(opt.id) ?? false;
         return (
@@ -41,7 +41,7 @@ export function PortalSegmentedControl<T extends string>({
               disabled
                 ? "cursor-not-allowed opacity-45"
                 : value === opt.id
-                  ? "bg-white text-slate-900 shadow-sm"
+                  ? "bg-white text-slate-900 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.28)]"
                   : "text-slate-500 hover:text-slate-800"
             }`}
           >
@@ -54,7 +54,7 @@ export function PortalSegmentedControl<T extends string>({
 }
 
 /** Primary page title in portal workspaces (aligned with Axis Pro Portal dashboard). */
-export const PORTAL_PAGE_TITLE = "text-2xl font-bold tracking-tight text-slate-900";
+export const PORTAL_PAGE_TITLE = "text-[2rem] font-semibold tracking-[-0.03em] text-slate-950";
 
 /** Matches admin Managers / Properties filter row (status + tier pill groups). */
 export type PortalTierFilterId = "all" | "free" | "pro" | "business";
@@ -81,14 +81,14 @@ export function PortalStatusTierFilterBar({
 }) {
   return (
     <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:rounded-full">
+      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200/90 bg-slate-100/70 p-1 sm:rounded-full">
         {statusTabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onStatusChange(tab.id)}
             className={`flex min-h-9 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-              activeStatusId === tab.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              activeStatusId === tab.id ? "bg-white text-slate-900 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.28)]" : "text-slate-500 hover:text-slate-800"
             }`}
           >
             {tab.label}
@@ -103,14 +103,14 @@ export function PortalStatusTierFilterBar({
         ))}
       </div>
 
-      <div className="inline-flex flex-wrap items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:rounded-full">
+      <div className="inline-flex flex-wrap items-center gap-1 rounded-2xl border border-slate-200/90 bg-slate-100/70 p-1 sm:rounded-full">
         {TIER_FILTER_OPTIONS.map((opt) => (
           <button
             key={opt.id}
             type="button"
             onClick={() => onTierChange(opt.id)}
             className={`min-h-9 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-              tierFilter === opt.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              tierFilter === opt.id ? "bg-white text-slate-900 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.28)]" : "text-slate-500 hover:text-slate-800"
             }`}
           >
             {opt.label}
@@ -133,7 +133,7 @@ export function PortalStatRow({ items }: { items: PortalMetricItem[] }) {
       {items.map((k) => (
         <div
           key={k.label}
-          className="min-w-[10rem] flex-1 rounded-xl border border-slate-200/80 bg-slate-50/60 px-5 py-4 sm:min-w-[11rem] sm:flex-none"
+          className="min-w-[10rem] flex-1 rounded-2xl border border-slate-200/80 bg-slate-50/60 px-5 py-4 sm:min-w-[11rem] sm:flex-none"
         >
           <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{k.value}</p>
           <p className="mt-1 text-xs font-medium text-slate-500">{k.label}</p>
@@ -149,7 +149,7 @@ function tabButtonClass(active: boolean, textAlign: "center" | "left"): string {
     "min-w-[7.5rem] flex-1 basis-[7.5rem] rounded-xl border px-4 py-3 transition-colors duration-150 sm:flex-none sm:basis-auto",
     align,
     active
-      ? "border-primary bg-white shadow-[inset_0_-3px_0_0_#007aff] ring-1 ring-primary/20"
+      ? "border-slate-300 bg-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.28)] ring-1 ring-slate-200/80"
       : "border-slate-200/60 bg-slate-50/90 hover:border-slate-200 hover:bg-white",
   ].join(" ");
 }
@@ -203,7 +203,7 @@ export function ManagerPortalStatusPills({
 }) {
   const isPrimary = activeTone === "primary";
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:rounded-full">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200/90 bg-slate-100/70 p-1 sm:rounded-full">
       {tabs.map((tab) => {
         const active = activeId === tab.id;
         return (
@@ -214,8 +214,8 @@ export function ManagerPortalStatusPills({
             className={`flex min-h-9 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
               active
                 ? isPrimary
-                  ? "bg-primary text-white shadow-sm"
-                  : "bg-white text-slate-900 shadow-sm"
+                  ? "bg-slate-950 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
+                  : "bg-white text-slate-900 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.28)]"
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >

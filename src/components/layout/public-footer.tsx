@@ -21,7 +21,7 @@ const footerLinkClass =
 
 export function PublicFooter() {
   return (
-    <footer className="border-t border-slate-200/70 bg-[linear-gradient(180deg,#fafcff_0%,#f3f8ff_55%,#eef4fb_100%)]">
+    <footer className="border-t border-slate-200/70 bg-[#f5f5f7]">
       <div className="mx-auto max-w-6xl px-6 pb-6 pt-10 sm:px-5">
         <div className="flex flex-col gap-8 border-b border-slate-200/60 pb-6 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
           <div className="max-w-[18rem] shrink-0 space-y-3">
@@ -105,7 +105,7 @@ export function PublicFooter() {
         </div>
       </div>
 
-      <div className="border-t border-slate-200/60 bg-white/40 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-[2px] sm:px-6">
+      <div className="border-t border-slate-200/60 bg-white/30 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-[2px] sm:px-6">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1.5 text-center text-[13px] font-normal text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <span>© 2026 Axis. All rights reserved.</span>
           <span className="text-slate-500">Axis Housing</span>

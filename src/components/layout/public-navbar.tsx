@@ -65,8 +65,8 @@ export function PublicNavbar() {
       id="axis-public-navbar"
       className={`sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)] transition-[background,box-shadow,border-color,backdrop-filter] duration-300 ease-out ${
         scrolled
-          ? "border-slate-200/80 bg-white/80 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_40px_-20px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/70"
-          : "border-transparent bg-white/95 shadow-none backdrop-blur-none"
+          ? "border-slate-200/80 bg-[#f5f5f7]/85 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_36px_-24px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-[#f5f5f7]/78"
+          : "border-transparent bg-[#f5f5f7]/96 shadow-none backdrop-blur-none"
       }`}
     >
       <div className="mx-auto grid min-h-[56px] w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 sm:px-5 lg:grid-cols-[auto_1fr_auto]">
@@ -125,7 +125,7 @@ export function PublicNavbar() {
           {/* Mobile menu button */}
           <button
             type="button"
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full border border-slate-200/90 bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 lg:hidden"
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition hover:bg-slate-50 lg:hidden"
             onClick={() => setMobileOpen((v) => !v)}
           >
           {mobileOpen ? (
@@ -206,7 +206,7 @@ function RentWithAxisTrigger({
         href="/"
         className={`relative flex min-h-10 items-center rounded-full px-3 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
           active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
-        } ${open ? "bg-slate-100/80" : "hover:bg-slate-100/60"}`}
+        } ${open ? "bg-white" : "hover:bg-white/70"}`}
       >
         Rent with Axis
       </Link>
@@ -221,7 +221,7 @@ function RentWithAxisTrigger({
         }}
         className={`relative flex min-h-10 min-w-10 items-center justify-center rounded-full p-2 outline-none transition-colors duration-200 ${
           active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
-        } ${open ? "bg-slate-100/80" : "hover:bg-slate-100/60"}`}
+        } ${open ? "bg-white" : "hover:bg-white/70"}`}
       >
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden className={`shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
           <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -254,7 +254,7 @@ function PartnerDropdownTrigger({
         onClick={onToggle}
         className={`relative flex min-h-10 items-center gap-1.5 rounded-full px-4 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
           active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
-        } ${open ? "bg-slate-100/80" : "hover:bg-slate-100/60"}`}
+        } ${open ? "bg-white" : "hover:bg-white/70"}`}
       >
         <span>{label}</span>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden className={`shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
@@ -288,7 +288,7 @@ function DropdownPanel({
       }`}
       onMouseEnter={cancelClose}
     >
-      <div className="min-w-[220px] overflow-hidden rounded-2xl border border-black/[0.06] bg-white/90 py-1.5 shadow-[0_20px_60px_-12px_rgba(0,0,0,0.18)] backdrop-blur-2xl">
+      <div className="min-w-[220px] overflow-hidden rounded-[22px] border border-black/[0.06] bg-white/92 py-1.5 shadow-[0_22px_50px_-28px_rgba(15,23,42,0.18)] backdrop-blur-2xl">
         {links.map(({ href, label: linkLabel }) => {
           const isActive = activeHref === href;
           return (

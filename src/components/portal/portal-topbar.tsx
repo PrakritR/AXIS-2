@@ -21,11 +21,11 @@ export function PortalTopbar({ definition }: { definition: PortalDefinition }) {
   const { showToast } = useAppUi();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-[#f5f5f7]/88 backdrop-blur-xl">
       <div className="flex items-center justify-between gap-3 px-4 py-3 lg:px-8">
         <div className="min-w-0">
-          <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Signed in</p>
-          <p className="truncate text-sm font-semibold text-slate-950">{definition.title} · {formatPath(pathname)}</p>
+          <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Signed in</p>
+          <p className="truncate text-sm font-medium text-slate-950">{definition.title} · {formatPath(pathname)}</p>
         </div>
         <div className="flex min-w-0 items-center justify-end gap-2">
           <Button type="button" variant="outline" className="hidden sm:inline-flex" onClick={() => showToast("No new alerts.")}>

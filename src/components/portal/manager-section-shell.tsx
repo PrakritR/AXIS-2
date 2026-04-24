@@ -15,7 +15,7 @@ export type ShellAction = {
 };
 
 const selectClass =
-  "h-10 rounded-full border border-slate-200/90 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25";
+  "h-10 rounded-full border border-slate-200/90 bg-white/95 px-3.5 text-sm text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] outline-none transition focus:ring-4 focus:ring-primary/10";
 
 /** Property dropdown wrapped like admin filter chips (rounded shell). */
 export function PortalPropertyFilterPill({
@@ -48,7 +48,7 @@ export function PortalPropertyFilterPill({
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
-    <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+    <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1">
       <PortalPropertyFilter
         applications={applications}
         residents={residents}

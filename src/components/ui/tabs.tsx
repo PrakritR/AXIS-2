@@ -50,12 +50,12 @@ export function TabNav({
   return (
     <div
       ref={wrapRef}
-      className="relative flex flex-wrap gap-1 rounded-full border border-slate-200 bg-slate-50 p-1"
+      className="relative flex flex-wrap gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1"
     >
       {pill.w > 0 ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute rounded-full bg-primary shadow-[0_2px_12px_-2px_rgba(0,122,255,0.45)] transition-[left,top,width,height,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className="pointer-events-none absolute rounded-full border border-white/80 bg-white shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] transition-[left,top,width,height,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
           style={{ left: pill.left, top: pill.top, width: pill.w, height: pill.h }}
         />
       ) : null}
@@ -70,7 +70,7 @@ export function TabNav({
               else linkRefs.current.delete(t.id);
             }}
             className={`relative z-10 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
-              active ? "text-primary-foreground" : "text-slate-600 hover:text-slate-900"
+              active ? "text-slate-950" : "text-slate-600 hover:text-slate-900"
             }`}
           >
             {t.label}
@@ -128,12 +128,12 @@ export function PillTabs({
   return (
     <div
       ref={wrapRef}
-      className="relative flex flex-wrap gap-1 rounded-full border border-slate-200 bg-slate-50 p-1"
+      className="relative flex flex-wrap gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1"
     >
       {pill.w > 0 ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute rounded-full bg-primary shadow-[0_2px_12px_-2px_rgba(0,122,255,0.45)] transition-[left,top,width,height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className="pointer-events-none absolute rounded-full border border-white/80 bg-white shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] transition-[left,top,width,height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
           style={{ left: pill.left, top: pill.top, width: pill.w, height: pill.h }}
         />
       ) : null}
@@ -149,7 +149,7 @@ export function PillTabs({
             }}
             onClick={() => onChange(t.id)}
             className={`relative z-10 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
-              active ? "text-primary-foreground" : "text-slate-600 hover:text-slate-900"
+              active ? "text-slate-950" : "text-slate-600 hover:text-slate-900"
             }`}
           >
             {t.label}
