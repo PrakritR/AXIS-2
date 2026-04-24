@@ -42,6 +42,8 @@ export type DemoApplicantRow = {
   assignedPropertyId?: string;
   /** Manager-selected final room placement. */
   assignedRoomChoice?: string;
+  /** Rent locked for this tenant when placement / approval is finalized. */
+  signedMonthlyRent?: number | null;
   /** Listing owner scope — who should receive this application in the portal. */
   managerUserId?: string | null;
 };

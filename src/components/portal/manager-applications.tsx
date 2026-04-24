@@ -40,7 +40,7 @@ import {
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "@/lib/rental-application/data";
-import { findApplicationFeeCharge } from "@/lib/household-charges";
+import { findApplicationFeeCharge, upsertRecurringRentProfile } from "@/lib/household-charges";
 import { ensureAccountApplicationSeeds } from "@/lib/account-application-seeds";
 import { ensureAccountListingSeeds } from "@/lib/account-listing-seeds";
 
@@ -73,6 +73,14 @@ function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucke
   return roomLabel ? `Submitted · ${roomLabel}` : "Submitted";
 }
 
+function inferRoomRent(propertyId: string, roomChoice: string): number | null {
+  if (!propertyId || !roomChoice) return null;
+  const match = getRoomOptionsForProperty(propertyId).find((option) => option.value === roomChoice);
+  if (!match) return null;
+  const rent = Number.parseFloat(match.label.replace(/[^0-9.]+/g, ""));
+  return Number.isFinite(rent) && rent > 0 ? rent : null;
+}
+
 function ManagerApplicationPlacementEditor({
   row,
   propertyOptions,
@@ -80,16 +88,19 @@ function ManagerApplicationPlacementEditor({
 }: {
   row: DemoApplicantRow;
   propertyOptions: ManagerPropertyFilterOption[];
-  onSave: (propertyId: string, roomChoice: string) => void;
+  onSave: (propertyId: string, roomChoice: string, signedMonthlyRent: number) => void;
 }) {
   const initialPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const initialRoomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
+  const initialSignedRent = row.signedMonthlyRent && row.signedMonthlyRent > 0 ? String(row.signedMonthlyRent) : "";
   const [propertyId, setPropertyId] = useState(initialPropertyId);
   const [roomChoice, setRoomChoice] = useState(initialRoomChoice);
+  const [signedRent, setSignedRent] = useState(initialSignedRent);
 
   useEffect(() => {
     setPropertyId(row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "");
     setRoomChoice(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "");
+    setSignedRent(row.signedMonthlyRent && row.signedMonthlyRent > 0 ? String(row.signedMonthlyRent) : "");
   }, [row]);
 
   const roomOptions = useMemo(() => (propertyId ? getRoomOptionsForProperty(propertyId) : []), [propertyId]);
@@ -100,6 +111,12 @@ function ManagerApplicationPlacementEditor({
       setRoomChoice("");
     }
   }, [roomChoice, roomOptions]);
+
+  useEffect(() => {
+    if (signedRent.trim()) return;
+    const inferred = inferRoomRent(propertyId, roomChoice);
+    if (inferred) setSignedRent(String(inferred));
+  }, [propertyId, roomChoice, signedRent]);
 
   const applicantChoices = [
     row.application?.roomChoice1?.trim(),
@@ -137,6 +154,18 @@ function ManagerApplicationPlacementEditor({
               ))}
             </Select>
           </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Signed monthly rent</span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={signedRent}
+              onChange={(e) => setSignedRent(e.target.value)}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              placeholder="800"
+            />
+          </label>
         </div>
       </div>
 
@@ -149,10 +178,20 @@ function ManagerApplicationPlacementEditor({
           <span className="font-medium text-slate-800">Current assignment:</span>{" "}
           {propertyId && roomChoice ? `${getPropertyById(propertyId)?.title ?? propertyId} · ${getRoomChoiceLabel(roomChoice)}` : "Not assigned yet"}
         </p>
+        <p>
+          <span className="font-medium text-slate-800">Tenant rent snapshot:</span>{" "}
+          {Number.parseFloat(signedRent) > 0 ? `$${Number.parseFloat(signedRent).toFixed(2)} / month` : "Set the rent this tenant signed for."}
+        </p>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} disabled={!propertyId || !roomChoice} onClick={() => onSave(propertyId, roomChoice)}>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN_PRIMARY}
+          disabled={!propertyId || !roomChoice || !(Number.parseFloat(signedRent) > 0)}
+          onClick={() => onSave(propertyId, roomChoice, Number.parseFloat(signedRent))}
+        >
           Save placement
         </Button>
       </div>
@@ -285,13 +324,14 @@ export function ManagerApplications() {
   };
 
   const savePlacement = useCallback(
-    (id: string, propertyId: string, roomChoice: string) => {
+    (id: string, propertyId: string, roomChoice: string, signedMonthlyRent: number) => {
       const property = getPropertyById(propertyId);
       const roomLabel = getRoomChoiceLabel(roomChoice);
-      if (!property || !roomLabel) {
-        showToast("Select a valid house and room.");
+      if (!property || !roomLabel || !(signedMonthlyRent > 0)) {
+        showToast("Select a valid house, room, and signed rent.");
         return;
       }
+      const rowToUpdate = rows.find((row) => row.id === id);
       const next = rows.map((row) =>
         row.id === id
           ? {
@@ -300,20 +340,55 @@ export function ManagerApplications() {
               propertyId,
               assignedPropertyId: propertyId,
               assignedRoomChoice: roomChoice,
+              signedMonthlyRent: Number(signedMonthlyRent.toFixed(2)),
               stage: stageLabelForRow(row, row.bucket, roomChoice),
             }
           : row,
       );
       persist(next);
+      if (rowToUpdate?.email?.trim()) {
+        upsertRecurringRentProfile({
+          residentEmail: rowToUpdate.email.trim(),
+          residentName: rowToUpdate.name,
+          residentUserId: null,
+          propertyId,
+          propertyLabel: property.title?.trim() || rowToUpdate.property,
+          roomLabel,
+          managerUserId: userId ?? null,
+          monthlyRent: signedMonthlyRent,
+        });
+      }
       showToast("Assigned house and room saved.");
     },
-    [rows, persist, showToast],
+    [rows, persist, showToast, userId],
   );
 
-  const deleteApplication = (id: string) => {
+  const deleteApplication = async (id: string) => {
+    const row = rows.find((candidate) => candidate.id === id);
+    const email = row?.email?.trim().toLowerCase();
+
+    if (email) {
+      try {
+        const res = await fetch("/api/portal/delete-resident-access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email }),
+        });
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        if (!res.ok) {
+          showToast(body?.error ?? "Could not remove the linked resident account.");
+          return;
+        }
+      } catch {
+        showToast("Could not remove the linked resident account.");
+        return;
+      }
+    }
+
     persist(rows.filter((r) => r.id !== id));
     setExpandedId(null);
-    showToast("Application deleted.");
+    showToast(email ? "Application and resident access deleted." : "Application deleted.");
   };
 
   return (
@@ -408,7 +483,7 @@ export function ManagerApplications() {
                               type="button"
                               variant="outline"
                               className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
-                              onClick={() => deleteApplication(row.id)}
+                              onClick={() => void deleteApplication(row.id)}
                             >
                               Delete application
                             </Button>
@@ -416,7 +491,13 @@ export function ManagerApplications() {
 
                           {row.application ? (
                             <div className="mt-4 max-h-[min(70vh,520px)] overflow-y-auto rounded-xl border border-slate-200/80 bg-white p-4">
-                              <ManagerApplicationPlacementEditor row={row} propertyOptions={placementPropertyOptions} onSave={(propertyId, roomChoice) => savePlacement(row.id, propertyId, roomChoice)} />
+                              <ManagerApplicationPlacementEditor
+                                row={row}
+                                propertyOptions={placementPropertyOptions}
+                                onSave={(propertyId, roomChoice, signedMonthlyRent) =>
+                                  savePlacement(row.id, propertyId, roomChoice, signedMonthlyRent)
+                                }
+                              />
                               <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Application on file</p>
                               <div className="mt-3">
                                 <ManagerApplicationReadonlyReview

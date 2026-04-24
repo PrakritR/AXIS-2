@@ -160,8 +160,8 @@ export function ResidentDashboard({
           ? "Your application was approved. We’re syncing your resident access now so the right sections appear in the portal."
           : managerIsFree
           ? applicationProperty
-            ? `${displayName} is approved for ${applicationProperty}. Payments are available now. Lease and work orders stay hidden on the manager's Free plan.`
-            : `${displayName} is approved. Payments are available now. Lease and work orders stay hidden on the manager's Free plan.`
+            ? `${displayName} is approved for ${applicationProperty}. Payments are available now. Lease and work orders are visible in the portal, but the property's Free tier does not include access to those features.`
+            : `${displayName} is approved. Payments are available now. Lease and work orders are visible in the portal, but the property's Free tier does not include access to those features.`
           : applicationProperty
             ? `${displayName} is approved for ${applicationProperty}.`
             : `${displayName} is approved and can use the full resident portal.`,
@@ -241,28 +241,30 @@ export function ResidentDashboard({
               <p className="mt-2 text-xs font-medium text-slate-500">Payments will appear after sync.</p>
             )}
           </StatCard>
-          {canOpenFullPortal ? (
-            <StatCard label="Lease">
-              <p className="text-lg font-semibold text-slate-900">Active</p>
-              <Link
-                href="/resident/lease"
-                className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
-              >
-                Open
-              </Link>
-            </StatCard>
-          ) : null}
-          {canOpenFullPortal ? (
-            <StatCard label="Work orders">
-              <p className="text-lg font-semibold text-slate-900">{openWorkOrders} open</p>
-              <Link
-                href="/resident/work-orders"
-                className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
-              >
-                Open
-              </Link>
-            </StatCard>
-          ) : null}
+          <StatCard label="Lease" muted={!canOpenFullPortal}>
+            <p className="text-lg font-semibold text-slate-900">{canOpenFullPortal ? "Active" : "Unavailable on Free tier"}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {canOpenFullPortal ? "Open your lease workspace." : "This property plan does not include resident lease access."}
+            </p>
+            <Link
+              href="/resident/lease"
+              className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
+            >
+              Open
+            </Link>
+          </StatCard>
+          <StatCard label="Work orders" muted={!canOpenFullPortal}>
+            <p className="text-lg font-semibold text-slate-900">{canOpenFullPortal ? `${openWorkOrders} open` : "Unavailable on Free tier"}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {canOpenFullPortal ? "Track and create work orders." : "This property plan does not include resident work-order access."}
+            </p>
+            <Link
+              href="/resident/work-orders"
+              className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
+            >
+              Open
+            </Link>
+          </StatCard>
           <StatCard label="Home" muted>
             <p className="text-sm font-medium text-slate-800">{applicationProperty ?? "Your unit"}</p>
           </StatCard>
@@ -321,7 +323,7 @@ export function ResidentDashboard({
           </p>
           <p className="mt-1 text-sm text-slate-500">
             {managerIsFree
-              ? "Payments unlock after approval. Lease and work orders stay unavailable on the manager's Free plan."
+              ? "Payments unlock after approval. Lease and work orders stay visible in the portal, but the property's Free tier does not include access to them."
               : "We&apos;ll unlock lease, payments, and work orders after approval."}
           </p>
         </StatCard>

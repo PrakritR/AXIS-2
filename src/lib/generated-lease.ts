@@ -15,6 +15,10 @@ import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } 
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
+type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
+  __signedRentLabel?: string;
+};
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -120,6 +124,8 @@ export function leaseContextFromApplication(application: Partial<RentalWizardFor
 export function rentSummaryFromApplication(application: Partial<RentalWizardFormState> | undefined | null): string | null {
   if (!application || !Object.keys(application).length) return null;
   try {
+    const signedRentLabel = (application as LeaseApplicationWithRentSnapshot).__signedRentLabel?.trim();
+    if (signedRentLabel) return signedRentLabel;
     const ctx = leaseContextFromApplication(application as RentalWizardFormState);
     const room = ctx.leasedRoom;
     const list = ctx.listingProperty;
@@ -165,6 +171,7 @@ function leaseCss(): string {
 /** Full HTML document suitable for download and “Print to PDF”. */
 export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   const { application: a, leasedRoom: room, listingProperty: list, submission: sub, generatedAtIso } = ctx;
+  const signedRentLabel = (a as LeaseApplicationWithRentSnapshot).__signedRentLabel?.trim();
 
   const premises =
     room?.title ??
@@ -176,11 +183,12 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   const cityZip = [room?.neighborhood ?? list?.neighborhood, room?.zip ?? list?.zip].filter(Boolean).join(", ");
 
   const monthlyRent =
-    submissionRoomRentFromChoice(sub, a.roomChoice1) ??
+    signedRentLabel ||
+    (submissionRoomRentFromChoice(sub, a.roomChoice1) ??
     (room && findSubmissionRoomRent(sub, room.unitLabel)) ??
     room?.rentLabel ??
     list?.rentLabel ??
-    "As set forth in the rent schedule below";
+    "As set forth in the rent schedule below");
 
   const leaseTerm = dash(a.leaseTerm);
   const leaseStart = dash(a.leaseStart);

@@ -67,7 +67,7 @@ export function appendManagerApplicationRow(row: DemoApplicantRow): void {
  * Returns the application answers with the manager's final property / room placement
  * applied on top of the original applicant submission.
  */
-export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "application" | "assignedPropertyId" | "assignedRoomChoice">):
+export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "application" | "assignedPropertyId" | "assignedRoomChoice" | "signedMonthlyRent">):
   | Partial<RentalWizardFormState>
   | undefined {
   if (!row.application) return undefined;
@@ -76,5 +76,14 @@ export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "applicat
   const roomChoice = row.assignedRoomChoice?.trim();
   if (propertyId) next.propertyId = propertyId;
   if (roomChoice) next.roomChoice1 = roomChoice;
+  const signedRentLabel = signedRentLabelForRow(row);
+  if (signedRentLabel) {
+    (next as Partial<RentalWizardFormState> & { __signedRentLabel?: string }).__signedRentLabel = signedRentLabel;
+  }
   return next;
+}
+
+export function signedRentLabelForRow(row: Pick<DemoApplicantRow, "signedMonthlyRent">): string | null {
+  if (!Number.isFinite(row.signedMonthlyRent ?? NaN) || (row.signedMonthlyRent ?? 0) <= 0) return null;
+  return `$${Number(row.signedMonthlyRent).toFixed(2)} / month`;
 }

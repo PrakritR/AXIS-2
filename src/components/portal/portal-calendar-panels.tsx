@@ -3,8 +3,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
 import {
+  ADMIN_AVAILABILITY_STORAGE_KEY,
+  SLOTS_PER_DAY,
   dateHasAvailability,
   dateSlotKey,
   formatAvailabilitySlotLabel,
@@ -14,15 +18,25 @@ import {
   readAvailabilityDateSetForStorageKey,
   startOfWeekMonday,
   toLocalDateStr,
-  ADMIN_AVAILABILITY_STORAGE_KEY,
   writeAvailabilityDateSetForStorageKey,
 } from "@/lib/demo-admin-scheduling";
 
 type CalendarMode = "day" | "week" | "month";
+type RecurrenceCadence = "once" | "weekly" | "biweekly" | "monthly";
 
-/** Half-hour slots shown in the grid (8:00–19:30 local); matches demo slot indexing from 8:00. */
 const SLOT_ROW_START = 0;
-const SLOT_ROW_END = 23;
+const SLOT_ROW_END = SLOTS_PER_DAY - 1;
+const DEFAULT_VISIBLE_START_SLOT = 16;
+const DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE = 40;
+const WEEKDAY_OPTIONS = [
+  { value: 0, label: "Mon" },
+  { value: 1, label: "Tue" },
+  { value: 2, label: "Wed" },
+  { value: 3, label: "Thu" },
+  { value: 4, label: "Fri" },
+  { value: 5, label: "Sat" },
+  { value: 6, label: "Sun" },
+] as const;
 
 function addDays(d: Date, n: number): Date {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
@@ -84,23 +98,22 @@ type DemoMeeting = {
   statusLabel?: string;
 };
 
-const slotRowIndices = Array.from(
-  { length: SLOT_ROW_END - SLOT_ROW_START + 1 },
-  (_, i) => SLOT_ROW_START + i,
-);
+const slotRowIndices = Array.from({ length: SLOT_ROW_END - SLOT_ROW_START + 1 }, (_, i) => SLOT_ROW_START + i);
 
 function formatSlotEndLabel(slotIndexExclusive: number): string {
-  const mins = 8 * 60 + slotIndexExclusive * 30;
+  const mins = (slotIndexExclusive % SLOTS_PER_DAY) * 30;
   const h24 = Math.floor(mins / 60);
   const m = mins % 60;
   const d = new Date(2000, 0, 1, h24, m);
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-/**
- * Manager + admin shared calendar: schedule card (day/week/month) + availability paint grid.
- * `storageKey` must be non-null for reads/writes (caller handles manager auth).
- */
+function weekdayLabelList(days: number[]) {
+  return WEEKDAY_OPTIONS.filter((option) => days.includes(option.value))
+    .map((option) => option.label)
+    .join(", ");
+}
+
 export function PortalCalendarPanels({
   storageKey,
   calendarRefreshSignal,
@@ -111,26 +124,26 @@ export function PortalCalendarPanels({
   compactAvailability = false,
 }: {
   storageKey: string | null;
-  /** Increment from parent to reload slot state from storage (e.g. admin page Refresh). */
   calendarRefreshSignal?: number;
-  /** Initial schedule panel mode (admin defaults to month). */
   defaultViewMode?: CalendarMode;
-  /** When true, month grid stays visible: day clicks choose a range + sync week without jumping to Day view (admin Calendar). */
   pinMonthSchedule?: boolean;
-  /** Manager portal: which property / portfolio scope tour slots apply to */
   tourScopeLabel?: string;
   unavailableMessage?: string;
   compactAvailability?: boolean;
 }) {
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
-  /** yyyy-mm-dd inclusive range highlights in month view when `pinMonthSchedule`. */
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [activeSlots, setActiveSlots] = useState<Set<string>>(() => new Set());
   const [dragMode, setDragMode] = useState<"add" | "remove" | null>(null);
-  const [visibleStartSlot, setVisibleStartSlot] = useState(0);
-  const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(24);
-  const [futureWeekCount, setFutureWeekCount] = useState(4);
+  const [visibleStartSlot, setVisibleStartSlot] = useState(DEFAULT_VISIBLE_START_SLOT);
+  const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE);
+  const [blockModalOpen, setBlockModalOpen] = useState(false);
+  const [blockStartSlot, setBlockStartSlot] = useState(DEFAULT_VISIBLE_START_SLOT);
+  const [blockEndSlotExclusive, setBlockEndSlotExclusive] = useState(DEFAULT_VISIBLE_START_SLOT + 2);
+  const [blockWeekdays, setBlockWeekdays] = useState<number[]>([0, 1, 2, 3, 4]);
+  const [blockCadence, setBlockCadence] = useState<RecurrenceCadence>("weekly");
+  const [blockOccurrences, setBlockOccurrences] = useState(4);
 
   useEffect(() => {
     if (!storageKey) return;
@@ -138,10 +151,7 @@ export function PortalCalendarPanels({
   }, [storageKey]);
 
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
-  const fullWeekDates = useMemo(
-    () => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)),
-    [weekMonday],
-  );
+  const fullWeekDates = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)), [weekMonday]);
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
 
   const meetings = useMemo<DemoMeeting[]>(() => {
@@ -154,7 +164,7 @@ export function PortalCalendarPanels({
       return {
         id: `planned-${event.id}`,
         dateStr: toLocalDateStr(start),
-        startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes() - 8 * 60) / 30)),
+        startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / 30)),
         span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
         title: event.title,
         color: "border-sky-300 bg-sky-100 text-sky-950",
@@ -172,7 +182,7 @@ export function PortalCalendarPanels({
           return {
             id: `inquiry-${row.id}-${index}`,
             dateStr: toLocalDateStr(start),
-            startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes() - 8 * 60) / 30)),
+            startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / 30)),
             span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
             title: `${row.name} request`,
             color: "border-amber-300 bg-amber-100 text-amber-950",
@@ -276,7 +286,9 @@ export function PortalCalendarPanels({
           const nextStart = Number.parseInt(e.target.value, 10);
           if (!Number.isFinite(nextStart)) return;
           setVisibleStartSlot(nextStart);
-          setVisibleEndSlotExclusive((current) => (current <= nextStart ? Math.min(nextStart + 1, 24) : current));
+          setVisibleEndSlotExclusive((current) =>
+            current <= nextStart ? Math.min(nextStart + 1, SLOTS_PER_DAY) : current,
+          );
         }}
       >
         {slotRowIndices.map((slot) => (
@@ -298,7 +310,7 @@ export function PortalCalendarPanels({
       >
         {slotRowIndices
           .map((slot) => slot + 1)
-          .filter((slot) => slot > visibleStartSlot)
+          .filter((slot) => slot > visibleStartSlot && slot <= SLOTS_PER_DAY)
           .map((slot) => (
             <option key={`end-${slot}`} value={slot}>
               {formatSlotEndLabel(slot)}
@@ -323,64 +335,90 @@ export function PortalCalendarPanels({
     setAnchorDate((d) => addDays(d, dir * 7));
   }, []);
 
-  const replaceWeekFromPattern = useCallback(
-    (next: Set<string>, sourceWeekDates: Date[], targetWeekDates: Date[]) => {
-      for (const targetDate of targetWeekDates) {
-        const targetDateStr = toLocalDateStr(targetDate);
-        for (const slot of slotRowIndices) {
-          next.delete(dateSlotKey(targetDateStr, slot));
-        }
-      }
-
-      sourceWeekDates.forEach((sourceDate, idx) => {
-        const sourceDateStr = toLocalDateStr(sourceDate);
-        const targetDateStr = toLocalDateStr(targetWeekDates[idx]!);
-        for (const slot of slotRowIndices) {
-          if (activeSlots.has(dateSlotKey(sourceDateStr, slot))) {
-            next.add(dateSlotKey(targetDateStr, slot));
-          }
-        }
-      });
-    },
-    [activeSlots],
-  );
-
   const copyPreviousWeek = useCallback(() => {
     const previousWeekDates = fullWeekDates.map((date) => addDays(date, -7));
     const next = new Set(activeSlots);
-    replaceWeekFromPattern(next, previousWeekDates, fullWeekDates);
-    writeAvailability(next);
-  }, [activeSlots, fullWeekDates, replaceWeekFromPattern, writeAvailability]);
 
-  const applyCurrentWeekToFutureWeeks = useCallback(() => {
-    const weeks = Math.max(1, futureWeekCount);
+    for (const targetDate of fullWeekDates) {
+      const targetDateStr = toLocalDateStr(targetDate);
+      for (const slot of slotRowIndices) {
+        next.delete(dateSlotKey(targetDateStr, slot));
+      }
+    }
+
+    previousWeekDates.forEach((sourceDate, idx) => {
+      const sourceDateStr = toLocalDateStr(sourceDate);
+      const targetDateStr = toLocalDateStr(fullWeekDates[idx]!);
+      for (const slot of slotRowIndices) {
+        if (activeSlots.has(dateSlotKey(sourceDateStr, slot))) {
+          next.add(dateSlotKey(targetDateStr, slot));
+        }
+      }
+    });
+
+    writeAvailability(next);
+  }, [activeSlots, fullWeekDates, writeAvailability]);
+
+  const toggleBlockWeekday = useCallback((weekday: number) => {
+    setBlockWeekdays((current) =>
+      current.includes(weekday) ? current.filter((value) => value !== weekday) : [...current, weekday].sort((a, b) => a - b),
+    );
+  }, []);
+
+  const openBlockModal = useCallback(() => {
+    const weekday = mondayBasedDayIndex(anchorDate);
+    setBlockWeekdays(viewMode === "day" ? [weekday] : [0, 1, 2, 3, 4]);
+    setBlockStartSlot(visibleStartSlot);
+    setBlockEndSlotExclusive(Math.min(SLOTS_PER_DAY, visibleStartSlot + 2));
+    setBlockCadence("weekly");
+    setBlockOccurrences(4);
+    setBlockModalOpen(true);
+  }, [anchorDate, viewMode, visibleStartSlot]);
+
+  const applyRecurringBlock = useCallback(() => {
+    if (blockWeekdays.length === 0 || blockEndSlotExclusive <= blockStartSlot) return;
+
     const next = new Set(activeSlots);
-    for (let weekOffset = 1; weekOffset <= weeks; weekOffset += 1) {
-      const targetWeekDates = fullWeekDates.map((date) => addDays(date, weekOffset * 7));
-      replaceWeekFromPattern(next, fullWeekDates, targetWeekDates);
+    const occurrences = blockCadence === "once" ? 1 : Math.max(1, blockOccurrences);
+    const baseDates = blockWeekdays.map((weekday) => addDays(weekMonday, weekday));
+
+    for (let occurrenceIndex = 0; occurrenceIndex < occurrences; occurrenceIndex += 1) {
+      const targetDates = baseDates.map((date) => {
+        if (blockCadence === "once" || blockCadence === "weekly") return addDays(date, occurrenceIndex * 7);
+        if (blockCadence === "biweekly") return addDays(date, occurrenceIndex * 14);
+        return addMonths(date, occurrenceIndex);
+      });
+
+      for (const targetDate of targetDates) {
+        const targetDateStr = toLocalDateStr(targetDate);
+        for (let slot = blockStartSlot; slot < blockEndSlotExclusive; slot += 1) {
+          next.add(dateSlotKey(targetDateStr, slot));
+        }
+      }
+    }
+
+    writeAvailability(next);
+    setBlockModalOpen(false);
+  }, [activeSlots, blockCadence, blockEndSlotExclusive, blockOccurrences, blockStartSlot, blockWeekdays, weekMonday, writeAvailability]);
+
+  const clearCurrentWeek = useCallback(() => {
+    const next = new Set(activeSlots);
+    for (const ds of fullWeekDateStrs) {
+      for (const slot of slotRowIndices) {
+        next.delete(dateSlotKey(ds, slot));
+      }
     }
     writeAvailability(next);
-  }, [activeSlots, fullWeekDates, futureWeekCount, replaceWeekFromPattern, writeAvailability]);
+  }, [activeSlots, fullWeekDateStrs, writeAvailability]);
 
-  const futureWeeksControl = (
-    <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1">
-      <span className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Repeat</span>
-      <select
-        className="h-8 rounded-full border border-slate-200 bg-white px-2 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25"
-        value={String(futureWeekCount)}
-        onChange={(e) => setFutureWeekCount(Number.parseInt(e.target.value, 10) || 4)}
-      >
-        {[1, 2, 4, 8, 12].map((weeks) => (
-          <option key={weeks} value={weeks}>
-            {weeks} week{weeks === 1 ? "" : "s"}
-          </option>
-        ))}
-      </select>
-      <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={applyCurrentWeekToFutureWeeks}>
-        Apply forward
-      </Button>
-    </div>
-  );
+  const blockSummary = useMemo(() => {
+    const days = blockWeekdays.length > 0 ? weekdayLabelList(blockWeekdays) : "No days selected";
+    const repeats =
+      blockCadence === "once"
+        ? "this week only"
+        : `${blockCadence} for ${blockOccurrences} occurrence${blockOccurrences === 1 ? "" : "s"}`;
+    return `${days} · ${formatAvailabilitySlotLabel(blockStartSlot)}-${formatSlotEndLabel(blockEndSlotExclusive)} · ${repeats}`;
+  }, [blockCadence, blockEndSlotExclusive, blockOccurrences, blockStartSlot, blockWeekdays]);
 
   if (!storageKey) {
     return (
@@ -392,164 +430,226 @@ export function PortalCalendarPanels({
 
   if (compactAvailability) {
     return (
-      <Card className="p-4 sm:p-5">
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 rounded-full px-3"
-                onClick={() => shiftAvailabilityWeek(-1)}
-                aria-label="Previous week"
-              >
-                ←
-              </Button>
-              <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Availability</p>
-                <p className="truncate text-sm font-semibold text-slate-900">Week of {formatWeekRangeMonSun(weekMonday)}</p>
-                {tourScopeLabel ? <p className="truncate text-xs font-medium text-primary">{tourScopeLabel}</p> : null}
+      <>
+        <Card className="p-4 sm:p-5">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
+                  ←
+                </Button>
+                <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Availability</p>
+                  <p className="truncate text-sm font-semibold text-slate-900">Week of {formatWeekRangeMonSun(weekMonday)}</p>
+                  {tourScopeLabel ? <p className="truncate text-xs font-medium text-primary">{tourScopeLabel}</p> : null}
+                </div>
+                <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next week">
+                  →
+                </Button>
+                <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open this week</div>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 rounded-full px-3"
-                onClick={() => shiftAvailabilityWeek(1)}
-                aria-label="Next week"
-              >
-                →
+            </div>
+
+            <div className="flex flex-wrap gap-2 xl:justify-end">
+              {timeWindowControl}
+              <Button type="button" variant="outline" className="rounded-full" onClick={jumpToToday}>
+                Today
               </Button>
-              <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
-                {weekSlotCount} open this week
-              </div>
+              <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
+                Copy previous week
+              </Button>
+              <Button type="button" variant="outline" className="rounded-full" onClick={openBlockModal}>
+                Create block
+              </Button>
+              <Button type="button" variant="outline" className="rounded-full" onClick={clearCurrentWeek}>
+                Clear week
+              </Button>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 xl:justify-end">
-            {timeWindowControl}
-            <Button type="button" variant="outline" className="rounded-full" onClick={jumpToToday}>
-              Today
-            </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
-              Copy previous week
-            </Button>
-            {futureWeeksControl}
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => {
-                const next = new Set(activeSlots);
-                for (const ds of fullWeekDateStrs) {
-                  for (const slot of slotRowIndices) next.delete(dateSlotKey(ds, slot));
-                }
-                writeAvailability(next);
-              }}
-            >
-              Clear week
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => {
-                const next = new Set(activeSlots);
-                const templateSlots = [4, 5, 6, 12, 13];
-                for (const ds of fullWeekDateStrs) {
-                  for (const s of templateSlots) {
-                    if (s >= SLOT_ROW_START && s <= SLOT_ROW_END) next.add(dateSlotKey(ds, s));
-                  }
-                }
-                writeAvailability(next);
-              }}
-            >
-              Apply template
-            </Button>
-          </div>
-        </div>
+          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs font-semibold text-slate-600">Create recurring blocks for multiple days, then drag on the calendar for quick touch-ups.</p>
+            </div>
+            <div className="overflow-x-auto" onMouseLeave={() => setDragMode(null)} onMouseUp={() => setDragMode(null)}>
+              <div className="grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] gap-px bg-slate-200 text-xs">
+                <div className="bg-slate-50 px-2 py-2 font-bold uppercase tracking-[0.12em] text-slate-400">Time</div>
+                {fullWeekDates.map((d) => {
+                  const ds = toLocalDateStr(d);
+                  const count = visibleSlotIndices.reduce((total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0), 0);
+                  return (
+                    <div key={ds} className="bg-slate-50 px-2 py-2 text-center">
+                      <p className="font-bold uppercase tracking-[0.12em] text-slate-500">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
+                      <p className="mt-0.5 font-semibold text-slate-900">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-emerald-700">{count} open</p>
+                    </div>
+                  );
+                })}
 
-        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-xs font-semibold text-slate-600">Click and drag directly on the calendar to open or close booking slots.</p>
-          </div>
-          <div
-            className="overflow-x-auto"
-            onMouseLeave={() => setDragMode(null)}
-            onMouseUp={() => setDragMode(null)}
-          >
-            <div className="grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] gap-px bg-slate-200 text-xs">
-              <div className="bg-slate-50 px-2 py-2 font-bold uppercase tracking-[0.12em] text-slate-400">Time</div>
-              {fullWeekDates.map((d) => {
-                const ds = toLocalDateStr(d);
-                const count = visibleSlotIndices.reduce(
-                  (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
-                  0,
-                );
-                return (
-                  <div key={ds} className="bg-slate-50 px-2 py-2 text-center">
-                    <p className="font-bold uppercase tracking-[0.12em] text-slate-500">
-                      {d.toLocaleDateString(undefined, { weekday: "short" })}
-                    </p>
-                    <p className="mt-0.5 font-semibold text-slate-900">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-                    <p className="mt-0.5 text-[11px] font-medium text-emerald-700">{count} open</p>
-                  </div>
-                );
-              })}
-
-              {visibleSlotIndices.map((slotIdx) => (
-                <Fragment key={slotIdx}>
-                  <div className="flex min-h-9 items-center bg-white px-2 font-semibold text-slate-500">
-                    {formatAvailabilitySlotLabel(slotIdx)}
-                  </div>
-                  {fullWeekDateStrs.map((ds) => {
-                    const key = dateSlotKey(ds, slotIdx);
-                    const active = activeSlots.has(key);
-                    const meeting = meetingBySlotKey.get(key);
-                    const isMeetingStart = meeting?.startSlot === slotIdx;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onMouseDown={() => {
-                          const nextMode = active ? "remove" : "add";
-                          setDragMode(nextMode);
-                          applySlot(key, nextMode);
-                        }}
-                        onMouseEnter={() => {
-                          if (dragMode) applySlot(key, dragMode);
-                        }}
-                        onMouseUp={() => setDragMode(null)}
-                        className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
-                          meeting
-                            ? `${meeting.color} ring-1 ring-inset`
-                            : active
-                            ? "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300"
-                            : "bg-white text-transparent hover:bg-primary/[0.07] hover:text-primary"
-                        }`}
-                        aria-label={`${active ? "Close" : "Open"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
-                      >
-                        {meeting ? (
-                          isMeetingStart ? (
-                            <span className="block truncate">
-                              {meeting.statusLabel}: {meeting.title}
-                            </span>
+                {visibleSlotIndices.map((slotIdx) => (
+                  <Fragment key={slotIdx}>
+                    <div className="flex min-h-9 items-center bg-white px-2 font-semibold text-slate-500">{formatAvailabilitySlotLabel(slotIdx)}</div>
+                    {fullWeekDateStrs.map((ds) => {
+                      const key = dateSlotKey(ds, slotIdx);
+                      const active = activeSlots.has(key);
+                      const meeting = meetingBySlotKey.get(key);
+                      const isMeetingStart = meeting?.startSlot === slotIdx;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onMouseDown={() => {
+                            const nextMode = active ? "remove" : "add";
+                            setDragMode(nextMode);
+                            applySlot(key, nextMode);
+                          }}
+                          onMouseEnter={() => {
+                            if (dragMode) applySlot(key, dragMode);
+                          }}
+                          onMouseUp={() => setDragMode(null)}
+                          className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
+                            meeting
+                              ? `${meeting.color} ring-1 ring-inset`
+                              : active
+                                ? "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300"
+                                : "bg-white text-transparent hover:bg-primary/[0.07] hover:text-primary"
+                          }`}
+                          aria-label={`${active ? "Close" : "Open"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
+                        >
+                          {meeting ? (
+                            isMeetingStart ? (
+                              <span className="block truncate">
+                                {meeting.statusLabel}: {meeting.title}
+                              </span>
+                            ) : (
+                              <span className="block truncate opacity-70">{meeting.statusLabel}</span>
+                            )
+                          ) : active ? (
+                            "Open"
                           ) : (
-                            <span className="block truncate opacity-70">{meeting.statusLabel}</span>
-                          )
-                        ) : active ? (
-                          "Open"
-                        ) : (
-                          "Add"
-                        )}
-                      </button>
-                    );
-                  })}
-                </Fragment>
-              ))}
+                            "Add"
+                          )}
+                        </button>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+
+        <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => setBlockModalOpen(false)}>
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">{blockSummary}</div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-900">Days of week</p>
+              <div className="flex flex-wrap gap-2">
+                {WEEKDAY_OPTIONS.map((option) => {
+                  const active = blockWeekdays.includes(option.value);
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => toggleBlockWeekday(option.value)}
+                      className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                        active
+                          ? "border-primary bg-primary text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-primary/30 hover:text-primary"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-900">Start time</label>
+                <Select
+                  value={String(blockStartSlot)}
+                  onChange={(e) => {
+                    const nextStart = Number.parseInt(e.target.value, 10);
+                    if (!Number.isFinite(nextStart)) return;
+                    setBlockStartSlot(nextStart);
+                    setBlockEndSlotExclusive((current) =>
+                      current <= nextStart ? Math.min(SLOTS_PER_DAY, nextStart + 1) : current,
+                    );
+                  }}
+                >
+                  {slotRowIndices.map((slot) => (
+                    <option key={`block-start-${slot}`} value={slot}>
+                      {formatAvailabilitySlotLabel(slot)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-900">End time</label>
+                <Select
+                  value={String(blockEndSlotExclusive)}
+                  onChange={(e) => {
+                    const nextEnd = Number.parseInt(e.target.value, 10);
+                    if (!Number.isFinite(nextEnd)) return;
+                    setBlockEndSlotExclusive(nextEnd);
+                    setBlockStartSlot((current) => (current >= nextEnd ? Math.max(0, nextEnd - 1) : current));
+                  }}
+                >
+                  {slotRowIndices
+                    .map((slot) => slot + 1)
+                    .filter((slot) => slot > blockStartSlot && slot <= SLOTS_PER_DAY)
+                    .map((slot) => (
+                      <option key={`block-end-${slot}`} value={slot}>
+                        {formatSlotEndLabel(slot)}
+                      </option>
+                    ))}
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-900">Repeat</label>
+                <Select value={blockCadence} onChange={(e) => setBlockCadence(e.target.value as RecurrenceCadence)}>
+                  <option value="once">Once</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Biweekly</option>
+                  <option value="monthly">Monthly</option>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-900">Occurrences</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={String(blockCadence === "once" ? 1 : blockOccurrences)}
+                  onChange={(e) => setBlockOccurrences(Math.max(1, Math.min(24, Number.parseInt(e.target.value, 10) || 1)))}
+                  disabled={blockCadence === "once"}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+              <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                className="rounded-full"
+                onClick={applyRecurringBlock}
+                disabled={blockWeekdays.length === 0 || blockEndSlotExclusive <= blockStartSlot}
+              >
+                Create block
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      </>
     );
   }
 
@@ -588,7 +688,9 @@ export function PortalCalendarPanels({
               {viewMode === "month" ? monthBlocksCount : meetings.length} blocks
             </div>
             {viewMode !== "month" ? timeWindowControl : null}
-            {viewMode !== "month" ? futureWeeksControl : null}
+            <Button type="button" variant="outline" className="h-9 rounded-full px-3 text-xs" onClick={openBlockModal}>
+              Create block
+            </Button>
           </div>
         </div>
       </div>
@@ -653,14 +755,10 @@ export function PortalCalendarPanels({
                       const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
                       return (
                         <Fragment key={`${ds}-${slotIdx}`}>
-                          <div className="bg-white px-3 py-2 text-[11px] font-semibold text-slate-400">
-                            {formatAvailabilitySlotLabel(slotIdx)}
-                          </div>
+                          <div className="bg-white px-3 py-2 text-[11px] font-semibold text-slate-400">{formatAvailabilitySlotLabel(slotIdx)}</div>
                           <div className="relative min-h-[40px] bg-white p-1">
                             {meeting ? (
-                              <div className={`rounded-xl border px-2 py-2 text-xs font-semibold shadow-sm ${meeting.color}`}>
-                                {meeting.title}
-                              </div>
+                              <div className={`rounded-xl border px-2 py-2 text-xs font-semibold shadow-sm ${meeting.color}`}>{meeting.title}</div>
                             ) : (
                               <div className="h-full rounded-xl border border-dashed border-slate-100" />
                             )}
@@ -681,18 +779,14 @@ export function PortalCalendarPanels({
           <div className="grid grid-cols-[68px_minmax(0,1fr)] gap-px bg-slate-200">
             <div className="col-span-2 bg-slate-50 px-3 py-3 text-center">
               <p className="text-sm font-semibold text-slate-900">{anchorDate.toLocaleDateString(undefined, { weekday: "long" })}</p>
-              <p className="text-xs text-slate-500">
-                {anchorDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-              </p>
+              <p className="text-xs text-slate-500">{anchorDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</p>
             </div>
             {visibleSlotIndices.map((slotIdx) => {
               const ds = toLocalDateStr(anchorDate);
               const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
               return (
                 <Fragment key={slotIdx}>
-                  <div className="bg-white px-2 py-2 text-[11px] font-semibold text-slate-400">
-                    {formatAvailabilitySlotLabel(slotIdx)}
-                  </div>
+                  <div className="bg-white px-2 py-2 text-[11px] font-semibold text-slate-400">{formatAvailabilitySlotLabel(slotIdx)}</div>
                   <div className="relative min-h-[40px] bg-white p-1">
                     {meeting ? (
                       <div
@@ -720,56 +814,39 @@ export function PortalCalendarPanels({
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Availability editor</p>
           <h2 className="mt-2 text-xl font-semibold text-slate-950">Public booking windows</h2>
-          {tourScopeLabel ? (
-            <p className="mt-1 text-sm font-medium text-primary">{tourScopeLabel}</p>
-          ) : null}
+          {tourScopeLabel ? <p className="mt-1 text-sm font-medium text-primary">{tourScopeLabel}</p> : null}
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 shrink-0 rounded-full px-3 text-sm"
-              onClick={jumpToToday}
-            >
+            <Button type="button" variant="outline" className="h-9 shrink-0 rounded-full px-3 text-sm" onClick={jumpToToday}>
               Today
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 shrink-0 rounded-full px-3 text-sm"
-              onClick={() => shiftAvailabilityWeek(-1)}
-              aria-label="Previous week"
-            >
+            <Button type="button" variant="outline" className="h-9 shrink-0 rounded-full px-3 text-sm" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
               ←
             </Button>
             <p className="min-w-0 flex-1 text-xs leading-snug text-slate-600 sm:text-sm">
               <span className="font-semibold text-slate-800">Week of {formatWeekRangeMonSun(weekMonday)}</span>
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 shrink-0 rounded-full px-3 text-sm"
-              onClick={() => shiftAvailabilityWeek(1)}
-              aria-label="Next week"
-            >
+            <Button type="button" variant="outline" className="h-9 shrink-0 rounded-full px-3 text-sm" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next week">
               →
             </Button>
           </div>
         </div>
         <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open slots</div>
       </div>
-      <div className="mt-3">{timeWindowControl}</div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {timeWindowControl}
+        <Button type="button" variant="outline" className="rounded-full" onClick={openBlockModal}>
+          Create block
+        </Button>
+      </div>
+
       <div className="mt-3 flex flex-wrap gap-2">
         <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
           Copy previous week
         </Button>
-        {futureWeeksControl}
       </div>
 
-      <div
-        className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3"
-        onMouseLeave={() => setDragMode(null)}
-        onMouseUp={() => setDragMode(null)}
-      >
+      <div className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3" onMouseLeave={() => setDragMode(null)} onMouseUp={() => setDragMode(null)}>
         {fullWeekDates.map((d) => {
           const ds = toLocalDateStr(d);
           return (
@@ -813,49 +890,122 @@ export function PortalCalendarPanels({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="rounded-full"
-          onClick={() => {
-            const next = new Set(activeSlots);
-            for (const ds of fullWeekDateStrs) {
-              for (const slot of slotRowIndices) {
-                next.delete(dateSlotKey(ds, slot));
-              }
-            }
-            writeAvailability(next);
-          }}
-        >
+        <Button type="button" variant="outline" className="rounded-full" onClick={clearCurrentWeek}>
           Clear this week
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="rounded-full"
-          onClick={() => {
-            const next = new Set(activeSlots);
-            const templateSlots = [4, 5, 6, 12, 13];
-            for (const ds of fullWeekDateStrs) {
-              for (const s of templateSlots) {
-                if (s >= SLOT_ROW_START && s <= SLOT_ROW_END) {
-                  next.add(dateSlotKey(ds, s));
-                }
-              }
-            }
-            writeAvailability(next);
-          }}
-        >
-          Apply template
         </Button>
       </div>
     </Card>
   );
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.25fr_0.95fr]">
-      {scheduleCard}
-      {availabilityCard}
-    </div>
+    <>
+      <div className="grid gap-4 xl:grid-cols-[1.25fr_0.95fr]">
+        {scheduleCard}
+        {availabilityCard}
+      </div>
+
+      <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => setBlockModalOpen(false)}>
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">{blockSummary}</div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-900">Days of week</p>
+            <div className="flex flex-wrap gap-2">
+              {WEEKDAY_OPTIONS.map((option) => {
+                const active = blockWeekdays.includes(option.value);
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => toggleBlockWeekday(option.value)}
+                    className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                      active
+                        ? "border-primary bg-primary text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-primary/30 hover:text-primary"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900">Start time</label>
+              <Select
+                value={String(blockStartSlot)}
+                onChange={(e) => {
+                  const nextStart = Number.parseInt(e.target.value, 10);
+                  if (!Number.isFinite(nextStart)) return;
+                  setBlockStartSlot(nextStart);
+                  setBlockEndSlotExclusive((current) => (current <= nextStart ? Math.min(SLOTS_PER_DAY, nextStart + 1) : current));
+                }}
+              >
+                {slotRowIndices.map((slot) => (
+                  <option key={`block-start-${slot}`} value={slot}>
+                    {formatAvailabilitySlotLabel(slot)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900">End time</label>
+              <Select
+                value={String(blockEndSlotExclusive)}
+                onChange={(e) => {
+                  const nextEnd = Number.parseInt(e.target.value, 10);
+                  if (!Number.isFinite(nextEnd)) return;
+                  setBlockEndSlotExclusive(nextEnd);
+                  setBlockStartSlot((current) => (current >= nextEnd ? Math.max(0, nextEnd - 1) : current));
+                }}
+              >
+                {slotRowIndices
+                  .map((slot) => slot + 1)
+                  .filter((slot) => slot > blockStartSlot && slot <= SLOTS_PER_DAY)
+                  .map((slot) => (
+                    <option key={`block-end-${slot}`} value={slot}>
+                      {formatSlotEndLabel(slot)}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900">Repeat</label>
+              <Select value={blockCadence} onChange={(e) => setBlockCadence(e.target.value as RecurrenceCadence)}>
+                <option value="once">Once</option>
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="monthly">Monthly</option>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900">Occurrences</label>
+              <Input
+                type="number"
+                min={1}
+                max={24}
+                value={String(blockCadence === "once" ? 1 : blockOccurrences)}
+                onChange={(e) => setBlockOccurrences(Math.max(1, Math.min(24, Number.parseInt(e.target.value, 10) || 1)))}
+                disabled={blockCadence === "once"}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" className="rounded-full" onClick={applyRecurringBlock} disabled={blockWeekdays.length === 0 || blockEndSlotExclusive <= blockStartSlot}>
+              Create block
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }

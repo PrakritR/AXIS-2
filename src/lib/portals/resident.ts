@@ -48,28 +48,6 @@ const residentPortalApproved: PortalDefinition = {
   ],
 };
 
-const residentPortalApprovedLimited: PortalDefinition = {
-  kind: "resident",
-  basePath: "/resident",
-  title: "Resident Portal",
-  accent: "blue",
-  sections: [
-    { section: "dashboard", label: "Dashboard", tabs: [] },
-    { section: "payments", label: "Payments", tabs: [] },
-    {
-      section: "inbox",
-      label: "Inbox",
-      tabs: [
-        { id: "unopened", label: "Unopened" },
-        { id: "opened", label: "Opened" },
-        { id: "sent", label: "Sent" },
-        { id: "trash", label: "Trash" },
-      ],
-    },
-    { section: "profile", label: "Profile", tabs: [] },
-  ],
-};
-
 export async function getResidentPortalDefinition(): Promise<PortalDefinition> {
   const { profile, user } = await getEffectiveSessionForPortal("resident");
   const managerSubscriptionTier = profile?.manager_id?.trim()
@@ -82,6 +60,6 @@ export async function getResidentPortalDefinition(): Promise<PortalDefinition> {
     managerSubscriptionTier,
   });
   if (unlocked) return residentPortalApproved;
-  if (profile?.application_approved) return residentPortalApprovedLimited;
+  if (profile?.application_approved) return residentPortalApproved;
   return residentPortalUnderReview;
 }

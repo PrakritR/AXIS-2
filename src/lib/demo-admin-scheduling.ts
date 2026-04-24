@@ -11,8 +11,8 @@ const PLANNED_KEY = "axis_admin_planned_events_v1";
 /** Monday = 0 … Sunday = 6 */
 export const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
-/** Half-hour slots from 8:00 through 19:30 (index 0 = 8:00–8:30; last slot ends 20:00). */
-export const SLOTS_PER_DAY = 24;
+/** Half-hour slots across the full day (index 0 = 12:00–12:30 AM; last slot ends at midnight). */
+export const SLOTS_PER_DAY = 48;
 
 function isBrowser() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -183,17 +183,17 @@ export function dateHasOpenSlots(dateStr: string) {
 }
 
 export function formatAvailabilitySlotLabel(slotIndex: number) {
-  const mins = 8 * 60 + slotIndex * 30;
+  const mins = slotIndex * 30;
   const h24 = Math.floor(mins / 60);
   const m = mins % 60;
   const d = new Date(2000, 0, 1, h24, m);
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-/** Local start time for a painted half-hour on a calendar date (8:00 + slotIndex×30 min). */
+/** Local start time for a painted half-hour on a calendar date (midnight + slotIndex×30 min). */
 export function localDateAtSlotStart(dateStr: string, slotIndex: number) {
   const [y, mo, day] = dateStr.split("-").map(Number);
-  const base = new Date(y!, mo! - 1, day!, 8, 0, 0, 0);
+  const base = new Date(y!, mo! - 1, day!, 0, 0, 0, 0);
   base.setMinutes(base.getMinutes() + slotIndex * 30);
   return base;
 }
@@ -212,8 +212,7 @@ export function mondayBasedDayIndex(d: Date) {
 export function slotIndexForDate(d: Date) {
   const h = d.getHours();
   const m = d.getMinutes();
-  if (h < 8) return null;
-  const base = (h - 8) * 2 + (m >= 30 ? 1 : 0);
+  const base = h * 2 + (m >= 30 ? 1 : 0);
   if (base < 0 || base >= SLOTS_PER_DAY) return null;
   return base;
 }

@@ -26,6 +26,7 @@ import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-orders-panel";
+import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalSectionSubtabs } from "@/components/portal/portal-section-subtabs";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
@@ -54,6 +55,24 @@ function subscriptionGated(
   const basePath: "/manager" | "/owner" | "/pro" =
     kind === "owner" ? "/owner" : kind === "pro" ? "/pro" : "/manager";
   return <PortalTierPaywall basePath={basePath} />;
+}
+
+function ResidentFreeTierFeatureNotice({ title }: { title: string }) {
+  return (
+    <div className="mx-auto max-w-2xl">
+      <ManagerPortalPageShell title={title}>
+        <div className="rounded-3xl border border-amber-200/80 bg-amber-50/70 p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-900/70">Property plan</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950">Property is using the Free tier</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-700">
+            This resident tab is visible so you can see what exists in the portal, but access to{" "}
+            <span className="font-semibold text-slate-900">{title.toLowerCase()}</span> is not included while the property stays on the Free tier.
+            Payments, inbox, dashboard, and profile are still available.
+          </p>
+        </div>
+      </ManagerPortalPageShell>
+    </div>
+  );
 }
 
 export async function renderPortalSection(
@@ -409,6 +428,11 @@ export async function renderPortalSection(
       if (section === "lease") return <ResidentLeasePanel />;
       if (section === "payments") return <ResidentPaymentsPanel />;
       if (section === "work-orders") return <ResidentWorkOrdersPanel />;
+    }
+    if (residentPaymentsUnlocked && residentManagerTier === "free") {
+      if (tabParts?.length) notFound();
+      if (section === "lease") return <ResidentFreeTierFeatureNotice title="Lease" />;
+      if (section === "work-orders") return <ResidentFreeTierFeatureNotice title="Work orders" />;
     }
   }
 

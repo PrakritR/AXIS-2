@@ -25,7 +25,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
     <div className="flex min-h-screen flex-col bg-[#f5f5f7]">
       <PublicNavbar />
       {showPreviewBanner ? <AdminPreviewBanner label={previewLabel} /> : null}
-      <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col lg:flex-row">
+      <div className="flex min-h-0 w-full flex-1 flex-col lg:flex-row">
         <PortalSidebar definition={residentPortal} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <main className="flex min-h-0 flex-1 flex-col px-4 py-6 lg:px-8 lg:py-8">{children}</main>
