@@ -52,6 +52,20 @@ function countByBucket(rows: DemoApplicantRow[]) {
   return c;
 }
 
+async function syncResidentApproval(row: DemoApplicantRow, nextBucket: ManagerApplicationBucket) {
+  const email = row.email?.trim().toLowerCase();
+  if (!email) return;
+  await fetch("/api/portal/resident-approval", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      email,
+      approved: nextBucket === "approved",
+    }),
+  });
+}
+
 function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucket, assignedRoomChoice?: string) {
   const roomLabel = getRoomChoiceLabel(assignedRoomChoice ?? row.assignedRoomChoice ?? "");
   if (bucket === "approved") return roomLabel ? `Approved · ${roomLabel}` : "Approved";
@@ -237,9 +251,9 @@ export function ManagerApplications() {
     showToast("Refreshed.");
   }, [showToast]);
 
-  const setRowBucket = (id: string, nextBucket: ManagerApplicationBucket) => {
+  const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket) => {
+    const row = rows.find((r) => r.id === id);
     if (nextBucket === "approved") {
-      const row = rows.find((r) => r.id === id);
       const email = row?.email?.trim();
       const propertyId = row?.propertyId?.trim();
       if (row && email && propertyId) {
@@ -252,6 +266,13 @@ export function ManagerApplications() {
     }
     const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket, stage: stageLabelForRow(r, nextBucket) } : r));
     persist(next);
+    if (row) {
+      try {
+        await syncResidentApproval(row, nextBucket);
+      } catch {
+        /* keep local workflow moving even if profile sync fails */
+      }
+    }
     setExpandedId(null);
     setBucket(nextBucket);
     const msg =

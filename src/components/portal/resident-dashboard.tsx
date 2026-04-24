@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { HOUSEHOLD_CHARGES_EVENT, readChargesForResident } from "@/lib/household-charges";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
@@ -57,15 +58,18 @@ export function ResidentDashboard({
   residentUserId?: string | null;
   managerSubscriptionTier?: "free" | "paid" | null;
 }) {
+  const router = useRouter();
   const email = residentEmail.trim().toLowerCase();
   const [applicationStatus, setApplicationStatus] = useState<ResidentApplicationStatus>(applicationApproved ? "approved" : "pending");
   const [applicationStage, setApplicationStage] = useState(applicationApproved ? "Approved" : "Submitted");
   const [applicationProperty, setApplicationProperty] = useState<string | null>(null);
   const [pendingFeeLabel, setPendingFeeLabel] = useState<string | null>(null);
   const [balanceDue, setBalanceDue] = useState("—");
+  const [approvalSyncing, setApprovalSyncing] = useState(false);
   const openWorkOrders = 0;
   const inboxUnread = 0;
   const managerIsFree = managerSubscriptionTier === "free";
+  const syncStartedRef = useRef(false);
 
   useEffect(() => {
     const sync = () => {
@@ -109,6 +113,36 @@ export function ResidentDashboard({
     };
   }, [applicationApproved, email, residentUserId]);
 
+  useEffect(() => {
+    if (!email) return;
+    const desiredApproved = applicationStatus === "approved";
+    if (desiredApproved === applicationApproved) {
+      syncStartedRef.current = false;
+      setApprovalSyncing(false);
+      return;
+    }
+    if (syncStartedRef.current) return;
+    syncStartedRef.current = true;
+    setApprovalSyncing(true);
+    void fetch("/api/portal/resident-approval", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        email,
+        approved: desiredApproved,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("sync failed");
+        router.refresh();
+      })
+      .catch(() => {
+        syncStartedRef.current = false;
+        setApprovalSyncing(false);
+      });
+  }, [applicationApproved, applicationStatus, email, router]);
+
   const primaryNotice = useMemo(() => {
     if (showTestAccessNote) {
       return {
@@ -121,8 +155,10 @@ export function ResidentDashboard({
     if (applicationStatus === "approved") {
       return {
         tone: statusTone("approved"),
-        title: "Resident portal active",
-        body: managerIsFree
+        title: approvalSyncing ? "Finishing access setup" : "Resident portal active",
+        body: approvalSyncing
+          ? "Your application was approved. We’re syncing your resident access now so the right sections appear in the portal."
+          : managerIsFree
           ? applicationProperty
             ? `${displayName} is approved for ${applicationProperty}. Payments are available now. Lease and work orders stay hidden on the manager's Free plan.`
             : `${displayName} is approved. Payments are available now. Lease and work orders stay hidden on the manager's Free plan.`
@@ -145,9 +181,15 @@ export function ResidentDashboard({
       title: pendingFeeLabel ? "Application pending payment review" : "Application under review",
       body: pendingFeeLabel
         ? `Your application fee (${pendingFeeLabel}) is still pending confirmation. Your manager must mark it paid and approve the application before the full resident portal unlocks.`
-        : "Your application has been submitted and is still pending manager review. Full resident portal access unlocks after approval.",
+        : managerIsFree
+          ? "Your application has been submitted and is still pending manager review. After approval, Payments will unlock. Lease and work orders stay hidden on the manager's Free plan."
+          : "Your application has been submitted and is still pending manager review. Full resident portal access unlocks after approval.",
     };
-  }, [applicationProperty, applicationStatus, displayName, managerIsFree, pendingFeeLabel, showTestAccessNote]);
+  }, [applicationProperty, applicationStatus, approvalSyncing, displayName, managerIsFree, pendingFeeLabel, showTestAccessNote]);
+
+  const residentSectionsReady = applicationApproved;
+  const canOpenPayments = residentSectionsReady;
+  const canOpenFullPortal = residentSectionsReady && !managerIsFree;
 
   if (applicationStatus === "approved") {
     return (
@@ -170,26 +212,36 @@ export function ResidentDashboard({
         {balanceDue !== "—" ? (
           <p className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-4 py-2.5 text-sm text-amber-950">
             You have an outstanding balance of <span className="font-semibold tabular-nums">{balanceDue}</span>.{" "}
-            <Link className="font-semibold text-primary underline-offset-2 hover:underline" href="/resident/payments">
-              Pay in Payments
-            </Link>
+            {canOpenPayments ? (
+              <Link className="font-semibold text-primary underline-offset-2 hover:underline" href="/resident/payments">
+                Pay in Payments
+              </Link>
+            ) : (
+              <span className="font-medium">Payments will appear as soon as access finishes syncing.</span>
+            )}
           </p>
         ) : null}
         <div className={`grid gap-3 sm:grid-cols-2 ${managerIsFree ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
           <StatCard label="Account status">
-            <p className="text-lg font-semibold text-slate-900">Active</p>
-            <p className="mt-1 text-sm text-slate-500">Resident access is live.</p>
+            <p className="text-lg font-semibold text-slate-900">{residentSectionsReady ? "Active" : "Syncing access"}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {residentSectionsReady ? "Resident access is live." : "We’re updating your portal sections now."}
+            </p>
           </StatCard>
           <StatCard label="Payment due">
             <p className="text-lg font-semibold tabular-nums text-slate-900">{balanceDue}</p>
-            <Link
-              href="/resident/payments"
-              className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
-            >
-              Open
-            </Link>
+            {canOpenPayments ? (
+              <Link
+                href="/resident/payments"
+                className="mt-2 inline-flex w-fit rounded-full border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-primary"
+              >
+                Open
+              </Link>
+            ) : (
+              <p className="mt-2 text-xs font-medium text-slate-500">Payments will appear after sync.</p>
+            )}
           </StatCard>
-          {!managerIsFree ? (
+          {canOpenFullPortal ? (
             <StatCard label="Lease">
               <p className="text-lg font-semibold text-slate-900">Active</p>
               <Link
@@ -200,7 +252,7 @@ export function ResidentDashboard({
               </Link>
             </StatCard>
           ) : null}
-          {!managerIsFree ? (
+          {canOpenFullPortal ? (
             <StatCard label="Work orders">
               <p className="text-lg font-semibold text-slate-900">{openWorkOrders} open</p>
               <Link
@@ -268,7 +320,9 @@ export function ResidentDashboard({
             {pendingFeeLabel ? "Wait for payment confirmation and approval" : "Wait for manager approval"}
           </p>
           <p className="mt-1 text-sm text-slate-500">
-            We&apos;ll unlock lease, payments, and work orders after approval.
+            {managerIsFree
+              ? "Payments unlock after approval. Lease and work orders stay unavailable on the manager's Free plan."
+              : "We&apos;ll unlock lease, payments, and work orders after approval."}
           </p>
         </StatCard>
       </div>
