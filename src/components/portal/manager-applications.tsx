@@ -41,6 +41,8 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "@/lib/rental-application/data";
 import { findApplicationFeeCharge } from "@/lib/household-charges";
+import { ensureAccountApplicationSeeds } from "@/lib/account-application-seeds";
+import { ensureAccountListingSeeds } from "@/lib/account-listing-seeds";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -146,7 +148,7 @@ function ManagerApplicationPlacementEditor({
 
 export function ManagerApplications() {
   const { showToast } = useAppUi();
-  const { userId, ready: authReady } = useManagerUserId();
+  const { userId, email, ready: authReady } = useManagerUserId();
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
   const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -175,6 +177,17 @@ export function ManagerApplications() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!userId || !email) return;
+    let changed = false;
+    if (ensureAccountListingSeeds(userId, email)) changed = true;
+    if (ensureAccountApplicationSeeds(userId, email)) changed = true;
+    if (changed) {
+      setRows(readManagerApplicationRows());
+      setPortfolioTick((n) => n + 1);
+    }
+  }, [userId, email]);
 
   const persist = useCallback((next: DemoApplicantRow[]) => {
     setRows(next);

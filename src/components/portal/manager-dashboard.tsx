@@ -14,6 +14,8 @@ import {
   demoManagerWorkOrderRowsFull,
 } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { ensureAccountApplicationSeeds } from "@/lib/account-application-seeds";
+import { ensureAccountListingSeeds } from "@/lib/account-listing-seeds";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import { HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
@@ -87,7 +89,7 @@ export function ManagerDashboard() {
   const { showToast } = useAppUi();
   const pathname = usePathname();
   const portalBase = pathname.startsWith("/owner") ? "/owner" : "/manager";
-  const { userId, ready } = useManagerUserId();
+  const { userId, email, ready } = useManagerUserId();
 
   const [pipelineTick, setPipelineTick] = useState(0);
   useEffect(() => {
@@ -142,6 +144,14 @@ export function ManagerDashboard() {
       window.removeEventListener("storage", sync);
     };
   }, []);
+
+  useEffect(() => {
+    if (!userId || !email) return;
+    let changed = false;
+    if (ensureAccountListingSeeds(userId, email)) changed = true;
+    if (ensureAccountApplicationSeeds(userId, email)) changed = true;
+    if (changed) setApplicationRows(readManagerApplicationRows(demoApplicantRows));
+  }, [userId, email]);
 
   const pendingApplications = applicationRows.filter((a) => a.bucket === "pending").length;
 
