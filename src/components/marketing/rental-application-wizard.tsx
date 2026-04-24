@@ -115,21 +115,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     };
   }, [step]);
 
-  useEffect(() => {
-    if (!draftReady || step !== 12) return;
-    const email = form.email.trim();
-    const pid = form.propertyId.trim();
-    if (!email.includes("@") || !pid) return;
-    const { amount } = listingApplicationFeeAmount(pid);
-    if (amount <= 0) return;
-    ensurePendingApplicationFeeCharge({
-      residentEmail: form.email,
-      residentName: form.fullLegalName,
-      residentUserId: feeStepUserId,
-      propertyId: pid,
-    });
-  }, [draftReady, step, form.email, form.fullLegalName, form.propertyId, feeStepUserId, chargeTick]);
-
   const propertyOptions = useMemo(() => {
     const base = getPropertySelectOptions();
     const seen = new Set(base.map((b) => b.value));
@@ -373,6 +358,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         router.replace("/rent/apply");
         return;
       }
+      ensurePendingApplicationFeeCharge({
+        residentEmail: form.email,
+        residentName: form.fullLegalName,
+        residentUserId: feeStepUserId,
+        propertyId: pid,
+      });
       const marked = markApplicationFeePaidAfterStripe(form.email, pid, feeStepUserId);
       if (!marked) {
         showToast("Payment succeeded, but the application fee line could not be updated.");
@@ -409,12 +400,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         const needsFee = Boolean(pid && emailTrim.includes("@") && amount > 0);
 
         if (needsFee && payChannel === "stripe") {
-          ensurePendingApplicationFeeCharge({
-            residentEmail: form.email,
-            residentName: form.fullLegalName,
-            residentUserId,
-            propertyId: pid,
-          });
           const charge = findApplicationFeeCharge(form.email, pid, residentUserId);
           if (charge?.status === "paid") {
             finalizeApplicationSubmit(residentUserId);
@@ -479,15 +464,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           }
           finalizeApplicationSubmit(residentUserId);
           return;
-        }
-
-        if (needsFee) {
-          ensurePendingApplicationFeeCharge({
-            residentEmail: form.email,
-            residentName: form.fullLegalName,
-            residentUserId,
-            propertyId: pid,
-          });
         }
 
         finalizeApplicationSubmit(residentUserId);

@@ -1384,10 +1384,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </p>
           </div>
         ) : null}
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm text-slate-700">
-          Manager view:
-          <span className="ml-1 font-medium text-slate-900">{payChannel === "stripe" ? "Paid" : "Pending"}</span>
-        </div>
       </div>
     );
   }

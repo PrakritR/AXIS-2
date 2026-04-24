@@ -22,7 +22,7 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "paid", label: "Paid" },
 ];
 
-export function ManagerPayments({ tab = "ledger" }: { tab?: "ledger" | "payouts" }) {
+export function ManagerPayments() {
   const { showToast } = useAppUi();
   const { userId } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
@@ -139,19 +139,6 @@ export function ManagerPayments({ tab = "ledger" }: { tab?: "ledger" | "payouts"
     });
   }, [mergedRows, bucket, propertyFilter, residentFilter]);
 
-  if (tab === "payouts") {
-    return (
-      <ManagerPortalPageShell title="Payments">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.05fr)]">
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
-            <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
-          </div>
-          <ManagerPayoutSplitsForm />
-        </div>
-      </ManagerPortalPageShell>
-    );
-  }
-
   return (
     <ManagerPortalPageShell
       title="Payments"
@@ -166,9 +153,6 @@ export function ManagerPayments({ tab = "ledger" }: { tab?: "ledger" | "payouts"
             residentValue={residentFilter}
             onResidentChange={setResidentFilter}
           />
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => setPayoutsOpen(true)}>
-            Payouts
-          </Button>
           <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setAddOpen(true)}>
             Add payment
           </Button>
@@ -215,9 +199,14 @@ export function ManagerPayments({ tab = "ledger" }: { tab?: "ledger" | "payouts"
         open={payoutsOpen}
         title="Payouts"
         onClose={() => setPayoutsOpen(false)}
-        panelClassName="relative z-[71] max-h-[90vh] w-full max-w-md overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-2xl"
+        panelClassName="relative z-[71] max-h-[90vh] w-full max-w-[1100px] overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-2xl"
       >
-        <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.05fr)]">
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
+            <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
+          </div>
+          <ManagerPayoutSplitsForm />
+        </div>
       </Modal>
     </ManagerPortalPageShell>
   );

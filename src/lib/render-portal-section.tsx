@@ -178,18 +178,10 @@ export async function renderPortalSection(
     if (section === "payments") {
       if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
       const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
-      if (!["ledger", "payouts"].includes(paymentsTab)) redirect(`${def.basePath}/payments/ledger`);
-      const paymentTabs: TabItem[] = meta.tabs.map((t) => ({
-        id: t.id,
-        label: t.label,
-        href: `${def.basePath}/payments/${t.id}`,
-      }));
+      if (paymentsTab === "stripe" || paymentsTab === "payouts") redirect(`${def.basePath}/payments/ledger?payouts=1`);
+      if (paymentsTab !== "ledger") redirect(`${def.basePath}/payments/ledger`);
       return subscriptionGated(
-        <>
-          <PortalSectionSubtabs tabs={paymentTabs} activeId={paymentsTab} />
-          <ManagerPayments tab={paymentsTab as "ledger" | "payouts"} />
-        </>,
+        <ManagerPayments />,
         kind,
         "payments",
         managerOwnerSubscriptionTier,
@@ -270,18 +262,10 @@ export async function renderPortalSection(
     if (section === "payments") {
       if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
       const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
-      if (!["ledger", "payouts"].includes(paymentsTab)) redirect(`${def.basePath}/payments/ledger`);
-      const paymentTabs: TabItem[] = meta.tabs.map((t) => ({
-        id: t.id,
-        label: t.label,
-        href: `${def.basePath}/payments/${t.id}`,
-      }));
+      if (paymentsTab === "stripe" || paymentsTab === "payouts") redirect(`${def.basePath}/payments/ledger?payouts=1`);
+      if (paymentsTab !== "ledger") redirect(`${def.basePath}/payments/ledger`);
       return subscriptionGated(
-        <>
-          <PortalSectionSubtabs tabs={paymentTabs} activeId={paymentsTab} />
-          <ManagerPayments tab={paymentsTab as "ledger" | "payouts"} />
-        </>,
+        <ManagerPayments />,
         kind,
         "payments",
         managerOwnerSubscriptionTier,
@@ -341,18 +325,10 @@ export async function renderPortalSection(
     if (section === "payments") {
       if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
       const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
-      if (!["ledger", "payouts"].includes(paymentsTab)) redirect(`${def.basePath}/payments/ledger`);
-      const paymentTabs: TabItem[] = meta.tabs.map((t) => ({
-        id: t.id,
-        label: t.label,
-        href: `${def.basePath}/payments/${t.id}`,
-      }));
+      if (paymentsTab === "stripe" || paymentsTab === "payouts") redirect(`${def.basePath}/payments/ledger?payouts=1`);
+      if (paymentsTab !== "ledger") redirect(`${def.basePath}/payments/ledger`);
       return subscriptionGated(
-        <>
-          <PortalSectionSubtabs tabs={paymentTabs} activeId={paymentsTab} />
-          <ManagerPayments tab={paymentsTab as "ledger" | "payouts"} />
-        </>,
+        <ManagerPayments />,
         kind,
         "payments",
         managerOwnerSubscriptionTier,
