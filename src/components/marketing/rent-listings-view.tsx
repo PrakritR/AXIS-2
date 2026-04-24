@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PropertyCard } from "@/components/marketing/property-card";
+import { RoomListingCard } from "@/components/marketing/room-listing-card";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
 import { parseRadiusParam, parseUSZip } from "@/lib/listings-search";
-import { filterPropertiesForCatalog } from "@/lib/property-listings-catalog";
+import { filterRoomListings } from "@/lib/room-listings-catalog";
 
 function firstString(v: string | string[] | undefined): string | undefined {
   if (v === undefined) return undefined;
@@ -31,7 +31,6 @@ export function parseListingsSearchFromParams(
   return { zipRaw, centerZip, radiusMiles, moveIn, moveOut, maxBudgetNum, bathroom };
 }
 
-/** Public rent listings — properties (not individual rooms). */
 export function RentListingsView() {
   const searchParams = useSearchParams();
   const [extras, setExtras] = useState<MockProperty[]>([]);
@@ -69,9 +68,9 @@ export function RentListingsView() {
     Boolean(props.moveIn) ||
     Boolean(props.moveOut);
 
-  const propertyResults = useMemo(
+  const roomResults = useMemo(
     () =>
-      filterPropertiesForCatalog(combined, {
+      filterRoomListings(combined, {
         zipRaw: props.zipRaw,
         radiusMiles: props.radiusMiles,
         maxBudgetNum: props.maxBudgetNum,
@@ -83,7 +82,7 @@ export function RentListingsView() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">Listings</p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Available properties</h1>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Available rooms</h1>
 
       {hasSearch ? (
         <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
@@ -123,11 +122,11 @@ export function RentListingsView() {
                 Bath: {props.bathroom}
               </>
             ) : null}
-            {propertyResults.length > 0 ? (
+            {roomResults.length > 0 ? (
               <>
                 <span className="text-slate-500"> · </span>
                 <span className="font-semibold text-slate-900">
-                  {propertyResults.length} propert{propertyResults.length === 1 ? "y" : "ies"}
+                  {roomResults.length} room{roomResults.length === 1 ? "" : "s"}
                 </span>
               </>
             ) : null}
@@ -138,20 +137,20 @@ export function RentListingsView() {
         </div>
       ) : null}
 
-      {propertyResults.length === 0 ? (
+      {roomResults.length === 0 ? (
         <div className="mt-12 rounded-3xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-14 text-center">
-          <p className="text-base font-semibold text-slate-800">No properties match these filters</p>
+          <p className="text-base font-semibold text-slate-800">No rooms match these filters</p>
           <p className="mt-2 text-sm text-slate-600">
-            Try a larger radius, a nearby ZIP, a higher max rent, or set bathroom to Any (filters apply to rooms inside each listing).
+            Try a larger radius, a nearby ZIP, a higher max rent, or set bathroom to Any.
           </p>
           <Link href="/rent/listings" className="mt-6 inline-flex text-sm font-semibold text-primary hover:opacity-90">
-            View all properties
+            View all rooms
           </Link>
         </div>
       ) : (
         <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {propertyResults.map((p) => (
-            <PropertyCard key={p.id} property={p} />
+          {roomResults.map((room) => (
+            <RoomListingCard key={room.key} row={room} />
           ))}
         </div>
       )}
