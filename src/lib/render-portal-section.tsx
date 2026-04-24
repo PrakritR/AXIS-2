@@ -368,6 +368,8 @@ export async function renderPortalSection(
       <ResidentDashboard
         applicationApproved={profile?.application_approved ?? false}
         displayName={profile?.full_name ?? profile?.email ?? "Resident"}
+        residentEmail={profile?.email ?? residentCtx?.user?.email ?? ""}
+        residentUserId={profile?.id ?? residentCtx?.user?.id ?? null}
       />
     );
   }
