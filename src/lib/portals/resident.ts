@@ -10,7 +10,6 @@ const residentPortalUnderReview: PortalDefinition = {
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
-    { section: "profile", label: "Profile", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",
@@ -21,6 +20,7 @@ const residentPortalUnderReview: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
+    { section: "profile", label: "Profile", tabs: [] },
   ],
 };
 
@@ -31,8 +31,8 @@ const residentPortalApproved: PortalDefinition = {
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
-    { section: "lease", label: "Lease", tabs: [] },
     { section: "payments", label: "Payments", tabs: [] },
+    { section: "lease", label: "Lease", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },
     {
       section: "inbox",
