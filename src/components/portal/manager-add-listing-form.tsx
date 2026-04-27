@@ -95,16 +95,12 @@ const MAX_IMG_BYTES = 2.6 * 1024 * 1024;
 const MAX_VID_BYTES = 14 * 1024 * 1024;
 const MAX_HOUSE_PHOTOS = 12;
 
-/** Multi-step flow (similar to the rental application wizard). */
+/** Multi-step flow — 5 steps, combining related sections to reduce friction. */
 const LISTING_FORM_STEPS = [
-  { id: "building", label: "Building & listing" },
-  { id: "lease", label: "Lease & payments" },
-  { id: "bundles", label: "Bundles & leasing" },
-  { id: "costs", label: "House costs" },
+  { id: "building", label: "Building" },
+  { id: "lease", label: "Lease & costs" },
   { id: "rooms", label: "Rooms" },
-  { id: "bath", label: "Bathrooms" },
-  { id: "shared", label: "Shared spaces" },
-  { id: "quick-facts", label: "Quick facts" },
+  { id: "spaces", label: "Bathrooms & spaces" },
   { id: "amenities", label: "Amenities" },
 ] as const;
 
@@ -189,6 +185,7 @@ export function ManagerAddListingForm({
   );
   const [busy, setBusy] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [showQuickFacts, setShowQuickFacts] = useState(() => Boolean(initialSubmission?.quickFacts?.length));
   const scrollRef = useRef<HTMLDivElement>(null);
   const { userId, ready: authReady } = useManagerUserId();
 
@@ -579,10 +576,27 @@ export function ManagerAddListingForm({
               ×
             </button>
           </div>
-          <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-            Step {stepIndex + 1} of {LISTING_STEP_COUNT} · {LISTING_FORM_STEPS[stepIndex]!.label}
-          </p>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-4 flex flex-wrap items-center gap-1">
+            {LISTING_FORM_STEPS.map((step, i) => (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => {
+                  if (i < stepIndex || canContinueFromStep(stepIndex)) setStepIndex(i);
+                }}
+                className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                  i === stepIndex
+                    ? "bg-primary text-white"
+                    : i < stepIndex
+                      ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      : "text-slate-400"
+                }`}
+              >
+                {step.label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
             <div
               className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
               style={{ width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%` }}
@@ -591,19 +605,19 @@ export function ManagerAddListingForm({
         </div>
 
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+          {/* ── Step 0: Building & listing ── */}
           {stepIndex === 0 ? (
           <FormSection
             id="edit-building"
             title="Building & listing"
-            description="Legal address and marketing copy for search and the listing page."
+            description="Address, photos, and public description."
           >
             <div className="mb-6">
               <ListingSubsection
-                title="General house photos"
-                description="Exterior, kitchen, living areas, and other shared spaces—these appear at the top of your public listing (not room-specific tours)."
+                title="House photos"
+                description="Exterior, kitchen, living areas — appear at the top of your public listing."
               >
                 <div>
-                  <FieldLabel hint="Shown in the large photo grid on the listing page.">Upload photos</FieldLabel>
                   <div className="mt-2 rounded-xl border border-dashed border-slate-200/90 bg-white p-4">
                     <input
                       id="house-photos-input"
@@ -639,9 +653,7 @@ export function ManagerAddListingForm({
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-3 text-[11px] text-slate-500">
-                        No photos yet — up to {MAX_HOUSE_PHOTOS} images (~{Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB each).
-                      </p>
+                      <p className="mt-2 text-[11px] text-slate-500">Up to {MAX_HOUSE_PHOTOS} photos (~{Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB each).</p>
                     )}
                   </div>
                 </div>
@@ -657,11 +669,11 @@ export function ManagerAddListingForm({
                 <Input value={sub.address} onChange={(e) => setSub((s) => ({ ...s, address: e.target.value }))} />
               </div>
               <GridField>
-                <FieldLabel hint="Postal code for search and maps.">ZIP *</FieldLabel>
+                <FieldLabel>ZIP *</FieldLabel>
                 <Input value={sub.zip} onChange={(e) => setSub((s) => ({ ...s, zip: e.target.value }))} maxLength={10} />
               </GridField>
               <GridField>
-                <FieldLabel hint="Area name as you want it on the listing.">Neighborhood *</FieldLabel>
+                <FieldLabel>Neighborhood *</FieldLabel>
                 <Input value={sub.neighborhood} onChange={(e) => setSub((s) => ({ ...s, neighborhood: e.target.value }))} />
               </GridField>
               <div className="sm:col-span-2">
@@ -669,7 +681,7 @@ export function ManagerAddListingForm({
                 <Input value={sub.tagline} onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))} placeholder="Short headline for search cards" />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel hint="Shown on the listing — describe the home, culture, and who it is good for.">House overview</FieldLabel>
+                <FieldLabel hint="Describe the home, culture, and who it is good for.">House overview</FieldLabel>
                 <Textarea
                   className="min-h-[100px]"
                   value={sub.houseOverview}
@@ -678,65 +690,73 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel hint="Shown on the public listing under the House rules tab (quiet hours, guests, smoking, shared spaces).">
-                  House rules
-                </FieldLabel>
+                <FieldLabel hint="Quiet hours, guests, smoking, shared spaces.">House rules</FieldLabel>
                 <Textarea
-                  className="min-h-[88px]"
+                  className="min-h-[80px]"
                   value={sub.houseRulesText}
                   onChange={(e) => setSub((s) => ({ ...s, houseRulesText: e.target.value }))}
-                  placeholder="e.g. Quiet hours 10pm–8am · No smoking indoors · Label your food in shared refrigerators"
+                  placeholder="e.g. Quiet hours 10pm–8am · No smoking indoors"
                 />
               </div>
             </div>
           </FormSection>
           ) : null}
 
+          {/* ── Step 1: Lease, fees & costs ── */}
           {stepIndex === 1 ? (
           <FormSection
             id="edit-lease"
-            title="Lease, fees & resident payments"
+            title="Lease, fees & costs"
             description={
-              <>
-                Application, deposit, signing-day charges, and optional Zelle.{" "}
-                <span className="font-medium text-slate-700">Leave a money field blank or $0 if it does not apply</span> — those lines stay off the
-                public “Lease basics” table.
-              </>
+              <>Leave money fields blank or $0 to hide them on the public listing.</>
             }
           >
             <div className="space-y-5">
-              <ListingSubsection title="Lease terms & lengths">
+              <ListingSubsection title="Lease terms">
                 <div>
-                  <FieldLabel>Lease terms & lengths</FieldLabel>
+                  <FieldLabel hint="Lease lengths and terms shown on your listing.">Lease terms</FieldLabel>
                   <Textarea className="min-h-[72px]" value={sub.leaseTermsBody} onChange={(e) => setSub((s) => ({ ...s, leaseTermsBody: e.target.value }))} />
                 </div>
               </ListingSubsection>
 
-              <ListingSubsection
-                title="Published fees"
-                description="Shown on your listing and on the rental application when relevant."
-              >
-                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              <ListingSubsection title="Fees">
+                <div className="grid gap-3 sm:grid-cols-3">
                   <GridField>
-                    <FieldLabel hint='e.g. "$50" or "Waived"'>Application fee</FieldLabel>
+                    <FieldLabel>Application fee</FieldLabel>
                     <Input value={sub.applicationFee} onChange={(e) => setSub((s) => ({ ...s, applicationFee: e.target.value }))} placeholder="$50 or Waived" />
                   </GridField>
                   <GridField>
-                    <FieldLabel hint='e.g. "$500" or "—"'>Security deposit</FieldLabel>
+                    <FieldLabel>Security deposit</FieldLabel>
                     <Input value={sub.securityDeposit} onChange={(e) => setSub((s) => ({ ...s, securityDeposit: e.target.value }))} placeholder="$500" />
                   </GridField>
                   <GridField>
-                    <FieldLabel hint='e.g. "$200" or "—"'>Move-in fee</FieldLabel>
+                    <FieldLabel>Move-in fee</FieldLabel>
                     <Input value={sub.moveInFee} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} placeholder="$200 or —" />
                   </GridField>
+                  <GridField>
+                    <FieldLabel hint="Leave blank or $0 to hide.">Parking (monthly)</FieldLabel>
+                    <Input value={sub.parkingMonthly} onChange={(e) => setSub((s) => ({ ...s, parkingMonthly: e.target.value }))} placeholder="$150 or —" />
+                  </GridField>
+                  <GridField>
+                    <FieldLabel hint="Leave blank or $0 to hide.">HOA / community</FieldLabel>
+                    <Input value={sub.hoaMonthly} onChange={(e) => setSub((s) => ({ ...s, hoaMonthly: e.target.value }))} placeholder="—" />
+                  </GridField>
+                  <GridField>
+                    <FieldLabel>Other monthly fees</FieldLabel>
+                    <Input value={sub.otherMonthlyFees} onChange={(e) => setSub((s) => ({ ...s, otherMonthlyFees: e.target.value }))} placeholder="—" />
+                  </GridField>
+                </div>
+                <div className="mt-3">
+                  <FieldLabel hint="Explain all recurring and one-time housing costs (shown on your listing).">Cost summary</FieldLabel>
+                  <Textarea className="min-h-[72px]" value={sub.houseCostsDetail} onChange={(e) => setSub((s) => ({ ...s, houseCostsDetail: e.target.value }))} />
                 </div>
               </ListingSubsection>
 
               <ListingSubsection
-                title="Payment due at signing"
-                description="Select every charge collected when the lease is signed. Totals use your amounts above and per-room rent / utilities."
+                title="Payment at signing"
+                description="Select every charge collected when the lease is signed."
               >
-                <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
                   {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
                     <label key={opt.id} className="flex cursor-pointer items-center gap-2">
                       <input
@@ -759,63 +779,43 @@ export function ManagerAddListingForm({
               <ListingSubsection
                 id="edit-zelle"
                 title="Application fee payment methods"
-                description="Choose whether applicants can pay the application fee by Stripe, Zelle, or both."
+                description="Choose how applicants can pay the application fee."
               >
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-4 w-4 rounded border-slate-300"
-                    checked={sub.zellePaymentsEnabled ?? false}
-                    onChange={(e) => {
-                      const on = e.target.checked;
-                      setSub((s) => ({
-                        ...s,
-                        zellePaymentsEnabled: on,
-                        applicationFeeZelleEnabled: on ? (s.applicationFeeZelleEnabled ?? true) : false,
-                      }));
-                    }}
-                  />
-                  <span className="text-sm font-medium text-slate-800">Enable Zelle</span>
-                </label>
-                <div>
-                  <FieldLabel hint="Shown to applicants if they choose Zelle.">Zelle phone or email</FieldLabel>
-                  <Input
-                    value={sub.zelleContact ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, zelleContact: e.target.value }))}
-                    placeholder="+1 555 010 8899 or name@email.com"
-                    disabled={!(sub.zellePaymentsEnabled ?? false)}
-                  />
+                <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                  <label className="flex cursor-pointer items-center gap-3">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300"
+                      checked={sub.applicationFeeStripeEnabled !== false}
+                      onChange={(e) => setSub((s) => ({ ...s, applicationFeeStripeEnabled: e.target.checked }))}
+                    />
+                    <span className="text-sm font-medium text-slate-800">Stripe (card)</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-3">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300"
+                      checked={Boolean(sub.zellePaymentsEnabled)}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setSub((s) => ({
+                          ...s,
+                          zellePaymentsEnabled: on,
+                          applicationFeeZelleEnabled: on,
+                        }));
+                      }}
+                    />
+                    <span className="text-sm font-medium text-slate-800">Zelle</span>
+                  </label>
                 </div>
                 {sub.zellePaymentsEnabled ? (
-                  <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-                    <label className="flex cursor-pointer items-start gap-3">
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4 rounded border-slate-300"
-                        checked={sub.applicationFeeStripeEnabled !== false}
-                        onChange={(e) =>
-                          setSub((s) => ({
-                            ...s,
-                            applicationFeeStripeEnabled: e.target.checked,
-                          }))
-                        }
-                      />
-                      <span className="text-sm font-medium text-slate-800">Stripe</span>
-                    </label>
-                    <label className="flex cursor-pointer items-start gap-3">
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4 rounded border-slate-300"
-                        checked={Boolean(sub.applicationFeeZelleEnabled ?? true)}
-                        onChange={(e) =>
-                          setSub((s) => ({
-                            ...s,
-                            applicationFeeZelleEnabled: e.target.checked,
-                          }))
-                        }
-                      />
-                      <span className="text-sm font-medium text-slate-800">Zelle</span>
-                    </label>
+                  <div className="mt-3">
+                    <FieldLabel hint="Shown to applicants when they select Zelle.">Zelle phone or email</FieldLabel>
+                    <Input
+                      value={sub.zelleContact ?? ""}
+                      onChange={(e) => setSub((s) => ({ ...s, zelleContact: e.target.value }))}
+                      placeholder="+1 555 010 8899 or name@email.com"
+                    />
                   </div>
                 ) : null}
               </ListingSubsection>
@@ -823,129 +823,15 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
+          {/* ── Step 2: Rooms ── */}
           {stepIndex === 2 ? (
-          <FormSection
-            id="edit-bundles"
-            title="Bundles & leasing"
-            description={
-              <>
-                Optional packages on the public “Bundles & leasing” section. Choose rooms per bundle below. Leave everything empty to auto-build one summary from{" "}
-                <span className="font-medium text-slate-800">Rooms</span>.
-              </>
-            }
-          >
-            <div className="space-y-4">
-              {(sub.bundles ?? []).map((bundle, i) => (
-                <div key={bundle.id} className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 sm:p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <p className="text-sm font-semibold text-slate-900">Bundle {i + 1}</p>
-                    <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBundle(i)}>
-                      Remove
-                    </button>
-                  </div>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <div className="sm:col-span-2">
-                      <FieldLabel hint="Shown in the Bundle column.">Bundle name</FieldLabel>
-                      <Input value={bundle.label} onChange={(e) => setBundle(i, { label: e.target.value })} placeholder="e.g. Standard lease package" />
-                    </div>
-                    <GridField>
-                      <FieldLabel hint="e.g. from $899/mo">Price line</FieldLabel>
-                      <Input value={bundle.price} onChange={(e) => setBundle(i, { price: e.target.value })} placeholder="from $899/mo" />
-                    </GridField>
-                    <GridField>
-                      <FieldLabel hint='Shown with a strikethrough when set (e.g. "$999/mo").'>Optional compare-at price</FieldLabel>
-                      <Input value={bundle.strikethrough} onChange={(e) => setBundle(i, { strikethrough: e.target.value })} placeholder="$999/mo" />
-                    </GridField>
-                    <div className="sm:col-span-2">
-                      <FieldLabel hint="Shown as the Offer column when set.">Offer / promo</FieldLabel>
-                      <Input value={bundle.promo} onChange={(e) => setBundle(i, { promo: e.target.value })} placeholder="First month concession, etc." />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <FieldLabel hint="Checked rooms appear under this bundle on the listing. Add rooms in the Rooms section first.">
-                        Rooms in this bundle
-                      </FieldLabel>
-                      {sub.rooms.filter((r) => r.name.trim()).length === 0 ? (
-                        <p className="mt-2 rounded-lg border border-dashed border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-950">
-                          Name at least one room below (Rooms section) to pick it here.
-                        </p>
-                      ) : (
-                        <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
-                          {sub.rooms.map((room) => (
-                            <label key={`${bundle.id}-br-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300"
-                                checked={(bundle.includedRoomIds ?? []).includes(room.id)}
-                                onChange={(e) => toggleBundleRoom(i, room.id, e.target.checked)}
-                              />
-                              <span className="font-medium text-slate-800">{room.name.trim()}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="sm:col-span-2">
-                      <FieldLabel hint="Overrides auto-generated room names only when you need extra wording.">Scope notes (optional)</FieldLabel>
-                      <Textarea
-                        className="min-h-[56px]"
-                        value={bundle.roomsLine}
-                        onChange={(e) => setBundle(i, { roomsLine: e.target.value })}
-                        placeholder="Optional · e.g. Flexible dates · Combine with Room B only"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addBundle}>
-                + Add bundle
-              </Button>
-            </div>
-          </FormSection>
-          ) : null}
-
-          {stepIndex === 3 ? (
-          <FormSection
-            id="edit-costs"
-            title="House costs"
-            description="Recurring fees. Leave blank or $0 for items that do not apply — they are hidden on the public lease summary."
-          >
-            <div className="space-y-3">
-              <div>
-                <FieldLabel hint="Explain all recurring and one-time housing costs.">Cost summary</FieldLabel>
-                <Textarea className="min-h-[80px]" value={sub.houseCostsDetail} onChange={(e) => setSub((s) => ({ ...s, houseCostsDetail: e.target.value }))} />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <GridField>
-                  <FieldLabel hint="Leave blank or $0 to hide on the listing.">Parking (monthly)</FieldLabel>
-                  <Input value={sub.parkingMonthly} onChange={(e) => setSub((s) => ({ ...s, parkingMonthly: e.target.value }))} placeholder="$150 or —" />
-                </GridField>
-                <GridField>
-                  <FieldLabel hint="Leave blank or $0 to hide on the listing.">HOA / community</FieldLabel>
-                  <Input value={sub.hoaMonthly} onChange={(e) => setSub((s) => ({ ...s, hoaMonthly: e.target.value }))} placeholder="$0 = not shown on listing" />
-                </GridField>
-                <GridField>
-                  <FieldLabel hint="Any other recurring line item.">Other fees</FieldLabel>
-                  <Input value={sub.otherMonthlyFees} onChange={(e) => setSub((s) => ({ ...s, otherMonthlyFees: e.target.value }))} />
-                </GridField>
-              </div>
-            </div>
-          </FormSection>
-          ) : null}
-
-          {stepIndex === 4 ? (
           <FormSection
             id="edit-rooms"
             title="Rooms"
-            description={
-              <>
-                Add each rentable room, <span className="font-medium text-slate-800">monthly rent</span>, and{" "}
-                <span className="font-medium text-slate-800">utilities estimate</span> (per room). Bathroom assignment is in{" "}
-                <span className="font-medium text-slate-800">Bathrooms</span> below — no need to repeat it here.
-              </>
-            }
+            description="Add each rentable room with rent and utilities. Bathroom assignments are in the next step."
           >
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-              <p className="text-sm text-slate-500">Each room can include photos and one optional video for the listing.</p>
+              <p className="text-sm text-slate-500">Photos and one optional video per room.</p>
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addRoom}>
                 + Add room
               </Button>
@@ -970,15 +856,15 @@ export function ManagerAddListingForm({
                     </div>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <GridField>
-                        <FieldLabel hint="Shown on the listing and in room pickers.">Room name *</FieldLabel>
+                        <FieldLabel>Room name *</FieldLabel>
                         <Input value={room.name} onChange={(e) => setRoom(i, { name: e.target.value })} placeholder="Room 12A" />
                       </GridField>
                       <GridField>
-                        <FieldLabel hint="Optional — e.g. first floor, garden level.">Floor / level</FieldLabel>
+                        <FieldLabel hint="e.g. first floor, garden level.">Floor / level</FieldLabel>
                         <Input value={room.floor} onChange={(e) => setRoom(i, { floor: e.target.value })} placeholder="First floor" />
                       </GridField>
                       <GridField>
-                        <FieldLabel hint="Whole dollars per month.">Monthly rent ($) *</FieldLabel>
+                        <FieldLabel>Monthly rent ($) *</FieldLabel>
                         <Input
                           inputMode="decimal"
                           value={room.monthlyRent || ""}
@@ -987,7 +873,15 @@ export function ManagerAddListingForm({
                         />
                       </GridField>
                       <GridField>
-                        <FieldLabel hint="Pick a preset or type your own.">Availability</FieldLabel>
+                        <FieldLabel hint="Monthly estimate used in signing totals.">Utilities estimate</FieldLabel>
+                        <Input
+                          value={room.utilitiesEstimate}
+                          onChange={(e) => setRoom(i, { utilitiesEstimate: e.target.value })}
+                          placeholder="$175/mo"
+                        />
+                      </GridField>
+                      <GridField>
+                        <FieldLabel>Availability</FieldLabel>
                         <div>
                           <Input
                             value={room.availability}
@@ -1003,17 +897,7 @@ export function ManagerAddListingForm({
                         </div>
                       </GridField>
                       <GridField>
-                        <FieldLabel hint="Monthly estimate for this room (used on the listing and in signing totals).">
-                          Utilities (estimate)
-                        </FieldLabel>
-                        <Input
-                          value={room.utilitiesEstimate}
-                          onChange={(e) => setRoom(i, { utilitiesEstimate: e.target.value })}
-                          placeholder="e.g. $175/mo"
-                        />
-                      </GridField>
-                      <GridField>
-                        <FieldLabel hint="Preset or describe what is included in this room.">Furnishing</FieldLabel>
+                        <FieldLabel>Furnishing</FieldLabel>
                         <select
                           className={selectInputCls}
                           value={furnishState.select}
@@ -1034,7 +918,7 @@ export function ManagerAddListingForm({
                       </GridField>
                       {furnishState.select === "__custom__" ? (
                         <div className="sm:col-span-2">
-                          <FieldLabel hint="Shown on the listing when furnishing is not a simple preset.">Custom furnishing details</FieldLabel>
+                          <FieldLabel>Custom furnishing details</FieldLabel>
                           <Textarea
                             className="min-h-[56px]"
                             value={room.furnishing}
@@ -1044,7 +928,7 @@ export function ManagerAddListingForm({
                         </div>
                       ) : null}
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Toggle common items; add anything else on the lines below.">Room amenities</FieldLabel>
+                        <FieldLabel hint="Check common items; add extras below.">Room amenities</FieldLabel>
                         <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
                           {ROOM_AMENITY_PRESETS.map((p) => {
                             const on = splitLineList(room.roomAmenitiesText).includes(p.label);
@@ -1065,23 +949,20 @@ export function ManagerAddListingForm({
                             );
                           })}
                         </div>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="One per line — merged with the checkboxes above on the public listing.">Additional amenities</FieldLabel>
                         <Textarea
-                          className="min-h-[56px]"
+                          className="mt-2 min-h-[48px]"
                           value={extraLinesOutsidePresetSet(room.roomAmenitiesText, ROOM_AMENITY_LABEL_SET)}
                           onChange={(e) =>
                             setRoom(i, {
                               roomAmenitiesText: setExtraLinesPreservingPresets(room.roomAmenitiesText, e.target.value, ROOM_AMENITY_LABEL_SET),
                             })
                           }
-                          placeholder="Anything not in the list — e.g. Window AC unit, Murphy bed…"
+                          placeholder="One per line — e.g. Window AC unit, Murphy bed…"
                         />
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Furniture, light, closet, desk, notes for listing card.">Room details</FieldLabel>
-                        <Textarea className="min-h-[72px]" value={room.detail} onChange={(e) => setRoom(i, { detail: e.target.value })} />
+                        <FieldLabel hint="Notes for listing card (closet size, light, layout).">Room details</FieldLabel>
+                        <Textarea className="min-h-[60px]" value={room.detail} onChange={(e) => setRoom(i, { detail: e.target.value })} />
                       </div>
 
                       <div className="sm:col-span-2">
@@ -1180,7 +1061,7 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-bath"
             title="Bathrooms"
-            description="Group the public listing by bathroom: assign each bedroom to the bath row it uses. A room can use a private suite bath and still share a whole-house hall bath — use “Whole-house” for the common one. Add finishes (dual vanities, walk-in shower, etc.) under Bathroom amenities."
+            description={'Group the public listing by bathroom: assign each bedroom to the bath row it uses. A room can use a private suite bath and still share a whole-house hall bath — use "Whole-house" for the common one. Add finishes (dual vanities, walk-in shower, etc.) under Bathroom amenities.'}
           >
               <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                 <p className="text-sm text-slate-500">Shown in the Bathrooms section on the public listing.</p>
@@ -1386,7 +1267,7 @@ export function ManagerAddListingForm({
                             className="min-h-[72px]"
                             value={sp.detail}
                             onChange={(e) => setSharedSpace(i, { detail: e.target.value })}
-                            placeholder="How the space works, what’s included, any house rules."
+                            placeholder="How the space works, what's included, any house rules."
                           />
                         </div>
                         <div className="sm:col-span-2">

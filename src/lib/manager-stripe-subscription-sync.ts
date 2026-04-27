@@ -11,11 +11,12 @@ import {
 } from "@/lib/stripe-price-ids";
 import { META_SCHEDULED_BILLING, META_SCHEDULED_TIER } from "@/lib/stripe-subscription-metadata";
 
-function clearScheduleMetadata(meta: Record<string, string>): Record<string, string> {
-  const next = { ...meta };
-  delete next[META_SCHEDULED_TIER];
-  delete next[META_SCHEDULED_BILLING];
-  return next;
+function clearScheduleMetadata(meta: Record<string, string>): Record<string, string | null> {
+  return {
+    ...meta,
+    [META_SCHEDULED_TIER]: null,
+    [META_SCHEDULED_BILLING]: null,
+  };
 }
 
 /**

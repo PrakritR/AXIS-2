@@ -305,6 +305,7 @@ export function ManagerPlan() {
 
   const handleTierAction = (target: ManagerSkuTier) => {
     if (!sub || busyTier !== null || billingSyncBusy || billingPortalBusy) return;
+    if (sub.scheduledDowngrade?.tier === target) return;
     setPendingTier(target);
   };
 
@@ -443,14 +444,18 @@ export function ManagerPlan() {
               let ctaDisabled = (busyTier !== null || billingSyncBusy) && !busyHere;
               let showPrimary = true;
 
+              const isScheduledDowngradeTo = !current && sub.scheduledDowngrade?.tier === tierId;
+
               if (tierId === "free") {
+                showPrimary = false;
                 if (sub.isFree) {
                   ctaLabel = "Current plan";
-                  showPrimary = false;
+                  ctaDisabled = true;
+                } else if (selected) {
+                  ctaLabel = "Selected (confirm above)";
                   ctaDisabled = true;
                 } else {
-                  ctaLabel = sub.stripeManaged ? "Cancel plan (end of period)" : "Switch to Free";
-                  showPrimary = false;
+                  ctaLabel = "Switch to Free";
                 }
               } else if (current) {
                 const bill = sub.billing?.toLowerCase();
@@ -464,8 +469,11 @@ export function ManagerPlan() {
                 ctaDisabled = true;
                 if (selected && hasPendingChanges) {
                   ctaLabel = "Selected (confirm above)";
-                  ctaDisabled = true;
                 }
+              } else if (isScheduledDowngradeTo) {
+                ctaLabel = "Downgrade scheduled";
+                showPrimary = false;
+                ctaDisabled = true;
               } else if (!sub.stripeManaged && (tierId === "pro" || tierId === "business")) {
                 ctaLabel = selected ? "Selected (confirm above)" : `Choose ${tierLabel(tierId)}`;
               } else if (sub.stripeManaged) {

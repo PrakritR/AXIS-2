@@ -59,6 +59,8 @@ export type LeasePipelineRow = {
   generatedAtIso?: string | null;
   managerUploadedPdf?: { dataUrl: string; fileName: string; uploadedAt: string } | null;
   thread: LeaseThreadMessage[];
+  signatureName?: string | null;
+  signedAtIso?: string | null;
 };
 
 /** Coerce partial rows from localStorage so UI never reads undefined thread / notes / bucket. */
@@ -98,6 +100,8 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     generatedAtIso: r.generatedAtIso ?? null,
     managerUploadedPdf: r.managerUploadedPdf ?? null,
     thread: safeThread,
+    signatureName: typeof r.signatureName === "string" ? r.signatureName : null,
+    signedAtIso: typeof r.signedAtIso === "string" ? r.signedAtIso : null,
   };
 }
 
@@ -284,7 +288,7 @@ function makeMsg(role: LeaseThreadRole, body: string): LeaseThreadMessage {
   };
 }
 
-/** Removes a lease row and clears any resident-uploaded PDF keyed by that row’s email (demo storage). */
+/** Removes a lease row and clears any resident-uploaded PDF keyed by that row's email (demo storage). */
 export function deleteLeasePipelineRow(id: string): boolean {
   const rows = readLeasePipeline();
   const row = rows.find((r) => r.id === id);
@@ -387,18 +391,7 @@ export function downloadLeaseFromRow(row: LeasePipelineRow): void {
     return;
   }
   if (row.generatedHtml) {
-    const rawName = (row.application?.fullLegalName ?? row.residentName ?? "lease").trim() || "lease";
-    const safe = rawName.replace(/[^\w\-]+/g, "_").slice(0, 60);
-    const blob = new Blob([row.generatedHtml], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Axis-Lease-${safe}.html`;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    printLeaseAsPdf(row);
     return;
   }
 }
@@ -442,15 +435,16 @@ export function managerUploadLeasePdf(rowId: string, file: File): Promise<{ ok: 
   });
 }
 
-/** Resident electronically signs — moves lease to signed (no separate manager “mark signed”). */
-export function residentSignLease(email: string): boolean {
+/** Resident electronically signs — moves lease to signed (no separate manager "mark signed"). */
+export function residentSignLease(email: string, signatureName?: string): boolean {
   const rows = readLeasePipeline();
   const idx = rows.findIndex((r) => r.residentEmail.toLowerCase() === email.trim().toLowerCase());
   if (idx === -1) return false;
   const row = rows[idx]!;
   if (row.bucket !== "resident") return false;
   const iso = new Date().toISOString();
-  const thread = [...(row.thread ?? []), makeMsg("resident", "Signed electronically.")];
+  const sigMsg = signatureName ? `Signed electronically — ${signatureName}.` : "Signed electronically.";
+  const thread = [...(row.thread ?? []), makeMsg("resident", sigMsg)];
   rows[idx] = {
     ...row,
     bucket: "signed",
@@ -459,9 +453,36 @@ export function residentSignLease(email: string): boolean {
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
     notes: row.notes,
+    signatureName: signatureName ?? null,
+    signedAtIso: iso,
   };
   write(rows);
   return true;
+}
+
+/** Open the lease in a print-ready popup — browser saves as PDF from the print dialog. */
+export function printLeaseAsPdf(row: LeasePipelineRow): void {
+  if (typeof window === "undefined") return;
+  if (row.managerUploadedPdf?.dataUrl) {
+    const a = document.createElement("a");
+    a.href = row.managerUploadedPdf.dataUrl;
+    a.download = row.managerUploadedPdf.fileName || "lease.pdf";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return;
+  }
+  const html = row.generatedHtml;
+  if (!html) return;
+  const printHtml = html.replace(
+    "</head>",
+    `<style>@media print{body{margin:0}}</style><script>window.onload=function(){window.print();}<\/script></head>`,
+  );
+  const win = window.open("", "_blank", "width=900,height=700");
+  if (!win) return;
+  win.document.write(printHtml);
+  win.document.close();
 }
 
 export function residentRequestEdits(email: string, message: string): boolean {

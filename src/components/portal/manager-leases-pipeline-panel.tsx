@@ -26,6 +26,7 @@ import {
   downloadLeaseFromRow,
   generateLeaseHtmlForRow,
   managerUploadLeasePdf,
+  printLeaseAsPdf,
   readLeasePipeline,
   updateLeasePipelineRow,
   type LeasePipelineRow,
@@ -83,12 +84,17 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onDownload = (row: LeasePipelineRow) => {
-    if (!row.generatedHtml && !row.managerUploadedPdf) {
-      showToast("Generate a lease or upload a PDF first.");
+    if (row.managerUploadedPdf?.dataUrl) {
+      downloadLeaseFromRow(row);
+      showToast("PDF download started.");
       return;
     }
-    downloadLeaseFromRow(row);
-    showToast("Download started.");
+    if (row.generatedHtml) {
+      printLeaseAsPdf(row);
+      showToast("Print dialog opened — choose 'Save as PDF' to download.");
+      return;
+    }
+    showToast("Generate a lease or upload a PDF first.");
   };
 
   const onSendToResident = (row: LeasePipelineRow) => {
@@ -199,6 +205,21 @@ export function ManagerLeasesPipelinePanel({
                     <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                       <p className="text-sm leading-relaxed text-slate-600">{row.notes}</p>
                       <p className="mt-1.5 text-xs text-slate-500">PDF version v{row.pdfVersion}</p>
+                      {row.signatureName && row.signedAtIso ? (
+                        <div className="mt-2 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3 py-2.5 text-xs text-emerald-900">
+                          <span className="font-semibold">Signed electronically</span>
+                          {" — "}
+                          <span
+                            className="text-sm text-slate-800"
+                            style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
+                          >
+                            {row.signatureName}
+                          </span>
+                          <span className="ml-2 text-emerald-700">
+                            {new Date(row.signedAtIso).toLocaleString()}
+                          </span>
+                        </div>
+                      ) : null}
 
                       {bucket === "manager" ? (
                         <div className="mt-3 space-y-3">

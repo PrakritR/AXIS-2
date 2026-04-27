@@ -25,11 +25,12 @@ function paidTierRank(t: PaidTier): number {
   return 2;
 }
 
-function clearScheduleMetadata(meta: Record<string, string>): Record<string, string> {
-  const next = { ...meta };
-  delete next[META_SCHEDULED_TIER];
-  delete next[META_SCHEDULED_BILLING];
-  return next;
+function clearScheduleMetadata(meta: Record<string, string>): Record<string, string | null> {
+  return {
+    ...meta,
+    [META_SCHEDULED_TIER]: null,
+    [META_SCHEDULED_BILLING]: null,
+  };
 }
 
 export async function POST(req: Request) {
