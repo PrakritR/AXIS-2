@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -43,6 +43,42 @@ import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "
 import { findApplicationFeeCharge, upsertRecurringRentProfile } from "@/lib/household-charges";
 import { ensureAccountApplicationSeeds } from "@/lib/account-application-seeds";
 import { ensureAccountListingSeeds } from "@/lib/account-listing-seeds";
+
+function ApplicantIds({ applicationId, email }: { applicationId: string; email?: string }) {
+  const [axisId, setAxisId] = useState<string | null>(null);
+  const fetched = useRef(false);
+
+  useEffect(() => {
+    if (!email || fetched.current) return;
+    fetched.current = true;
+    void fetch(`/api/portal/applicant-ids?email=${encodeURIComponent(email)}`)
+      .then((r) => r.json() as Promise<{ axisId?: string | null }>)
+      .then((body) => {
+        if (body.axisId) setAxisId(body.axisId);
+      })
+      .catch(() => undefined);
+  }, [email]);
+
+  return (
+    <div className="mt-4 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4">
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Identifiers</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Application ID</p>
+          <p className="mt-1 font-mono text-sm font-medium text-slate-900">{applicationId}</p>
+        </div>
+        {email ? (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Axis Resident ID</p>
+            <p className="mt-1 font-mono text-sm font-medium text-slate-900">
+              {axisId ? axisId : <span className="text-slate-400">Fetching…</span>}
+            </p>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -500,6 +536,7 @@ export function ManagerApplications() {
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
                         <p className="font-medium text-slate-900">{row.name}</p>
                         {row.email ? <p className="mt-0.5 text-xs text-slate-500">{row.email}</p> : null}
+                        <p className="mt-0.5 font-mono text-[10px] text-slate-400">{row.id}</p>
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>{displayRoomForRow(row)}</td>
@@ -561,6 +598,8 @@ export function ManagerApplications() {
                               </div>
                             </div>
                           ) : null}
+
+                          <ApplicantIds applicationId={row.id} email={row.email} />
 
                           <p className="mt-4 text-sm leading-relaxed text-slate-600">
                             <span className="font-medium text-slate-800">Manager notes</span> — {row.detail}

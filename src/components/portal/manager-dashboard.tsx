@@ -121,17 +121,13 @@ export function ManagerDashboard() {
     }
   }, [userId, pipelineTick]);
 
-  const [hcTick, setHcTick] = useState(0);
+  const [paymentLineCount, setPaymentLineCount] = useState(demoManagerPaymentLedgerRows.length);
   useEffect(() => {
-    const on = () => setHcTick((n) => n + 1);
+    setPaymentLineCount(safePaymentLineCount(userId, ready));
+    const on = () => setPaymentLineCount(safePaymentLineCount(userId, ready));
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
-  }, []);
-
-  const paymentLineCount = useMemo(() => {
-    void hcTick;
-    return safePaymentLineCount(userId, ready);
-  }, [userId, hcTick, ready]);
+  }, [userId, ready]);
 
   const [applicationRows, setApplicationRows] = useState(demoApplicantRows);
   useEffect(() => {
