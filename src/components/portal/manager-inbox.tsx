@@ -188,7 +188,6 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       setComposeOpen(false);
       showToast(p.kind === "admin" ? "Message sent to the admin team." : "Message sent.");
       router.push(`${portalBase}/inbox/sent`);
-      router.refresh();
     },
     [router, showToast, portalBase],
   );
