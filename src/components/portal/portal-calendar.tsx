@@ -341,6 +341,33 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
           tourScopeLabel={tourScopeLabel}
           unavailableMessage="Select a house before creating tour windows."
           compactAvailability
+          otherProperties={
+            portal === "manager" && calendarPropertyId
+              ? managerProperties.filter((p) => p.id !== calendarPropertyId)
+              : undefined
+          }
+          onCopyWeekToHouses={
+            portal === "manager" && userId && calendarPropertyId
+              ? (propertyIds, weekDateStrs) => {
+                  if (!userId || !calendarPropertyId) return;
+                  const srcKey = managerPropertyAvailabilityStorageKey(userId, calendarPropertyId);
+                  const srcSlots = readAvailabilityDateSetForStorageKey(srcKey);
+                  const weekStrs = new Set(weekDateStrs);
+                  const weekSrcSlots = [...srcSlots].filter((key) => weekStrs.has(key.split(":")[0] ?? ""));
+                  for (const pid of propertyIds) {
+                    const dstKey = managerPropertyAvailabilityStorageKey(userId, pid);
+                    const dstSlots = new Set(readAvailabilityDateSetForStorageKey(dstKey));
+                    for (const slot of weekSrcSlots) dstSlots.add(slot);
+                    writeAvailabilityDateSetForStorageKey(dstSlots, dstKey);
+                  }
+                  setCalendarRefreshSignal((n) => n + 1);
+                  const destNames = propertyIds
+                    .map((id) => managerProperties.find((p) => p.id === id)?.name ?? id)
+                    .join(", ");
+                  showToast(`Week schedule pushed to: ${destNames}.`);
+                }
+              : undefined
+          }
         />
       </ManagerPortalPageShell>
       {copyModal}

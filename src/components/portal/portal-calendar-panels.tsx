@@ -128,6 +128,8 @@ export function PortalCalendarPanels({
   tourScopeLabel,
   unavailableMessage = "Sign in to manage your availability.",
   compactAvailability = false,
+  otherProperties,
+  onCopyWeekToHouses,
 }: {
   storageKey: string | null;
   calendarRefreshSignal?: number;
@@ -136,6 +138,8 @@ export function PortalCalendarPanels({
   tourScopeLabel?: string;
   unavailableMessage?: string;
   compactAvailability?: boolean;
+  otherProperties?: { id: string; name: string }[];
+  onCopyWeekToHouses?: (propertyIds: string[], weekDateStrs: string[]) => void;
 }) {
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
@@ -150,6 +154,8 @@ export function PortalCalendarPanels({
   const [blockWeekdays, setBlockWeekdays] = useState<number[]>([0, 1, 2, 3, 4]);
   const [blockCadence, setBlockCadence] = useState<RecurrenceCadence>("weekly");
   const [blockOccurrences, setBlockOccurrences] = useState(4);
+  const [updateToHousesOpen, setUpdateToHousesOpen] = useState(false);
+  const [selectedHouseIds, setSelectedHouseIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!storageKey) return;
@@ -508,6 +514,16 @@ export function PortalCalendarPanels({
             <Button type="button" variant="outline" className="rounded-full" onClick={clearCurrentWeek}>
               Clear week
             </Button>
+            {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => { setSelectedHouseIds(new Set()); setUpdateToHousesOpen(true); }}
+              >
+                Update to houses
+              </Button>
+            ) : null}
           </div>
 
           <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -691,6 +707,64 @@ export function PortalCalendarPanels({
             </div>
           </div>
         </Modal>
+
+        {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
+          <Modal
+            open={updateToHousesOpen}
+            title="Update week schedule to other houses"
+            onClose={() => setUpdateToHousesOpen(false)}
+          >
+            <div className="space-y-5">
+              <p className="text-sm text-slate-600">
+                Copy this week&apos;s availability to the selected houses. Slots are added on top of existing ones — nothing is removed.
+              </p>
+              <div className="space-y-2">
+                {otherProperties.map((p) => (
+                  <label
+                    key={p.id}
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition ${
+                      selectedHouseIds.has(p.id)
+                        ? "border-primary bg-primary/[0.06] ring-1 ring-primary/30"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedHouseIds.has(p.id)}
+                      onChange={(e) => {
+                        setSelectedHouseIds((cur) => {
+                          const next = new Set(cur);
+                          if (e.target.checked) next.add(p.id);
+                          else next.delete(p.id);
+                          return next;
+                        });
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 accent-primary"
+                    />
+                    <span className="text-sm font-medium text-slate-900">{p.name}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+                <Button type="button" variant="outline" className="rounded-full" onClick={() => setUpdateToHousesOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="rounded-full"
+                  disabled={selectedHouseIds.size === 0}
+                  onClick={() => {
+                    onCopyWeekToHouses([...selectedHouseIds], fullWeekDateStrs);
+                    setUpdateToHousesOpen(false);
+                  }}
+                >
+                  Update {selectedHouseIds.size > 0 ? `${selectedHouseIds.size} house${selectedHouseIds.size > 1 ? "s" : ""}` : "houses"}
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        ) : null}
       </>
     );
   }

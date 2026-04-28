@@ -31,6 +31,7 @@ import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import { readExtraListingsForUser, readPendingManagerPropertiesForUser, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 
 type ActiveResident = {
   id: string;
@@ -59,6 +60,7 @@ export function ManagerResidents() {
   const { userId } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
   const [hcTick, setHcTick] = useState(0);
+  const [propertyTick, setPropertyTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addChargeOpen, setAddChargeOpen] = useState(false);
@@ -71,6 +73,16 @@ export function ManagerResidents() {
     const on = () => setHcTick((n) => n + 1);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+  }, []);
+
+  useEffect(() => {
+    const bump = () => setPropertyTick((n) => n + 1);
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
+      window.removeEventListener("storage", bump);
+    };
   }, []);
 
   const residents = useMemo<ActiveResident[]>(() => {
@@ -102,20 +114,39 @@ export function ManagerResidents() {
   }, [userId, hcTick]);
 
   const propertyOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const r of residents) {
-      if (r.propertyLabel) seen.set(r.propertyLabel, r.propertyLabel);
+    void propertyTick;
+    const labelById = new Map<string, string>();
+    if (userId) {
+      for (const p of readExtraListingsForUser(userId)) {
+        labelById.set(p.id, (p.title || p.buildingName || p.address || p.id).trim());
+      }
+      for (const p of readPendingManagerPropertiesForUser(userId)) {
+        const label = [p.buildingName, p.address].filter(Boolean).join(" · ").trim() || p.id;
+        labelById.set(p.id, label);
+      }
     }
-    return [...seen.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [residents]);
+    for (const r of residents) {
+      if (r.propertyId && !labelById.has(r.propertyId)) {
+        labelById.set(r.propertyId, r.propertyLabel || r.propertyId);
+      }
+    }
+    return [...labelById.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [residents, userId, propertyTick]);
 
-  const filtered = useMemo(
-    () =>
-      propertyFilter
-        ? residents.filter((r) => r.propertyLabel === propertyFilter)
-        : residents,
-    [residents, propertyFilter],
-  );
+  const filtered = useMemo(() => {
+    const base = propertyFilter
+      ? residents.filter((r) => r.propertyId === propertyFilter)
+      : residents;
+    return [...base].sort((a, b) => {
+      const propCmp = a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" });
+      if (propCmp !== 0) return propCmp;
+      const aNum = parseInt(a.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
+      const bNum = parseInt(b.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
+      return aNum - bNum;
+    });
+  }, [residents, propertyFilter]);
 
   const selected = useMemo(() => residents.find((r) => r.id === selectedId) ?? null, [residents, selectedId]);
 
