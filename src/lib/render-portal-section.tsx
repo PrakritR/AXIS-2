@@ -16,6 +16,7 @@ import { AdminEventsClient } from "@/components/portal/admin-events-client";
 import { AdminProfileSection } from "@/components/portal/admin-profile-section";
 import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
 import { ManagerProperties } from "@/components/portal/manager-properties";
+import { ManagerResidents } from "@/components/portal/manager-residents";
 import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
 import { OwnerInboxPanel } from "@/components/portal/owner-inbox-panel";
 import { OwnerProperties } from "@/components/portal/owner-properties";
@@ -227,6 +228,9 @@ export async function renderPortalSection(
     if (section === "applications") {
       return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);
     }
+    if (section === "residents") {
+      return subscriptionGated(<ManagerResidents />, kind, "residents", managerOwnerSubscriptionTier);
+    }
     if (section === "leases") {
       return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
     }
@@ -319,6 +323,9 @@ export async function renderPortalSection(
     }
     if (section === "applications") {
       return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);
+    }
+    if (section === "residents") {
+      return subscriptionGated(<ManagerResidents />, kind, "residents", managerOwnerSubscriptionTier);
     }
     if (section === "leases") {
       return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);

@@ -10,6 +10,7 @@ export const proPortal: PortalDefinition = {
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
+    { section: "residents", label: "Residents", tabs: [] },
     {
       section: "payments",
       label: "Payments",

@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEvent, ReactNode } from "react";
+import type { DragEvent, FormEvent, ReactNode } from "react";
 import { Children, useEffect, useRef, useState } from "react";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
@@ -91,9 +91,20 @@ function togglePaymentAtSigning(
   return PAYMENT_AT_SIGNING_OPTIONS.map((o) => o.id).filter((k) => set.has(k));
 }
 
-const MAX_IMG_BYTES = 2.6 * 1024 * 1024;
+const MAX_IMG_BYTES = 10 * 1024 * 1024;
 const MAX_VID_BYTES = 14 * 1024 * 1024;
 const MAX_HOUSE_PHOTOS = 12;
+/** Max pixel width after compression — keeps localStorage size manageable. */
+const IMG_MAX_WIDTH = 1280;
+const IMG_QUALITY = 0.75;
+
+function mediaDropZoneClass(active: boolean) {
+  return `rounded-xl border border-dashed p-4 transition ${
+    active
+      ? "border-primary/50 bg-primary/[0.06] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.18)]"
+      : "border-slate-200/90 bg-white hover:border-primary/30 hover:bg-primary/[0.03]"
+  }`;
+}
 
 /** Multi-step flow — 5 steps, combining related sections to reduce friction. */
 const LISTING_FORM_STEPS = [
@@ -106,13 +117,37 @@ const LISTING_FORM_STEPS = [
 
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
+/** Reads a file and returns a compressed JPEG data URL. Falls back to raw data URL for non-image files. */
 async function fileToDataUrl(file: File, maxBytes: number): Promise<string | null> {
   if (file.size > maxBytes) return null;
+  if (!file.type.startsWith("image/")) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
   return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = reject;
-    r.readAsDataURL(file);
+    const img = new window.Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      try {
+        const scale = Math.min(1, IMG_MAX_WIDTH / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(null); return; }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", IMG_QUALITY));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("Image load failed")); };
+    img.src = objectUrl;
   });
 }
 
@@ -186,6 +221,7 @@ export function ManagerAddListingForm({
   const [busy, setBusy] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [showQuickFacts, setShowQuickFacts] = useState(() => Boolean(initialSubmission?.quickFacts?.length));
+  const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { userId, ready: authReady } = useManagerUserId();
 
@@ -490,6 +526,49 @@ export function ManagerAddListingForm({
     setRoom(roomIndex, { videoDataUrl: null });
   };
 
+  const activateDropZone = (zoneId: string) => {
+    setActiveDropZone(zoneId);
+  };
+
+  const deactivateDropZone = (zoneId?: string) => {
+    setActiveDropZone((current) => (zoneId && current !== zoneId ? current : null));
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLElement>, zoneId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    activateDropZone(zoneId);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLElement>, zoneId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const next = event.relatedTarget as Node | null;
+    if (next && event.currentTarget.contains(next)) return;
+    deactivateDropZone(zoneId);
+  };
+
+  const onDropHousePhotos = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deactivateDropZone("house-photos");
+    void onPickHousePhotos(event.dataTransfer.files);
+  };
+
+  const onDropRoomPhotos = (roomIndex: number, roomId: string, event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deactivateDropZone(`room-photos-${roomId}`);
+    void onPickRoomPhotos(roomIndex, event.dataTransfer.files);
+  };
+
+  const onDropRoomVideo = (roomIndex: number, roomId: string, event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deactivateDropZone(`room-video-${roomId}`);
+    void onPickRoomVideo(roomIndex, event.dataTransfer.files?.[0] ?? null);
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const roomsOk = sub.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
@@ -550,12 +629,12 @@ export function ManagerAddListingForm({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-900/50 p-3 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-2 sm:p-4 lg:p-6">
       <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Close" />
       <form
         id="manager-add-listing-form"
         onSubmit={handleSubmit}
-        className="relative z-10 flex max-h-[min(96vh,1080px)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        className="relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)] lg:max-h-[calc(100dvh-3rem)]"
       >
         <div className="shrink-0 border-b border-slate-100 p-6 pb-4 sm:p-8 sm:pb-4">
           <div className="flex items-start justify-between gap-3">
@@ -618,7 +697,13 @@ export function ManagerAddListingForm({
                 description="Exterior, kitchen, living areas — appear at the top of your public listing."
               >
                 <div>
-                  <div className="mt-2 rounded-xl border border-dashed border-slate-200/90 bg-white p-4">
+                  <div
+                    className={`mt-2 ${mediaDropZoneClass(activeDropZone === "house-photos")}`}
+                    onDragOver={(e) => handleDragOver(e, "house-photos")}
+                    onDragEnter={(e) => handleDragOver(e, "house-photos")}
+                    onDragLeave={(e) => handleDragLeave(e, "house-photos")}
+                    onDrop={onDropHousePhotos}
+                  >
                     <input
                       id="house-photos-input"
                       type="file"
@@ -636,6 +721,7 @@ export function ManagerAddListingForm({
                     >
                       Add house photos
                     </label>
+                    <p className="mt-3 text-sm text-slate-600">Drag and drop photos here, or use the button above.</p>
                     {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
@@ -653,7 +739,7 @@ export function ManagerAddListingForm({
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-2 text-[11px] text-slate-500">Up to {MAX_HOUSE_PHOTOS} photos (~{Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB each).</p>
+                      <p className="mt-2 text-[11px] text-slate-500">Up to {MAX_HOUSE_PHOTOS} photos. Images are auto-compressed for fast loading.</p>
                     )}
                   </div>
                 </div>
@@ -967,7 +1053,13 @@ export function ManagerAddListingForm({
 
                       <div className="sm:col-span-2">
                         <FieldLabel>Photos</FieldLabel>
-                        <div className="mt-2 rounded-xl border border-dashed border-slate-200/90 bg-white p-4">
+                        <div
+                          className={`mt-2 ${mediaDropZoneClass(activeDropZone === `room-photos-${room.id}`)}`}
+                          onDragOver={(e) => handleDragOver(e, `room-photos-${room.id}`)}
+                          onDragEnter={(e) => handleDragOver(e, `room-photos-${room.id}`)}
+                          onDragLeave={(e) => handleDragLeave(e, `room-photos-${room.id}`)}
+                          onDrop={(e) => onDropRoomPhotos(i, room.id, e)}
+                        >
                           <input
                             key={`room-photos-in-${room.id}`}
                             id={`room-photos-${room.id}`}
@@ -986,6 +1078,7 @@ export function ManagerAddListingForm({
                           >
                             Add photos
                           </label>
+                          <p className="mt-3 text-sm text-slate-600">Drag and drop room photos here, or use the button above.</p>
                           {room.photoDataUrls.length > 0 ? (
                             <div className="mt-3 flex flex-wrap gap-2">
                               {room.photoDataUrls.map((url, pi) => (
@@ -1003,14 +1096,20 @@ export function ManagerAddListingForm({
                               ))}
                             </div>
                           ) : (
-                            <p className="mt-3 text-[11px] text-slate-500">No photos yet — up to 8 images (~2.6 MB each).</p>
+                            <p className="mt-3 text-[11px] text-slate-500">No photos yet — up to 8 images. Images are auto-compressed.</p>
                           )}
                         </div>
                       </div>
 
                       <div className="sm:col-span-2">
                         <FieldLabel hint="One short clip per room (~14 MB max).">Video tour</FieldLabel>
-                        <div className="mt-2 rounded-xl border border-dashed border-slate-200/90 bg-white p-4">
+                        <div
+                          className={`mt-2 ${mediaDropZoneClass(activeDropZone === `room-video-${room.id}`)}`}
+                          onDragOver={(e) => handleDragOver(e, `room-video-${room.id}`)}
+                          onDragEnter={(e) => handleDragOver(e, `room-video-${room.id}`)}
+                          onDragLeave={(e) => handleDragLeave(e, `room-video-${room.id}`)}
+                          onDrop={(e) => onDropRoomVideo(i, room.id, e)}
+                        >
                           <input
                             key={`room-video-in-${room.id}`}
                             id={`room-video-${room.id}`}
@@ -1028,6 +1127,7 @@ export function ManagerAddListingForm({
                           >
                             {room.videoDataUrl ? "Replace video" : "Add video"}
                           </label>
+                          <p className="mt-3 text-sm text-slate-600">Drag and drop one room video here, or use the button above.</p>
                           {room.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
                               <video

@@ -15,7 +15,7 @@ import {
   takePendingManagerProperty,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
-import { legacyAdminFieldsToSubmission } from "@/lib/manager-listing-submission";
+import { legacyAdminFieldsToSubmission, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 
 /** Admin-wide queue (all managers). Manager portal passes `forManagerUserId` for isolated side-buckets. */
 const SIDE_KEY_GLOBAL = "axis_admin_property_buckets_v1";
@@ -50,6 +50,8 @@ export type AdminPropertyRow = {
   managerUserId?: string;
   /** Last admin “request edit” message shown to the submitting manager/owner (demo localStorage). */
   editRequestNote?: string;
+  /** Full submission preserved so images and rich content survive the admin approval flow. */
+  submission?: ManagerListingSubmissionV1;
 };
 
 type SideBuckets = {
@@ -130,24 +132,28 @@ export function normalizeAdminPropertyRow(row: Partial<AdminPropertyRow> & { adm
     listingId: row.listingId,
     managerUserId: row.managerUserId,
     editRequestNote: row.editRequestNote,
+    submission: row.submission,
   };
 }
 
 export function pendingToAdminRow(row: ManagerPendingPropertyRow): AdminPropertyRow {
-  return normalizeAdminPropertyRow({
-    adminRefId: row.id,
-    buildingName: row.buildingName,
-    unitLabel: row.unitLabel,
-    address: row.address,
-    zip: row.zip,
-    neighborhood: row.neighborhood,
-    beds: row.beds,
-    baths: row.baths,
-    monthlyRent: row.monthlyRent,
-    petFriendly: row.petFriendly,
-    tagline: row.tagline ?? "",
-    managerUserId: row.submittedByUserId,
-  });
+  return {
+    ...normalizeAdminPropertyRow({
+      adminRefId: row.id,
+      buildingName: row.buildingName,
+      unitLabel: row.unitLabel,
+      address: row.address,
+      zip: row.zip,
+      neighborhood: row.neighborhood,
+      beds: row.beds,
+      baths: row.baths,
+      monthlyRent: row.monthlyRent,
+      petFriendly: row.petFriendly,
+      tagline: row.tagline ?? "",
+      managerUserId: row.submittedByUserId,
+    }),
+    submission: row.submission,
+  };
 }
 
 /** Preview mock for portal “More details” — same shape as public listing page. */
@@ -186,6 +192,7 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
     tagline: prop.tagline ?? "",
     listingId,
     managerUserId: prop.managerUserId,
+    submission: prop.listingSubmission,
   });
 }
 
@@ -273,7 +280,9 @@ export function approveFromRequestChange(adminRefId: string, forManagerUserId?: 
   const row = side.requestChange[idx]!;
   const nextRc = [...side.requestChange.slice(0, idx), ...side.requestChange.slice(idx + 1)];
   const listingId = `mgr-${slugPart(row.buildingName)}-${slugPart(row.unitLabel)}-${adminRefId.slice(-6)}`;
-  const prop = buildMockPropertyFromAdminRow(row, listingId);
+  const prop = row.submission
+    ? buildMockPropertyFromDraft({ ...row, id: listingId, submittedAt: new Date().toISOString(), submission: row.submission, submittedByUserId: row.managerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID }, listingId)
+    : buildMockPropertyFromAdminRow(row, listingId);
   const owner = row.managerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
   appendExtraListing({ ...prop, managerUserId: owner, adminPublishLive: true }, owner);
   writeSideStorage({ ...side, requestChange: nextRc }, forManagerUserId);
@@ -319,8 +328,10 @@ export function listAdminRow(row: AdminPropertyRow, forManagerUserId?: string | 
   if (idx === -1) return null;
   const listingId =
     row.listingId ?? `mgr-${slugPart(row.buildingName)}-${slugPart(row.unitLabel)}-${row.adminRefId.slice(-6)}`;
-  const prop = buildMockPropertyFromAdminRow(row, listingId);
   const owner = row.managerUserId ?? forManagerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
+  const prop = row.submission
+    ? buildMockPropertyFromDraft({ ...row, id: listingId, submittedAt: new Date().toISOString(), submission: row.submission, submittedByUserId: owner }, listingId)
+    : buildMockPropertyFromAdminRow(row, listingId);
   appendExtraListing({ ...prop, managerUserId: owner, adminPublishLive: true }, owner);
   const nextUn = [...side.unlisted.slice(0, idx), ...side.unlisted.slice(idx + 1)];
   writeSideStorage({ ...side, unlisted: nextUn }, forManagerUserId);
