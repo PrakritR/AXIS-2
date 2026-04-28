@@ -77,7 +77,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const [feeStepUserId, setFeeStepUserId] = useState<string | null>(null);
   const [reviewReturnStep, setReviewReturnStep] = useState<number | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
-  const [postSubmit, setPostSubmit] = useState<{ applicationId: string } | null>(null);
+  const [postSubmit, setPostSubmit] = useState<{ axisId: string } | null>(null);
   const [emailAccountStatus, setEmailAccountStatus] = useState<{ exists: boolean; axisId: string | null } | null>(null);
   const router = useRouter();
 
@@ -288,11 +288,11 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         propertyId: form.propertyId,
       });
 
-      const applicationId = makeNewApplicationId();
+      const axisId = makeNewApplicationId();
       const listing = prop ?? readAllExtraListings().find((p) => p.id === pid);
       const feeCharge = findApplicationFeeCharge(form.email, pid, residentUserId);
       appendManagerApplicationRow({
-        id: applicationId,
+        id: axisId,
         name: form.fullLegalName.trim() || "Applicant",
         property: (listing?.title?.trim() || pid.trim()) || "Listing",
         propertyId: pid || undefined,
@@ -308,7 +308,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       setForm(createInitialRentalWizardState());
       setStep(1);
       setErrors({});
-      setPostSubmit({ applicationId });
+      setPostSubmit({ axisId });
       setChargeTick((n) => n + 1);
       showToast("Application submitted.");
     },
@@ -599,7 +599,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             </p>
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Axis ID</p>
-              <p className="mt-2 font-mono text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{postSubmit.applicationId}</p>
+              <p className="mt-2 font-mono text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{postSubmit.axisId}</p>
               {emailAccountStatus?.axisId ? (
                 <p className="mt-2 text-xs text-slate-500">Your Axis ID: <span className="font-mono font-semibold text-slate-800">{emailAccountStatus.axisId}</span></p>
               ) : null}
@@ -614,7 +614,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 </Link>
               ) : (
                 <Link
-                  href={`/auth/create-account?role=resident&axis_id=${encodeURIComponent(postSubmit.applicationId)}`}
+                  href={`/auth/create-account?role=resident&axis_id=${encodeURIComponent(postSubmit.axisId)}`}
                   className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-8 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:translate-y-px"
                 >
                   Create resident account with Axis ID

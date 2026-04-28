@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 type Body = {
   fullName?: string;
   phone?: string;
-  applicationId?: string;
+  axisId?: string;
 };
 
 export async function POST(req: Request) {
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
     const phone = typeof body.phone === "string" ? body.phone.trim() : "";
-    const applicationId = typeof body.applicationId === "string" ? body.applicationId.trim() : "";
+    const axisId = typeof body.axisId === "string" ? body.axisId.trim() : "";
 
     const svc = createSupabaseServiceRoleClient();
     const { data: existingProfile } = await svc.from("profiles").select("*").eq("id", user.id).maybeSingle();
@@ -53,15 +53,15 @@ export async function POST(req: Request) {
 
     await ensureProfileRoleRow(svc, user.id, "resident");
 
-    if (applicationId) {
-      const nextMeta = { ...(user.user_metadata ?? {}), application_id: applicationId };
+    if (axisId) {
+      const nextMeta = { ...(user.user_metadata ?? {}), axis_id: axisId };
       const { error: authError } = await svc.auth.admin.updateUserById(user.id, { user_metadata: nextMeta });
       if (authError) {
         return NextResponse.json({ error: authError.message }, { status: 400 });
       }
     }
 
-    return NextResponse.json({ ok: true, applicationId: applicationId || null });
+    return NextResponse.json({ ok: true, axisId: axisId || null });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });

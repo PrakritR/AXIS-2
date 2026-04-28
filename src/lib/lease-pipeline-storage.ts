@@ -53,7 +53,7 @@ export type LeasePipelineRow = {
   pdfVersion: number;
   notes: string;
   updatedAtIso: string;
-  applicationId?: string;
+  axisId?: string;
   application?: Partial<RentalWizardFormState>;
   generatedHtml?: string | null;
   generatedAtIso?: string | null;
@@ -94,7 +94,7 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     pdfVersion: typeof r.pdfVersion === "number" && Number.isFinite(r.pdfVersion) ? Math.max(0, Math.floor(r.pdfVersion)) : 1,
     notes: typeof r.notes === "string" ? r.notes : String(r.notes ?? ""),
     updatedAtIso: typeof r.updatedAtIso === "string" && r.updatedAtIso.trim() ? r.updatedAtIso : isoFallback,
-    applicationId: typeof r.applicationId === "string" ? r.applicationId : undefined,
+    axisId: typeof r.axisId === "string" ? r.axisId : undefined,
     application: r.application,
     generatedHtml: r.generatedHtml ?? null,
     generatedAtIso: r.generatedAtIso ?? null,
@@ -157,7 +157,7 @@ function demoRowToPipeline(seed: DemoManagerLeaseDraftRow): LeasePipelineRow {
     pdfVersion: Number.parseInt(String(seed.pdfVersion).replace(/\D/g, ""), 10) || 1,
     notes: String(seed.notes ?? ""),
     updatedAtIso: new Date().toISOString(),
-    applicationId: appRow?.id,
+    axisId: appRow?.id,
     application,
     generatedHtml: null,
     generatedAtIso: null,
@@ -194,7 +194,7 @@ function syncApprovedApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] 
   for (const app of apps) {
     const email = app.email!.trim().toLowerCase();
     const exists = next.some(
-      (r) => r.applicationId === app.id || r.residentEmail.toLowerCase() === email,
+      (r) => r.axisId === app.id || r.residentEmail.toLowerCase() === email,
     );
     if (exists) continue;
     const unit = app.property?.trim() || "—";
@@ -211,7 +211,7 @@ function syncApprovedApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] 
         pdfVersion: 1,
         notes: "Created from approved application.",
         updatedAtIso: iso,
-        applicationId: app.id,
+        axisId: app.id,
         application: effectiveApplicationForRow(app),
         generatedHtml: null,
         generatedAtIso: null,
@@ -227,8 +227,8 @@ function syncApprovedApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] 
 function enrichFromApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] {
   const apps = readManagerApplicationRows();
   return rows.map((r) => {
-    if (!r.applicationId) return r;
-    const app = apps.find((a) => a.id === r.applicationId);
+    if (!r.axisId) return r;
+    const app = apps.find((a) => a.id === r.axisId);
     if (!app?.application) return r;
     return {
       ...r,

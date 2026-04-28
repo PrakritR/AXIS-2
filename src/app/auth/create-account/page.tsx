@@ -65,7 +65,7 @@ function CreateAccountContent() {
   }, [searchParams]);
 
   const axisIdFromUrl = useMemo(
-    () => searchParams.get("axis_id")?.trim() || searchParams.get("application_id")?.trim() || "",
+    () => searchParams.get("axis_id")?.trim() || "",
     [searchParams],
   );
 

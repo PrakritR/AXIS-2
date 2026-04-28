@@ -41,7 +41,7 @@ export function PortalPropertyFilterPill({
   onResidentChange?: (residentId: string) => void;
   applicationOptions?: ManagerPropertyFilterOption[];
   applicationValue?: string;
-  onApplicationChange?: (applicationId: string) => void;
+  onApplicationChange?: (axisId: string) => void;
 }) {
   const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
   const hasResidentPick = Boolean(residents && residentOptions && residentOptions.length > 0 && onResidentChange);
@@ -90,7 +90,7 @@ export function PortalPropertyFilter({
   onResidentChange?: (residentId: string) => void;
   applicationOptions?: ManagerPropertyFilterOption[];
   applicationValue?: string;
-  onApplicationChange?: (applicationId: string) => void;
+  onApplicationChange?: (axisId: string) => void;
 }) {
   const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
   const hasResidentPick = Boolean(residents && residentOptions && residentOptions.length > 0 && onResidentChange);

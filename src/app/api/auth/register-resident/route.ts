@@ -12,14 +12,13 @@ type Body = {
   email: string;
   password: string;
   axisId?: string;
-  applicationId?: string;
 };
 
 export async function POST(req: Request) {
   try {
-    const { email, password, axisId, applicationId } = (await req.json()) as Body;
+    const { email, password, axisId } = (await req.json()) as Body;
     const normalEmail = email?.trim().toLowerCase();
-    const normalAxisId = (axisId || applicationId)?.trim();
+    const normalAxisId = axisId?.trim();
 
     if (!normalEmail || !normalAxisId) {
       return NextResponse.json({ error: "Email and Axis ID are required." }, { status: 400 });

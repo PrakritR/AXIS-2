@@ -6,6 +6,28 @@ export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
 
 const EMPTY_FALLBACK: DemoApplicantRow[] = [];
 
+export function normalizeApplicationAxisId(id: string): string {
+  const raw = id.trim();
+  if (!raw) return raw;
+  if (raw.toUpperCase().startsWith("AXIS-")) return raw;
+  const suffix = raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 12);
+  return `AXIS-${suffix || Date.now().toString(36).toUpperCase()}`;
+}
+
+function normalizeApplicationRow(row: DemoApplicantRow): DemoApplicantRow {
+  const nextId = normalizeApplicationAxisId(row.id);
+  return nextId === row.id ? row : { ...row, id: nextId };
+}
+
+function normalizeApplicationRows(rows: DemoApplicantRow[]): DemoApplicantRow[] {
+  const byId = new Map<string, DemoApplicantRow>();
+  for (const row of rows) {
+    const normalized = normalizeApplicationRow(row);
+    byId.set(normalized.id, { ...byId.get(normalized.id), ...normalized });
+  }
+  return [...byId.values()];
+}
+
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
@@ -51,12 +73,13 @@ export async function syncManagerApplicationsFromServer(): Promise<DemoApplicant
     const res = await fetch("/api/manager-applications", { credentials: "include" });
     if (!res.ok) return readManagerApplicationRows();
     const body = (await res.json()) as { rows?: DemoApplicantRow[] };
-    const rows = Array.isArray(body.rows) ? body.rows : [];
+    const rows = normalizeApplicationRows(Array.isArray(body.rows) ? body.rows : []);
     if (rows.length > 0) {
       window.localStorage.setItem(KEY, JSON.stringify(rows));
+      mirrorApplicationsToServer(rows);
       emit();
     } else {
-      const localRows = readManagerApplicationRows();
+      const localRows = normalizeApplicationRows(readManagerApplicationRows());
       if (localRows.length > 0) mirrorApplicationsToServer(localRows);
     }
     return rows;
@@ -72,7 +95,7 @@ export function readManagerApplicationRows(fallback: DemoApplicantRow[] = EMPTY_
     if (!raw) return [...fallback];
     const v = JSON.parse(raw) as unknown;
     if (!Array.isArray(v) || v.length === 0) return [...fallback];
-    const stored = v as DemoApplicantRow[];
+    const stored = normalizeApplicationRows(v as DemoApplicantRow[]);
     return stored.map((r) => {
       const seed = fallback.find((f) => f.id === r.id);
       if (!seed) return r;
@@ -90,9 +113,10 @@ export function readManagerApplicationRows(fallback: DemoApplicantRow[] = EMPTY_
 export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
   if (!canUseStorage()) return;
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(rows));
+    const normalizedRows = normalizeApplicationRows(rows);
+    window.localStorage.setItem(KEY, JSON.stringify(normalizedRows));
     emit();
-    mirrorApplicationsToServer(rows);
+    mirrorApplicationsToServer(normalizedRows);
     void import("@/lib/lease-pipeline-storage").then(({ readLeasePipeline }) => {
       readLeasePipeline();
     });
@@ -109,11 +133,12 @@ export function resetManagerApplicationRowsToDemo(): void {
 
 /** Append one application (e.g. after resident submit). Skips if the same id already exists. */
 export function appendManagerApplicationRow(row: DemoApplicantRow): void {
+  const normalizedRow = normalizeApplicationRow(row);
   const rows = readManagerApplicationRows();
-  if (rows.some((r) => r.id === row.id)) return;
-  const next = [...rows, row];
+  if (rows.some((r) => r.id === normalizedRow.id)) return;
+  const next = [...rows, normalizedRow];
   writeManagerApplicationRows(next);
-  mirrorApplicationRowToServer(row);
+  mirrorApplicationRowToServer(normalizedRow);
 }
 
 /**
