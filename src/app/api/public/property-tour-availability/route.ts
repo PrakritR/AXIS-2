@@ -44,11 +44,16 @@ function propertyMatchKey(row: Record<string, unknown>): string {
   return `${textField(row, "buildingName")}::${textField(row, "address")}`.toLowerCase();
 }
 
+function houseKeyFromParts(buildingName: string | null | undefined, address: string | null | undefined): string {
+  return `${String(buildingName ?? "").trim()}::${String(address ?? "").trim()}`.toLowerCase();
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const propertyId = searchParams.get("propertyId")?.trim();
     if (!propertyId) return NextResponse.json({ error: "propertyId required" }, { status: 400 });
+    const requestedHouseKey = houseKeyFromParts(searchParams.get("buildingName"), searchParams.get("address"));
 
     const safeId = safePropertyId(propertyId);
     const db = createSupabaseServiceRoleClient();
@@ -67,44 +72,74 @@ export async function GET(req: Request) {
     const directMatches = propertyRecords.filter(({ property }) => {
       const id = textField(property, "id");
       const buildingId = textField(property, "buildingId");
-      return id === propertyId || safePropertyId(id) === safeId || buildingId === propertyId || safePropertyId(buildingId) === safeId;
+      const key = propertyMatchKey(property);
+      return (
+        id === propertyId ||
+        safePropertyId(id) === safeId ||
+        buildingId === propertyId ||
+        safePropertyId(buildingId) === safeId ||
+        (requestedHouseKey !== "::" && key === requestedHouseKey)
+      );
     });
     const houseKeys = new Set(directMatches.map(({ property }) => propertyMatchKey(property)).filter(Boolean));
+    const matchingPropertyRecords = propertyRecords.filter(
+      ({ property }) => directMatches.some((match) => match.property === property) || houseKeys.has(propertyMatchKey(property)),
+    );
     const managerIds = [
       ...new Set(
-        propertyRecords
-          .filter(({ property }) => directMatches.some((match) => match.property === property) || houseKeys.has(propertyMatchKey(property)))
-          .map(({ managerUserId }) => managerUserId),
+        matchingPropertyRecords.map(({ managerUserId }) => managerUserId),
       ),
     ];
+    const propertyIdsByManager = new Map<string, Set<string>>();
+    for (const { managerUserId, property } of matchingPropertyRecords) {
+      const ids = propertyIdsByManager.get(managerUserId) ?? new Set<string>();
+      for (const value of [textField(property, "id"), textField(property, "buildingId")]) {
+        if (!value) continue;
+        ids.add(value);
+        ids.add(safePropertyId(value));
+      }
+      propertyIdsByManager.set(managerUserId, ids);
+    }
 
-    const globalAvailabilityRows =
+    const propertyAvailabilityRows =
       managerIds.length > 0
         ? await db
             .from("portal_schedule_records")
             .select("id, manager_user_id, property_id, record_type, row_data")
-            .eq("record_type", "manager_availability")
+            .eq("record_type", "manager_property_availability")
             .in("manager_user_id", managerIds)
         : { data: [], error: null };
 
-    if (globalAvailabilityRows.error) {
-      return NextResponse.json({ error: globalAvailabilityRows.error.message }, { status: 500 });
+    if (propertyAvailabilityRows.error) {
+      return NextResponse.json({ error: propertyAvailabilityRows.error.message }, { status: 500 });
     }
 
-    const { data: legacyData, error } = await db
+    const { data: globalData, error } = await db
       .from("portal_schedule_records")
       .select("id, manager_user_id, property_id, record_type, row_data")
-      .eq("record_type", "manager_property_availability")
-      .or(`property_id.eq.${propertyId},property_id.eq.${safeId},id.like.%_prop_${safeId}`);
+      .eq("record_type", "manager_availability")
+      .in("manager_user_id", managerIds.length > 0 ? managerIds : ["__none__"]);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const globalRows = (globalAvailabilityRows.data ?? []) as ScheduleRecordRow[];
-    const legacyRows = ((legacyData ?? []) as ScheduleRecordRow[]).filter((row) => {
+    const propertyRowsForHouse = ((propertyAvailabilityRows.data ?? []) as ScheduleRecordRow[]).filter((row) => {
       const managerUserId = row.manager_user_id?.trim();
-      return managerUserId && !globalRows.some((globalRow) => globalRow.manager_user_id === managerUserId);
+      if (!managerUserId) return false;
+      const propertyIds = propertyIdsByManager.get(managerUserId);
+      if (!propertyIds || propertyIds.size === 0) return false;
+      const rowPropertyId = row.property_id?.trim() ?? "";
+      const rowId = row.id?.trim() ?? "";
+      return (
+        propertyIds.has(rowPropertyId) ||
+        propertyIds.has(safePropertyId(rowPropertyId)) ||
+        [...propertyIds].some((propertyKey) => rowId.includes(`_prop_${propertyKey}`))
+      );
     });
-    const rows = [...globalRows, ...legacyRows];
+    const globalRows = ((globalData ?? []) as ScheduleRecordRow[]).filter((row) => {
+      const managerUserId = row.manager_user_id?.trim();
+      return managerUserId && !propertyRowsForHouse.some((propertyRow) => propertyRow.manager_user_id === managerUserId);
+    });
+    const rows = [...propertyRowsForHouse, ...globalRows];
     const availabilityManagerIds = [...new Set(rows.map((row) => row.manager_user_id).filter((id): id is string => Boolean(id)))];
     const labelByManagerId = new Map<string, string>();
     if (availabilityManagerIds.length > 0) {

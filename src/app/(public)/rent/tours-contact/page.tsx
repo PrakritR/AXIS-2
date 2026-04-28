@@ -219,7 +219,12 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
     setSelectedDay(null);
     setSelectedSlotIndex(null);
     setSelectedManagerUserId(null);
-    void fetch(`/api/public/property-tour-availability?propertyId=${encodeURIComponent(selectedProperty.id)}`, { cache: "no-store" })
+    const params = new URLSearchParams({
+      propertyId: selectedProperty.id,
+      buildingName: selectedProperty.buildingName,
+      address: selectedProperty.address,
+    });
+    void fetch(`/api/public/property-tour-availability?${params.toString()}`, { cache: "no-store" })
       .then(async (res) => {
         const body = (await res.json()) as { slotHosts?: Record<string, PropertyManagerEntry[]> };
         if (!cancelled) setSlotHosts(res.ok && body.slotHosts ? body.slotHosts : {});

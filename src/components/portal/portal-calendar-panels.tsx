@@ -126,12 +126,6 @@ type CalendarBlockSelection =
   | { kind: "availability"; dateStr: string; slotIndex: number }
   | { kind: "meeting"; meeting: DemoMeeting };
 
-type CalendarPopoverAnchor = {
-  top: number;
-  left: number;
-  width: number;
-};
-
 const slotRowIndices = Array.from({ length: SLOT_ROW_END - SLOT_ROW_START + 1 }, (_, i) => SLOT_ROW_START + i);
 
 function formatSlotEndLabel(slotIndexExclusive: number): string {
@@ -147,23 +141,6 @@ function localIsoForSlot(dateStr: string, slotIndex: number): string {
   const d = new Date(year!, month! - 1, day!, 0, 0, 0, 0);
   d.setMinutes(slotIndex * 30);
   return d.toISOString();
-}
-
-function anchorPopoverToElement(el: HTMLElement): CalendarPopoverAnchor {
-  const rect = el.getBoundingClientRect();
-  const margin = 12;
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  const width = Math.min(420, Math.max(280, viewportWidth - margin * 2));
-  const estimatedHeight = 360;
-  const left = Math.min(
-    Math.max(margin, rect.left + rect.width / 2 - width / 2),
-    Math.max(margin, viewportWidth - width - margin),
-  );
-  const below = rect.bottom + 10;
-  const above = rect.top - estimatedHeight - 10;
-  const top = below + estimatedHeight <= viewportHeight - margin ? below : Math.max(margin, above);
-  return { top, left, width };
 }
 
 function weekdayLabelList(days: number[]) {
@@ -213,7 +190,6 @@ export function PortalCalendarPanels({
   const [updateToHousesOpen, setUpdateToHousesOpen] = useState(false);
   const [selectedHouseIds, setSelectedHouseIds] = useState<Set<string>>(new Set());
   const [selectedBlock, setSelectedBlock] = useState<CalendarBlockSelection | null>(null);
-  const [selectedBlockAnchor, setSelectedBlockAnchor] = useState<CalendarPopoverAnchor | null>(null);
   const [meetingRefresh, setMeetingRefresh] = useState(0);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
@@ -377,8 +353,7 @@ export function PortalCalendarPanels({
   );
 
   const openSlotDetails = useCallback(
-    (dateStr: string, slotIdx: number, target: HTMLElement, meeting?: DemoMeeting) => {
-      setSelectedBlockAnchor(anchorPopoverToElement(target));
+    (dateStr: string, slotIdx: number, _target: HTMLElement, meeting?: DemoMeeting) => {
       if (meeting) {
         setSelectedBlock({ kind: "meeting", meeting });
         return;
@@ -396,7 +371,6 @@ export function PortalCalendarPanels({
     next.delete(dateSlotKey(selectedBlock.dateStr, selectedBlock.slotIndex));
     writeAvailability(next);
     setSelectedBlock(null);
-    setSelectedBlockAnchor(null);
   }, [activeSlots, selectedBlock, writeAvailability]);
 
   const approveSelectedInquiry = useCallback(async () => {
@@ -408,7 +382,6 @@ export function PortalCalendarPanels({
       })
     ) {
       setSelectedBlock(null);
-      setSelectedBlockAnchor(null);
       setMeetingRefresh((n) => n + 1);
       reloadAvailability();
     }
@@ -422,7 +395,6 @@ export function PortalCalendarPanels({
         : await deletePartnerInquiryFromServer(selectedBlock.meeting.sourceId);
     if (ok) {
       setSelectedBlock(null);
-      setSelectedBlockAnchor(null);
       setMeetingRefresh((n) => n + 1);
       reloadAvailability();
     }
@@ -659,7 +631,6 @@ export function PortalCalendarPanels({
 
   const closeSelectedBlock = useCallback(() => {
     setSelectedBlock(null);
-    setSelectedBlockAnchor(null);
   }, []);
 
   useEffect(() => {
@@ -673,7 +644,7 @@ export function PortalCalendarPanels({
 
   const selectedBlockModal = (
     selectedBlock ? (
-    <div className="fixed inset-0 z-[80]">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <button
         type="button"
         aria-label="Close calendar details"
@@ -681,12 +652,7 @@ export function PortalCalendarPanels({
         onClick={closeSelectedBlock}
       />
       <div
-        className="absolute z-[81] max-h-[min(520px,calc(100svh-1.5rem))] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-slate-900/5 sm:p-5"
-        style={{
-          top: selectedBlockAnchor?.top ?? 24,
-          left: selectedBlockAnchor?.left ?? 16,
-          width: selectedBlockAnchor?.width ?? "min(420px, calc(100vw - 1.5rem))",
-        }}
+        className="relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-slate-900/5 sm:p-5"
       >
       <div className="mb-4 flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
         <h3 className="min-w-0 text-base font-bold text-slate-950">
