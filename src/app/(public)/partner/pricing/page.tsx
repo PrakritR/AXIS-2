@@ -2,7 +2,11 @@
 
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { normalizeProMonthlyPromoInput, PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
+import {
+  FULL_PAYMENT_WAIVER_PROMO_CODE,
+  normalizeProMonthlyPromoInput,
+  PRO_MONTHLY_FIRST_FREE_PROMO_CODE,
+} from "@/lib/stripe-promos";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -129,7 +133,7 @@ export default function PartnerPricingPage() {
   );
 
   const startManagerSignupIntent = useCallback(
-    async (opts: { tier: TierId; billing: "monthly" | "annual" }) => {
+    async (opts: { tier: TierId; billing: "monthly" | "annual"; promo?: string }) => {
       setCheckoutBusy(true);
       try {
         const res = await fetch("/api/manager/signup-intent", {
@@ -141,6 +145,7 @@ export default function PartnerPricingPage() {
             email: typeof email === "string" ? email.trim() : "",
             fullName: typeof fullName === "string" ? fullName.trim() : "",
             phone: typeof phone === "string" ? phone.trim() : "",
+            promo: opts.promo,
           }),
         });
         let payload: { sessionId?: string; error?: string };
@@ -413,6 +418,7 @@ export default function PartnerPricingPage() {
                     }
                     const normalizedPromo = normalizeProMonthlyPromoInput(codeSafe);
                     const isProMonthly = selectedTierId === "pro" && billing === "monthly";
+                    const isFullWaiver = normalizedPromo === FULL_PAYMENT_WAIVER_PROMO_CODE;
 
                     if (
                       normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
@@ -425,8 +431,12 @@ export default function PartnerPricingPage() {
                       return;
                     }
 
-                    if (selectedTierId === "free") {
-                      await startManagerSignupIntent({ tier: "free", billing });
+                    if (selectedTierId === "free" || isFullWaiver) {
+                      await startManagerSignupIntent({
+                        tier: selectedTierId,
+                        billing,
+                        promo: isFullWaiver ? FULL_PAYMENT_WAIVER_PROMO_CODE : undefined,
+                      });
                       return;
                     }
 

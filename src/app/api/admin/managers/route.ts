@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { removePortalAccess } from "@/lib/auth/remove-portal-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -96,12 +97,8 @@ export async function DELETE(req: Request) {
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const supabase = createSupabaseServiceRoleClient();
-
-    // Delete auth user — cascades to profiles via FK on delete cascade
-    const { error } = await supabase.auth.admin.deleteUser(id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    return NextResponse.json({ ok: true });
+    const result = await removePortalAccess(supabase, id, "manager");
+    return NextResponse.json({ ok: true, mode: result.mode });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });

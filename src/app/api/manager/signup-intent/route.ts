@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateManagerId } from "@/lib/manager-id";
 import { newAxisIntentSessionId } from "@/lib/manager-signup-intent";
+import { FULL_PAYMENT_WAIVER_PROMO_CODE } from "@/lib/stripe-promos";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -14,6 +15,7 @@ type Body = {
   email?: string;
   fullName?: string;
   phone?: string;
+  promo?: string;
 };
 
 function isTier(s: string): s is Tier {
@@ -35,6 +37,7 @@ export async function POST(req: Request) {
     const billingRaw = typeof body.billing === "string" ? body.billing.toLowerCase().trim() : "";
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+    const promo = typeof body.promo === "string" ? body.promo.trim().toUpperCase() : "";
     if (!email.includes("@")) {
       return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
     }
@@ -46,8 +49,9 @@ export async function POST(req: Request) {
     }
 
     const skipStripeForFree = tierRaw === "free";
+    const skipStripeForPromo = promo === FULL_PAYMENT_WAIVER_PROMO_CODE;
 
-    if (!skipStripeForFree) {
+    if (!skipStripeForFree && !skipStripeForPromo) {
       return NextResponse.json(
         { error: "This tier requires Stripe checkout. Use Continue on the pricing page for paid plans." },
         { status: 400 },
@@ -74,7 +78,7 @@ export async function POST(req: Request) {
       manager_id: managerId,
       tier: tierRaw,
       billing: billingRaw,
-      promo_code: null,
+      promo_code: skipStripeForPromo ? FULL_PAYMENT_WAIVER_PROMO_CODE : null,
       paid_at: new Date().toISOString(),
       full_name: fullName,
     });
