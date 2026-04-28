@@ -152,7 +152,7 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
         id,
         folder: "sent",
         from: "You",
-        email: p.kind === "admin" ? "Axis admin team" : p.toEmailLine,
+        email: p.kind === "admin" ? "prakritramachandran@gmail.com" : p.toEmailLine,
         subject: p.subject.trim(),
         preview: previewLine(p.body),
         body: p.body.trim(),
@@ -161,7 +161,7 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
       };
       setLocal((prev) => [row, ...prev]);
       setComposeOpen(false);
-      showToast(p.kind === "admin" ? "Message sent to the admin team." : "Message sent.");
+      showToast(p.kind === "admin" ? "Message sent to prakritramachandran@gmail.com." : "Message sent.");
       router.push(`${portalBase}/inbox/sent`);
     },
     [router, showToast, portalBase],

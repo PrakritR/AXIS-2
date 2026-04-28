@@ -118,7 +118,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       const row: DemoResidentInboxThread = {
         id: `sent_${Date.now()}`,
         from: "You",
-        email: p.kind === "admin" ? "Axis admin team" : p.toEmailLine,
+        email: p.kind === "admin" ? "prakritramachandran@gmail.com" : p.toEmailLine,
         subject: p.subject.trim(),
         preview: previewLine(p.body),
         when,
@@ -144,7 +144,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       }
       setSent((prev) => [row, ...prev]);
       setComposeOpen(false);
-      showToast(p.kind === "admin" ? "Message sent to the admin team." : "Message sent.");
+      showToast(p.kind === "admin" ? "Message sent to prakritramachandran@gmail.com." : "Message sent.");
       router.push("/resident/inbox/sent");
       router.refresh();
     },

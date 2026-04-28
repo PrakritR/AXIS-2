@@ -12,7 +12,7 @@ export type ScopedInboxSendPayload =
   | { kind: "peer"; subject: string; body: string; toLabel: string; toEmailLine: string };
 
 type RecipientMode =
-  | "axis-admin"
+  | "primary-admin"
   | "broadcast-managers"
   | "broadcast-owners"
   | "broadcast-residents"
@@ -21,7 +21,7 @@ type RecipientMode =
   | "pick-residents";
 
 function modesForPortal(portal: "resident" | "manager" | "owner"): { value: RecipientMode; label: string }[] {
-  const admin = { value: "axis-admin" as const, label: "Axis admin team" };
+  const admin = { value: "primary-admin" as const, label: "prakritramachandran@gmail.com" };
   if (portal === "resident") {
     return [
       admin,
@@ -129,7 +129,7 @@ export function ScopedInboxComposeModal({
       return;
     }
 
-    if (mode === "axis-admin") {
+    if (mode === "primary-admin") {
       onSend({ kind: "admin", subject: s, body: b, senderName, senderEmail });
       return;
     }

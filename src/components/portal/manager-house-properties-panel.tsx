@@ -94,7 +94,7 @@ const EMPTY_COPY: Record<ManagerStageKey, string> = {
 };
 
 const BANNER_COPY: Record<ManagerStageKey, string> = {
-  pending: "New submissions and listings that need updates appear here until Axis admin clears them to go live.",
+  pending: "New submissions and listings that need updates appear here until prakritramachandran@gmail.com clears them to go live.",
   listed: "Live on Rent with Axis — published listings you can unlist or remove.",
   unlisted: "These listings are off the public site. You can relist or delete them from your queue.",
   rejected: "Rejected submissions stay here until you restore them to pending or delete them permanently.",
@@ -276,8 +276,8 @@ function ManagerPropertyInlineDetails({
         <>
           <p className="text-xs text-slate-500">
             {row.adminRefId.startsWith("mgr-")
-              ? "This listing was edited and is off the public site until Axis admin approves it again. You can keep editing here."
-              : "Listing approval is handled by Axis admin. Edit below without leaving this preview; only admin can approve, request changes, or reject a listing."}
+              ? "This listing was edited and is off the public site until prakritramachandran@gmail.com approves it again. You can keep editing here."
+              : "Listing approval is handled by prakritramachandran@gmail.com. Edit below without leaving this preview; only that admin can approve, request changes, or reject a listing."}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={openInlineEditor}>

@@ -3,6 +3,8 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
+const PRIMARY_ADMIN_EMAIL = "prakritramachandran@gmail.com";
+
 type AdminAvailabilityHost = {
   adminUserId: string;
   adminLabel: string;
@@ -22,7 +24,7 @@ function slotRowsFromPayload(payload: unknown): string[] {
 function adminIdFromRecord(id: string, managerUserId: unknown): string {
   if (typeof managerUserId === "string" && managerUserId.trim()) return managerUserId.trim();
   const match = id.match(/^axis_admin_avail_slots_v2_admin_(.+)$/);
-  return match?.[1]?.trim() || "axis-admin";
+  return match?.[1]?.trim() || "";
 }
 
 export async function GET() {
@@ -35,17 +37,31 @@ export async function GET() {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    const adminIds = [
+      ...new Set(
+        ((data ?? []) as ScheduleRecordRow[])
+          .map((record) => adminIdFromRecord(String(record.id ?? ""), record.manager_user_id))
+          .filter(Boolean),
+      ),
+    ];
+    const emailByAdminId = new Map<string, string>();
+    if (adminIds.length > 0) {
+      const { data: profiles } = await db.from("profiles").select("id, email").in("id", adminIds);
+      for (const profile of (profiles ?? []) as { id?: string | null; email?: string | null }[]) {
+        if (profile.id && profile.email) emailByAdminId.set(profile.id, profile.email.trim().toLowerCase());
+      }
+    }
+
     const slotHosts: Record<string, AdminAvailabilityHost[]> = {};
     for (const record of ((data ?? []) as ScheduleRecordRow[])) {
       const rowData = record.row_data && typeof record.row_data === "object" ? record.row_data as Record<string, unknown> : {};
       const slots = slotRowsFromPayload(rowData.payload);
       const adminUserId = adminIdFromRecord(String(record.id ?? ""), record.manager_user_id);
-      const adminLabel =
-        typeof rowData.adminLabel === "string" && rowData.adminLabel.trim()
-          ? rowData.adminLabel.trim()
-          : adminUserId === "axis-admin"
-            ? "Axis admin"
-            : `Axis admin ${adminUserId.slice(0, 8)}`;
+      if (!adminUserId) continue;
+      const storedLabel = typeof rowData.adminLabel === "string" ? rowData.adminLabel.trim().toLowerCase() : "";
+      const profileEmail = emailByAdminId.get(adminUserId) ?? "";
+      if (storedLabel !== PRIMARY_ADMIN_EMAIL && profileEmail !== PRIMARY_ADMIN_EMAIL) continue;
+      const adminLabel = PRIMARY_ADMIN_EMAIL;
 
       for (const slot of slots) {
         const hosts = slotHosts[slot] ?? [];

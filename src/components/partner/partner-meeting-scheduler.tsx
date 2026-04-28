@@ -242,10 +242,10 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             {!hasAnyPublished ? (
               <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
                 {loadingAvailability ? (
-                  "Loading Axis admin meeting windows..."
+                  "Loading meeting windows..."
                 ) : (
                   <>
-                    No meeting windows are published yet. An Axis admin can set availability under{" "}
+                    No meeting windows are published yet. Availability can be set under{" "}
                     <span className="font-semibold">Admin portal - Events - Availability</span>. You can still use the
                     message tab to reach us.
                   </>
@@ -394,7 +394,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                       </button>
                       {window.hosts.length > 1 ? (
                         <label className="mt-3 block text-xs font-semibold text-slate-600">
-                          Choose Axis admin
+                          Choose admin
                           <select
                             className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                             value={window.selectedAdminUserId}
@@ -416,7 +416,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                 </div>
                 {!canContinue ? (
                   <p className="mt-3 text-xs font-semibold text-amber-700">
-                    Pick an Axis admin for each selected time with multiple admins available.
+                    Pick an admin for each selected time with multiple admins available.
                   </p>
                 ) : null}
               </div>

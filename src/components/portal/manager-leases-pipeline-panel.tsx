@@ -334,8 +334,8 @@ export function ManagerLeasesPipelinePanel({
                             <ThreadView row={row} />
                           </div>
                           <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">
-                            Admin review is read-only here — you can view the lease and comments only. Messaging and routing happen in the
-                            Axis admin portal. When this returns to Manager review, you&apos;ll see admin feedback above and can reply or send
+                            Admin review is read-only here — you can view the lease and comments only. Messaging and routing happen through
+                            prakritramachandran@gmail.com. When this returns to Manager review, you&apos;ll see admin feedback above and can reply or send
                             the lease onward.
                           </p>
                         </>

@@ -10,11 +10,8 @@ import {
   appendPartnerInquiry,
   dateHasAvailability,
   formatAvailabilitySlotLabel,
-  getManagersForProperty,
   localDateAtSlotStart,
-  managerPropertyAvailabilityStorageKey,
   type PropertyManagerEntry,
-  readAvailabilityDateSetForStorageKey,
   toLocalDateStr,
 } from "@/lib/demo-admin-scheduling";
 import Link from "next/link";
@@ -199,6 +196,8 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
   const [selectedManagerUserId, setSelectedManagerUserId] = useState<string | null>(null);
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
+  const [slotHosts, setSlotHosts] = useState<Record<string, PropertyManagerEntry[]>>({});
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const buildings = useMemo(() => groupByBuilding(properties), [properties]);
 
   useEffect(() => {
@@ -209,49 +208,46 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
     };
   }, []);
 
-  // All managers offering tours for this property (registered + primary fallback).
-  const managersForProperty = useMemo(() => {
-    void tick;
-    if (!selectedProperty) return [];
-    const registered = getManagersForProperty(selectedProperty.id);
-    if (selectedProperty.managerUserId?.trim()) {
-      const alreadyIn = registered.some((e) => e.userId === selectedProperty.managerUserId);
-      if (!alreadyIn) {
-        return [{ userId: selectedProperty.managerUserId, label: "Property Manager" }, ...registered];
-      }
+  useEffect(() => {
+    if (!selectedProperty) {
+      setSlotHosts({});
+      return;
     }
-    return registered;
-  }, [selectedProperty, tick]);
+    let cancelled = false;
+    setAvailabilityLoading(true);
+    setSlotHosts({});
+    setSelectedDay(null);
+    setSelectedSlotIndex(null);
+    setSelectedManagerUserId(null);
+    void fetch(`/api/public/property-tour-availability?propertyId=${encodeURIComponent(selectedProperty.id)}`, { cache: "no-store" })
+      .then(async (res) => {
+        const body = (await res.json()) as { slotHosts?: Record<string, PropertyManagerEntry[]> };
+        if (!cancelled) setSlotHosts(res.ok && body.slotHosts ? body.slotHosts : {});
+      })
+      .catch(() => {
+        if (!cancelled) setSlotHosts({});
+      })
+      .finally(() => {
+        if (!cancelled) setAvailabilityLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProperty]);
 
-  // Union of all managers' availability slots.
   const selectedAvailability = useMemo(() => {
     void tick;
-    if (!selectedProperty) return new Set<string>();
-    const combined = new Set<string>();
-    for (const mgr of managersForProperty) {
-      for (const slot of readAvailabilityDateSetForStorageKey(
-        managerPropertyAvailabilityStorageKey(mgr.userId, selectedProperty.id),
-      )) {
-        combined.add(slot);
-      }
-    }
-    return combined;
-  }, [selectedProperty, managersForProperty, tick]);
+    return new Set(Object.entries(slotHosts).filter(([, hosts]) => hosts.length > 0).map(([slot]) => slot));
+  }, [slotHosts, tick]);
 
   // Map from slot key ("YYYY-MM-DD:slotIndex") to managers available at that slot.
   const slotManagerMap = useMemo(() => {
-    if (!selectedProperty) return new Map<string, PropertyManagerEntry[]>();
     const map = new Map<string, PropertyManagerEntry[]>();
-    for (const mgr of managersForProperty) {
-      for (const slot of readAvailabilityDateSetForStorageKey(
-        managerPropertyAvailabilityStorageKey(mgr.userId, selectedProperty.id),
-      )) {
-        const existing = map.get(slot) ?? [];
-        map.set(slot, [...existing, mgr]);
-      }
+    for (const [slot, hosts] of Object.entries(slotHosts)) {
+      map.set(slot, hosts);
     }
     return map;
-  }, [selectedProperty, managersForProperty]);
+  }, [slotHosts]);
 
   // Managers available at the currently selected slot.
   const managersAtSelectedSlot = useMemo(() => {
@@ -433,6 +429,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
             managersAtSelectedSlot={managersAtSelectedSlot}
             selectedManagerUserId={selectedManagerUserId}
             onSelectManager={setSelectedManagerUserId}
+            availabilityLoading={availabilityLoading}
           />
         )}
         {step === 3 && (
@@ -647,6 +644,7 @@ function Step2({
   calMonth, calYear, onPrevMonth, onNextMonth,
   selectedDay, onSelectDay, selectedSlotIndex, onSelectSlotIndex,
   managersAtSelectedSlot, selectedManagerUserId, onSelectManager,
+  availabilityLoading,
 }: {
   property: MockProperty | null;
   availability: Set<string>;
@@ -657,6 +655,7 @@ function Step2({
   managersAtSelectedSlot: PropertyManagerEntry[];
   selectedManagerUserId: string | null;
   onSelectManager: (userId: string) => void;
+  availabilityLoading: boolean;
 }) {
   const daysInMonth = getDaysInMonth(calYear, calMonth);
   const firstDay = getFirstDayOfMonth(calYear, calMonth);
@@ -669,6 +668,10 @@ function Step2({
       {!property ? (
         <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
           Pick a property and room first so we can show the right meeting windows.
+        </p>
+      ) : availabilityLoading ? (
+        <p className="rounded-2xl border border-blue-200/80 bg-blue-50/90 px-4 py-3 text-sm text-blue-950">
+          Loading tour windows from the calendar...
         </p>
       ) : availability.size === 0 ? (
         <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
