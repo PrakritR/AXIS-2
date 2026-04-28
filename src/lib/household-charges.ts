@@ -88,11 +88,11 @@ function readAll(): HouseholdCharge[] {
   }
 }
 
-function writeAll(rows: HouseholdCharge[]) {
+function writeAll(rows: HouseholdCharge[], silent = false) {
   if (!isBrowser()) return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
-    emit();
+    if (!silent) emit();
   } catch {
     /* ignore */
   }
@@ -373,7 +373,7 @@ function ensureRecurringRentCharge(profile: RecurringRentProfile): void {
   };
 
   if (idx === -1) {
-    writeAll([...rows, baseCharge]);
+    writeAll([...rows, baseCharge], true);
     return;
   }
 
@@ -387,7 +387,7 @@ function ensureRecurringRentCharge(profile: RecurringRentProfile): void {
     paidAt: existing.paidAt,
     balanceLabel: existing.status === "paid" ? "$0.00" : amountLabel,
   };
-  writeAll(next);
+  writeAll(next, true);
 }
 
 export function readRecurringRentProfilesForManager(managerUserId: string | null): RecurringRentProfile[] {

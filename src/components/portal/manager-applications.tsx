@@ -125,7 +125,11 @@ function roomSortKey(row: DemoApplicantRow): string {
 }
 
 function displayRoomForRow(row: DemoApplicantRow): string {
-  return getRoomChoiceLabel(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "") || "—";
+  const raw = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
+  if (!raw) return "—";
+  // Return just the room name (first segment before " · ")
+  const full = getRoomChoiceLabel(raw);
+  return full.split(" · ")[0]?.trim() || full || "—";
 }
 
 function sortApplicationRows(rows: DemoApplicantRow[], bucket: ManagerApplicationBucket): DemoApplicantRow[] {
@@ -158,11 +162,14 @@ function ManagerApplicationPlacementEditor({
   const [propertyId, setPropertyId] = useState(initialPropertyId);
   const [roomChoice, setRoomChoice] = useState(initialRoomChoice);
   const [signedRent, setSignedRent] = useState(initialSignedRent);
+  const userEditedRentRef = useRef(false);
 
   useEffect(() => {
     setPropertyId(row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "");
     setRoomChoice(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "");
-    setSignedRent(row.signedMonthlyRent && row.signedMonthlyRent > 0 ? String(row.signedMonthlyRent) : "");
+    if (!userEditedRentRef.current) {
+      setSignedRent(row.signedMonthlyRent && row.signedMonthlyRent > 0 ? String(row.signedMonthlyRent) : "");
+    }
   }, [row]);
 
   const availablePropertyOptions = useMemo(() => {
@@ -196,7 +203,7 @@ function ManagerApplicationPlacementEditor({
   }, [roomChoice, roomOptions]);
 
   useEffect(() => {
-    if (signedRent.trim()) return;
+    if (userEditedRentRef.current || signedRent.trim()) return;
     const inferred = inferRoomRent(propertyId, roomChoice);
     if (inferred) setSignedRent(String(inferred));
   }, [propertyId, roomChoice, signedRent]);
@@ -244,7 +251,7 @@ function ManagerApplicationPlacementEditor({
               min={0}
               step={0.01}
               value={signedRent}
-              onChange={(e) => setSignedRent(e.target.value)}
+              onChange={(e) => { userEditedRentRef.current = true; setSignedRent(e.target.value); }}
               className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="800"
             />
@@ -296,6 +303,7 @@ export function ManagerApplications() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [rows, setRows] = useState<DemoApplicantRow[]>([]);
   const [portfolioTick, setPortfolioTick] = useState(0);
+  const [roomSortDir, setRoomSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
@@ -371,8 +379,13 @@ export function ManagerApplications() {
   const rowsForBucket = useMemo(() => {
     const inBucket = scopedRows.filter((r) => r.bucket === bucket);
     const filtered = !propertyFilter.trim() ? inBucket : inBucket.filter((r) => r.propertyId === propertyFilter);
-    return sortApplicationRows(filtered, bucket);
-  }, [scopedRows, bucket, propertyFilter]);
+    const sorted = sortApplicationRows(filtered, bucket);
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+    return [...sorted].sort((a, b) => {
+      const cmp = collator.compare(roomSortKey(a), roomSortKey(b));
+      return roomSortDir === "asc" ? cmp : -cmp;
+    });
+  }, [scopedRows, bucket, propertyFilter, roomSortDir]);
 
   const refreshTable = useCallback(() => {
     setRows(readManagerApplicationRows());
@@ -508,7 +521,15 @@ export function ManagerApplications() {
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 uppercase tracking-[0.14em] hover:text-slate-700"
+                    onClick={() => setRoomSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                  >
+                    Room {roomSortDir === "asc" ? "↑" : "↓"}
+                  </button>
+                </th>
                 <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               </tr>
             </thead>
