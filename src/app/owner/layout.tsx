@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { PublicNavbar } from "@/components/layout/public-navbar";
+import { AccountLinksSync } from "@/components/portal/account-links-sync";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
@@ -27,6 +28,7 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f5f5f7]">
+      <AccountLinksSync />
       <PublicNavbar />
       <PortalTopBanners
         planHref="/owner/plan"

@@ -253,22 +253,15 @@ export async function renderPortalSection(
     const useOwnerUi = proCtx.effectiveRole === "owner";
 
     if (section === "relationships") {
-      if (!meta.tabs.length) notFound();
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+      if (tabParts?.length) {
+        const legacyRelTab = tabParts[0]!;
+        if (legacyRelTab === "owner" || legacyRelTab === "manager") {
+          redirect(`${def.basePath}/${section}`);
+        }
+        notFound();
       }
-      const relTab = tabParts[0]!;
-      if (!["owner", "manager"].includes(relTab)) notFound();
-      const relTabs: TabItem[] = meta.tabs.map((t) => ({
-        id: t.id,
-        label: t.label,
-        href: `${def.basePath}/${section}/${t.id}`,
-      }));
       return subscriptionGated(
-        <>
-          <PortalSectionSubtabs tabs={relTabs} activeId={relTab} />
-          <ProAccountLinksPanelLoader mode={relTab === "owner" ? "owner" : "manager"} />
-        </>,
+        <ProAccountLinksPanelLoader />,
         kind,
         "relationships",
         managerOwnerSubscriptionTier,

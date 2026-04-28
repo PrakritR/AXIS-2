@@ -22,10 +22,7 @@ export const proPortal: PortalDefinition = {
     {
       section: "relationships",
       label: "Account links",
-      tabs: [
-        { id: "owner", label: "Owner" },
-        { id: "manager", label: "Manager" },
-      ],
+      tabs: [],
     },
     { section: "leases", label: "Leases", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },

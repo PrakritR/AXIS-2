@@ -1,4 +1,5 @@
 import { PublicNavbar } from "@/components/layout/public-navbar";
+import { AccountLinksSync } from "@/components/portal/account-links-sync";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { buildManagerPortalDefinition } from "@/lib/portals/manager-nav";
@@ -8,6 +9,7 @@ export default async function ManagerLayout({ children }: { children: React.Reac
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f5f5f7]">
+      <AccountLinksSync />
       <PublicNavbar />
       <PortalTopBanners
         planHref="/manager/plan"

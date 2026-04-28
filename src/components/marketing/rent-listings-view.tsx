@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PropertyCard } from "@/components/marketing/property-card";
 import { RoomListingCard } from "@/components/marketing/room-listing-card";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
@@ -82,7 +83,9 @@ export function RentListingsView() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">Listings</p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Available rooms</h1>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+        {hasSearch ? "Available rooms" : "Available properties"}
+      </h1>
 
       {hasSearch ? (
         <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
@@ -137,21 +140,21 @@ export function RentListingsView() {
         </div>
       ) : null}
 
-      {roomResults.length === 0 ? (
+      {hasSearch && roomResults.length === 0 ? (
         <div className="mt-12 rounded-3xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-14 text-center">
           <p className="text-base font-semibold text-slate-800">No rooms match these filters</p>
           <p className="mt-2 text-sm text-slate-600">
             Try a larger radius, a nearby ZIP, a higher max rent, or set bathroom to Any.
           </p>
           <Link href="/rent/listings" className="mt-6 inline-flex text-sm font-semibold text-primary hover:opacity-90">
-            View all rooms
+            View all properties
           </Link>
         </div>
       ) : (
         <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {roomResults.map((room) => (
-            <RoomListingCard key={room.key} row={room} />
-          ))}
+          {hasSearch
+            ? roomResults.map((room) => <RoomListingCard key={room.key} row={room} />)
+            : combined.map((property) => <PropertyCard key={property.id} property={property} />)}
         </div>
       )}
     </div>

@@ -169,8 +169,8 @@ export async function POST(req: Request) {
         {
           error:
             tabKind === "owner"
-              ? "Only an owner workspace can send invites on the Owner tab."
-              : "Only a manager workspace can send invites on the Manager tab.",
+              ? "Only an owner workspace can send owner links."
+              : "Only a manager workspace can send manager links.",
         },
         { status: 403 },
       );
@@ -219,8 +219,8 @@ export async function POST(req: Request) {
         {
           error:
             tabKind === "owner"
-              ? "On the Owner tab, enter another owner workspace's Axis ID."
-              : "On the Manager tab, enter another manager workspace's Axis ID.",
+              ? "Select owner only when entering another owner workspace's Axis ID."
+              : "Select manager only when entering another manager workspace's Axis ID.",
         },
         { status: 400 },
       );
@@ -231,8 +231,8 @@ export async function POST(req: Request) {
     }
 
     const { tier: inviterTier } = await getManagerPurchaseSku(user.id);
-    const linkCap = maxAccountLinksForTier(inviterTier);
-    if (linkCap != null) {
+    const inviterLinkCap = maxAccountLinksForTier(inviterTier);
+    if (inviterLinkCap != null) {
       const { count: used, error: capErr } = await svc
         .from("account_link_invites")
         .select("id", { count: "exact", head: true })
@@ -253,10 +253,44 @@ export async function POST(req: Request) {
         }
         return NextResponse.json({ error: capErr.message }, { status: 500 });
       }
-      if ((used ?? 0) >= linkCap) {
+      if ((used ?? 0) >= inviterLinkCap) {
         return NextResponse.json(
           {
-            error: `Plan limit: ${linkCap} link${linkCap === 1 ? "" : "s"} max per tab.`,
+            error: `Plan limit: ${inviterLinkCap} link${inviterLinkCap === 1 ? "" : "s"} max for ${tabKind} links on your plan.`,
+          },
+          { status: 403 },
+        );
+      }
+    }
+
+    const { tier: inviteeTier } = await getManagerPurchaseSku(inviteeProfile.id);
+    const inviteeLinkCap = maxAccountLinksForTier(inviteeTier);
+    if (inviteeLinkCap != null) {
+      const { count: inviteeUsed, error: inviteeCapErr } = await svc
+        .from("account_link_invites")
+        .select("id", { count: "exact", head: true })
+        .eq("invitee_user_id", inviteeProfile.id)
+        .eq("tab_kind", tabKind)
+        .in("status", ["pending", "accepted"]);
+
+      if (inviteeCapErr) {
+        if (looksLikeAccountLinksMissingTable(inviteeCapErr)) {
+          return NextResponse.json(
+            {
+              error:
+                "Database is missing account_link_invites. Apply supabase/migrations/20260422120000_account_link_invites.sql.",
+              migrationRequired: true,
+            },
+            { status: 503 },
+          );
+        }
+        return NextResponse.json({ error: inviteeCapErr.message }, { status: 500 });
+      }
+
+      if ((inviteeUsed ?? 0) >= inviteeLinkCap) {
+        return NextResponse.json(
+          {
+            error: `Invitee needs to upgrade. They already have ${inviteeUsed ?? 0} of ${inviteeLinkCap} allowed ${tabKind} link${inviteeLinkCap === 1 ? "" : "s"}.`,
           },
           { status: 403 },
         );

@@ -46,15 +46,13 @@ function resolvePropertyLabel(id: string, fallback: string): string {
 }
 
 export function ProAccountLinksPanel({
-  mode,
   userId,
 }: {
-  mode: "owner" | "manager";
   userId: string;
 }) {
   const { showToast } = useAppUi();
   const planBase = usePaidPortalBasePath();
-  const perspective: ProRelationshipPerspective = mode === "owner" ? "owner_tab" : "manager_tab";
+  const [selectedKind, setSelectedKind] = useState<"owner" | "manager">("manager");
 
   const [localTick, setLocalTick] = useState(0);
   const refreshLocal = useCallback(() => setLocalTick((n) => n + 1), []);
@@ -105,19 +103,16 @@ export function ProAccountLinksPanel({
     };
   }, [refreshLocal]);
 
-  const localRows = useMemo(
-    () => readProRelationships(userId).filter((r) => r.perspective === perspective),
-    [userId, perspective, localTick],
-  );
+  const localRows = useMemo(() => readProRelationships(userId), [userId, localTick]);
 
   const tabRemote = useMemo(
-    () => remoteInvites.filter((i) => i.tabKind === mode),
-    [remoteInvites, mode],
+    () => remoteInvites.filter((i) => i.tabKind === selectedKind),
+    [remoteInvites, selectedKind],
   );
 
-  const activeRemote = tabRemote.filter((i) => i.status === "accepted");
-  const incomingPending = tabRemote.filter((i) => i.status === "pending" && i.direction === "incoming");
-  const outgoingPending = tabRemote.filter((i) => i.status === "pending" && i.direction === "outgoing");
+  const activeRemote = remoteInvites.filter((i) => i.status === "accepted");
+  const incomingPending = remoteInvites.filter((i) => i.status === "pending" && i.direction === "incoming");
+  const outgoingPending = remoteInvites.filter((i) => i.status === "pending" && i.direction === "outgoing");
 
   const outgoingUsedCount = tabRemote.filter(
     (i) => i.direction === "outgoing" && (i.status === "pending" || i.status === "accepted"),
@@ -198,12 +193,12 @@ export function ProAccountLinksPanel({
         setDraftAxisId(null);
         return;
       }
-      const needRole = mode === "owner" ? "owner" : "manager";
+    const needRole = selectedKind;
       if (String(body.role ?? "").toLowerCase() !== needRole) {
         showToast(
-          mode === "owner"
-            ? `On this tab, link another owner — enter their ${AXIS_ID_LABEL}.`
-            : `On this tab, link another manager — enter their ${AXIS_ID_LABEL}.`,
+          selectedKind === "owner"
+            ? `Select owner only when entering another owner workspace's ${AXIS_ID_LABEL}.`
+            : `Select manager only when entering another manager workspace's ${AXIS_ID_LABEL}.`,
         );
         setDraftAxisId(null);
         return;
@@ -250,7 +245,7 @@ export function ProAccountLinksPanel({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             inviteeAxisId: draftAxisId,
-            tabKind: mode,
+            tabKind: selectedKind,
             assignedPropertyIds: ids,
             payoutPercentForManager: payout,
           }),
@@ -275,6 +270,7 @@ export function ProAccountLinksPanel({
       }
     }
 
+    const perspective: ProRelationshipPerspective = selectedKind === "owner" ? "owner_tab" : "manager_tab";
     const all = readProRelationships(userId);
     const dupe = all.some((r) => r.linkedAxisId === draftAxisId && r.perspective === perspective);
     if (dupe) {
@@ -389,10 +385,50 @@ export function ProAccountLinksPanel({
     await patchInvite(id, { action: "cancel" }, "Invite withdrawn.");
   };
 
-  const peerLabel = mode === "owner" ? "owner" : "manager";
-  const title =
-    mode === "owner" ? "Link another owner workspace" : "Link another manager workspace";
-  const splitLabel = mode === "owner" ? "Owner split amount" : "Manager split amount";
+  const peerLabel = selectedKind === "owner" ? "owner" : "manager";
+  const splitLabel = selectedKind === "owner" ? "Owner split amount" : "Manager split amount";
+
+  const ownerUsedCount = useMemo(
+    () =>
+      remoteInvites.filter(
+        (i) => i.tabKind === "owner" && i.direction === "outgoing" && (i.status === "pending" || i.status === "accepted"),
+      ).length,
+    [remoteInvites],
+  );
+  const managerUsedCount = useMemo(
+    () =>
+      remoteInvites.filter(
+        (i) => i.tabKind === "manager" && i.direction === "outgoing" && (i.status === "pending" || i.status === "accepted"),
+      ).length,
+    [remoteInvites],
+  );
+
+  const ownerLocalCount = useMemo(
+    () => localRows.filter((r) => r.perspective === "owner_tab").length,
+    [localRows],
+  );
+  const managerLocalCount = useMemo(
+    () => localRows.filter((r) => r.perspective === "manager_tab").length,
+    [localRows],
+  );
+
+  const activeOwnerCount = useRemote ? ownerUsedCount : ownerLocalCount;
+  const activeManagerCount = useRemote ? managerUsedCount : managerLocalCount;
+
+  function kindForPerspective(perspective: ProRelationshipPerspective): "owner" | "manager" {
+    return perspective === "owner_tab" ? "owner" : "manager";
+  }
+
+  function kindBadge(kind: "owner" | "manager") {
+    return kind === "owner" ? "Owner" : "Manager";
+  }
+
+  function relationshipCopy(kind: "owner" | "manager", direction: "incoming" | "outgoing") {
+    if (kind === "manager") {
+      return direction === "incoming" ? "You manage their properties" : "They manage your properties";
+    }
+    return direction === "incoming" ? "You own their properties" : "They own your properties";
+  }
 
   // Sync accepted remote invites into this user's localStorage so collectAccessiblePropertyIds
   // picks up linked property IDs (enables Applications and Residents tabs to filter correctly).
@@ -408,7 +444,7 @@ export function ProAccountLinksPanel({
         id: inv.id,
         linkedAxisId: inv.linkedAxisId,
         linkedDisplayName: inv.linkedDisplayName ?? undefined,
-        perspective,
+        perspective: inv.tabKind === "owner" ? "owner_tab" : "manager_tab",
         payoutPercentForManager: inv.payoutPercentForManager,
         assignedPropertyIds: inv.assignedPropertyIds,
         createdAt: inv.createdAt,
@@ -424,7 +460,7 @@ export function ProAccountLinksPanel({
     if (changed || filtered.length !== next.length) {
       writeProRelationships(userId, filtered);
     }
-  }, [activeRemote, useRemote, userId, perspective]);
+  }, [activeRemote, useRemote, userId]);
 
   const activeCards = useRemote ? activeRemote : localRows;
 
@@ -433,12 +469,11 @@ export function ProAccountLinksPanel({
       <div className="mx-auto max-w-3xl space-y-8">
         <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-            {mode === "owner" ? "Owner perspective" : "Manager perspective"}
+            Account relationships
           </p>
-          <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900">{title}</h2>
+          <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900">Link another workspace</h2>
           <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            Verify their <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span>, choose the properties they should manage, then set the split amount for
-            that relationship. They approve on the same tab ({mode === "owner" ? "Owner" : "Manager"}) before it goes live.
+            Verify their <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span>, choose whether the linked workspace is an owner or a manager, then assign the properties and split amount for that relationship.
           </p>
           {!useRemote && remoteLoaded ? (
             <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900">
@@ -452,10 +487,12 @@ export function ProAccountLinksPanel({
               }`}
             >
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className={`font-semibold tabular-nums ${atLinkCap ? "text-rose-900" : "text-slate-900"}`}>
-                  {linksUsed}/{linkCap}
-                </span>
-                <span className="text-slate-500">links this tab</span>
+                <span className={`font-semibold tabular-nums ${atLinkCap ? "text-rose-900" : "text-slate-900"}`}>{linksUsed}/{linkCap}</span>
+                <span className="text-slate-500">{selectedKind === "owner" ? "owner links" : "manager links"}</span>
+                <span className="text-slate-400">·</span>
+                <span className="text-slate-500">Managers {activeManagerCount}</span>
+                <span className="text-slate-400">·</span>
+                <span className="text-slate-500">Owners {activeOwnerCount}</span>
                 {tierShort ? (
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${atLinkCap ? "bg-white/80 text-rose-800" : "bg-white text-slate-600"}`}>
                     {tierShort}
@@ -471,14 +508,32 @@ export function ProAccountLinksPanel({
 
         <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-6 shadow-sm">
           <p className="text-sm font-semibold text-slate-900">New invite</p>
-          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end">
+          <div className="mt-4 grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)_auto] sm:items-end">
+            <label className="block text-xs font-semibold text-slate-600">
+              Linked workspace type
+              <select
+                value={selectedKind}
+                onChange={(e) => {
+                  const next = e.target.value === "owner" ? "owner" : "manager";
+                  setSelectedKind(next);
+                  setDraftAxisId(null);
+                  setDraftName(null);
+                  setDraftUserId(null);
+                  setSelectedProps({});
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              >
+                <option value="manager">Manager</option>
+                <option value="owner">Owner</option>
+              </select>
+            </label>
             <label className="block flex-1 text-xs font-semibold text-slate-600">
               {AXIS_ID_LABEL}
               <input
                 type="text"
                 value={axisInput}
                 onChange={(e) => setAxisInput(e.target.value)}
-                placeholder={mode === "owner" ? "e.g. axis-owner-abc123" : "e.g. AXIS-1A2B3C4D"}
+                placeholder={selectedKind === "owner" ? "e.g. axis-owner-abc123" : "e.g. AXIS-1A2B3C4D"}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
             </label>
@@ -559,9 +614,6 @@ export function ProAccountLinksPanel({
         {useRemote && incomingPending.length > 0 ? (
           <div className="space-y-3">
             <p className="text-sm font-semibold text-slate-900">Pending approvals (incoming)</p>
-            <p className="text-xs text-slate-500">
-              Another workspace invited you — accept here on the <span className="font-semibold">{mode}</span> tab.
-            </p>
             <ul className="space-y-3">
               {incomingPending.map((inv) => (
                 <li
@@ -572,7 +624,11 @@ export function ProAccountLinksPanel({
                     <div>
                       <p className="font-semibold text-slate-900">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
                       <p className="font-mono text-xs text-slate-500">{inv.linkedAxisId}</p>
+                      <p className="mt-1 text-xs font-medium text-emerald-700">{relationshipCopy(inv.tabKind, "incoming")}</p>
                       <p className="mt-2 text-xs text-slate-500">
+                        <span className="mr-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-600">
+                          {kindBadge(inv.tabKind)}
+                        </span>
                         {inv.assignedPropertyIds.length} propert{inv.assignedPropertyIds.length === 1 ? "y" : "ies"} · {inv.payoutPercentForManager}% payout
                       </p>
                     </div>
@@ -608,6 +664,7 @@ export function ProAccountLinksPanel({
                   <div>
                     <span className="font-semibold text-slate-900">{inv.linkedDisplayName ?? inv.linkedAxisId}</span>
                     <span className="ml-2 font-mono text-xs text-slate-500">{inv.linkedAxisId}</span>
+                    <p className="mt-1 text-xs font-medium text-slate-600">{relationshipCopy(inv.tabKind, "outgoing")}</p>
                   </div>
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void cancelInvite(inv.id)}>
                     Withdraw invite
@@ -634,9 +691,12 @@ export function ProAccountLinksPanel({
                   <div>
                     <p className="font-semibold text-slate-900">{r.linkedDisplayName ?? r.linkedAxisId}</p>
                     <p className="font-mono text-xs text-slate-500">{r.linkedAxisId}</p>
-                    {mode === "manager" ? (
-                      <p className="mt-1 text-xs font-medium text-emerald-700">You are a manager for this account</p>
-                    ) : null}
+                    <p className="mt-1 text-xs font-medium text-emerald-700">{relationshipCopy(r.tabKind, r.direction)}</p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-600">
+                        {kindBadge(r.tabKind)}
+                      </span>
+                    </p>
                   </div>
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void removeLink(r.id)}>
                     Remove
@@ -708,9 +768,12 @@ export function ProAccountLinksPanel({
                   <div>
                     <p className="font-semibold text-slate-900">{r.linkedDisplayName ?? r.linkedAxisId}</p>
                     <p className="font-mono text-xs text-slate-500">{r.linkedAxisId}</p>
-                    {mode === "manager" ? (
-                      <p className="mt-1 text-xs font-medium text-emerald-700">You are a manager for this account</p>
-                    ) : null}
+                    <p className="mt-1 text-xs font-medium text-emerald-700">{relationshipCopy(kindForPerspective(r.perspective), "outgoing")}</p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-600">
+                        {kindBadge(kindForPerspective(r.perspective))}
+                      </span>
+                    </p>
                   </div>
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void removeLink(r.id)}>
                     Remove
@@ -768,8 +831,8 @@ export function ProAccountLinksPanel({
   );
 }
 
-/** Load session user id on client and render panel (server passes mode only). */
-export function ProAccountLinksPanelLoader({ mode }: { mode: "owner" | "manager" }) {
+/** Load session user id on client and render panel. */
+export function ProAccountLinksPanelLoader() {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -794,5 +857,5 @@ export function ProAccountLinksPanelLoader({ mode }: { mode: "owner" | "manager"
     );
   }
 
-  return <ProAccountLinksPanel mode={mode} userId={userId} />;
+  return <ProAccountLinksPanel userId={userId} />;
 }
