@@ -227,7 +227,7 @@ export function getRoomOptionsForProperty(propertyId: string, options: RoomAvail
     }
   }
 
-  const catalog = [...mockProperties, ...readExtraListings()];
+  const catalog = [...mockProperties, ...readAllExtraListings(), ...readExtraListings()];
   const seen = new Set<string>();
   const out: { value: string; label: string }[] = [];
   for (const p of catalog) {

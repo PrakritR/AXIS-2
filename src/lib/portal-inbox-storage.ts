@@ -57,3 +57,9 @@ export function persistInbox(key: string, threads: PersistedInboxThread[]): void
     /* quota */
   }
 }
+
+/** Append one thread and emit inbox-changed event for live UI refresh. */
+export function appendPersistedInboxThread(key: string, thread: PersistedInboxThread, fallback: PersistedInboxThread[] = []): void {
+  const rows = loadPersistedInbox(key, fallback);
+  persistInbox(key, [thread, ...rows]);
+}

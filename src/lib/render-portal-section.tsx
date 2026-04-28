@@ -423,7 +423,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident") {
-    if (residentWorkspaceUnlocked || (residentPaymentsUnlocked && section === "payments")) {
+    if (residentWorkspaceUnlocked || (residentPaymentsUnlocked && (section === "payments" || section === "work-orders"))) {
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentLeasePanel />;
       if (section === "payments") return <ResidentPaymentsPanel />;

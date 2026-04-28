@@ -70,6 +70,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const [extrasTick, setExtrasTick] = useState(0);
   const [chargeTick, setChargeTick] = useState(0);
   const [feeStepUserId, setFeeStepUserId] = useState<string | null>(null);
+  const [reviewReturnStep, setReviewReturnStep] = useState<number | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [postSubmit, setPostSubmit] = useState<{ applicationId: string } | null>(null);
   const router = useRouter();
@@ -214,6 +215,14 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const goToStep = useCallback((n: number) => {
     setStep(n);
     setErrors({});
+    setReviewReturnStep(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const editFromReview = useCallback((n: number) => {
+    setStep(n);
+    setErrors({});
+    setReviewReturnStep(n);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -409,7 +418,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           const listingForPay = prop ?? readAllExtraListings().find((p) => p.id === pid);
           const managerUserId = listingForPay?.managerUserId?.trim() ?? "";
           if (!managerUserId) {
-            showToast("This listing cannot take Stripe payments yet. Choose Zelle or contact the manager.");
+            showToast("This listing cannot take Stripe payments yet. Contact the manager before submitting.");
             return;
           }
 
@@ -483,7 +492,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       showToast("Please fix the highlighted fields before continuing.");
       return;
     }
-    setStep((s) => s + 1);
+    if (reviewReturnStep != null && reviewReturnStep === step) {
+      setStep(11);
+      setReviewReturnStep(null);
+    } else {
+      setStep((s) => s + 1);
+    }
     setErrors({});
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -493,6 +507,13 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     if (step === 12) {
       setStep(11);
       setErrors({});
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (reviewReturnStep != null && reviewReturnStep === step) {
+      setStep(11);
+      setErrors({});
+      setReviewReturnStep(null);
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -601,12 +622,13 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 setRef2Phone={setRef2Phone}
                 setSsn={setSsn}
                 goToStep={goToStep}
+                editFromReview={editFromReview}
               />
             </div>
 
             <div className="mt-10 flex flex-col-reverse gap-3 border-t border-slate-100 pt-8 sm:flex-row sm:items-center sm:justify-between">
               <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack} disabled={step <= 1}>
-                Back
+                {reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
               </Button>
               <Button
                 type="button"

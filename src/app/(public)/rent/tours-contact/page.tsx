@@ -5,6 +5,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import { PROPERTY_PIPELINE_EVENT, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
+import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import Link from "next/link";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 
@@ -44,6 +45,39 @@ type BuildingGroup = {
   neighborhood: string;
   units: MockProperty[];
 };
+
+type TourRoomOption = {
+  key: string;
+  label: string;
+  subtitle: string;
+  property: MockProperty;
+};
+
+function roomOptionsForProperty(p: MockProperty): TourRoomOption[] {
+  if (p.listingSubmission?.v === 1) {
+    const sub = normalizeManagerListingSubmissionV1(p.listingSubmission);
+    const rooms = sub.rooms.filter((r) => r.name.trim());
+    if (rooms.length > 0) {
+      return rooms.map((room) => {
+        const parts = [room.name.trim(), room.floor.trim(), room.monthlyRent > 0 ? `$${room.monthlyRent}/mo` : ""].filter(Boolean);
+        return {
+          key: `${p.id}::${room.id}`,
+          label: parts.join(" · "),
+          subtitle: p.title,
+          property: p,
+        };
+      });
+    }
+  }
+  return [
+    {
+      key: p.id,
+      label: `${p.buildingName} · ${p.unitLabel}`,
+      subtitle: `${p.neighborhood} · ${p.rentLabel}`,
+      property: p,
+    },
+  ];
+}
 
 function groupByBuilding(properties: MockProperty[]): BuildingGroup[] {
   const map = new Map<string, BuildingGroup>();
@@ -122,13 +156,20 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
   const [step1Phase, setStep1Phase] = useState<"property" | "room">("property");
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<MockProperty | null>(null);
+  const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
+  const selectedRoomLabel = useMemo(() => {
+    if (!selectedProperty || !selectedRoomKey) return "";
+    const hit = roomOptionsForProperty(selectedProperty).find((o) => o.key === selectedRoomKey);
+    return hit?.label ?? selectedProperty.title;
+  }, [selectedProperty, selectedRoomKey]);
+
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const buildings = useMemo(() => groupByBuilding(properties), [properties]);
 
-  const canContinue1 = selectedProperty !== null;
+  const canContinue1 = selectedProperty !== null && selectedRoomKey !== null;
   const canContinue2 = selectedDay !== null && selectedTime !== null;
 
   const steps = [
@@ -163,6 +204,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               setStep1Phase("property");
               setSelectedBuildingId(null);
               setSelectedProperty(null);
+              setSelectedRoomKey(null);
               setSelectedDay(null);
               setSelectedTime(null);
             }}
@@ -235,17 +277,21 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
             onSelectBuilding={(id) => {
               setSelectedBuildingId(id);
               setSelectedProperty(null);
+              setSelectedRoomKey(null);
               setStep1Phase("room");
             }}
             onBackToProperties={() => {
               setSelectedBuildingId(null);
               setSelectedProperty(null);
+              setSelectedRoomKey(null);
               setStep1Phase("property");
             }}
-            onSelectRoom={(p) => {
+            onSelectRoom={(p, roomKey) => {
               setSelectedProperty(p);
               setSelectedBuildingId(p.buildingId);
+              setSelectedRoomKey(roomKey);
             }}
+            selectedRoomKey={selectedRoomKey}
           />
         )}
         {step === 2 && (
@@ -269,6 +315,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
         {step === 3 && (
           <Step3
             property={selectedProperty}
+            roomLabel={selectedRoomLabel}
             day={selectedDay}
             time={selectedTime}
             month={calMonth}
@@ -328,6 +375,7 @@ function Step1({
   onSelectBuilding,
   onBackToProperties,
   onSelectRoom,
+  selectedRoomKey,
 }: {
   buildings: BuildingGroup[];
   phase: "property" | "room";
@@ -335,7 +383,8 @@ function Step1({
   selectedProperty: MockProperty | null;
   onSelectBuilding: (buildingId: string) => void;
   onBackToProperties: () => void;
-  onSelectRoom: (p: MockProperty) => void;
+  onSelectRoom: (p: MockProperty, roomKey: string) => void;
+  selectedRoomKey: string | null;
 }) {
   if (phase === "property") {
     return (
@@ -396,13 +445,14 @@ function Step1({
           ← All properties
         </button>
       </div>
-      {building.units.map((p) => {
-        const isSelected = selectedProperty?.id === p.id;
+      {building.units.flatMap((p) => roomOptionsForProperty(p)).map((option) => {
+        const p = option.property;
+        const isSelected = selectedRoomKey === option.key;
         return (
           <button
-            key={p.id}
+            key={option.key}
             type="button"
-            onClick={() => onSelectRoom(p)}
+            onClick={() => onSelectRoom(p, option.key)}
             className={`w-full rounded-2xl border p-4 text-left transition-all duration-150 ${
               isSelected
                 ? "border-primary bg-primary/[0.08] ring-2 ring-primary/20"
@@ -412,12 +462,12 @@ function Step1({
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-slate-900">
-                  {p.buildingName} · {p.unitLabel}
+                  {option.label}
                 </p>
-                <p className="mt-0.5 text-xs text-slate-500">{p.address}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{option.subtitle}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
+                  <Chip>{p.address}</Chip>
                   <Chip>{p.neighborhood}</Chip>
-                  <Chip>{p.rentLabel}</Chip>
                   <Chip>Available {p.available}</Chip>
                 </div>
               </div>
@@ -527,16 +577,16 @@ function Step2({
 }
 
 function Step3({
-  property, day, time, month, year, onSubmit,
+  property, roomLabel, day, time, month, year, onSubmit,
 }: {
-  property: MockProperty | null; day: number | null; time: string | null;
+  property: MockProperty | null; roomLabel: string; day: number | null; time: string | null;
   month: number; year: number; onSubmit: () => void;
 }) {
   return (
     <div className="space-y-5">
       {/* Summary */}
       <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm">
-        <p className="font-semibold text-slate-800">{property?.title}</p>
+        <p className="font-semibold text-slate-800">{roomLabel || property?.title}</p>
         <p className="mt-0.5 text-slate-500">
           {MONTHS[month]} {day}, {year} · {time}
         </p>

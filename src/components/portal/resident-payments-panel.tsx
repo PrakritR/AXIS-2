@@ -114,7 +114,15 @@ export function ResidentPaymentsPanel() {
     <ManagerPortalPageShell
       title="Payments"
       titleAside={
-        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Refreshed payments.")}>
+        <Button
+          type="button"
+          variant="outline"
+          className="shrink-0 rounded-full"
+          onClick={() => {
+            refresh();
+            showToast("Refreshed payments.");
+          }}
+        >
           Refresh
         </Button>
       }

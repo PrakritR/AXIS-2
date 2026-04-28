@@ -11,6 +11,7 @@ import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
   MANAGER_INBOX_STORAGE_KEY,
+  PORTAL_INBOX_CHANGED_EVENT,
   loadPersistedInbox,
   persistInbox,
 } from "@/lib/portal-inbox-storage";
@@ -81,6 +82,22 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   useEffect(() => {
     setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, seedThreads()) as InboxThread[]);
     setPersistReady(true);
+  }, []);
+
+  useEffect(() => {
+    const sync = (evt?: Event) => {
+      if (evt && evt.type === PORTAL_INBOX_CHANGED_EVENT) {
+        const ce = evt as CustomEvent<{ key?: string }>;
+        if (ce.detail?.key && ce.detail.key !== MANAGER_INBOX_STORAGE_KEY) return;
+      }
+      setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, seedThreads()) as InboxThread[]);
+    };
+    window.addEventListener("storage", sync);
+    window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
+    };
   }, []);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
@@ -8,7 +8,30 @@ import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type Po
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
+import { appendPersistedInboxThread, MANAGER_INBOX_STORAGE_KEY } from "@/lib/portal-inbox-storage";
 import type { DemoResidentInboxThread } from "@/data/demo-portal";
+
+const RESIDENT_SENT_KEY = "axis_resident_sent_inbox_v1";
+
+function readSentRows(): DemoResidentInboxThread[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(RESIDENT_SENT_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSentRows(rows: DemoResidentInboxThread[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(RESIDENT_SENT_KEY, JSON.stringify(rows));
+  } catch {
+    /* ignore */
+  }
+}
 
 function toRows(
   list: { id: string; from: string; email: string; subject: string; preview: string; when: string; unread: boolean }[],
@@ -37,6 +60,17 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const [sent, setSent] = useState<DemoResidentInboxThread[]>([]);
   const [composeOpen, setComposeOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSent(readSentRows());
+    const sync = () => setSent(readSentRows());
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
+  }, []);
+
+  useEffect(() => {
+    writeSentRows(sent);
+  }, [sent]);
 
   const trashCount = 0;
 
@@ -101,6 +135,23 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         unread: false,
         body: p.body.trim(),
       };
+      if (p.kind === "peer") {
+        appendPersistedInboxThread(
+          MANAGER_INBOX_STORAGE_KEY,
+          {
+            id: `inbox_resident_${Date.now()}`,
+            folder: "inbox",
+            from: "Resident",
+            email: "resident@example.com",
+            subject: p.subject.trim(),
+            preview: previewLine(p.body),
+            body: p.body.trim(),
+            time: when,
+            unread: true,
+          },
+          [],
+        );
+      }
       setSent((prev) => [row, ...prev]);
       setComposeOpen(false);
       showToast(p.kind === "admin" ? "Message sent to the admin team." : "Message sent.");
