@@ -5,49 +5,55 @@ import type { ReactNode } from "react";
 import { useId } from "react";
 
 const markTileClass =
-  "flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-slate-200/90 bg-white/92 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.2)]";
+  "flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] border border-slate-200/90 bg-white shadow-[0_12px_28px_-24px_rgba(15,23,42,0.24)]";
 
 export type AxisLogoVariant = "default" | "portalHeader" | "adminHeader";
 
-/** Inline “AX”: solid A, X with one diagonal in sky → primary gradient, one diagonal in slate. */
+/** Inline “AX”: quieter architectural mark with a balanced A and a brighter brand X. */
 function AxisLogoGlyph({ className = "" }: { className?: string }) {
   const raw = useId().replace(/:/g, "");
   const gradId = `ax-x-${raw}`;
+  const tileGlowId = `ax-glow-${raw}`;
 
   return (
     <svg
-      className={`block h-[26px] w-[42px] shrink-0 ${className}`}
-      viewBox="0 0 42 22"
+      className={`block h-[28px] w-[46px] shrink-0 ${className}`}
+      viewBox="0 0 46 26"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden
     >
       <defs>
+        <radialGradient id={tileGlowId} cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(34 7) rotate(132.734) scale(20.9165 19.7768)">
+          <stop offset="0%" stopColor="#dbeafe" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </radialGradient>
         <linearGradient
           id={gradId}
-          x1="24.25"
-          y1="3.25"
-          x2="39.75"
-          y2="18.75"
+          x1="27"
+          y1="4"
+          x2="43"
+          y2="22"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0%" stopColor="#8fc3ff" />
-          <stop offset="45%" stopColor="#4da3ff" />
+          <stop offset="0%" stopColor="#7cc1ff" />
+          <stop offset="42%" stopColor="#2f8fff" />
           <stop offset="100%" stopColor="#0a84ff" />
         </linearGradient>
       </defs>
+      <path d="M15 0H46V26H15Z" fill={`url(#${tileGlowId})`} />
       {/* A */}
       <path
-        d="M2.5 18.5L10 2.5L17.5 18.5M6.75 12.25H13.25"
+        d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45"
         stroke="#0f172a"
-        strokeWidth="2.35"
+        strokeWidth="2.55"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* X — gradient limb (\) */}
-      <path d="M24.25 3.25L39.75 18.75" stroke={`url(#${gradId})`} strokeWidth="2.45" strokeLinecap="round" />
-      {/* X — solid limb (/) */}
-      <path d="M39.75 3.25L24.25 18.75" stroke="#0f172a" strokeWidth="2.45" strokeLinecap="round" />
+      {/* X — bright lead stroke */}
+      <path d="M27 4L43 22" stroke={`url(#${gradId})`} strokeWidth="2.75" strokeLinecap="round" />
+      {/* X — dark balancing stroke */}
+      <path d="M43 4L27 22" stroke="#1e3a8a" strokeWidth="2.55" strokeLinecap="round" />
     </svg>
   );
 }
@@ -94,9 +100,9 @@ export function AxisLogoMarkSoft({ className = "" }: { className?: string }) {
 
 export function AxisLogoWordmark() {
   return (
-    <span className="leading-[1.08]">
-      <span className="block text-[16px] font-semibold tracking-[-0.03em] text-[#0f172a]">AXIS</span>
-      <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Housing</span>
+    <span className="leading-none">
+      <span className="block text-[17px] font-semibold tracking-[-0.035em] text-[#0f172a]">AXIS</span>
+      <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Housing</span>
     </span>
   );
 }
