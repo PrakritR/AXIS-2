@@ -32,11 +32,11 @@ export async function GET(req: Request) {
 
     const { data: profile } = await svc
       .from("profiles")
-      .select("id")
+      .select("manager_id")
       .eq("email", email)
       .maybeSingle();
 
-    const axisId = profile?.id ? `AXIS-R-${profile.id.slice(0, 8).toUpperCase()}` : null;
+    const axisId = profile?.manager_id?.trim() || null;
     return NextResponse.json({ axisId });
   } catch (err) {
     return NextResponse.json(

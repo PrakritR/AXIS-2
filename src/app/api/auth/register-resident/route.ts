@@ -3,6 +3,7 @@ import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
+import { generateAxisId } from "@/lib/manager-id";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -10,17 +11,18 @@ export const runtime = "nodejs";
 type Body = {
   email: string;
   password: string;
-  applicationId: string;
+  axisId?: string;
+  applicationId?: string;
 };
 
 export async function POST(req: Request) {
   try {
-    const { email, password, applicationId } = (await req.json()) as Body;
+    const { email, password, axisId, applicationId } = (await req.json()) as Body;
     const normalEmail = email?.trim().toLowerCase();
-    const normalApplicationId = applicationId?.trim();
+    const normalAxisId = (axisId || applicationId)?.trim();
 
-    if (!normalEmail || !normalApplicationId) {
-      return NextResponse.json({ error: "Email and Application ID are required." }, { status: 400 });
+    if (!normalEmail || !normalAxisId) {
+      return NextResponse.json({ error: "Email and Axis ID are required." }, { status: 400 });
     }
     if (!password || password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
@@ -34,7 +36,7 @@ export async function POST(req: Request) {
       email_confirm: true,
       user_metadata: {
         role: "resident",
-        application_id: normalApplicationId,
+        axis_id: normalAxisId,
       },
     });
 
@@ -67,6 +69,7 @@ export async function POST(req: Request) {
     }
 
     const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    const profileAxisId = existingProfile?.manager_id?.trim() || normalAxisId || generateAxisId();
 
     const { error: upErr } = await supabase.from("profiles").upsert(
       {
@@ -74,7 +77,7 @@ export async function POST(req: Request) {
         email: normalEmail,
         role: primaryRoleWhenAddingResident(existingProfile?.role as string | undefined),
         full_name: existingProfile?.full_name ?? null,
-        manager_id: existingProfile?.manager_id ?? null,
+        manager_id: profileAxisId,
         application_approved: existingProfile?.application_approved ?? false,
       },
       { onConflict: "id" },
@@ -85,7 +88,7 @@ export async function POST(req: Request) {
 
     await ensureProfileRoleRow(supabase, userId, "resident");
 
-    return NextResponse.json({ ok: true, reusedExistingAuthUser });
+    return NextResponse.json({ ok: true, reusedExistingAuthUser, axisId: profileAxisId });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });

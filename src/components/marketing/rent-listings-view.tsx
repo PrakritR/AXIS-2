@@ -7,7 +7,7 @@ import { PropertyCard } from "@/components/marketing/property-card";
 import { RoomListingCard } from "@/components/marketing/room-listing-card";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
-import { PROPERTY_PIPELINE_EVENT, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
+import { loadPublicExtraListingsFromServer, PROPERTY_PIPELINE_EVENT, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
 import { parseRadiusParam, parseUSZip } from "@/lib/listings-search";
 import { filterRoomListings } from "@/lib/room-listings-catalog";
 
@@ -46,6 +46,7 @@ export function RentListingsView() {
 
   const refreshExtras = useCallback(() => {
     setExtras(readExtraListingsPublic());
+    void loadPublicExtraListingsFromServer().then(setExtras);
   }, []);
 
   useEffect(() => {

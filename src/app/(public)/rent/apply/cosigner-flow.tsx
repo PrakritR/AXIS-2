@@ -139,7 +139,7 @@ export function CosignerApplyFlow({
     const id = f.signerAppId.trim();
     const name = f.signerFullName.trim();
     if (!id && !name) {
-      const msg = "Enter an Application ID or the signer’s full name.";
+      const msg = "Enter an Axis ID or the signer’s full name.";
       errs.signerAppId = msg;
       errs.signerFullName = msg;
     } else {
@@ -147,7 +147,7 @@ export function CosignerApplyFlow({
         const r = validateFullName(name);
         if (!r.ok) errs.signerFullName = r.message;
       }
-      if (id && id.length < 4) errs.signerAppId = "Application ID looks too short.";
+      if (id && id.length < 4) errs.signerAppId = "Axis ID looks too short.";
     }
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
@@ -278,21 +278,21 @@ export function CosignerApplyFlow({
           <>
             <CardHeader
               title="Link This Co-Signer To A Signer Application"
-              subtitle="Provide the signer’s application ID, their full name, or both."
+              subtitle="Provide the signer’s Axis ID, their full name, or both."
             />
             <div className="mt-6 divide-y divide-slate-100">
-              <Field label="Signer Application ID" optional hint="Recommended if you have their Application ID." error={fieldErrors.signerAppId}>
+              <Field label="Signer Axis ID" optional hint="Recommended if you have their Axis ID." error={fieldErrors.signerAppId}>
                 <Input
                   value={f.signerAppId}
                   onChange={(e) => {
                     patchField(setF, "signerAppId", e.target.value);
                     clearError("signerAppId");
                   }}
-                  placeholder="APP-recXXXXXXXXXXXXXXXXX"
+                  placeholder="AXIS-XXXXXXXX"
                   className={`${inputClass} ${err("signerAppId")}`}
                 />
               </Field>
-              <Field label="Signer Full Name" optional hint="Use this when you do not have the Application ID." error={fieldErrors.signerFullName}>
+              <Field label="Signer Full Name" optional hint="Use this when you do not have the Axis ID." error={fieldErrors.signerFullName}>
                 <Input
                   value={f.signerFullName}
                   onChange={(e) => {

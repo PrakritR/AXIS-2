@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 
     const roles = new Set<string>();
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
+    const { data: profile } = await supabase.from("profiles").select("role, manager_id").eq("id", userId).maybeSingle();
     const primaryRole = typeof profile?.role === "string" ? profile.role.trim().toLowerCase() : "";
     if (primaryRole) roles.add(primaryRole);
 
@@ -31,8 +31,7 @@ export async function GET(req: Request) {
     }
 
     const sortedRoles = [...roles].sort();
-    const isResident = sortedRoles.includes("resident");
-    const axisId = isResident ? `AXIS-R-${userId.slice(0, 8).toUpperCase()}` : null;
+    const axisId = profile?.manager_id?.trim() || null;
 
     return NextResponse.json({
       exists: true,

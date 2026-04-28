@@ -6,7 +6,7 @@ import { ListingDetailSections } from "@/components/marketing/listing-detail-sec
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
-import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
+import { loadPublicExtraListingsFromServer, PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
 
 export function RentListingDetailClient({ id }: { id: string }) {
   const base = mockProperties.find((p) => p.id === id);
@@ -16,6 +16,7 @@ export function RentListingDetailClient({ id }: { id: string }) {
     if (base) return;
     const pick = () => readExtraListings().find((p) => p.id === id) ?? null;
     setExtra(pick());
+    void loadPublicExtraListingsFromServer().then((rows) => setExtra(rows.find((p) => p.id === id) ?? pick()));
     const on = () => setExtra(pick());
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     window.addEventListener("storage", on);

@@ -15,6 +15,56 @@ function emit() {
   window.dispatchEvent(new Event(MANAGER_APPLICATIONS_EVENT));
 }
 
+function mirrorApplicationsToServer(rows: DemoApplicantRow[]) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/manager-applications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "replace", rows }),
+  }).catch(() => undefined);
+}
+
+function mirrorApplicationRowToServer(row: DemoApplicantRow) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/manager-applications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "upsert", row }),
+  }).catch(() => undefined);
+}
+
+export function deleteManagerApplicationFromServer(id: string) {
+  if (typeof window === "undefined" || !id.trim()) return;
+  void fetch("/api/manager-applications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "delete", id }),
+  }).catch(() => undefined);
+}
+
+export async function syncManagerApplicationsFromServer(): Promise<DemoApplicantRow[]> {
+  if (!canUseStorage()) return [];
+  try {
+    const res = await fetch("/api/manager-applications", { credentials: "include" });
+    if (!res.ok) return readManagerApplicationRows();
+    const body = (await res.json()) as { rows?: DemoApplicantRow[] };
+    const rows = Array.isArray(body.rows) ? body.rows : [];
+    if (rows.length > 0) {
+      window.localStorage.setItem(KEY, JSON.stringify(rows));
+      emit();
+    } else {
+      const localRows = readManagerApplicationRows();
+      if (localRows.length > 0) mirrorApplicationsToServer(localRows);
+    }
+    return rows;
+  } catch {
+    return readManagerApplicationRows();
+  }
+}
+
 export function readManagerApplicationRows(fallback: DemoApplicantRow[] = EMPTY_FALLBACK): DemoApplicantRow[] {
   if (!canUseStorage()) return [...fallback];
   try {
@@ -42,6 +92,7 @@ export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
   try {
     window.localStorage.setItem(KEY, JSON.stringify(rows));
     emit();
+    mirrorApplicationsToServer(rows);
     void import("@/lib/lease-pipeline-storage").then(({ readLeasePipeline }) => {
       readLeasePipeline();
     });
@@ -60,7 +111,9 @@ export function resetManagerApplicationRowsToDemo(): void {
 export function appendManagerApplicationRow(row: DemoApplicantRow): void {
   const rows = readManagerApplicationRows();
   if (rows.some((r) => r.id === row.id)) return;
-  writeManagerApplicationRows([...rows, row]);
+  const next = [...rows, row];
+  writeManagerApplicationRows(next);
+  mirrorApplicationRowToServer(row);
 }
 
 /**

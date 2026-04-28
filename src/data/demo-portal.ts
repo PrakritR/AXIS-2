@@ -126,6 +126,10 @@ export type DemoManagerWorkOrderRow = {
   scheduledAtIso?: string;
   residentName?: string;
   residentEmail?: string;
+  propertyId?: string;
+  assignedPropertyId?: string;
+  assignedRoomChoice?: string;
+  managerUserId?: string | null;
 };
 
 export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];

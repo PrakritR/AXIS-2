@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
-import { demoManagerInboxThreads } from "@/data/demo-portal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
@@ -56,31 +55,17 @@ function countThreads(threads: InboxThread[]) {
   };
 }
 
-function seedThreads(): InboxThread[] {
-  return demoManagerInboxThreads.map((t) => ({
-    id: t.id,
-    folder: t.folder,
-    from: t.from,
-    email: t.email,
-    subject: t.subject,
-    preview: t.preview,
-    body: t.body,
-    time: t.time,
-    unread: t.unread,
-  }));
-}
-
 export function ManagerInbox({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
   const portalBase = usePaidPortalBasePath();
-  const [local, setLocal] = useState<InboxThread[]>(() => seedThreads());
+  const [local, setLocal] = useState<InboxThread[]>([]);
   const [persistReady, setPersistReady] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
 
   useEffect(() => {
-    setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, seedThreads()) as InboxThread[]);
+    setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
     setPersistReady(true);
   }, []);
 
@@ -90,7 +75,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         const ce = evt as CustomEvent<{ key?: string }>;
         if (ce.detail?.key && ce.detail.key !== MANAGER_INBOX_STORAGE_KEY) return;
       }
-      setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, seedThreads()) as InboxThread[]);
+      setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
     };
     window.addEventListener("storage", sync);
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
@@ -193,7 +178,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   );
 
   const refreshInbox = () => {
-    setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, seedThreads()) as InboxThread[]);
+    setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
     showToast("Inbox refreshed.");
   };
 

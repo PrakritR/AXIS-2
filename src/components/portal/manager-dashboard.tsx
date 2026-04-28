@@ -5,18 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import {
-  demoApplicantRows,
-  demoKpis,
-  demoManagerHouseRows,
-  demoManagerInboxThreads,
-  demoManagerPaymentLedgerRows,
-  demoManagerWorkOrderRowsFull,
-} from "@/data/demo-portal";
+import type { DemoApplicantRow, DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
-import { ensureAccountApplicationSeeds } from "@/lib/account-application-seeds";
-import { ensureAccountListingSeeds } from "@/lib/account-listing-seeds";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
+import { getPartnerInquiryWindows, readPartnerInquiries } from "@/lib/demo-admin-scheduling";
+import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { LEASE_PIPELINE_EVENT, readLeasePipeline } from "@/lib/lease-pipeline-storage";
@@ -43,11 +36,10 @@ function safeLeasePipelineCount(): number {
 
 function safePaymentLineCount(userId: string | null, ready: boolean): number {
   try {
-    if (!ready) return demoManagerPaymentLedgerRows.length;
-    const fromHc = userId ? readChargesForManager(userId).length : readChargesForManager(null).length;
-    return fromHc + demoManagerPaymentLedgerRows.length;
+    if (!ready) return 0;
+    return userId ? readChargesForManager(userId).length : readChargesForManager(null).length;
   } catch {
-    return demoManagerPaymentLedgerRows.length;
+    return 0;
   }
 }
 
@@ -59,18 +51,10 @@ function safeInboxUnopened(key: string, fallback: PersistedInboxThread[]): numbe
   }
 }
 
-function managerInboxFallback(): PersistedInboxThread[] {
-  return demoManagerInboxThreads.map((t) => ({
-    id: t.id,
-    folder: t.folder,
-    from: t.from,
-    email: t.email,
-    subject: t.subject,
-    preview: t.preview,
-    body: t.body,
-    time: t.time,
-    unread: t.unread,
-  }));
+function formatUpcomingTourTime(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "soon";
+  return d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function StatLink({ label, value, href }: { label: string; value: string; href: string }) {
@@ -89,7 +73,7 @@ export function ManagerDashboard() {
   const { showToast } = useAppUi();
   const pathname = usePathname();
   const portalBase = pathname.startsWith("/owner") ? "/owner" : "/manager";
-  const { userId, email, ready } = useManagerUserId();
+  const { userId, ready } = useManagerUserId();
 
   const [pipelineTick, setPipelineTick] = useState(0);
   useEffect(() => {
@@ -102,13 +86,41 @@ export function ManagerDashboard() {
     };
   }, []);
 
+  const [tourTick, setTourTick] = useState(0);
+  useEffect(() => {
+    const on = () => setTourTick((n) => n + 1);
+    window.addEventListener(ADMIN_UI_EVENT, on);
+    window.addEventListener("storage", on);
+    return () => {
+      window.removeEventListener(ADMIN_UI_EVENT, on);
+      window.removeEventListener("storage", on);
+    };
+  }, []);
+
+  const upcomingTour = useMemo(() => {
+    void tourTick;
+    if (!userId) return null;
+    const now = Date.now() - 30 * 60 * 1000;
+    return readPartnerInquiries()
+      .filter((row) => row.kind === "tour" && row.status === "pending" && row.managerUserId === userId)
+      .flatMap((row) =>
+        getPartnerInquiryWindows(row).map((window) => ({
+          row,
+          start: window.start,
+          startMs: new Date(window.start).getTime(),
+        })),
+      )
+      .filter((tour) => Number.isFinite(tour.startMs) && tour.startMs >= now)
+      .sort((a, b) => a.startMs - b.startMs)[0] ?? null;
+  }, [userId, tourTick]);
+
   const pipelineSummary = useMemo(() => {
     void pipelineTick;
     try {
       if (!userId) {
         return {
-          pendingProperties: demoManagerHouseRows.filter((p) => p.bucket === "pending").length,
-          totalProperties: demoManagerHouseRows.length,
+          pendingProperties: 0,
+          totalProperties: 0,
         };
       }
       const [p0, p1, p2, p3, p4] = adminKpiCounts(userId);
@@ -121,7 +133,7 @@ export function ManagerDashboard() {
     }
   }, [userId, pipelineTick]);
 
-  const [paymentLineCount, setPaymentLineCount] = useState(demoManagerPaymentLedgerRows.length);
+  const [paymentLineCount, setPaymentLineCount] = useState(0);
   useEffect(() => {
     setPaymentLineCount(safePaymentLineCount(userId, ready));
     const on = () => setPaymentLineCount(safePaymentLineCount(userId, ready));
@@ -129,9 +141,9 @@ export function ManagerDashboard() {
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
   }, [userId, ready]);
 
-  const [applicationRows, setApplicationRows] = useState(demoApplicantRows);
+  const [applicationRows, setApplicationRows] = useState<DemoApplicantRow[]>([]);
   useEffect(() => {
-    const sync = () => setApplicationRows(readManagerApplicationRows(demoApplicantRows));
+    const sync = () => setApplicationRows(readManagerApplicationRows());
     sync();
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
     window.addEventListener("storage", sync);
@@ -140,14 +152,6 @@ export function ManagerDashboard() {
       window.removeEventListener("storage", sync);
     };
   }, []);
-
-  useEffect(() => {
-    if (!userId || !email) return;
-    let changed = false;
-    if (ensureAccountListingSeeds(userId, email)) changed = true;
-    if (ensureAccountApplicationSeeds(userId, email)) changed = true;
-    if (changed) setApplicationRows(readManagerApplicationRows(demoApplicantRows));
-  }, [userId, email]);
 
   const pendingApplications = applicationRows.filter((a) => a.bucket === "pending").length;
 
@@ -188,13 +192,12 @@ export function ManagerDashboard() {
   const inboxUnopenedCount = useMemo(() => {
     void inboxTick;
     const key = pathname.startsWith("/owner") ? OWNER_INBOX_STORAGE_KEY : MANAGER_INBOX_STORAGE_KEY;
-    const fallback = pathname.startsWith("/owner") ? [] : managerInboxFallback();
-    return safeInboxUnopened(key, fallback);
+    return safeInboxUnopened(key, []);
   }, [pathname, inboxTick]);
 
-  const [workOrderRows, setWorkOrderRows] = useState(demoManagerWorkOrderRowsFull);
+  const [workOrderRows, setWorkOrderRows] = useState<DemoManagerWorkOrderRow[]>([]);
   useEffect(() => {
-    const sync = () => setWorkOrderRows(readManagerWorkOrderRows(demoManagerWorkOrderRowsFull));
+    const sync = () => setWorkOrderRows(readManagerWorkOrderRows());
     sync();
     const sub = subscribeManagerWorkOrders(sync);
     return () => sub();
@@ -215,12 +218,14 @@ export function ManagerDashboard() {
       }
     >
       <div className="space-y-4">
-        {Number(demoKpis.payments.overdue) > 0 ? (
-          <p className="rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950">
-            <span className="font-semibold">{demoKpis.payments.overdue}</span> payment line
-            {Number(demoKpis.payments.overdue) === 1 ? " is" : "s are"} overdue.{" "}
-            <Link className="font-semibold text-primary underline-offset-2 hover:underline" href={`${portalBase}/payments`}>
-              Open payments
+        {upcomingTour ? (
+          <p className="rounded-2xl border border-sky-200/80 bg-sky-50/70 px-4 py-3 text-sm text-sky-950">
+            <span className="font-semibold">Scheduled tour soon:</span>{" "}
+            {upcomingTour.row.name} requested {upcomingTour.row.propertyTitle ?? "a property"}{" "}
+            {upcomingTour.row.roomLabel ? `(${upcomingTour.row.roomLabel}) ` : ""}
+            for <span className="font-semibold">{formatUpcomingTourTime(upcomingTour.start)}</span>.{" "}
+            <Link className="font-semibold text-primary underline-offset-2 hover:underline" href={`${portalBase}/calendar`}>
+              Open calendar
             </Link>
           </p>
         ) : null}

@@ -272,6 +272,11 @@ export type PartnerInquiry = {
   email: string;
   phone: string;
   notes: string;
+  kind?: "partner" | "tour";
+  managerUserId?: string;
+  propertyId?: string;
+  propertyTitle?: string;
+  roomLabel?: string;
   requestedWindows?: PartnerInquiryWindow[];
   proposedStart: string;
   proposedEnd: string;
@@ -285,6 +290,15 @@ export type PlannedEvent = {
   start: string;
   end: string;
   sourceInquiryId?: string;
+  kind?: "partner" | "tour";
+  managerUserId?: string;
+  propertyId?: string;
+  propertyTitle?: string;
+  roomLabel?: string;
+  attendeeName?: string;
+  attendeeEmail?: string;
+  attendeePhone?: string;
+  notes?: string;
   /** Shown in admin details; emailed to partner when accepted (demo log). */
   instructions?: string;
 };
@@ -363,32 +377,51 @@ export function pendingInquiryCount() {
   }).length;
 }
 
-export function acceptPartnerInquiry(id: string, opts?: { instructions?: string }): boolean {
+export function acceptPartnerInquiry(id: string, opts?: { instructions?: string; start?: string; end?: string }): boolean {
   const rows = readPartnerInquiries();
   const row = rows.find((r) => r.id === id);
   if (!row || row.status !== "pending") return false;
   const instructions = opts?.instructions?.trim() || undefined;
+  const start = opts?.start ?? row.proposedStart;
+  const end = opts?.end ?? row.proposedEnd;
   updatePartnerInquiry(id, { status: "accepted" });
   appendPlannedEvent({
     id: crypto.randomUUID(),
-    title: `Partner call · ${row.name}`,
-    start: row.proposedStart,
-    end: row.proposedEnd,
+    title: row.kind === "tour" ? `Tour · ${row.name}` : `Partner call · ${row.name}`,
+    start,
+    end,
     sourceInquiryId: id,
+    kind: row.kind,
+    managerUserId: row.managerUserId,
+    propertyId: row.propertyId,
+    propertyTitle: row.propertyTitle,
+    roomLabel: row.roomLabel,
+    attendeeName: row.name,
+    attendeeEmail: row.email,
+    attendeePhone: row.phone,
+    notes: row.notes,
     instructions,
   });
-  const when = formatRangeLabel(row.proposedStart, row.proposedEnd);
+  const when = formatRangeLabel(start, end);
   const extra = instructions ? `\n\nDetails from the host:\n${instructions}` : "";
   logDemoOutboundEmail(
     row.email,
-    "Your Axis partner meeting is scheduled",
-    `Hi ${row.name},\n\nYour meeting is confirmed for:\n${when}.${extra}\n\n— Axis Housing (outbound mail is logged for review).`,
+    row.kind === "tour" ? "Your Axis tour is scheduled" : "Your Axis partner meeting is scheduled",
+    `Hi ${row.name},\n\nYour ${row.kind === "tour" ? "tour" : "meeting"} is confirmed for:\n${when}.${extra}\n\n— Axis Housing (outbound mail is logged for review).`,
   );
   return true;
 }
 
 export function declinePartnerInquiry(id: string) {
   return updatePartnerInquiry(id, { status: "declined" });
+}
+
+export function deletePartnerInquiry(id: string): boolean {
+  const rows = readPartnerInquiries();
+  const next = rows.filter((r) => r.id !== id);
+  if (next.length === rows.length) return false;
+  writeJson(INQ_KEY, next);
+  return true;
 }
 
 export function getPartnerInquiryWindows(row: PartnerInquiry): PartnerInquiryWindow[] {

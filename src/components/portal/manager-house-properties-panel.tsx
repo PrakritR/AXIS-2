@@ -34,8 +34,10 @@ import {
   PROPERTY_PIPELINE_EVENT,
   countManagerManagedPropertiesForUser,
   deletePendingSubmissionForManager,
+  mirrorLocalPropertyPipelineToServer,
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
+  syncPropertyPipelineFromServer,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import {
@@ -481,6 +483,10 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
   const [activeStage, setActiveStage] = useState<ManagerStageKey>("pending");
 
   useEffect(() => {
+    void syncPropertyPipelineFromServer().then(() => {
+      setTick((t) => t + 1);
+      void mirrorLocalPropertyPipelineToServer();
+    });
     const on = () => setTick((t) => t + 1);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     window.addEventListener("storage", on);

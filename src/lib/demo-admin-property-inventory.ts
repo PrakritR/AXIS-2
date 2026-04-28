@@ -3,6 +3,7 @@ import {
   appendExtraListing,
   buildMockPropertyFromAdminRow,
   buildMockPropertyFromDraft,
+  deleteMirroredPropertyRecord,
   LEGACY_MANAGER_SCOPE_USER_ID,
   PROPERTY_PIPELINE_EVENT,
   readAllExtraListings,
@@ -16,6 +17,7 @@ import {
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import { legacyAdminFieldsToSubmission, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import type { ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 
 /** Admin-wide queue (all managers). Manager portal passes `forManagerUserId` for isolated side-buckets. */
 const SIDE_KEY_GLOBAL = "axis_admin_property_buckets_v1";
@@ -83,6 +85,30 @@ function writeSideStorage(side: SideBuckets, forManagerUserId?: string | null) {
   } catch {
     /* ignore */
   }
+}
+
+function mirrorAdminPropertyRecord(input: {
+  id: string;
+  managerUserId?: string | null;
+  status: ManagerPropertyRecordStatus;
+  rowData: AdminPropertyRow;
+  propertyData?: MockProperty | null;
+  editRequestNote?: string | null;
+}) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/property-records", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "upsert",
+      id: input.id,
+      managerUserId: input.managerUserId ?? input.rowData.managerUserId ?? null,
+      status: input.status,
+      rowData: input.rowData,
+      propertyData: input.propertyData ?? null,
+      editRequestNote: input.editRequestNote ?? input.rowData.editRequestNote ?? null,
+    }),
+  }).catch(() => {});
 }
 
 function readSide(forManagerUserId?: string | null): SideBuckets {
@@ -260,6 +286,14 @@ export function movePendingToRequestChange(
     ...(note ? { editRequestNote: note } : {}),
   });
   writeSideStorage(side, forManagerUserId);
+  const next = side.requestChange[side.requestChange.length - 1]!;
+  mirrorAdminPropertyRecord({
+    id: next.adminRefId,
+    managerUserId: next.managerUserId ?? forManagerUserId,
+    status: "request_change",
+    rowData: next,
+    editRequestNote: note,
+  });
   return true;
 }
 
@@ -270,6 +304,8 @@ export function movePendingToRejected(pendingId: string, forManagerUserId?: stri
   const side = readSide(forManagerUserId);
   side.rejected.push({ ...pendingToAdminRow(row), adminRefId: newAdminRefId() });
   writeSideStorage(side, forManagerUserId);
+  const next = side.rejected[side.rejected.length - 1]!;
+  mirrorAdminPropertyRecord({ id: next.adminRefId, managerUserId: next.managerUserId ?? forManagerUserId, status: "rejected", rowData: next });
   return true;
 }
 
@@ -286,6 +322,7 @@ export function approveFromRequestChange(adminRefId: string, forManagerUserId?: 
   const owner = row.managerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
   appendExtraListing({ ...prop, managerUserId: owner, adminPublishLive: true }, owner);
   writeSideStorage({ ...side, requestChange: nextRc }, forManagerUserId);
+  deleteMirroredPropertyRecord(adminRefId);
   return true;
 }
 
@@ -298,6 +335,9 @@ export function declineFromRequestChange(adminRefId: string, forManagerUserId?: 
   const nextRc = [...side.requestChange.slice(0, idx), ...side.requestChange.slice(idx + 1)];
   side.rejected.push({ ...row, adminRefId: newAdminRefId() });
   writeSideStorage({ ...side, requestChange: nextRc }, forManagerUserId);
+  deleteMirroredPropertyRecord(adminRefId);
+  const next = side.rejected[side.rejected.length - 1]!;
+  mirrorAdminPropertyRecord({ id: next.adminRefId, managerUserId: next.managerUserId ?? forManagerUserId, status: "rejected", rowData: next });
   return true;
 }
 
@@ -310,6 +350,7 @@ export function returnRequestChangeToPending(adminRefId: string, forManagerUserI
   const uid = row.managerUserId ?? forManagerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
   submitManagerPendingProperty(legacyAdminFieldsToSubmission(row), uid);
   writeSideStorage({ ...side, requestChange: nextRc }, forManagerUserId);
+  deleteMirroredPropertyRecord(adminRefId);
   return true;
 }
 
@@ -319,6 +360,8 @@ export function unlistManagerListing(listingId: string, forManagerUserId?: strin
   const side = readSide(forManagerUserId);
   side.unlisted.push(mockToAdminRow(removed, listingId));
   writeSideStorage(side, forManagerUserId);
+  const next = side.unlisted[side.unlisted.length - 1]!;
+  mirrorAdminPropertyRecord({ id: next.adminRefId, managerUserId: next.managerUserId ?? forManagerUserId, status: "unlisted", rowData: next });
   return true;
 }
 
@@ -335,6 +378,7 @@ export function listAdminRow(row: AdminPropertyRow, forManagerUserId?: string | 
   appendExtraListing({ ...prop, managerUserId: owner, adminPublishLive: true }, owner);
   const nextUn = [...side.unlisted.slice(0, idx), ...side.unlisted.slice(idx + 1)];
   writeSideStorage({ ...side, unlisted: nextUn }, forManagerUserId);
+  deleteMirroredPropertyRecord(row.adminRefId);
   return listingId;
 }
 
@@ -352,6 +396,14 @@ export function moveListedToRequestChange(
     ...(note ? { editRequestNote: note } : {}),
   });
   writeSideStorage(side, forManagerUserId);
+  const next = side.requestChange[side.requestChange.length - 1]!;
+  mirrorAdminPropertyRecord({
+    id: next.adminRefId,
+    managerUserId: next.managerUserId ?? forManagerUserId,
+    status: "request_change",
+    rowData: next,
+    editRequestNote: note,
+  });
   return true;
 }
 
@@ -362,6 +414,8 @@ export function moveListedToRejected(listingId: string, forManagerUserId?: strin
   const side = readSide(forManagerUserId);
   side.rejected.push({ ...mockToAdminRow(removed, listingId), adminRefId: newAdminRefId() });
   writeSideStorage(side, forManagerUserId);
+  const next = side.rejected[side.rejected.length - 1]!;
+  mirrorAdminPropertyRecord({ id: next.adminRefId, managerUserId: next.managerUserId ?? forManagerUserId, status: "rejected", rowData: next });
   return true;
 }
 
@@ -374,6 +428,9 @@ export function moveUnlistedToRejected(adminRefId: string, forManagerUserId?: st
   const next = [...side.unlisted.slice(0, idx), ...side.unlisted.slice(idx + 1)];
   side.rejected.push({ ...row, adminRefId: newAdminRefId() });
   writeSideStorage({ ...side, unlisted: next }, forManagerUserId);
+  deleteMirroredPropertyRecord(adminRefId);
+  const rejected = side.rejected[side.rejected.length - 1]!;
+  mirrorAdminPropertyRecord({ id: rejected.adminRefId, managerUserId: rejected.managerUserId ?? forManagerUserId, status: "rejected", rowData: rejected });
   return true;
 }
 
@@ -386,6 +443,7 @@ export function restoreRejectedToPending(adminRefId: string, forManagerUserId?: 
   const uid = row.managerUserId ?? forManagerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
   submitManagerPendingProperty(legacyAdminFieldsToSubmission(row), uid);
   writeSideStorage({ ...side, rejected: nextR }, forManagerUserId);
+  deleteMirroredPropertyRecord(adminRefId);
   return true;
 }
 
@@ -396,6 +454,7 @@ export function removeRejectedProperty(adminRefId: string, forManagerUserId?: st
   if (idx === -1) return false;
   const nextR = [...side.rejected.slice(0, idx), ...side.rejected.slice(idx + 1)];
   writeSideStorage({ ...side, rejected: nextR }, forManagerUserId);
+  deleteMirroredPropertyRecord(adminRefId);
   return true;
 }
 
@@ -410,7 +469,9 @@ export function deleteManagerLiveListing(listingId: string, forManagerUserId: st
   const extras = readExtraListingsForUser(forManagerUserId);
   const hit = extras.find((p) => p.id === listingId);
   if (!hit || !hit.id.startsWith("mgr-")) return false;
-  return removeExtraListing(listingId) !== null;
+  const ok = removeExtraListing(listingId) !== null;
+  if (ok) deleteMirroredPropertyRecord(listingId);
+  return ok;
 }
 
 /** Drops a row from the manager-only unlisted queue (does not restore a public listing). */
@@ -420,5 +481,6 @@ export function deleteUnlistedManagerProperty(adminRefId: string, forManagerUser
   if (idx === -1) return false;
   const nextUn = [...side.unlisted.slice(0, idx), ...side.unlisted.slice(idx + 1)];
   writeSideStorage({ ...side, unlisted: nextUn }, forManagerUserId);
+  deleteMirroredPropertyRecord(adminRefId);
   return true;
 }

@@ -9,8 +9,12 @@ import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics"
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
   SLOTS_PER_DAY,
+  acceptPartnerInquiry,
   dateHasAvailability,
   dateSlotKey,
+  deletePartnerInquiry,
+  deletePlannedEvent,
+  formatRangeLabel,
   formatAvailabilitySlotLabel,
   getPartnerInquiryWindows,
   readPartnerInquiries,
@@ -96,13 +100,29 @@ function formatNavTitle(anchor: Date, mode: CalendarMode): string {
 
 type DemoMeeting = {
   id: string;
+  source: "planned" | "inquiry";
+  sourceId: string;
+  startIso: string;
+  endIso: string;
   dateStr: string;
   startSlot: number;
   span: number;
   title: string;
   color: string;
   statusLabel?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  notes?: string;
+  propertyTitle?: string;
+  roomLabel?: string;
+  instructions?: string;
+  kind?: "partner" | "tour";
 };
+
+type CalendarBlockSelection =
+  | { kind: "availability"; dateStr: string; slotIndex: number }
+  | { kind: "meeting"; meeting: DemoMeeting };
 
 const slotRowIndices = Array.from({ length: SLOT_ROW_END - SLOT_ROW_START + 1 }, (_, i) => SLOT_ROW_START + i);
 
@@ -112,6 +132,13 @@ function formatSlotEndLabel(slotIndexExclusive: number): string {
   const m = mins % 60;
   const d = new Date(2000, 0, 1, h24, m);
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function localIsoForSlot(dateStr: string, slotIndex: number): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const d = new Date(year!, month! - 1, day!, 0, 0, 0, 0);
+  d.setMinutes(slotIndex * 30);
+  return d.toISOString();
 }
 
 function weekdayLabelList(days: number[]) {
@@ -130,6 +157,7 @@ export function PortalCalendarPanels({
   compactAvailability = false,
   otherProperties,
   onCopyWeekToHouses,
+  scheduledTourFilter,
 }: {
   storageKey: string | null;
   calendarRefreshSignal?: number;
@@ -140,6 +168,7 @@ export function PortalCalendarPanels({
   compactAvailability?: boolean;
   otherProperties?: { id: string; name: string }[];
   onCopyWeekToHouses?: (propertyIds: string[], weekDateStrs: string[]) => void;
+  scheduledTourFilter?: { managerUserId: string | null; propertyId: string | null };
 }) {
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
@@ -156,6 +185,8 @@ export function PortalCalendarPanels({
   const [blockOccurrences, setBlockOccurrences] = useState(4);
   const [updateToHousesOpen, setUpdateToHousesOpen] = useState(false);
   const [selectedHouseIds, setSelectedHouseIds] = useState<Set<string>>(new Set());
+  const [selectedBlock, setSelectedBlock] = useState<CalendarBlockSelection | null>(null);
+  const [meetingRefresh, setMeetingRefresh] = useState(0);
 
   useEffect(() => {
     if (!storageKey) return;
@@ -167,25 +198,56 @@ export function PortalCalendarPanels({
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
 
   const meetings = useMemo<DemoMeeting[]>(() => {
-    if (storageKey !== ADMIN_AVAILABILITY_STORAGE_KEY) return [];
+    const showAdminMeetings = storageKey === ADMIN_AVAILABILITY_STORAGE_KEY;
+    const showManagerTours = Boolean(scheduledTourFilter?.managerUserId && scheduledTourFilter.propertyId);
 
-    const planned = readPlannedEvents().map((event) => {
+    const planned = (showAdminMeetings || showManagerTours) ? readPlannedEvents()
+      .filter((event) => {
+        if (showAdminMeetings) return true;
+        return (
+          event.kind === "tour" &&
+          event.managerUserId === scheduledTourFilter?.managerUserId &&
+          event.propertyId === scheduledTourFilter?.propertyId
+        );
+      })
+      .map((event) => {
       const start = new Date(event.start);
       const end = new Date(event.end);
       const mins = Math.max(30, end.getTime() - start.getTime());
       return {
         id: `planned-${event.id}`,
+        source: "planned",
+        sourceId: event.id,
+        startIso: event.start,
+        endIso: event.end,
         dateStr: toLocalDateStr(start),
         startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / 30)),
         span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
         title: event.title,
         color: "border-sky-300 bg-sky-100 text-sky-950",
         statusLabel: "Confirmed",
+        name: event.attendeeName,
+        email: event.attendeeEmail,
+        phone: event.attendeePhone,
+        notes: event.notes,
+        propertyTitle: event.propertyTitle,
+        roomLabel: event.roomLabel,
+        instructions: event.instructions,
+        kind: event.kind,
       } satisfies DemoMeeting;
-    });
+    }) : [];
 
     const pending = readPartnerInquiries()
       .filter((row) => row.status === "pending")
+      .filter((row) => {
+        if (showAdminMeetings) return true;
+        if (!showManagerTours) return false;
+        return (
+          row.kind === "tour" &&
+          row.managerUserId === scheduledTourFilter?.managerUserId &&
+          row.propertyId === scheduledTourFilter?.propertyId
+        );
+      })
       .flatMap((row) =>
         getPartnerInquiryWindows(row).map((window, index) => {
           const start = new Date(window.start);
@@ -196,19 +258,30 @@ export function PortalCalendarPanels({
           const mins = Math.max(30, end.getTime() - start.getTime());
           return {
             id: `inquiry-${row.id}-${index}`,
+            source: "inquiry",
+            sourceId: row.id,
+            startIso: window.start,
+            endIso: window.end,
             dateStr: toLocalDateStr(start),
             startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / 30)),
             span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
-            title: `${row.name} request`,
+            title: row.kind === "tour" ? `Tour · ${row.name}` : `${row.name} request`,
             color: "border-amber-300 bg-amber-100 text-amber-950",
-            statusLabel: "Requested",
+            statusLabel: row.kind === "tour" ? "Tour requested" : "Requested",
+            name: row.name,
+            email: row.email,
+            phone: row.phone,
+            notes: row.notes,
+            propertyTitle: row.propertyTitle,
+            roomLabel: row.roomLabel,
+            kind: row.kind,
           } satisfies DemoMeeting;
         }),
       )
       .filter(Boolean) as DemoMeeting[];
 
     return [...planned, ...pending];
-  }, [storageKey, activeSlots, calendarRefreshSignal]);
+  }, [storageKey, activeSlots, calendarRefreshSignal, meetingRefresh, scheduledTourFilter?.managerUserId, scheduledTourFilter?.propertyId]);
 
   const monthYear = anchorDate.getFullYear();
   const monthIndex = anchorDate.getMonth();
@@ -245,6 +318,54 @@ export function PortalCalendarPanels({
     },
     [storageKey],
   );
+
+  const openSlotDetails = useCallback(
+    (dateStr: string, slotIdx: number, meeting?: DemoMeeting) => {
+      if (meeting) {
+        setSelectedBlock({ kind: "meeting", meeting });
+        return;
+      }
+      if (activeSlots.has(dateSlotKey(dateStr, slotIdx))) {
+        setSelectedBlock({ kind: "availability", dateStr, slotIndex: slotIdx });
+      }
+    },
+    [activeSlots],
+  );
+
+  const deleteAvailabilitySlot = useCallback(() => {
+    if (selectedBlock?.kind !== "availability") return;
+    const next = new Set(activeSlots);
+    next.delete(dateSlotKey(selectedBlock.dateStr, selectedBlock.slotIndex));
+    writeAvailability(next);
+    setSelectedBlock(null);
+  }, [activeSlots, selectedBlock, writeAvailability]);
+
+  const approveSelectedInquiry = useCallback(() => {
+    if (selectedBlock?.kind !== "meeting" || selectedBlock.meeting.source !== "inquiry") return;
+    if (
+      acceptPartnerInquiry(selectedBlock.meeting.sourceId, {
+        start: selectedBlock.meeting.startIso,
+        end: selectedBlock.meeting.endIso,
+      })
+    ) {
+      setSelectedBlock(null);
+      setMeetingRefresh((n) => n + 1);
+      reloadAvailability();
+    }
+  }, [reloadAvailability, selectedBlock]);
+
+  const deleteSelectedMeeting = useCallback(() => {
+    if (selectedBlock?.kind !== "meeting") return;
+    const ok =
+      selectedBlock.meeting.source === "planned"
+        ? deletePlannedEvent(selectedBlock.meeting.sourceId)
+        : deletePartnerInquiry(selectedBlock.meeting.sourceId);
+    if (ok) {
+      setSelectedBlock(null);
+      setMeetingRefresh((n) => n + 1);
+      reloadAvailability();
+    }
+  }, [reloadAvailability, selectedBlock]);
 
   const prevRefreshSig = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -475,6 +596,114 @@ export function PortalCalendarPanels({
     return `${days} · ${formatAvailabilitySlotLabel(blockStartSlot)}-${formatSlotEndLabel(blockEndSlotExclusive)} · ${repeats}`;
   }, [blockCadence, blockEndSlotExclusive, blockOccurrences, blockStartSlot, blockWeekdays]);
 
+  const selectedBlockModal = (
+    <Modal
+      open={Boolean(selectedBlock)}
+      title={selectedBlock?.kind === "meeting" ? selectedBlock.meeting.title : "Availability block"}
+      onClose={() => setSelectedBlock(null)}
+    >
+      {selectedBlock?.kind === "meeting" ? (
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <p className="font-semibold text-slate-950">{formatRangeLabel(selectedBlock.meeting.startIso, selectedBlock.meeting.endIso)}</p>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              {selectedBlock.meeting.statusLabel ?? (selectedBlock.meeting.source === "planned" ? "Confirmed" : "Requested")}
+            </p>
+          </div>
+
+          <div className="grid gap-3 text-sm sm:grid-cols-2">
+            {selectedBlock.meeting.name ? (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Name</p>
+                <p className="mt-1 font-medium text-slate-900">{selectedBlock.meeting.name}</p>
+              </div>
+            ) : null}
+            {selectedBlock.meeting.email ? (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Email</p>
+                <p className="mt-1 font-medium text-slate-900">{selectedBlock.meeting.email}</p>
+              </div>
+            ) : null}
+            {selectedBlock.meeting.phone ? (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Phone</p>
+                <p className="mt-1 font-medium text-slate-900">{selectedBlock.meeting.phone}</p>
+              </div>
+            ) : null}
+            {selectedBlock.meeting.propertyTitle ? (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Property</p>
+                <p className="mt-1 font-medium text-slate-900">
+                  {selectedBlock.meeting.propertyTitle}
+                  {selectedBlock.meeting.roomLabel ? ` · ${selectedBlock.meeting.roomLabel}` : ""}
+                </p>
+              </div>
+            ) : null}
+          </div>
+
+          {selectedBlock.meeting.notes ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Notes</p>
+              <p className="mt-1.5 whitespace-pre-wrap text-slate-700">{selectedBlock.meeting.notes}</p>
+            </div>
+          ) : null}
+
+          {selectedBlock.meeting.instructions ? (
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">Confirmation details</p>
+              <p className="mt-1.5 whitespace-pre-wrap text-sky-950">{selectedBlock.meeting.instructions}</p>
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setSelectedBlock(null)}>
+              Close
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              onClick={deleteSelectedMeeting}
+            >
+              {selectedBlock.meeting.source === "planned" ? "Delete event" : "Delete request"}
+            </Button>
+            {selectedBlock.meeting.source === "inquiry" ? (
+              <Button type="button" variant="primary" className="rounded-full" onClick={approveSelectedInquiry}>
+                Approve
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : selectedBlock?.kind === "availability" ? (
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+            <p className="font-semibold">Open tour window</p>
+            <p className="mt-1">
+              {formatRangeLabel(
+                localIsoForSlot(selectedBlock.dateStr, selectedBlock.slotIndex),
+                localIsoForSlot(selectedBlock.dateStr, selectedBlock.slotIndex + 1),
+              )}
+            </p>
+          </div>
+          <p className="text-sm text-slate-600">Delete this slot if you no longer want applicants to book it.</p>
+          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setSelectedBlock(null)}>
+              Close
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              onClick={deleteAvailabilitySlot}
+            >
+              Delete slot
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
+  );
+
   if (!storageKey) {
     return (
       <Card className="p-5">
@@ -562,9 +791,19 @@ export function PortalCalendarPanels({
                         <button
                           key={key}
                           type="button"
-                          onMouseDown={() => startDragSelection(ds, fullWeekDateStrs.indexOf(ds), slotIdx)}
-                          onMouseEnter={() => extendDragSelection(ds, slotIdx)}
-                          onMouseUp={finishDragSelection}
+                          onMouseDown={() => {
+                            if (meeting || active) return;
+                            startDragSelection(ds, fullWeekDateStrs.indexOf(ds), slotIdx);
+                          }}
+                          onMouseEnter={() => {
+                            if (meeting || active) return;
+                            extendDragSelection(ds, slotIdx);
+                          }}
+                          onMouseUp={() => {
+                            if (meeting || active) return;
+                            finishDragSelection();
+                          }}
+                          onClick={() => openSlotDetails(ds, slotIdx, meeting)}
                           className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
                             meeting
                               ? `${meeting.color} ring-1 ring-inset`
@@ -574,7 +813,7 @@ export function PortalCalendarPanels({
                                 ? "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300"
                                 : "bg-white text-transparent hover:bg-primary/[0.07] hover:text-primary"
                           }`}
-                          aria-label={`Select ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
+                          aria-label={`${meeting || active ? "Open details for" : "Select"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
                         >
                           {meeting ? (
                             isMeetingStart ? (
@@ -769,6 +1008,7 @@ export function PortalCalendarPanels({
             </div>
           </Modal>
         ) : null}
+        {selectedBlockModal}
       </>
     );
   }
@@ -878,7 +1118,14 @@ export function PortalCalendarPanels({
                           <div className="bg-white px-3 py-2 text-[11px] font-semibold text-slate-400">{formatAvailabilitySlotLabel(slotIdx)}</div>
                           <div className="relative min-h-[40px] bg-white p-1">
                             {meeting ? (
-                              <div className={`rounded-xl border px-2 py-2 text-xs font-semibold shadow-sm ${meeting.color}`}>{meeting.title}</div>
+                              <button
+                                type="button"
+                                className={`w-full rounded-xl border px-2 py-2 text-left text-xs font-semibold shadow-sm transition hover:brightness-95 ${meeting.color}`}
+                                onClick={() => openSlotDetails(ds, slotIdx, meeting)}
+                              >
+                                {meeting.statusLabel ? `${meeting.statusLabel}: ` : ""}
+                                {meeting.title}
+                              </button>
                             ) : (
                               <div className="h-full rounded-xl border border-dashed border-slate-100" />
                             )}
@@ -909,12 +1156,15 @@ export function PortalCalendarPanels({
                   <div className="bg-white px-2 py-2 text-[11px] font-semibold text-slate-400">{formatAvailabilitySlotLabel(slotIdx)}</div>
                   <div className="relative min-h-[40px] bg-white p-1">
                     {meeting ? (
-                      <div
-                        className={`absolute inset-1 z-[1] rounded-xl border px-2 py-2 text-xs font-semibold shadow-sm ${meeting.color}`}
+                      <button
+                        type="button"
+                        className={`absolute inset-1 z-[1] rounded-xl border px-2 py-2 text-left text-xs font-semibold shadow-sm transition hover:brightness-95 ${meeting.color}`}
                         style={{ height: `calc(${meeting.span} * 40px - 4px)` }}
+                        onClick={() => openSlotDetails(ds, slotIdx, meeting)}
                       >
+                        {meeting.statusLabel ? `${meeting.statusLabel}: ` : ""}
                         {meeting.title}
-                      </div>
+                      </button>
                     ) : (
                       <div className="h-full rounded-xl border border-dashed border-slate-100" />
                     )}
@@ -985,9 +1235,19 @@ export function PortalCalendarPanels({
                     <button
                       key={key}
                       type="button"
-                      onMouseDown={() => startDragSelection(ds, weekday, slotIdx)}
-                      onMouseEnter={() => extendDragSelection(ds, slotIdx)}
-                      onMouseUp={finishDragSelection}
+                      onMouseDown={() => {
+                        if (active) return;
+                        startDragSelection(ds, weekday, slotIdx);
+                      }}
+                      onMouseEnter={() => {
+                        if (active) return;
+                        extendDragSelection(ds, slotIdx);
+                      }}
+                      onMouseUp={() => {
+                        if (active) return;
+                        finishDragSelection();
+                      }}
+                      onClick={() => openSlotDetails(ds, slotIdx)}
                       className={`flex min-h-10 items-center justify-between rounded-xl border px-3 text-left text-xs font-semibold transition ${
                         selected
                           ? "border-primary/40 bg-primary/[0.12] text-primary"
@@ -1125,6 +1385,7 @@ export function PortalCalendarPanels({
           </div>
         </div>
       </Modal>
+      {selectedBlockModal}
     </>
   );
 }

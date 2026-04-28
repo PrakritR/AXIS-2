@@ -20,6 +20,46 @@ function emit() {
   window.dispatchEvent(new Event(MANAGER_WORK_ORDERS_EVENT));
 }
 
+function mirrorWorkOrdersToServer(rows: DemoManagerWorkOrderRow[]) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/portal-work-orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "replace", rows }),
+  }).catch(() => undefined);
+}
+
+function deleteWorkOrderFromServer(id: string) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/portal-work-orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "delete", id }),
+  }).catch(() => undefined);
+}
+
+export async function syncManagerWorkOrdersFromServer(): Promise<DemoManagerWorkOrderRow[]> {
+  if (!canUseStorage()) return [];
+  try {
+    const res = await fetch("/api/portal-work-orders", { credentials: "include" });
+    if (!res.ok) return readManagerWorkOrderRows();
+    const body = (await res.json()) as { rows?: DemoManagerWorkOrderRow[] };
+    const rows = Array.isArray(body.rows) ? body.rows : [];
+    if (rows.length > 0) {
+      window.localStorage.setItem(KEY, JSON.stringify(rows));
+      emit();
+    } else {
+      const localRows = readManagerWorkOrderRows();
+      if (localRows.length > 0) mirrorWorkOrdersToServer(localRows);
+    }
+    return rows;
+  } catch {
+    return readManagerWorkOrderRows();
+  }
+}
+
 export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = EMPTY_FALLBACK): DemoManagerWorkOrderRow[] {
   if (!canUseStorage()) {
     return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
@@ -52,6 +92,7 @@ export function writeManagerWorkOrderRows(rows: DemoManagerWorkOrderRow[]): void
   try {
     window.localStorage.setItem(KEY, JSON.stringify(rows));
     emit();
+    mirrorWorkOrdersToServer(rows);
   } catch {
     /* quota */
   }
@@ -75,6 +116,7 @@ export function deleteManagerWorkOrderRow(id: string): boolean {
   if (!rows.some((r) => r.id === id)) return false;
   removePendingWorkOrderChargesForWorkOrder(id);
   writeManagerWorkOrderRows(rows.filter((r) => r.id !== id));
+  deleteWorkOrderFromServer(id);
   return true;
 }
 

@@ -68,6 +68,7 @@ export function ManagerResidents() {
   const [chargeAmount, setChargeAmount] = useState("");
   const [chargeBlocksLease, setChargeBlocksLease] = useState(false);
   const [chargeTab, setChargeTab] = useState<"pending" | "paid">("pending");
+  const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -85,6 +86,43 @@ export function ManagerResidents() {
     };
   }, []);
 
+  useEffect(() => {
+    const emails = [
+      ...new Set(
+        readManagerApplicationRows()
+          .filter(
+            (row) =>
+              row.bucket === "approved" &&
+              row.email?.trim() &&
+              applicationVisibleToPortalUser(row, userId),
+          )
+          .map((row) => row.email!.trim().toLowerCase()),
+      ),
+    ];
+    if (emails.length === 0) {
+      setResidentAccountEmails(new Set());
+      return;
+    }
+    let cancelled = false;
+    void fetch("/api/manager/resident-account-emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emails }),
+    })
+      .then(async (res) => {
+        const body = (await res.json()) as { emails?: string[] };
+        if (!cancelled && res.ok) {
+          setResidentAccountEmails(new Set((body.emails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean)));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setResidentAccountEmails(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, hcTick, propertyTick]);
+
   const residents = useMemo<ActiveResident[]>(() => {
     void hcTick;
     return readManagerApplicationRows()
@@ -92,6 +130,7 @@ export function ManagerResidents() {
         (row) =>
           row.bucket === "approved" &&
           row.email?.trim() &&
+          residentAccountEmails.has(row.email.trim().toLowerCase()) &&
           applicationVisibleToPortalUser(row, userId),
       )
       .map((row) => {
@@ -111,7 +150,7 @@ export function ManagerResidents() {
           axisId: `AXIS-R-${row.id.slice(0, 8).toUpperCase()}`,
         };
       });
-  }, [userId, hcTick]);
+  }, [userId, hcTick, residentAccountEmails]);
 
   const propertyOptions = useMemo(() => {
     void propertyTick;
@@ -222,7 +261,7 @@ export function ManagerResidents() {
         <PortalDataTableEmpty
           message={
             residents.length === 0
-              ? "No active residents yet. Residents appear here once their application is approved."
+              ? "No active residents yet. Residents appear here after approval and once they create an Axis resident account."
               : "No residents match the current filter."
           }
         />

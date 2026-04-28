@@ -18,9 +18,11 @@ import {
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH, ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import {
+  mirrorLocalPropertyPipelineToServer,
   PROPERTY_PIPELINE_EVENT,
   approvePendingManagerProperty,
   republishManagerListingAfterReview,
+  syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 import {
@@ -392,6 +394,10 @@ export function AdminPropertiesClient() {
   }, [showToast]);
 
   useEffect(() => {
+    void syncPropertyPipelineFromServer().then(() => {
+      setTick((t) => t + 1);
+      void mirrorLocalPropertyPipelineToServer();
+    });
     const on = () => setTick((t) => t + 1);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     window.addEventListener("storage", on);

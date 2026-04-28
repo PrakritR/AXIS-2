@@ -1,4 +1,5 @@
 import type { MockProperty } from "@/data/types";
+import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { parseJsonArray, parseLocalStorageJson, parseRecordOfArrays } from "@/lib/safe-local-storage";
 
@@ -92,6 +93,122 @@ function readExtrasMap(): ExtrasMap {
 
 function writeExtrasMap(m: ExtrasMap) {
   writeJson(EXTRAS_BY_USER_KEY, m);
+}
+
+function mirrorPropertyRecord(input: {
+  id: string;
+  managerUserId: string | null;
+  status: ManagerPropertyRecordStatus;
+  rowData?: unknown;
+  propertyData?: unknown;
+  editRequestNote?: string | null;
+}) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/property-records", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "upsert",
+      id: input.id,
+      managerUserId: input.managerUserId,
+      status: input.status,
+      rowData: input.rowData ?? null,
+      propertyData: input.propertyData ?? null,
+      editRequestNote: input.editRequestNote ?? null,
+    }),
+  }).catch(() => {});
+}
+
+export function deleteMirroredPropertyRecord(id: string) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/property-records", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "delete", id }),
+  }).catch(() => {});
+}
+
+export function cachePublicExtraListings(listings: MockProperty[]) {
+  if (!isBrowser()) return;
+  const map = readExtrasMap();
+  for (const listing of listings) {
+    const uid = listing.managerUserId?.trim() || LEGACY_MANAGER_SCOPE_USER_ID;
+    const list = map[uid] ?? [];
+    const idx = list.findIndex((p) => p.id === listing.id);
+    const next = { ...listing, managerUserId: uid };
+    if (idx === -1) list.push(next);
+    else list[idx] = next;
+    map[uid] = list;
+  }
+  writeExtrasMap(map);
+}
+
+export async function syncPropertyPipelineFromServer(): Promise<boolean> {
+  if (!isBrowser()) return false;
+  try {
+    const res = await fetch("/api/property-records", { credentials: "include", cache: "no-store" });
+    const body = (await res.json()) as { snapshot?: PropertyPipelineSnapshot };
+    if (!res.ok || !body.snapshot) return false;
+    window.localStorage.setItem(PENDING_BY_USER_KEY, JSON.stringify(body.snapshot.pendingByUser));
+    window.localStorage.setItem(EXTRAS_BY_USER_KEY, JSON.stringify(body.snapshot.extrasByUser));
+    window.localStorage.setItem("axis_admin_property_buckets_v1", JSON.stringify(body.snapshot.sideGlobal));
+    for (const [userId, side] of Object.entries(body.snapshot.sideByUser)) {
+      window.localStorage.setItem(`axis_mgr_property_side_v1_${userId}`, JSON.stringify(side));
+    }
+    window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function mirrorLocalPropertyPipelineToServer(): Promise<void> {
+  if (!isBrowser()) return;
+  const pendingMap = readPendingMap();
+  const extrasMap = readExtrasMap();
+  const jobs: Promise<unknown>[] = [];
+  for (const [managerUserId, rows] of Object.entries(pendingMap)) {
+    for (const row of rows) {
+      jobs.push(
+        fetch("/api/property-records", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "upsert", id: row.id, managerUserId, status: "pending", rowData: row }),
+        }).catch(() => {}),
+      );
+    }
+  }
+  for (const [managerUserId, rows] of Object.entries(extrasMap)) {
+    for (const row of rows) {
+      jobs.push(
+        fetch("/api/property-records", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "upsert",
+            id: row.id,
+            managerUserId,
+            status: row.adminPublishLive === true ? "live" : "review",
+            propertyData: row,
+          }),
+        }).catch(() => {}),
+      );
+    }
+  }
+  await Promise.allSettled(jobs);
+}
+
+export async function loadPublicExtraListingsFromServer(): Promise<MockProperty[]> {
+  try {
+    const res = await fetch("/api/property-records/public", { cache: "no-store" });
+    const body = (await res.json()) as { listings?: MockProperty[] };
+    if (!res.ok) return readExtraListingsPublic();
+    const listings = body.listings ?? [];
+    cachePublicExtraListings(listings);
+    return listings;
+  } catch {
+    return readExtraListingsPublic();
+  }
 }
 
 /**
@@ -245,6 +362,7 @@ export function submitManagerPendingProperty(input: ManagerPropertyDraftInput, m
   list.push(row);
   map[managerUserId] = list;
   writePendingMap(map);
+  mirrorPropertyRecord({ id, managerUserId, status: "pending", rowData: row });
   return id;
 }
 
@@ -267,6 +385,7 @@ export function updatePendingManagerProperty(
   };
   map[managerUserId] = list;
   writePendingMap(map);
+  mirrorPropertyRecord({ id: pendingId, managerUserId, status: "pending", rowData: list[idx] });
   return true;
 }
 
@@ -296,6 +415,13 @@ export function updateExtraListingFromSubmission(
   list[idx] = { ...next, managerUserId: owner, adminPublishLive: false };
   map[managerUserId] = list;
   writeExtrasMap(map);
+  mirrorPropertyRecord({
+    id: listingId,
+    managerUserId,
+    status: "review",
+    propertyData: list[idx],
+    rowData: { ...legacy, adminRefId: listingId, listingId, managerUserId },
+  });
   return true;
 }
 
@@ -311,6 +437,7 @@ export function republishManagerListingAfterReview(listingId: string): boolean {
     list[idx] = { ...cur, adminPublishLive: true };
     map[uid] = list;
     writeExtrasMap(map);
+    mirrorPropertyRecord({ id: listingId, managerUserId: uid, status: "live", propertyData: list[idx] });
     return true;
   }
   return false;
@@ -379,6 +506,7 @@ export function appendExtraListing(prop: MockProperty, ownerUserId: string) {
   list.push({ ...prop, managerUserId: uid });
   map[uid] = list;
   writeExtrasMap(map);
+  mirrorPropertyRecord({ id: prop.id, managerUserId: uid, status: prop.adminPublishLive === true ? "live" : "review", propertyData: { ...prop, managerUserId: uid } });
 }
 
 /** Deletes a pending submission from the signed-in manager’s queue only (does not approve or publish). */
@@ -392,6 +520,7 @@ export function deletePendingSubmissionForManager(pendingId: string, managerUser
   if (idx === -1) return false;
   map[uid] = [...list.slice(0, idx), ...list.slice(idx + 1)];
   writePendingMap(map);
+  deleteMirroredPropertyRecord(pendingId);
   window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
   return true;
 }
@@ -406,6 +535,7 @@ export function takePendingManagerProperty(pendingId: string): ManagerPendingPro
       const row = rows[idx]!;
       map[uid] = [...rows.slice(0, idx), ...rows.slice(idx + 1)];
       writePendingMap(map);
+      deleteMirroredPropertyRecord(pendingId);
       return row;
     }
   }
@@ -429,6 +559,7 @@ export function removeExtraListing(listingId: string): MockProperty | null {
       const row = rows[idx]!;
       map[uid] = [...rows.slice(0, idx), ...rows.slice(idx + 1)];
       writeExtrasMap(map);
+      deleteMirroredPropertyRecord(listingId);
       return row;
     }
   }

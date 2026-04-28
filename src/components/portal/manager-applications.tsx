@@ -28,8 +28,10 @@ import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-ap
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   MANAGER_APPLICATIONS_EVENT,
+  deleteManagerApplicationFromServer,
   effectiveApplicationForRow,
   readManagerApplicationRows,
+  syncManagerApplicationsFromServer,
   writeManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
 import {
@@ -40,42 +42,13 @@ import {
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "@/lib/rental-application/data";
-import { findApplicationFeeCharge, upsertRecurringRentProfile } from "@/lib/household-charges";
-import { ensureAccountApplicationSeeds } from "@/lib/account-application-seeds";
-import { ensureAccountListingSeeds } from "@/lib/account-listing-seeds";
+import { HOUSEHOLD_CHARGES_EVENT, recordApprovedApplicationCharges, upsertRecurringRentProfile } from "@/lib/household-charges";
 
-function ApplicantIds({ applicationId, email }: { applicationId: string; email?: string }) {
-  const [axisId, setAxisId] = useState<string | null>(null);
-  const fetched = useRef(false);
-
-  useEffect(() => {
-    if (!email || fetched.current) return;
-    fetched.current = true;
-    void fetch(`/api/portal/applicant-ids?email=${encodeURIComponent(email)}`)
-      .then((r) => r.json() as Promise<{ axisId?: string | null }>)
-      .then((body) => {
-        if (body.axisId) setAxisId(body.axisId);
-      })
-      .catch(() => undefined);
-  }, [email]);
-
+function ApplicantIds({ axisId }: { axisId: string }) {
   return (
     <div className="mt-4 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4">
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Identifiers</p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Application ID</p>
-          <p className="mt-1 font-mono text-sm font-medium text-slate-900">{applicationId}</p>
-        </div>
-        {email ? (
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Axis Resident ID</p>
-            <p className="mt-1 font-mono text-sm font-medium text-slate-900">
-              {axisId ? axisId : <span className="text-slate-400">Fetching…</span>}
-            </p>
-          </div>
-        ) : null}
-      </div>
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Axis ID</p>
+      <p className="mt-2 font-mono text-sm font-medium text-slate-900">{axisId}</p>
     </div>
   );
 }
@@ -297,7 +270,7 @@ function ManagerApplicationPlacementEditor({
 
 export function ManagerApplications() {
   const { showToast } = useAppUi();
-  const { userId, email, ready: authReady } = useManagerUserId();
+  const { userId, ready: authReady } = useManagerUserId();
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
   const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -308,6 +281,7 @@ export function ManagerApplications() {
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
     sync();
+    void syncManagerApplicationsFromServer().then(sync);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
     window.addEventListener("storage", sync);
     return () => {
@@ -329,15 +303,15 @@ export function ManagerApplications() {
   }, []);
 
   useEffect(() => {
-    if (!userId || !email) return;
+    if (!userId) return;
     let changed = false;
-    if (ensureAccountListingSeeds(userId, email)) changed = true;
-    if (ensureAccountApplicationSeeds(userId, email)) changed = true;
-    if (changed) {
-      setRows(readManagerApplicationRows());
-      setPortfolioTick((n) => n + 1);
+    for (const row of rows) {
+      if (row.bucket === "approved" && applicationVisibleToPortalUser(row, userId)) {
+        changed = recordApprovedApplicationCharges(row, userId) || changed;
+      }
     }
-  }, [userId, email]);
+    if (changed) window.dispatchEvent(new Event(HOUSEHOLD_CHARGES_EVENT));
+  }, [rows, userId]);
 
   const persist = useCallback((next: DemoApplicantRow[]) => {
     setRows(next);
@@ -394,19 +368,12 @@ export function ManagerApplications() {
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket) => {
     const row = rows.find((r) => r.id === id);
-    if (nextBucket === "approved") {
-      const email = row?.email?.trim();
-      const propertyId = row?.propertyId?.trim();
-      if (row && email && propertyId) {
-        const feeCharge = findApplicationFeeCharge(email, propertyId);
-        if (feeCharge?.status === "pending") {
-          showToast("Mark the application fee paid in Payments before approving this application.");
-          return;
-        }
-      }
-    }
     const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket, stage: stageLabelForRow(r, nextBucket) } : r));
     persist(next);
+    const updatedRow = next.find((r) => r.id === id);
+    if (nextBucket === "approved" && updatedRow) {
+      recordApprovedApplicationCharges(updatedRow, userId ?? null);
+    }
     if (row) {
       try {
         await syncResidentApproval(row, nextBucket);
@@ -489,6 +456,7 @@ export function ManagerApplications() {
     }
 
     persist(rows.filter((r) => r.id !== id));
+    deleteManagerApplicationFromServer(id);
     setExpandedId(null);
     showToast(email ? "Application and resident access deleted." : "Application deleted.");
   };
@@ -620,7 +588,7 @@ export function ManagerApplications() {
                             </div>
                           ) : null}
 
-                          <ApplicantIds applicationId={row.id} email={row.email} />
+                          <ApplicantIds axisId={row.id} />
 
                           <p className="mt-4 text-sm leading-relaxed text-slate-600">
                             <span className="font-medium text-slate-800">Manager notes</span> — {row.detail}

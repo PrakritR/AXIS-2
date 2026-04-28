@@ -29,8 +29,6 @@ export function collectAccessiblePropertyIds(userId: string): Set<string> {
 export function applicationVisibleToPortalUser(row: DemoApplicantRow, userId: string | null): boolean {
   if (!userId) return false;
   if (row.managerUserId && row.managerUserId === userId) return true;
-  // If the row has an explicit owner that isn't this user, never show it regardless of property IDs.
-  if (row.managerUserId && row.managerUserId !== userId) return false;
   const pid = row.propertyId?.trim();
   if (pid && collectAccessiblePropertyIds(userId).has(pid)) return true;
   return false;

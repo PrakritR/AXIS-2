@@ -10,12 +10,13 @@ import { ManagerHousePropertiesPanel } from "@/components/portal/manager-house-p
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
-import { ensureAccountListingSeeds } from "@/lib/account-listing-seeds";
 import {
   countManagerManagedPropertiesForUser,
+  mirrorLocalPropertyPipelineToServer,
   PROPERTY_PIPELINE_EVENT,
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
+  syncPropertyPipelineFromServer,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import {
@@ -63,7 +64,7 @@ export function ManagerProperties() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const portalBase = usePaidPortalBasePath();
-  const { userId, email } = useManagerUserId();
+  const { userId } = useManagerUserId();
   const [formOpen, setFormOpen] = useState(false);
   const [editListingContext, setEditListingContext] = useState<EditListingContext | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -100,18 +101,14 @@ export function ManagerProperties() {
   }, [loadSku]);
 
   useEffect(() => {
-    refreshPending();
+    void syncPropertyPipelineFromServer().then(() => {
+      refreshPending();
+      void mirrorLocalPropertyPipelineToServer();
+    });
     const on = () => refreshPending();
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
   }, [refreshPending]);
-
-  useEffect(() => {
-    if (!userId || !email) return;
-    if (ensureAccountListingSeeds(userId, email)) {
-      refreshPending();
-    }
-  }, [userId, email, refreshPending]);
 
   useEffect(() => {
     const editPending = searchParams.get("editPending");

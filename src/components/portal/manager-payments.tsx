@@ -15,6 +15,7 @@ import {
   autoSeedRecurringRentProfiles,
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
+  recordApprovedApplicationCharges,
   readChargesForManager,
   upsertRecurringRentProfile,
 } from "@/lib/household-charges";
@@ -182,6 +183,12 @@ export function ManagerPayments() {
   // No-ops if all profiles already exist, so this is safe to run on every render cycle.
   useEffect(() => {
     if (!userId) return;
+    let createdCharges = false;
+    for (const row of readManagerApplicationRows()) {
+      if (row.bucket === "approved" && applicationVisibleToPortalUser(row, userId)) {
+        createdCharges = recordApprovedApplicationCharges(row, userId) || createdCharges;
+      }
+    }
     const toSeed = approvedResidents
       .filter((r) => r.propertyId && r.signedMonthlyRent && r.signedMonthlyRent > 0)
       .map((r) => ({
@@ -193,7 +200,8 @@ export function ManagerPayments() {
         managerUserId: userId,
         monthlyRent: r.signedMonthlyRent!,
       }));
-    autoSeedRecurringRentProfiles(toSeed);
+    const seededRent = autoSeedRecurringRentProfiles(toSeed);
+    if (createdCharges || seededRent) setHcTick((n) => n + 1);
   }, [approvedResidents, userId]);
 
   return (

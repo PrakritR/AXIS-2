@@ -3,11 +3,12 @@
  * Managers mark Zelle/offline payments as paid; lease signing can be gated until required lines are paid.
  */
 
-import { getPropertyById } from "@/lib/rental-application/data";
+import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
-import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
+import type { DemoApplicantRow } from "@/data/demo-portal";
 
 export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
@@ -20,6 +21,7 @@ export const HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE = "__axis_demo_manager_scope__"
 export type HouseholdChargeKind =
   | "application_fee"
   | "rent"
+  | "utilities"
   | "security_deposit"
   | "move_in_fee"
   | "payment_at_signing"
@@ -144,10 +146,12 @@ function chargeTitle(kind: HouseholdChargeKind): string {
       return "Application fee";
     case "rent":
       return "Monthly rent";
+    case "utilities":
+      return "Utilities";
     case "security_deposit":
       return "Security deposit";
     case "move_in_fee":
-      return "Move-in fee";
+      return "Move-in cost";
     case "payment_at_signing":
       return "Payment due at signing";
     case "work_order_charge":
@@ -163,6 +167,8 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
       return sub.applicationFee;
     case "rent":
       return "$0";
+    case "utilities":
+      return "$0";
     case "security_deposit":
       return sub.securityDeposit;
     case "move_in_fee":
@@ -174,6 +180,37 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
     default:
       return "$0";
   }
+}
+
+function normalizeMoneyLabel(raw: string, amount: number): string {
+  const t = raw.trim();
+  if (t) return t.startsWith("$") ? t : `$${amount.toFixed(2)}`;
+  return `$${amount.toFixed(2)}`;
+}
+
+function findChargeByKind(residentEmail: string, propertyId: string, kind: HouseholdChargeKind): HouseholdCharge | undefined {
+  const email = residentEmail.trim().toLowerCase();
+  return readAll().find(
+    (row) =>
+      row.kind === kind &&
+      row.propertyId === propertyId &&
+      row.residentEmail.trim().toLowerCase() === email,
+  );
+}
+
+function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId">): {
+  raw: string;
+  amount: number;
+} {
+  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
+  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  if (!sub) return { raw: "", amount: 0 };
+  const { listingRoomId } = parseRoomChoiceValue(choice);
+  const room = listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : null;
+  const raw = room?.utilitiesEstimate?.trim() || "";
+  return { raw, amount: parseMoneyAmount(raw) };
 }
 
 export function findPendingWorkOrderCharge(workOrderId: string): HouseholdCharge | undefined {
@@ -246,7 +283,7 @@ export function listingApplicationFeeAmount(propertyId: string): { amount: numbe
 
 /**
  * Ensures a pending application-fee line exists when the listing requires a fee, so the applicant can pay
- * (e.g. Zelle) and the manager can mark it paid before the wizard finalizes and shows an Application ID.
+ * (e.g. Zelle) and the manager can mark it paid before the wizard finalizes and shows an Axis ID.
  */
 export function ensurePendingApplicationFeeCharge(input: {
   residentEmail: string;
@@ -523,9 +560,20 @@ export function markApplicationFeePaidAfterStripe(residentEmail: string, propert
   return true;
 }
 
+function markChargePaidById(chargeId: string): boolean {
+  const rows = readAll();
+  const i = rows.findIndex((r) => r.id === chargeId);
+  if (i === -1) return false;
+  if (rows[i]!.status === "paid") return true;
+  const next = [...rows];
+  next[i] = { ...next[i]!, status: "paid", paidAt: new Date().toISOString(), balanceLabel: "$0.00" };
+  writeAll(next);
+  return true;
+}
+
 /**
  * Called when an applicant completes the rental wizard (step 12).
- * Creates pending lines from the listing’s fee fields.
+ * Creates/tracks the application fee only. Lease/payment lines are created once the application is approved.
  */
 export function recordApplicationCharges(
   input: {
@@ -568,9 +616,133 @@ export function recordApplicationCharges(
     return;
   }
 
+  if (opts?.skipApplicationFee || existingAppFee) return;
+  ensurePendingApplicationFeeCharge(input);
+}
+
+export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null): boolean {
+  if (!isBrowser()) return false;
+  const residentEmail = row.email?.trim();
+  if (!residentEmail || !residentEmail.includes("@")) return false;
+  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  if (!propertyId) return false;
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  const propertyLabel = prop?.title ?? row.property ?? "Listing";
+  const zelleSnap = sub?.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
+  const effectiveManagerUserId = managerUserId ?? row.managerUserId ?? prop?.managerUserId ?? null;
+  const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Resident";
+  const roomLabel = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "Room";
+  let changed = false;
+  const now = Date.now();
+
+  const existingApplicationFee = findApplicationFeeCharge(residentEmail, propertyId, null);
+  const appFeeChannel = row.application?.applicationFeePayChannel === "zelle" ? "zelle" : "stripe";
+  if (existingApplicationFee) {
+    if (appFeeChannel !== "zelle" && existingApplicationFee.status !== "paid") {
+      changed = markChargePaidById(existingApplicationFee.id) || changed;
+    }
+  } else {
+    const fee = ensurePendingApplicationFeeCharge({
+      residentEmail,
+      residentName,
+      residentUserId: null,
+      propertyId,
+    });
+    if (fee) {
+      changed = true;
+      if (appFeeChannel !== "zelle") {
+        changed = markChargePaidById(fee.id) || changed;
+      }
+    }
+  }
+
+  const signedRent = Number(row.signedMonthlyRent ?? 0);
+  if (signedRent > 0) {
+    const profile = upsertRecurringRentProfile({
+      residentEmail,
+      residentName,
+      residentUserId: null,
+      propertyId,
+      propertyLabel,
+      roomLabel,
+      managerUserId: effectiveManagerUserId,
+      monthlyRent: signedRent,
+    });
+    if (profile) changed = true;
+  }
+
+  const created: HouseholdCharge[] = [];
+  const pushCharge = (
+    kind: HouseholdChargeKind,
+    raw: string,
+    blocksLeaseUntilPaid: boolean,
+    titleOverride?: string,
+  ) => {
+    const amount = parseMoneyAmount(raw);
+    if (amount <= 0) return;
+    if (findChargeByKind(residentEmail, propertyId, kind)) return;
+    const label = normalizeMoneyLabel(raw, amount);
+    created.push({
+      id: `hc_${row.id}_${kind}_${now}`,
+      createdAt: new Date().toISOString(),
+      residentEmail,
+      residentName,
+      residentUserId: null,
+      propertyId,
+      propertyLabel,
+      managerUserId: effectiveManagerUserId,
+      kind,
+      title: titleOverride ?? chargeTitle(kind),
+      amountLabel: label,
+      balanceLabel: label,
+      status: "pending",
+      zelleContactSnapshot: zelleSnap,
+      blocksLeaseUntilPaid,
+    });
+  };
+
+  if (sub) {
+    pushCharge("security_deposit", sub.securityDeposit, true);
+    pushCharge("move_in_fee", sub.moveInFee, false);
+    const utilities = selectedRoomUtilities(row);
+    if (utilities.amount > 0) {
+      pushCharge("utilities", utilities.raw, false, "Utilities");
+    }
+  }
+
+  if (created.length > 0) {
+    writeAll([...readAll(), ...created]);
+    changed = true;
+  }
+
+  return changed;
+}
+
+/**
+ * Legacy helper kept for compatibility with older flows. New approval code calls
+ * recordApprovedApplicationCharges instead.
+ */
+export function recordLegacyApplicationSigningCharges(
+  input: {
+    residentEmail: string;
+    residentName: string;
+    residentUserId: string | null;
+    propertyId: string;
+  },
+  opts?: { skipApplicationFee?: boolean }
+): void {
+  const existingAppFee = findApplicationFeeCharge(
+    input.residentEmail,
+    input.propertyId,
+    input.residentUserId
+  );
+
+  const prop = getPropertyById(input.propertyId);
+  const sub = prop?.listingSubmission;
+  if (!sub) return;
   const zelleSnap =
     sub.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
-
   const created: HouseholdCharge[] = [];
   const idBase = `hc_${Date.now()}`;
 

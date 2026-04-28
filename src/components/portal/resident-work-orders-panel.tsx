@@ -23,35 +23,22 @@ import {
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
-import type { DemoResidentWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
+import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import {
+  MANAGER_WORK_ORDERS_EVENT,
+  deleteManagerWorkOrderRow,
+  readManagerWorkOrderRows,
+  syncManagerWorkOrdersFromServer,
+  writeManagerWorkOrderRows,
+} from "@/lib/manager-work-orders-storage";
+import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 
 const TABS: { id: ResidentWorkBucket; label: string }[] = [
   { id: "open", label: "Open" },
   { id: "scheduled", label: "Scheduled" },
   { id: "completed", label: "Completed" },
 ];
-
-const RESIDENT_WORK_ORDERS_KEY = "axis_resident_work_orders_v1";
-
-function readStoredRows(): DemoResidentWorkOrderRow[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(RESIDENT_WORK_ORDERS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeStoredRows(rows: DemoResidentWorkOrderRow[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(RESIDENT_WORK_ORDERS_KEY, JSON.stringify(rows));
-  } catch {
-    /* ignore */
-  }
-}
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
@@ -67,13 +54,29 @@ export function ResidentWorkOrdersPanel() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Plumbing");
   const [priority, setPriority] = useState("Medium");
-  const [createdRows, setCreatedRows] = useState<DemoResidentWorkOrderRow[]>([]);
+  const [allWorkOrders, setAllWorkOrders] = useState<DemoManagerWorkOrderRow[]>([]);
+  const [residentEmail, setResidentEmail] = useState("");
 
   useEffect(() => {
-    setCreatedRows(readStoredRows());
+    const sync = () => setAllWorkOrders(readManagerWorkOrderRows());
+    sync();
+    void syncManagerWorkOrdersFromServer().then(sync);
+    void syncManagerApplicationsFromServer();
+    void createSupabaseBrowserClient().auth.getUser().then(({ data }) => {
+      setResidentEmail(data.user?.email?.trim().toLowerCase() ?? "");
+    });
+    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
   }, []);
 
-  const allRows = useMemo(() => createdRows, [createdRows]);
+  const allRows = useMemo(() => {
+    if (!residentEmail) return [];
+    return allWorkOrders.filter((row) => row.residentEmail?.trim().toLowerCase() === residentEmail);
+  }, [allWorkOrders, residentEmail]);
 
   const rows = useMemo(() => allRows.filter((r) => r.bucket === bucket), [allRows, bucket]);
 
@@ -93,21 +96,32 @@ export function ResidentWorkOrdersPanel() {
       showToast("Add a short title first.");
       return;
     }
-    const row: DemoResidentWorkOrderRow = {
-      id: `RWO-${Date.now()}`,
+    if (!residentEmail) {
+      showToast("Sign in to submit a work order.");
+      return;
+    }
+    const application = readManagerApplicationRows().find((row) => row.email?.trim().toLowerCase() === residentEmail);
+    const row: DemoManagerWorkOrderRow = {
+      id: `WO-${Date.now()}`,
+      propertyName: application?.property || "Assigned house",
+      propertyId: application?.assignedPropertyId || application?.propertyId || application?.application?.propertyId,
+      assignedPropertyId: application?.assignedPropertyId,
+      assignedRoomChoice: application?.assignedRoomChoice || application?.application?.roomChoice1,
+      managerUserId: application?.managerUserId ?? null,
+      unit: application?.assignedRoomChoice || application?.application?.roomChoice1 || "—",
       title: title.trim(),
-      category,
       priority,
       status: "Submitted",
       bucket: "open",
       description:
-        "Your request is logged. Maintenance will review and update this thread — open Details anytime for notes.",
+        `${category}: Your request is logged. Maintenance will review and update this thread — open Details anytime for notes.`,
+      scheduled: "—",
+      cost: "—",
+      residentName: application?.name,
+      residentEmail,
     };
-    setCreatedRows((prev) => {
-      const next = [row, ...prev];
-      writeStoredRows(next);
-      return next;
-    });
+    writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
+    setAllWorkOrders(readManagerWorkOrderRows());
     setExpandedId(row.id);
     showToast("Work order added to your open requests.");
     setTitle("");
@@ -144,12 +158,12 @@ export function ResidentWorkOrdersPanel() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row: DemoResidentWorkOrderRow) => (
+                {rows.map((row: DemoManagerWorkOrderRow) => (
                   <Fragment key={row.id}>
                     <tr className={PORTAL_TABLE_TR}>
                       <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-slate-600`}>{row.id}</td>
                       <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
-                      <td className={PORTAL_TABLE_TD}>{row.category}</td>
+                      <td className={PORTAL_TABLE_TD}>{row.description.split(":")[0] || "General"}</td>
                       <td className={PORTAL_TABLE_TD}>
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
                           {row.priority}
@@ -179,11 +193,8 @@ export function ResidentWorkOrdersPanel() {
                                 variant="outline"
                                 className={PORTAL_DETAIL_BTN}
                                 onClick={() => {
-                                  setCreatedRows((prev) => {
-                                    const next = prev.filter((r) => r.id !== row.id);
-                                    writeStoredRows(next);
-                                    return next;
-                                  });
+                                  deleteManagerWorkOrderRow(row.id);
+                                  setAllWorkOrders(readManagerWorkOrderRows());
                                   setExpandedId(null);
                                   showToast("Work order removed.");
                                 }}

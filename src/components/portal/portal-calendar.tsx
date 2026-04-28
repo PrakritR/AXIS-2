@@ -16,7 +16,6 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ensureAccountListingSeeds } from "@/lib/account-listing-seeds";
 import { readExtraListingsForUser, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 
 type CopyRange = "week" | "future" | "all";
@@ -73,13 +72,6 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   const [copySourceId, setCopySourceId] = useState<string>("");
   const [copyDestId, setCopyDestId] = useState<string>("");
   const [copyRange, setCopyRange] = useState<CopyRange>("all");
-
-  useEffect(() => {
-    if (portal !== "manager" || !userId || !email) return;
-    if (ensureAccountListingSeeds(userId, email)) {
-      setPropertyTick((n) => n + 1);
-    }
-  }, [portal, userId, email]);
 
   useEffect(() => {
     if (portal !== "manager") return;
@@ -350,6 +342,9 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
           tourScopeLabel={tourScopeLabel}
           unavailableMessage="Select a house before creating tour windows."
           compactAvailability
+          scheduledTourFilter={
+            portal === "manager" ? { managerUserId: userId, propertyId: calendarPropertyId || null } : undefined
+          }
           otherProperties={
             portal === "manager" && calendarPropertyId
               ? managerProperties.filter((p) => p.id !== calendarPropertyId)

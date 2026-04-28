@@ -30,12 +30,12 @@ export function AdminCreateResidentClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), fullName: fullName.trim(), password }),
       });
-      const body = (await res.json()) as { error?: string };
+      const body = (await res.json()) as { error?: string; axisId?: string };
       if (!res.ok) {
         showToast(body.error ?? "Could not create resident.");
         return;
       }
-      showToast("Resident account created.");
+      showToast(body.axisId ? `Resident account created. Axis ID: ${body.axisId}.` : "Resident account created.");
       setEmail("");
       setFullName("");
       setPassword("");

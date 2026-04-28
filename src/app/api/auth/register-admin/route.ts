@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isValidAdminRegisterKey } from "@/lib/auth/resolve-portal-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
+import { generateAxisId } from "@/lib/manager-id";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -57,13 +58,14 @@ export async function POST(req: Request) {
     }
 
     const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    const axisId = existingProfile?.manager_id?.trim() || generateAxisId();
 
     const { error: pErr } = await supabase.from("profiles").upsert(
       {
         id: userId,
         email: normalEmail,
         role: "admin",
-        manager_id: existingProfile?.manager_id ?? null,
+        manager_id: axisId,
         full_name: fullName?.trim() || existingProfile?.full_name || null,
         application_approved: existingProfile?.application_approved ?? true,
       },

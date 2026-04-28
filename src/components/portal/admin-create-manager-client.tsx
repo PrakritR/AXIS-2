@@ -35,7 +35,7 @@ export function AdminCreateManagerClient() {
         showToast(body.error ?? "Could not create manager.");
         return;
       }
-      showToast(body.managerId ? `Manager created. ID: ${body.managerId}` : "Manager account created.");
+      showToast(body.managerId ? `Manager created. Axis ID: ${body.managerId}` : "Manager account created.");
       setEmail("");
       setFullName("");
       setPassword("");
@@ -52,7 +52,7 @@ export function AdminCreateManagerClient() {
         <h1 className={PORTAL_PAGE_TITLE}>Create manager account</h1>
       </div>
       <p className="mt-2 max-w-xl text-sm text-slate-600">
-        Provisions a new manager login with a free-tier manager ID and checkout record. This is separate from resident
+        Provisions a new manager login with a free-tier Axis ID and checkout record. This is separate from resident
         onboarding.
       </p>
 

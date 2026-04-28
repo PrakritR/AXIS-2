@@ -16,6 +16,13 @@ function Req() {
   return <span className="text-danger"> *</span>;
 }
 
+function makeBrowserAxisId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `AXIS-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+  }
+  return `AXIS-${Date.now().toString(36).toUpperCase()}`;
+}
+
 type ManagerCheckoutPreview = {
   managerId: string;
   email: string;
@@ -40,7 +47,7 @@ function CreateAccountContent() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [applicationId, setApplicationId] = useState("");
+  const [axisId, setAxisId] = useState("");
   const [busy, setBusy] = useState(false);
   const [checkoutPreview, setCheckoutPreview] = useState<ManagerCheckoutPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -57,11 +64,17 @@ function CreateAccountContent() {
     setOwnerInviteRef(searchParams.get("slot") ?? "");
   }, [searchParams]);
 
-  const applicationIdFromUrl = useMemo(() => searchParams.get("application_id")?.trim() ?? "", [searchParams]);
+  const axisIdFromUrl = useMemo(
+    () => searchParams.get("axis_id")?.trim() || searchParams.get("application_id")?.trim() || "",
+    [searchParams],
+  );
 
   useEffect(() => {
-    if (applicationIdFromUrl) setApplicationId(applicationIdFromUrl);
-  }, [applicationIdFromUrl]);
+    if (axisIdFromUrl) {
+      setAxisId(axisIdFromUrl);
+      setRole("resident");
+    }
+  }, [axisIdFromUrl]);
 
   useEffect(() => {
     const normalEmail = email.trim().toLowerCase();
@@ -258,8 +271,8 @@ function CreateAccountContent() {
       return;
     }
 
-    if (role === "resident" && !applicationId.trim()) {
-      showToast("Application ID is required.");
+    if (role === "resident" && !axisId.trim()) {
+      showToast("Axis ID is required.");
       return;
     }
 
@@ -277,10 +290,10 @@ function CreateAccountContent() {
           body: JSON.stringify({
             email: email.trim(),
             password,
-            applicationId: applicationId.trim(),
+            axisId: axisId.trim(),
           }),
         });
-        const body = (await res.json()) as { error?: string; reusedExistingAuthUser?: boolean };
+        const body = (await res.json()) as { error?: string; reusedExistingAuthUser?: boolean; axisId?: string };
         if (!res.ok) {
           showToast(body.error ?? "Could not create resident account.");
           return;
@@ -295,12 +308,13 @@ function CreateAccountContent() {
       }
 
       const supabase = createSupabaseBrowserClient();
+      const generatedAxisId = makeBrowserAxisId();
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
           data: {
-            application_id: applicationId.trim(),
+            axis_id: generatedAxisId,
             invite_ref: ownerInviteRef.trim(),
           },
         },
@@ -320,6 +334,7 @@ function CreateAccountContent() {
         id: uid,
         email: email.trim().toLowerCase(),
         role,
+        manager_id: generatedAxisId,
         full_name: fullName.trim() || null,
         application_approved: role === "owner",
       });
@@ -377,20 +392,19 @@ function CreateAccountContent() {
             {isAxisIntentSignup ? (
               <>
                 Your <span className="font-semibold text-slate-800">Axis ID</span> is reserved for this signup—use it
-                like an Application ID when you need support. Set a password below to finish your Axis Pro account.
+                when you need support. Set a password below to finish your Axis Pro account.
               </>
             ) : (
               <>
                 Payment confirmed. Your <span className="font-semibold text-slate-800">Axis ID</span> is tied to this
-                checkout—use it like an Application ID when you need support. Set a password below to finish your Axis Pro
-                account.
+                checkout. Set a password below to finish your Axis Pro account.
               </>
             )}
           </>
         ) : role === "resident" ? (
           <>
-            Use your application email and Application ID. After signup, your resident portal stays limited until an
-            Axis manager marks your application fee paid and approves your application.
+            Use your application email and Axis ID. This Axis ID can only create resident portal access. After signup,
+            your resident portal stays limited until an Axis manager marks your application fee paid and approves your application.
           </>
         ) : role === "manager" ? (
           <>
@@ -573,15 +587,15 @@ function CreateAccountContent() {
             {role === "resident" ? (
               <div>
                 <label className="text-xs font-semibold text-[#334155]" htmlFor="app">
-                  Application ID
+                  Axis ID
                   <Req />
                 </label>
                 <Input
                   id="app"
-                  className="mt-1.5"
-                  placeholder="APP-recXXXXXXXXXXXXXXXXX"
-                  value={applicationId}
-                  onChange={(e) => setApplicationId(e.target.value)}
+                  className="mt-1.5 font-mono"
+                  placeholder="AXIS-XXXXXXXX"
+                  value={axisId}
+                  onChange={(e) => setAxisId(e.target.value)}
                 />
               </div>
             ) : null}

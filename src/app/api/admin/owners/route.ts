@@ -21,7 +21,7 @@ export async function GET() {
     const db = createSupabaseServiceRoleClient();
     const { data, error } = await db
       .from("profiles")
-      .select("id, email, full_name, application_approved, created_at")
+      .select("id, email, full_name, manager_id, application_approved, created_at")
       .eq("role", "owner")
       .order("created_at", { ascending: false });
 
@@ -31,6 +31,7 @@ export async function GET() {
       id: p.id,
       email: p.email ?? "",
       fullName: p.full_name ?? "",
+      managerId: p.manager_id ?? "",
       active: p.application_approved !== false,
       joinedAt: p.created_at ?? null,
     }));

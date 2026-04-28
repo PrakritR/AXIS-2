@@ -131,7 +131,7 @@ function buildApplication(seed: SpreadsheetSeed) {
 function buildSeedRows(managerUserId: string): DemoApplicantRow[] {
   const seeds: SpreadsheetSeed[] = [
     {
-      id: "APP-recL52lZTSTDWTZSu",
+      id: "AXIS-L52LZTST",
       name: "Fathima Shaikh",
       email: "fathimashaikh318@gmail.com",
       phone: "(312) 714-7974",
@@ -176,7 +176,7 @@ function buildSeedRows(managerUserId: string): DemoApplicantRow[] {
       detail: "Imported from spreadsheet · signed 4/9/2026",
     },
     {
-      id: "APP-recNnElgwqhWq2QJZ",
+      id: "AXIS-NNELGWQH",
       name: "Arnav Shanbhag",
       email: "arnavjs78@gmail.com",
       phone: "(814) 810-7714",
@@ -220,7 +220,7 @@ function buildSeedRows(managerUserId: string): DemoApplicantRow[] {
       detail: "Imported from spreadsheet · signed 4/8/2026",
     },
     {
-      id: "APP-recJewookPark2026",
+      id: "AXIS-JEWOOKPA",
       name: "Jewook Park",
       email: "jewook.parkder@gmail.com",
       phone: "(404) 610-9875",
@@ -264,7 +264,7 @@ function buildSeedRows(managerUserId: string): DemoApplicantRow[] {
       detail: "Imported from PDF · Brooklyn application signed 3/30/2026",
     },
     {
-      id: "APP-recDavidYoo2026",
+      id: "AXIS-DAVIDYOO",
       name: "David Hyungchan Yoo",
       email: "davidhyoo1@gmail.com",
       phone: "(470) 435-0530",
@@ -308,7 +308,7 @@ function buildSeedRows(managerUserId: string): DemoApplicantRow[] {
       detail: "Imported from PDF · Brooklyn application signed 3/30/2026",
     },
     {
-      id: "APP-recKGD8jwSJ683RVw",
+      id: "AXIS-KGD8JWSJ",
       name: "Connor D Federico Grome",
       email: "connorgrome89@gmail.com",
       phone: "(774) 270-2926",
@@ -354,7 +354,7 @@ function buildSeedRows(managerUserId: string): DemoApplicantRow[] {
       detail: "Imported from spreadsheet · signed 4/15/2026",
     },
     {
-      id: "APP-recAvUA6uPmkTVtsf",
+      id: "AXIS-AVUA6UPM",
       name: "Kavinu Weerawardhene",
       email: "Kavinuj753@gmail.com",
       phone: "(952) 290-3970",
@@ -402,7 +402,7 @@ function buildSeedRows(managerUserId: string): DemoApplicantRow[] {
       detail: "Imported from spreadsheet · signed 4/15/2026",
     },
     {
-      id: "APP-recLUEW7J5gGj1Xft",
+      id: "AXIS-LUEW7J5G",
       name: "David Macaraig",
       email: "davidjmacaraig@gmail.com",
       phone: "(925) 890-4537",
@@ -450,7 +450,7 @@ function buildSeedRows(managerUserId: string): DemoApplicantRow[] {
       detail: "Imported from spreadsheet · signed 4/15/2026",
     },
     {
-      id: "APP-recPLdgTipMB7HOZG",
+      id: "AXIS-PLDGTIPM",
       name: "Tatva Prasad",
       email: "tatvapra@usc.edu",
       phone: "(510) 399-3322",
@@ -496,7 +496,7 @@ function buildSeedRows(managerUserId: string): DemoApplicantRow[] {
       detail: "Imported from spreadsheet · signed 4/15/2026",
     },
     {
-      id: "APP-recedEk0e027aW0Lo",
+      id: "AXIS-EDEK0E02",
       name: "Ryan Gribble",
       email: "ryan.d.gribble@gmail.com",
       phone: "(850) 830-8483",
@@ -544,7 +544,7 @@ function buildSeedRows(managerUserId: string): DemoApplicantRow[] {
       detail: "Imported from spreadsheet · signed 4/16/2026",
     },
     {
-      id: "APP-recVrh8ColtNSXDW8",
+      id: "AXIS-VRH8COLT",
       name: "Wesley Taylor",
       email: "wbtaylor002@gmail.com",
       phone: "(704) 307-5286",

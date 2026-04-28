@@ -21,6 +21,7 @@ type SimpleRow = {
   id: string;
   email: string;
   fullName: string;
+  managerId: string;
   active: boolean;
   joinedAt: string | null;
 };
@@ -32,7 +33,7 @@ type UnifiedRow =
   | ({ kind: "owner" } & SimpleRow)
   | ({ kind: "resident" } & SimpleRow);
 
-type CategoryFilter = "all" | AccountKind;
+type CategoryFilter = "management" | "resident";
 type StatusTab = "active" | "disabled";
 type TierFilter = "all" | "free" | "pro" | "business";
 
@@ -67,12 +68,12 @@ function StatusPill({ active }: { active: boolean }) {
 function RolePill({ kind }: { kind: AccountKind }) {
   const styles: Record<AccountKind, string> = {
     manager: "border-sky-200/90 bg-sky-50 text-sky-900",
-    owner: "border-amber-200/90 bg-amber-50 text-amber-950",
+    owner: "border-sky-200/90 bg-sky-50 text-sky-900",
     resident: "border-violet-200/90 bg-violet-50 text-violet-900",
   };
   const labels: Record<AccountKind, string> = {
-    manager: "Manager",
-    owner: "Owner",
+    manager: "Management",
+    owner: "Management",
     resident: "Resident",
   };
   return (
@@ -356,7 +357,7 @@ export function AdminAxisUsersClient() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [statusTab, setStatusTab] = useState<StatusTab>("active");
-  const [category, setCategory] = useState<CategoryFilter>("all");
+  const [category, setCategory] = useState<CategoryFilter>("management");
   const [tierFilter, setTierFilter] = useState<TierFilter>("all");
 
   const load = useCallback(async () => {
@@ -411,12 +412,12 @@ export function AdminAxisUsersClient() {
   const { activeCount, disabledCount, categoryCounts } = useMemo(() => {
     let a = 0;
     let d = 0;
-    const c = { all: 0, manager: 0, owner: 0, resident: 0 };
+    const c = { management: 0, resident: 0 };
     for (const row of unified) {
       if (row.active) a += 1;
       else d += 1;
-      c.all += 1;
-      c[row.kind] += 1;
+      if (row.kind === "resident") c.resident += 1;
+      else c.management += 1;
     }
     return { activeCount: a, disabledCount: d, categoryCounts: c };
   }, [unified]);
@@ -425,13 +426,15 @@ export function AdminAxisUsersClient() {
     return unified.filter((row) => {
       if (statusTab === "active" && !row.active) return false;
       if (statusTab === "disabled" && row.active) return false;
-      if (category !== "all" && row.kind !== category) return false;
+      if (category === "resident" && row.kind !== "resident") return false;
+      if (category === "management" && row.kind === "resident") return false;
       if (row.kind === "manager" && tierFilter !== "all" && row.tier.toLowerCase() !== tierFilter) return false;
+      if (row.kind === "owner" && tierFilter !== "all") return false;
       return true;
     });
   }, [unified, statusTab, category, tierFilter]);
 
-  const showTierFilter = category === "all" || category === "manager";
+  const showTierFilter = category === "management";
 
   const STATUS_TABS: { id: StatusTab; label: string; count: number }[] = [
     { id: "active", label: "Active", count: activeCount },
@@ -439,10 +442,8 @@ export function AdminAxisUsersClient() {
   ];
 
   const ROLE_TABS: { id: CategoryFilter; label: string; count: number }[] = [
-    { id: "all", label: "All", count: categoryCounts.all },
-    { id: "manager", label: "Manager", count: categoryCounts.manager },
-    { id: "owner", label: "Owner", count: categoryCounts.owner },
-    { id: "resident", label: "Resident", count: categoryCounts.resident },
+    { id: "management", label: "Management", count: categoryCounts.management },
+    { id: "resident", label: "Residents", count: categoryCounts.resident },
   ];
 
   const TIER_OPTIONS: { id: TierFilter; label: string }[] = [
@@ -460,10 +461,6 @@ export function AdminAxisUsersClient() {
           Refresh
         </Button>
       </div>
-
-      <p className="mt-2 max-w-2xl text-sm text-slate-600">
-        All manager, owner, and resident accounts. Filter by category or status, then open details to enable, disable, or remove an account.
-      </p>
 
       <div className="mt-5">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Category</p>
@@ -591,7 +588,7 @@ export function AdminAxisUsersClient() {
                         <td className="px-5 py-4 align-middle">
                           <p className="font-semibold text-slate-900">{row.fullName || row.email}</p>
                           <p className="mt-0.5 text-sm text-slate-500">{row.email}</p>
-                          {row.kind === "manager" && row.managerId ? (
+                          {row.managerId ? (
                             <p className="mt-0.5 font-mono text-xs text-slate-400">{row.managerId}</p>
                           ) : null}
                         </td>

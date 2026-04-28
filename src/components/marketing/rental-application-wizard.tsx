@@ -5,7 +5,12 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
-import { PROPERTY_PIPELINE_EVENT, readAllExtraListings, readExtraListings } from "@/lib/demo-property-pipeline";
+import {
+  loadPublicExtraListingsFromServer,
+  PROPERTY_PIPELINE_EVENT,
+  readAllExtraListings,
+  readExtraListings,
+} from "@/lib/demo-property-pipeline";
 import {
   ensurePendingApplicationFeeCharge,
   findApplicationFeeCharge,
@@ -28,9 +33,9 @@ import { RentalWizardStepBody } from "./rental-wizard-steps";
 
 function makeNewApplicationId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `APP-${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+    return `AXIS-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   }
-  return `APP-${Date.now().toString(36).toUpperCase()}`;
+  return `AXIS-${Date.now().toString(36).toUpperCase()}`;
 }
 
 const STEP_META = [
@@ -107,6 +112,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
   useEffect(() => {
     const on = () => setExtrasTick((n) => n + 1);
+    void loadPublicExtraListingsFromServer().then(() => on());
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
   }, []);
@@ -585,14 +591,14 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>
-            <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Save your Application ID</h2>
+            <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Save your Axis ID</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-700">
               {emailAccountStatus?.exists
                 ? "Your application has been received. Since you already have an Axis account, sign in to track your application — no new account needed."
-                : <>Use this ID when you create your resident account (open signup below with it filled in). Share it with a co-signer if they apply separately. After signup, your account stays limited to <strong>Dashboard</strong>, <strong>Profile</strong>, and <strong>Inbox</strong>{" "}until the manager marks your application fee paid and approves your application. Stripe payments are marked paid automatically after checkout.</>}
+                : <>Use this Axis ID when you create your resident account (open signup below with it filled in). Share it with a co-signer if they apply separately. This ID only grants resident account creation. After signup, your account stays limited to <strong>Dashboard</strong>, <strong>Profile</strong>, and <strong>Inbox</strong>{" "}until the manager marks your application fee paid and approves your application. Stripe payments are marked paid automatically after checkout.</>}
             </p>
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Application ID</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Axis ID</p>
               <p className="mt-2 font-mono text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{postSubmit.applicationId}</p>
               {emailAccountStatus?.axisId ? (
                 <p className="mt-2 text-xs text-slate-500">Your Axis ID: <span className="font-mono font-semibold text-slate-800">{emailAccountStatus.axisId}</span></p>
@@ -608,10 +614,10 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 </Link>
               ) : (
                 <Link
-                  href={`/auth/create-account?role=resident&application_id=${encodeURIComponent(postSubmit.applicationId)}`}
+                  href={`/auth/create-account?role=resident&axis_id=${encodeURIComponent(postSubmit.applicationId)}`}
                   className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-8 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:translate-y-px"
                 >
-                  Create resident account with Application ID
+                  Create resident account with Axis ID
                 </Link>
               )}
               <Button type="button" variant="outline" className="min-h-[48px] px-8" onClick={() => setPostSubmit(null)}>

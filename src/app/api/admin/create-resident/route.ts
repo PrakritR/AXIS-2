@@ -4,6 +4,7 @@ import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
+import { generateAxisId } from "@/lib/manager-id";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -68,13 +69,14 @@ export async function POST(req: Request) {
     }
 
     const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    const axisId = existingProfile?.manager_id?.trim() || generateAxisId();
 
     await supabase.from("profiles").upsert(
       {
         id: userId,
         email: normalEmail,
         role: primaryRoleWhenAddingResident(existingProfile?.role as string | undefined),
-        manager_id: existingProfile?.manager_id ?? null,
+        manager_id: axisId,
         full_name: fullName.trim() || existingProfile?.full_name || null,
         application_approved: existingProfile?.application_approved ?? false,
       },
@@ -83,7 +85,7 @@ export async function POST(req: Request) {
 
     await ensureProfileRoleRow(supabase, userId, "resident");
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, axisId });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });
