@@ -243,7 +243,7 @@ export function PortalCalendarPanels({
 
     const planned = (showAdminMeetings || showManagerTours) ? readPlannedEvents()
       .filter((event) => {
-        if (showAdminMeetings) return true;
+        if (showAdminMeetings) return event.kind !== "tour";
         return (
           event.kind === "tour" &&
           event.managerUserId === scheduledTourFilter?.managerUserId &&
@@ -280,7 +280,7 @@ export function PortalCalendarPanels({
     const pending = readPartnerInquiries()
       .filter((row) => row.status === "pending")
       .filter((row) => {
-        if (showAdminMeetings) return true;
+        if (showAdminMeetings) return row.kind !== "tour";
         if (!showManagerTours) return false;
         return (
           row.kind === "tour" &&

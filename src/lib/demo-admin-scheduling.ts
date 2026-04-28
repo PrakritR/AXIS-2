@@ -465,6 +465,7 @@ export function deletePlannedEvent(id: string): boolean {
 export function pendingInquiryCount() {
   return readPartnerInquiries().filter((r) => {
     if (r.status !== "pending") return false;
+    if (r.kind === "tour") return false;
     const windows = getPartnerInquiryWindows(r);
     if (windows.length > 0) {
       return windows.some((window) => isFutureOrCurrentIsoWindow(window.end || window.start));

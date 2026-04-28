@@ -256,6 +256,12 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
     return slotManagerMap.get(`${dateStr}:${selectedSlotIndex}`) ?? [];
   }, [selectedDay, selectedSlotIndex, calYear, calMonth, slotManagerMap]);
 
+  const selectedTourManager = useMemo(() => {
+    if (managersAtSelectedSlot.length === 1) return managersAtSelectedSlot[0] ?? null;
+    if (!selectedManagerUserId) return null;
+    return managersAtSelectedSlot.find((manager) => manager.userId === selectedManagerUserId) ?? null;
+  }, [managersAtSelectedSlot, selectedManagerUserId]);
+
   // Auto-select the manager when only one is available at the chosen slot.
   useEffect(() => {
     if (managersAtSelectedSlot.length === 1) {
@@ -274,7 +280,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
   const canContinue2 =
     selectedDay !== null &&
     selectedSlotIndex !== null &&
-    (managersAtSelectedSlot.length <= 1 || selectedManagerUserId !== null);
+    selectedTourManager !== null;
 
   const steps = [
     { n: 1, label: "Property & room" },
@@ -446,6 +452,10 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
                 return;
               }
               if (!selectedProperty || selectedDay == null || selectedSlotIndex == null) return;
+              if (!selectedTourManager) {
+                showToast("Please choose the manager for this tour time.");
+                return;
+              }
               const dateStr = toLocalDateStr(new Date(calYear, calMonth, selectedDay, 12, 0, 0, 0));
               const start = localDateAtSlotStart(dateStr, selectedSlotIndex);
               const end = new Date(start.getTime() + 30 * 60 * 1000);
@@ -460,12 +470,19 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
                 email: email.trim(),
                 phone: phone.trim(),
                 kind: "tour",
-                managerUserId: selectedManagerUserId ?? managersAtSelectedSlot[0]?.userId,
+                managerUserId: selectedTourManager.userId,
                 propertyId: selectedProperty.id,
                 propertyTitle: selectedProperty.title,
                 roomLabel: selectedRoomLabel,
                 notes: [propertyContext, notes.trim()].filter(Boolean).join("\n\n"),
-                requestedWindows: [{ start: start.toISOString(), end: end.toISOString() }],
+                adminUserId: selectedTourManager.userId,
+                adminLabel: selectedTourManager.label,
+                requestedWindows: [{
+                  start: start.toISOString(),
+                  end: end.toISOString(),
+                  adminUserId: selectedTourManager.userId,
+                  adminLabel: selectedTourManager.label,
+                }],
                 proposedStart: start.toISOString(),
                 proposedEnd: end.toISOString(),
               });

@@ -98,7 +98,7 @@ export function AdminDashboard() {
 
   useEffect(() => {
     const syncEvents = () => {
-      const n = readPlannedEvents().length + pendingInquiryCount();
+      const n = readPlannedEvents().filter((event) => event.kind !== "tour").length + pendingInquiryCount();
       setEventsTotal(String(n));
     };
     syncEvents();
