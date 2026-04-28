@@ -7,7 +7,7 @@ import type {
   ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS, splitLineList } from "@/data/manager-listing-presets";
+import { LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS, sanitizeRoomAmenityText, splitLineList } from "@/data/manager-listing-presets";
 import { parseMonthlyRent } from "@/lib/listings-search";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import {
@@ -79,7 +79,7 @@ function legacySharedLabelsFromHouseAmenities(sub: ManagerListingSubmissionV1, s
 }
 
 function splitRoomAmenityLines(text: string): string[] {
-  return text
+  return sanitizeRoomAmenityText(text)
     .split(/[\n,]+/)
     .map((s) => s.trim())
     .filter(Boolean)

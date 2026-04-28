@@ -42,7 +42,15 @@ import {
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "@/lib/rental-application/data";
-import { HOUSEHOLD_CHARGES_EVENT, recordApprovedApplicationCharges, upsertRecurringRentProfile } from "@/lib/household-charges";
+import {
+  HOUSEHOLD_CHARGES_EVENT,
+  findApplicationFeeCharge,
+  listingApplicationFeeAmount,
+  recordApprovedApplicationCharges,
+  recordSubmittedApplicationFeeCharge,
+  syncHouseholdChargesFromServer,
+  upsertRecurringRentProfile,
+} from "@/lib/household-charges";
 
 function ApplicantIds({ axisId }: { axisId: string }) {
   return (
@@ -312,13 +320,22 @@ export function ManagerApplications() {
 
   useEffect(() => {
     if (!userId) return;
-    let changed = false;
-    for (const row of rows) {
-      if (row.bucket === "approved" && applicationVisibleToPortalUser(row, userId)) {
-        changed = recordApprovedApplicationCharges(row, userId) || changed;
+    let cancelled = false;
+    const repairApprovedCharges = async () => {
+      await syncHouseholdChargesFromServer();
+      if (cancelled) return;
+      let changed = false;
+      for (const row of rows) {
+        if (row.bucket === "approved" && applicationVisibleToPortalUser(row, userId)) {
+          changed = recordApprovedApplicationCharges(row, userId) || changed;
+        }
       }
-    }
-    if (changed) window.dispatchEvent(new Event(HOUSEHOLD_CHARGES_EVENT));
+      if (changed) window.dispatchEvent(new Event(HOUSEHOLD_CHARGES_EVENT));
+    };
+    void repairApprovedCharges();
+    return () => {
+      cancelled = true;
+    };
   }, [rows, userId]);
 
   const persist = useCallback((next: DemoApplicantRow[]) => {
@@ -376,6 +393,21 @@ export function ManagerApplications() {
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket) => {
     const row = rows.find((r) => r.id === id);
+    if (!row) return;
+    if (nextBucket === "approved") {
+      await syncHouseholdChargesFromServer();
+      recordSubmittedApplicationFeeCharge(row, userId ?? null);
+      const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+      const appFee = listingApplicationFeeAmount(propertyId);
+      const feeCharge = propertyId
+        ? findApplicationFeeCharge(row.email?.trim() ?? "", propertyId, null)
+        : undefined;
+      if (appFee.amount > 0 && feeCharge?.status !== "paid") {
+        window.dispatchEvent(new Event(HOUSEHOLD_CHARGES_EVENT));
+        showToast("Mark the application fee paid before approving this application.");
+        return;
+      }
+    }
     const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket, stage: stageLabelForRow(r, nextBucket) } : r));
     persist(next);
     const updatedRow = next.find((r) => r.id === id);

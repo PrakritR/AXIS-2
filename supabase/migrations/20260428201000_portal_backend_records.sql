@@ -238,8 +238,8 @@ values
       "roomFurnishing": ["Unfurnished", "Furnished", "Bed, desk, and chair"],
       "amenityGroups": {
         "houseWide": ["WiFi", "In-unit laundry", "Air conditioning", "Near public transit", "Parking available"],
-        "room": ["Desk", "Bed", "Heating", "AC", "Private bathroom"],
-        "bathroom": ["Shower", "Toilet", "Bathtub"],
+        "room": ["Walk-in closet", "Blackout curtains", "USB outlets", "Ceiling fan", "Mini fridge", "Private sink / vanity", "Balcony / bay window", "Hardwood floors", "Keypad lock"],
+        "bathroom": ["Dual vanities", "Walk-in / large shower", "Soaking tub", "Heated floors", "Window / natural light", "Exhaust fan", "Built-in storage / linen"],
         "sharedSpace": ["Refrigerator", "Microwave", "Oven / range", "Dishwasher", "Living / lounge seating"]
       }
     }'::jsonb,

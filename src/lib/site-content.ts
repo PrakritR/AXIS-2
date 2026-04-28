@@ -1,6 +1,8 @@
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition } from "@/data/manager-plan-tiers";
 import {
   BATHROOM_EXTRA_AMENITY_PRESETS,
+  DISALLOWED_BATHROOM_AMENITY_LABELS,
+  DISALLOWED_ROOM_AMENITY_LABELS,
   HOUSE_WIDE_AMENITY_PRESETS,
   ROOM_AMENITY_PRESETS,
   ROOM_AVAILABILITY_OPTIONS,
@@ -103,11 +105,13 @@ export async function loadListingPresetConfig(): Promise<ListingPresetConfig> {
   const body = await loadSiteContent();
   const raw = configByKey(body, "listing.form.presets");
   const groups = raw && typeof raw === "object" ? (raw as { amenityGroups?: Record<string, unknown> }).amenityGroups : null;
+  const roomRows = optionRows(groups?.room)?.filter((row) => !DISALLOWED_ROOM_AMENITY_LABELS.has(row.label));
+  const bathroomRows = optionRows(groups?.bathroom)?.filter((row) => !DISALLOWED_BATHROOM_AMENITY_LABELS.has(row.label));
   return {
     houseWide: optionRows(groups?.houseWide) ?? [...HOUSE_WIDE_AMENITY_PRESETS],
     sharedSpace: optionRows(groups?.sharedSpace) ?? [...SHARED_SPACE_AMENITY_PRESETS],
-    bathroom: optionRows(groups?.bathroom) ?? [...BATHROOM_EXTRA_AMENITY_PRESETS],
-    room: optionRows(groups?.room) ?? [...ROOM_AMENITY_PRESETS],
+    bathroom: bathroomRows ?? [...BATHROOM_EXTRA_AMENITY_PRESETS],
+    room: roomRows ?? [...ROOM_AMENITY_PRESETS],
     availability: Array.isArray((raw as { roomAvailability?: unknown } | null)?.roomAvailability)
       ? ((raw as { roomAvailability: string[] }).roomAvailability.filter((v) => typeof v === "string") as string[])
       : ROOM_AVAILABILITY_OPTIONS,

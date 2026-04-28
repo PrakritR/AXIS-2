@@ -20,8 +20,11 @@ export const HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE = "__axis_demo_manager_scope__"
 
 export type HouseholdChargeKind =
   | "application_fee"
+  | "first_month_rent"
+  | "prorated_rent"
   | "rent"
   | "utilities"
+  | "prorated_utilities"
   | "security_deposit"
   | "move_in_fee"
   | "payment_at_signing"
@@ -165,10 +168,16 @@ function chargeTitle(kind: HouseholdChargeKind): string {
   switch (kind) {
     case "application_fee":
       return "Application fee";
+    case "first_month_rent":
+      return "First month's rent";
+    case "prorated_rent":
+      return "Prorated first month's rent";
     case "rent":
       return "Monthly rent";
     case "utilities":
       return "Utilities";
+    case "prorated_utilities":
+      return "Prorated utilities";
     case "security_deposit":
       return "Security deposit";
     case "move_in_fee":
@@ -186,6 +195,9 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
   switch (kind) {
     case "application_fee":
       return sub.applicationFee;
+    case "first_month_rent":
+    case "prorated_rent":
+    case "prorated_utilities":
     case "rent":
       return "$0";
     case "utilities":
@@ -207,6 +219,26 @@ function normalizeMoneyLabel(raw: string, amount: number): string {
   const t = raw.trim();
   if (t) return t.startsWith("$") ? t : `$${amount.toFixed(2)}`;
   return `$${amount.toFixed(2)}`;
+}
+
+function moneyAmountLabel(amount: number): string {
+  return `$${amount.toFixed(2)}`;
+}
+
+function leaseStartProration(leaseStart: string | undefined): { prorated: boolean; factor: number; label: string } {
+  if (!leaseStart?.trim()) return { prorated: false, factor: 1, label: "full first month" };
+  const [yearRaw, monthRaw, dayRaw] = leaseStart.split("-").map(Number);
+  if (!yearRaw || !monthRaw || !dayRaw) return { prorated: false, factor: 1, label: "full first month" };
+  const daysInMonth = new Date(yearRaw, monthRaw, 0).getDate();
+  if (!Number.isFinite(daysInMonth) || daysInMonth <= 0 || dayRaw <= 1) {
+    return { prorated: false, factor: 1, label: "full first month" };
+  }
+  const billableDays = Math.max(1, daysInMonth - dayRaw + 1);
+  return {
+    prorated: true,
+    factor: billableDays / daysInMonth,
+    label: `${billableDays}/${daysInMonth} days from lease start`,
+  };
 }
 
 function findChargeByKind(residentEmail: string, propertyId: string, kind: HouseholdChargeKind): HouseholdCharge | undefined {
@@ -232,6 +264,19 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
   const room = listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : null;
   const raw = room?.utilitiesEstimate?.trim() || "";
   return { raw, amount: parseMoneyAmount(raw) };
+}
+
+function selectedRoomRentAmount(row: DemoApplicantRow): number {
+  const signedRent = Number(row.signedMonthlyRent ?? 0);
+  if (Number.isFinite(signedRent) && signedRent > 0) return signedRent;
+  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
+  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  if (!sub) return 0;
+  const { listingRoomId } = parseRoomChoiceValue(choice);
+  const room = listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : null;
+  return room?.monthlyRent && room.monthlyRent > 0 ? room.monthlyRent : 0;
 }
 
 export function findPendingWorkOrderCharge(workOrderId: string): HouseholdCharge | undefined {
@@ -719,23 +764,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const roomLabel = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "Room";
   let changed = false;
   const now = Date.now();
+  let firstChargeMonth = row.application?.leaseStart?.trim().slice(0, 7) || currentRentMonth();
 
   changed = recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId) || changed;
-
-  const signedRent = Number(row.signedMonthlyRent ?? 0);
-  if (signedRent > 0) {
-    const profile = upsertRecurringRentProfile({
-      residentEmail,
-      residentName,
-      residentUserId: null,
-      propertyId,
-      propertyLabel,
-      roomLabel,
-      managerUserId: effectiveManagerUserId,
-      monthlyRent: signedRent,
-    });
-    if (profile) changed = true;
-  }
 
   const created: HouseholdCharge[] = [];
   const pushCharge = (
@@ -767,17 +798,76 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     });
   };
 
+  const recurringStartMonth = (leaseStart?: string): string => {
+    const [yearRaw, monthRaw] = leaseStart?.split("-") ?? [];
+    const year = Number(yearRaw);
+    const month = Number(monthRaw);
+    const base = Number.isFinite(year) && Number.isFinite(month) && year > 0 && month > 0
+      ? new Date(year, month - 1, 1, 12, 0, 0, 0)
+      : new Date();
+    base.setMonth(base.getMonth() + 1);
+    return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const signedRent = selectedRoomRentAmount(row);
+  if (signedRent > 0) {
+    const leaseStart = row.application?.leaseStart?.trim();
+    firstChargeMonth = leaseStart?.slice(0, 7) || firstChargeMonth;
+    const start = leaseStartProration(leaseStart);
+    const firstRentKind: HouseholdChargeKind = start.prorated ? "prorated_rent" : "first_month_rent";
+    const firstRentAmount = start.prorated ? signedRent * start.factor : signedRent;
+    pushCharge(
+      firstRentKind,
+      moneyAmountLabel(firstRentAmount),
+      false,
+      start.prorated ? "Prorated first month's rent" : "First month's rent",
+    );
+    const profile = upsertRecurringRentProfile({
+      residentEmail,
+      residentName,
+      residentUserId: null,
+      propertyId,
+      propertyLabel,
+      roomLabel,
+      managerUserId: effectiveManagerUserId,
+      monthlyRent: signedRent,
+      startMonth: recurringStartMonth(leaseStart),
+    });
+    if (profile) changed = true;
+  }
+
   if (sub) {
     pushCharge("security_deposit", sub.securityDeposit, true);
     pushCharge("move_in_fee", sub.moveInFee, false);
     const utilities = selectedRoomUtilities(row);
     if (utilities.amount > 0) {
-      pushCharge("utilities", utilities.raw, false, "Utilities");
+      const start = leaseStartProration(row.application?.leaseStart);
+      const utilityKind: HouseholdChargeKind = start.prorated ? "prorated_utilities" : "utilities";
+      const utilityAmount = start.prorated ? utilities.amount * start.factor : utilities.amount;
+      pushCharge(
+        utilityKind,
+        moneyAmountLabel(utilityAmount),
+        false,
+        start.prorated ? "Prorated utilities" : "Utilities",
+      );
     }
   }
 
   if (created.length > 0) {
-    writeAll([...readAll(), ...created]);
+    const createsExplicitFirstRent = created.some((charge) => charge.kind === "first_month_rent" || charge.kind === "prorated_rent");
+    const existingRows = createsExplicitFirstRent
+      ? readAll().filter(
+          (charge) =>
+            !(
+              charge.kind === "rent" &&
+              charge.status === "pending" &&
+              charge.propertyId === propertyId &&
+              charge.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase() &&
+              charge.rentMonth === firstChargeMonth
+            ),
+        )
+      : readAll();
+    writeAll([...existingRows, ...created]);
     changed = true;
   }
 

@@ -16,7 +16,12 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { readExtraListingsForUser, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
+import {
+  PROPERTY_PIPELINE_EVENT,
+  readExtraListingsForUser,
+  readPendingManagerPropertiesForUser,
+  syncPropertyPipelineFromServer,
+} from "@/lib/demo-property-pipeline";
 
 type CopyRange = "week" | "future" | "all";
 
@@ -67,6 +72,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   const [calendarRefreshSignal, setCalendarRefreshSignal] = useState(0);
   const [calendarPropertyId, setCalendarPropertyId] = useState<string>("");
   const [propertyTick, setPropertyTick] = useState(0);
+  const [propertiesLoading, setPropertiesLoading] = useState(false);
 
   const [copyModalOpen, setCopyModalOpen] = useState(false);
   const [copySourceId, setCopySourceId] = useState<string>("");
@@ -84,13 +90,41 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
     };
   }, [portal]);
 
+  useEffect(() => {
+    if (portal !== "manager" || !authReady || !userId) return;
+    let cancelled = false;
+    setPropertiesLoading(true);
+    syncPropertyPipelineFromServer()
+      .finally(() => {
+        if (cancelled) return;
+        setPropertiesLoading(false);
+        setPropertyTick((n) => n + 1);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [portal, authReady, userId]);
+
   const managerProperties = useMemo(() => {
     if (portal !== "manager" || !userId) return [];
     void propertyTick;
-    return readExtraListingsForUser(userId)
+    const live = readExtraListingsForUser(userId).map((property) => ({
+      id: property.id,
+      name: property.title?.trim() || property.buildingName?.trim() || property.address?.trim() || property.id,
+    }));
+    const pending = readPendingManagerPropertiesForUser(userId).map((property) => ({
+      id: property.id,
+      name:
+        property.buildingName?.trim() ||
+        property.submission?.buildingName?.trim() ||
+        property.address?.trim() ||
+        property.id,
+    }));
+    return [...live, ...pending]
+      .filter((property, index, list) => list.findIndex((candidate) => candidate.id === property.id) === index)
       .map((property) => ({
         id: property.id,
-        name: property.title?.trim() || property.buildingName?.trim() || property.address?.trim() || property.id,
+        name: property.name,
       }))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   }, [portal, userId, propertyTick]);
@@ -180,7 +214,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
           <ManagerCalendarPropertyFilter properties={managerProperties} value={calendarPropertyId} onChange={setCalendarPropertyId} />
         }
       >
-        <p className="text-sm text-slate-500">Loading calendar…</p>
+        <p className="text-sm text-slate-500">{propertiesLoading ? "Loading houses…" : "Loading calendar…"}</p>
       </ManagerPortalPageShell>
     );
   }
@@ -336,43 +370,51 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
           ) : undefined
         }
       >
-        <PortalCalendarPanels
-          storageKey={storageKey}
-          calendarRefreshSignal={calendarRefreshSignal}
-          tourScopeLabel={tourScopeLabel}
-          unavailableMessage="Select a house before creating tour windows."
-          compactAvailability
-          scheduledTourFilter={
-            portal === "manager" ? { managerUserId: userId, propertyId: calendarPropertyId || null } : undefined
-          }
-          otherProperties={
-            portal === "manager" && calendarPropertyId
-              ? managerProperties.filter((p) => p.id !== calendarPropertyId)
-              : undefined
-          }
-          onCopyWeekToHouses={
-            portal === "manager" && userId && calendarPropertyId
-              ? (propertyIds, weekDateStrs) => {
-                  if (!userId || !calendarPropertyId) return;
-                  const srcKey = managerPropertyAvailabilityStorageKey(userId, calendarPropertyId);
-                  const srcSlots = readAvailabilityDateSetForStorageKey(srcKey);
-                  const weekStrs = new Set(weekDateStrs);
-                  const weekSrcSlots = [...srcSlots].filter((key) => weekStrs.has(key.split(":")[0] ?? ""));
-                  for (const pid of propertyIds) {
-                    const dstKey = managerPropertyAvailabilityStorageKey(userId, pid);
-                    const dstSlots = new Set(readAvailabilityDateSetForStorageKey(dstKey));
-                    for (const slot of weekSrcSlots) dstSlots.add(slot);
-                    writeAvailabilityDateSetForStorageKey(dstSlots, dstKey);
+        {propertiesLoading && managerProperties.length === 0 ? (
+          <p className="text-sm text-slate-500">Loading houses from the backend…</p>
+        ) : (
+          <PortalCalendarPanels
+            storageKey={storageKey}
+            calendarRefreshSignal={calendarRefreshSignal}
+            tourScopeLabel={tourScopeLabel}
+            unavailableMessage={
+              portal === "manager" && managerProperties.length === 0
+                ? "No houses found for this manager account yet."
+                : "Select a house before creating tour windows."
+            }
+            compactAvailability
+            scheduledTourFilter={
+              portal === "manager" ? { managerUserId: userId, propertyId: calendarPropertyId || null } : undefined
+            }
+            otherProperties={
+              portal === "manager" && calendarPropertyId
+                ? managerProperties.filter((p) => p.id !== calendarPropertyId)
+                : undefined
+            }
+            onCopyWeekToHouses={
+              portal === "manager" && userId && calendarPropertyId
+                ? (propertyIds, weekDateStrs) => {
+                    if (!userId || !calendarPropertyId) return;
+                    const srcKey = managerPropertyAvailabilityStorageKey(userId, calendarPropertyId);
+                    const srcSlots = readAvailabilityDateSetForStorageKey(srcKey);
+                    const weekStrs = new Set(weekDateStrs);
+                    const weekSrcSlots = [...srcSlots].filter((key) => weekStrs.has(key.split(":")[0] ?? ""));
+                    for (const pid of propertyIds) {
+                      const dstKey = managerPropertyAvailabilityStorageKey(userId, pid);
+                      const dstSlots = new Set(readAvailabilityDateSetForStorageKey(dstKey));
+                      for (const slot of weekSrcSlots) dstSlots.add(slot);
+                      writeAvailabilityDateSetForStorageKey(dstSlots, dstKey);
+                    }
+                    setCalendarRefreshSignal((n) => n + 1);
+                    const destNames = propertyIds
+                      .map((id) => managerProperties.find((p) => p.id === id)?.name ?? id)
+                      .join(", ");
+                    showToast(`Week schedule pushed to: ${destNames}.`);
                   }
-                  setCalendarRefreshSignal((n) => n + 1);
-                  const destNames = propertyIds
-                    .map((id) => managerProperties.find((p) => p.id === id)?.name ?? id)
-                    .join(", ");
-                  showToast(`Week schedule pushed to: ${destNames}.`);
-                }
-              : undefined
-          }
-        />
+                : undefined
+            }
+          />
+        )}
       </ManagerPortalPageShell>
       {copyModal}
     </>

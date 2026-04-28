@@ -18,6 +18,7 @@ import {
   recordApprovedApplicationCharges,
   recordSubmittedApplicationFeeCharge,
   readChargesForManager,
+  syncHouseholdChargesFromServer,
   upsertRecurringRentProfile,
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -55,6 +56,7 @@ export function ManagerPayments() {
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
+    void syncHouseholdChargesFromServer().then(on);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
   }, []);

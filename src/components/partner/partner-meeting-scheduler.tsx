@@ -4,16 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
   appendPartnerInquiry,
-  dateHasOpenSlots,
   dateStrFromCalendar,
   formatAvailabilitySlotLabel,
-  getOpenSlotIndicesForDateStr,
   isCalendarDayBeforeToday,
   localDateAtSlotStart,
-  readAvailabilityDateSet,
 } from "@/lib/demo-admin-scheduling";
 
 type Step = 1 | 2;
+type AdminAvailabilityHost = { adminUserId: string; adminLabel: string };
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -62,12 +60,32 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedSlotKeys, setSelectedSlotKeys] = useState<string[]>([]);
+  const [selectedHostBySlot, setSelectedHostBySlot] = useState<Record<string, string>>({});
+  const [slotHosts, setSlotHosts] = useState<Record<string, AdminAvailabilityHost[]>>({});
+  const [loadingAvailability, setLoadingAvailability] = useState(true);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
 
   const bump = useCallback(() => setTick((t) => t + 1), []);
+
+  const loadAvailability = useCallback(async () => {
+    setLoadingAvailability(true);
+    try {
+      const res = await fetch("/api/public/admin-availability", { cache: "no-store" });
+      const body = (await res.json()) as { slotHosts?: Record<string, AdminAvailabilityHost[]> };
+      setSlotHosts(res.ok && body.slotHosts ? body.slotHosts : {});
+    } catch {
+      setSlotHosts({});
+    } finally {
+      setLoadingAvailability(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAvailability();
+  }, [loadAvailability, tick]);
 
   useEffect(() => {
     const on = () => bump();
@@ -79,12 +97,17 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
     };
   }, [bump]);
 
-  const availability = useMemo(() => readAvailabilityDateSet(), [tick]);
-  const hasAnyPublished = availability.size > 0;
+  const hasAnyPublished = Object.keys(slotHosts).length > 0;
 
   const selectedDateStr =
     selectedDay != null ? dateStrFromCalendar(calYear, calMonth, selectedDay) : null;
-  const openSlots = selectedDateStr ? getOpenSlotIndicesForDateStr(selectedDateStr) : [];
+  const openSlots = selectedDateStr
+    ? Object.keys(slotHosts)
+        .filter((key) => key.startsWith(`${selectedDateStr}:`) && (slotHosts[key]?.length ?? 0) > 0)
+        .map((key) => Number.parseInt(key.split(":")[1] ?? "", 10))
+        .filter((slot) => Number.isFinite(slot))
+        .sort((a, b) => a - b)
+    : [];
   const selectedWindows = useMemo(
     () =>
       selectedSlotKeys
@@ -97,20 +120,23 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             dateStr,
             slotIndex,
             start: localDateAtSlotStart(dateStr, slotIndex),
+            hosts: slotHosts[key] ?? [],
+            selectedAdminUserId: selectedHostBySlot[key] ?? "",
           };
         })
-        .filter((window): window is { key: string; dateStr: string; slotIndex: number; start: Date } => Boolean(window))
+        .filter((window): window is { key: string; dateStr: string; slotIndex: number; start: Date; hosts: AdminAvailabilityHost[]; selectedAdminUserId: string } => Boolean(window))
         .sort((a, b) => a.start.getTime() - b.start.getTime()),
-    [selectedSlotKeys],
+    [selectedHostBySlot, selectedSlotKeys, slotHosts],
   );
 
-  const canContinue = selectedWindows.length > 0;
+  const canContinue = selectedWindows.length > 0 && selectedWindows.every((window) => window.hosts.length <= 1 || window.selectedAdminUserId);
   const daysInMonth = getDaysInMonth(calYear, calMonth);
   const firstDay = getFirstDayOfMonth(calYear, calMonth);
 
   const resetPickers = () => {
     setSelectedDay(null);
     setSelectedSlotKeys([]);
+    setSelectedHostBySlot({});
   };
 
   const submit = () => {
@@ -126,9 +152,14 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
     }
     const requestedWindows = selectedWindows.map((window) => {
       const end = new Date(window.start.getTime() + 30 * 60 * 1000);
+      const host =
+        window.hosts.find((candidate) => candidate.adminUserId === window.selectedAdminUserId) ??
+        window.hosts[0];
       return {
         start: window.start.toISOString(),
         end: end.toISOString(),
+        adminUserId: host?.adminUserId,
+        adminLabel: host?.adminLabel,
       };
     });
     appendPartnerInquiry({
@@ -139,6 +170,8 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
       requestedWindows,
       proposedStart: requestedWindows[0]!.start,
       proposedEnd: requestedWindows[0]!.end,
+      adminUserId: requestedWindows[0]?.adminUserId,
+      adminLabel: requestedWindows[0]?.adminLabel,
     });
     showToast("Request sent. Your proposed windows are now in the Axis calendar.");
     setStep(1);
@@ -152,9 +185,21 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
 
   const toggleSlot = (dateStr: string, slotIndex: number) => {
     const key = `${dateStr}:${slotIndex}`;
-    setSelectedSlotKeys((current) =>
-      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
-    );
+    const hosts = slotHosts[key] ?? [];
+    setSelectedSlotKeys((current) => {
+      if (current.includes(key)) {
+        setSelectedHostBySlot((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+        return current.filter((item) => item !== key);
+      }
+      if (hosts.length === 1) {
+        setSelectedHostBySlot((prev) => ({ ...prev, [key]: hosts[0]!.adminUserId }));
+      }
+      return [...current, key];
+    });
   };
 
   const steps = [
@@ -196,9 +241,15 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
           <div className="space-y-6">
             {!hasAnyPublished ? (
               <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
-                No meeting windows are published yet. An Axis admin can set availability under{" "}
-                <span className="font-semibold">Admin portal → Events → Availability</span>. You can still use the
-                message tab to reach us.
+                {loadingAvailability ? (
+                  "Loading Axis admin meeting windows..."
+                ) : (
+                  <>
+                    No meeting windows are published yet. An Axis admin can set availability under{" "}
+                    <span className="font-semibold">Admin portal - Events - Availability</span>. You can still use the
+                    message tab to reach us.
+                  </>
+                )}
               </p>
             ) : (
               <p className="text-sm text-slate-600">
@@ -254,7 +305,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                 {Array.from({ length: daysInMonth }).map((_, i) => {
                   const day = i + 1;
                   const ds = dateStrFromCalendar(calYear, calMonth, day);
-                  const open = dateHasOpenSlots(ds);
+                  const open = Object.keys(slotHosts).some((key) => key.startsWith(`${ds}:`) && (slotHosts[key]?.length ?? 0) > 0);
                   const isPast = isCalendarDayBeforeToday(calYear, calMonth, day);
                   const isSelected = selectedDay === day;
                   return (
@@ -328,21 +379,46 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {selectedWindows.map((window) => (
-                    <button
-                      key={window.key}
-                      type="button"
-                      onClick={() => toggleSlot(window.dateStr, window.slotIndex)}
-                      className="rounded-full border border-primary/20 bg-primary/[0.08] px-3 py-1.5 text-xs font-semibold text-primary"
-                    >
-                      {window.start.toLocaleDateString(undefined, {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                      })}{" "}
-                      · {formatAvailabilitySlotLabel(window.slotIndex)} ×
-                    </button>
+                    <div key={window.key} className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleSlot(window.dateStr, window.slotIndex)}
+                        className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-primary shadow-sm"
+                      >
+                        {window.start.toLocaleDateString(undefined, {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}{" "}
+                        · {formatAvailabilitySlotLabel(window.slotIndex)} ×
+                      </button>
+                      {window.hosts.length > 1 ? (
+                        <label className="mt-3 block text-xs font-semibold text-slate-600">
+                          Choose Axis admin
+                          <select
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                            value={window.selectedAdminUserId}
+                            onChange={(e) => setSelectedHostBySlot((prev) => ({ ...prev, [window.key]: e.target.value }))}
+                          >
+                            <option value="">Select admin</option>
+                            {window.hosts.map((host) => (
+                              <option key={host.adminUserId} value={host.adminUserId}>
+                                {host.adminLabel}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : window.hosts[0] ? (
+                        <p className="mt-2 text-xs font-medium text-slate-600">With {window.hosts[0].adminLabel}</p>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
+                {!canContinue ? (
+                  <p className="mt-3 text-xs font-semibold text-amber-700">
+                    Pick an Axis admin for each selected time with multiple admins available.
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -361,6 +437,9 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                         year: "numeric",
                       })}{" "}
                       · {formatAvailabilitySlotLabel(window.slotIndex)}–{formatAvailabilitySlotLabel(window.slotIndex + 1)}
+                      {window.hosts.length ? (
+                        <> · {window.hosts.find((host) => host.adminUserId === window.selectedAdminUserId)?.adminLabel ?? window.hosts[0]!.adminLabel}</>
+                      ) : null}
                     </p>
                   ))}
                 </div>

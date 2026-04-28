@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { MouseEvent } from "react";
 import { useMemo, useState } from "react";
 import { AdminPortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
@@ -12,6 +13,13 @@ function hrefForSection(def: PortalDefinition, section: string) {
   if (!meta) return def.basePath;
   if (!meta.tabs.length) return `${def.basePath}/${section}`;
   return `${def.basePath}/${section}/${meta.tabs[0].id}`;
+}
+
+function hardNavigate(e: MouseEvent<HTMLAnchorElement>, href: string, after?: () => void) {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  after?.();
+  window.location.assign(href);
 }
 
 export function PortalSidebar({ definition }: { definition: PortalDefinition }) {
@@ -51,6 +59,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               <a
                 key={s.section}
                 href={href}
+                onClick={(e) => hardNavigate(e, href)}
                 className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
                   active ? "bg-white text-slate-950 shadow-[0_10px_26px_-22px_rgba(15,23,42,0.35)]" : "text-slate-600 hover:bg-white hover:text-slate-950"
                 }`}
@@ -111,7 +120,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                   <a
                     key={s.section}
                     href={href}
-                    onClick={() => setOpen(false)}
+                    onClick={(e) => hardNavigate(e, href, () => setOpen(false))}
                     className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
                       active ? "bg-white text-slate-950 shadow-[0_10px_26px_-22px_rgba(15,23,42,0.35)]" : "text-slate-600 hover:bg-white hover:text-slate-950"
                     }`}

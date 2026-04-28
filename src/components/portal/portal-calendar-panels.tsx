@@ -159,6 +159,7 @@ export function PortalCalendarPanels({
   otherProperties,
   onCopyWeekToHouses,
   scheduledTourFilter,
+  scheduleOwnerLabel,
 }: {
   storageKey: string | null;
   calendarRefreshSignal?: number;
@@ -170,6 +171,7 @@ export function PortalCalendarPanels({
   otherProperties?: { id: string; name: string }[];
   onCopyWeekToHouses?: (propertyIds: string[], weekDateStrs: string[]) => void;
   scheduledTourFilter?: { managerUserId: string | null; propertyId: string | null };
+  scheduleOwnerLabel?: string | null;
 }) {
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
@@ -326,10 +328,10 @@ export function PortalCalendarPanels({
   const writeAvailability = useCallback(
     (next: Set<string>) => {
       if (!storageKey) return;
-      writeAvailabilityDateSetForStorageKey(next, storageKey);
+      writeAvailabilityDateSetForStorageKey(next, storageKey, { adminLabel: scheduleOwnerLabel });
       setActiveSlots(next);
     },
-    [storageKey],
+    [scheduleOwnerLabel, storageKey],
   );
 
   const openSlotDetails = useCallback(

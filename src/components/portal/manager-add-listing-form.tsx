@@ -45,6 +45,7 @@ import {
   SHARED_SPACE_AMENITY_PRESETS,
   furnishingSelectState,
   mergeToggleLine,
+  sanitizeRoomAmenityText,
   splitLineList,
 } from "@/data/manager-listing-presets";
 import { loadListingPresetConfig, type ListingPresetConfig } from "@/lib/site-content";
@@ -60,20 +61,6 @@ const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
   availability: ROOM_AVAILABILITY_OPTIONS,
   furnishing: ROOM_FURNISHING_OPTIONS,
 };
-
-/** Lines in `fullText` that are not preset labels (free-form additions). */
-function extraLinesOutsidePresetSet(fullText: string, presetSet: Set<string>): string {
-  return splitLineList(fullText)
-    .filter((l) => !presetSet.has(l))
-    .join("\n");
-}
-
-/** Replace non-preset lines while keeping preset lines exactly as they appear in `fullText`. */
-function setExtraLinesPreservingPresets(fullText: string, extraRaw: string, presetSet: Set<string>): string {
-  const presetLines = splitLineList(fullText).filter((l) => presetSet.has(l));
-  const extraLines = splitLineList(extraRaw);
-  return [...new Set([...presetLines, ...extraLines])].join("\n");
-}
 
 function FormSection({ id, title, description, children }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode }) {
   return (
@@ -269,10 +256,6 @@ export function ManagerAddListingForm({
   const isEditMode = Boolean(editPendingId ?? editListingId);
   const lastStepIndex = LISTING_STEP_COUNT - 1;
   const isFinalStep = stepIndex === lastStepIndex;
-  const HOUSE_WIDE_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.houseWide.map((p) => p.label)), [listingPresets.houseWide]);
-  const SHARED_SPACE_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.sharedSpace.map((p) => p.label)), [listingPresets.sharedSpace]);
-  const BATHROOM_EXTRA_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.bathroom.map((p) => p.label)), [listingPresets.bathroom]);
-  const ROOM_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.room.map((p) => p.label)), [listingPresets.room]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
@@ -652,8 +635,15 @@ export function ManagerAddListingForm({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const roomsOk = sub.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
-    if (!sub.buildingName.trim() || !sub.address.trim() || !sub.zip.trim() || !sub.neighborhood.trim()) {
+    const submission: ManagerListingSubmissionV1 = {
+      ...sub,
+      rooms: sub.rooms.map((room) => ({
+        ...room,
+        roomAmenitiesText: sanitizeRoomAmenityText(room.roomAmenitiesText),
+      })),
+    };
+    const roomsOk = submission.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
+    if (!submission.buildingName.trim() || !submission.address.trim() || !submission.zip.trim() || !submission.neighborhood.trim()) {
       showToast("Fill in building name, address, ZIP, and neighborhood.");
       return;
     }
@@ -661,11 +651,11 @@ export function ManagerAddListingForm({
       showToast("Add at least one room with a name and monthly rent.");
       return;
     }
-    if (sub.bathrooms.length > 0 && sub.bathrooms.every((b) => !b.name.trim())) {
+    if (submission.bathrooms.length > 0 && submission.bathrooms.every((b) => !b.name.trim())) {
       showToast("Name each bathroom or remove empty bathroom rows.");
       return;
     }
-    if (sub.sharedSpaces.some((space) => !space.name.trim())) {
+    if (submission.sharedSpaces.some((space) => !space.name.trim())) {
       showToast("Name each shared space or remove empty shared space rows.");
       return;
     }
@@ -688,7 +678,7 @@ export function ManagerAddListingForm({
         return;
       }
       if (editPendingId) {
-        const ok = await updatePendingManagerPropertyOnServer(editPendingId, sub, userId);
+        const ok = await updatePendingManagerPropertyOnServer(editPendingId, submission, userId);
         if (!ok) {
           showToast("Could not save changes.");
           return;
@@ -697,7 +687,7 @@ export function ManagerAddListingForm({
         return;
       }
       if (editListingId) {
-        const ok = await updateExtraListingFromSubmissionOnServer(editListingId, userId, sub);
+        const ok = await updateExtraListingFromSubmissionOnServer(editListingId, userId, submission);
         if (!ok) {
           showToast("Could not save changes.");
           return;
@@ -706,7 +696,7 @@ export function ManagerAddListingForm({
         onSubmitted();
         return;
       }
-      const id = await submitManagerPendingPropertyToServer(sub, userId);
+      const id = await submitManagerPendingPropertyToServer(submission, userId);
       if (!id) {
         showToast("Could not submit listing.");
         return;
@@ -718,14 +708,14 @@ export function ManagerAddListingForm({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-hidden bg-slate-900/50 px-2 py-3 sm:px-4 sm:py-5 lg:px-6 lg:py-6">
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-slate-900/50 px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4">
       <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Close" />
       <form
         id="manager-add-listing-form"
         onSubmit={handleSubmit}
-        className="relative z-10 flex h-[calc(100dvh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:h-[calc(100dvh-2.5rem)] lg:h-[calc(100dvh-3rem)]"
+        className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
       >
-        <div className="shrink-0 border-b border-slate-100 p-4 pb-3 sm:p-5 sm:pb-4">
+        <div className="shrink-0 border-b border-slate-100 p-3 pb-2 sm:p-4 sm:pb-3">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "Create listing"}</h2>
@@ -744,7 +734,7 @@ export function ManagerAddListingForm({
               ×
             </button>
           </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
             {LISTING_FORM_STEPS.map((step, i) => (
               <button
                 key={step.id}
@@ -775,7 +765,7 @@ export function ManagerAddListingForm({
           </div>
         </div>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-24 sm:px-6">
           {/* ── Step 0: Building & listing ── */}
           {stepIndex === 0 ? (
           <FormSection
@@ -1079,13 +1069,7 @@ export function ManagerAddListingForm({
                         <select
                           className={selectInputCls}
                           value={furnishState.select}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (v === "__custom__") {
-                              const c = furnishState.custom;
-                              setRoom(i, { furnishing: c.trim().length > 0 ? c : " " });
-                            } else setRoom(i, { furnishing: v });
-                          }}
+                          onChange={(e) => setRoom(i, { furnishing: e.target.value })}
                         >
                           {listingPresets.furnishing.map((o) => (
                             <option key={o.value || "blank"} value={o.value}>
@@ -1094,19 +1078,8 @@ export function ManagerAddListingForm({
                           ))}
                         </select>
                       </GridField>
-                      {furnishState.select === "__custom__" ? (
-                        <div className="sm:col-span-2">
-                          <FieldLabel>Custom furnishing details</FieldLabel>
-                          <Textarea
-                            className="min-h-[56px]"
-                            value={room.furnishing}
-                            onChange={(e) => setRoom(i, { furnishing: e.target.value })}
-                            placeholder="e.g. Queen bed, desk, dresser — tenant brings linens"
-                          />
-                        </div>
-                      ) : null}
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Check common items; add extras below.">Room amenities</FieldLabel>
+                        <FieldLabel hint="Room features only. Furniture and bathroom setup are selected above / next step.">Room amenities</FieldLabel>
                         <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
                           {listingPresets.room.map((p) => {
                             const on = splitLineList(room.roomAmenitiesText).includes(p.label);
@@ -1127,16 +1100,6 @@ export function ManagerAddListingForm({
                             );
                           })}
                         </div>
-                        <Textarea
-                          className="mt-2 min-h-[48px]"
-                          value={extraLinesOutsidePresetSet(room.roomAmenitiesText, ROOM_AMENITY_LABEL_SET)}
-                          onChange={(e) =>
-                            setRoom(i, {
-                              roomAmenitiesText: setExtraLinesPreservingPresets(room.roomAmenitiesText, e.target.value, ROOM_AMENITY_LABEL_SET),
-                            })
-                          }
-                          placeholder="One per line — e.g. Window AC unit, Murphy bed…"
-                        />
                       </div>
                       <div className="sm:col-span-2">
                         <FieldLabel hint="Notes for listing card (closet size, light, layout).">Room details</FieldLabel>
@@ -1388,25 +1351,6 @@ export function ManagerAddListingForm({
                           })}
                         </div>
                       </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="One per line — merged with the checkboxes above on the public listing.">
-                          Additional bathroom details
-                        </FieldLabel>
-                        <Textarea
-                          className="mt-2 min-h-[56px]"
-                          value={extraLinesOutsidePresetSet(b.amenitiesText ?? "", BATHROOM_EXTRA_AMENITY_LABEL_SET)}
-                          onChange={(e) =>
-                            setBath(i, {
-                              amenitiesText: setExtraLinesPreservingPresets(
-                                b.amenitiesText ?? "",
-                                e.target.value,
-                                BATHROOM_EXTRA_AMENITY_LABEL_SET,
-                              ),
-                            })
-                          }
-                          placeholder="e.g. Bluetooth speaker mirror, towel warmer…"
-                        />
-                      </div>
                     </div>
                   </div>
                 ))}
@@ -1550,25 +1494,6 @@ export function ManagerAddListingForm({
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel hint="One per line — merged with the checkboxes above on the public listing.">
-                            Additional space amenities
-                          </FieldLabel>
-                          <Textarea
-                            className="mt-2 min-h-[56px]"
-                            value={extraLinesOutsidePresetSet(sp.amenitiesText ?? "", SHARED_SPACE_AMENITY_LABEL_SET)}
-                            onChange={(e) =>
-                              setSharedSpace(i, {
-                                amenitiesText: setExtraLinesPreservingPresets(
-                                  sp.amenitiesText ?? "",
-                                  e.target.value,
-                                  SHARED_SPACE_AMENITY_LABEL_SET,
-                                ),
-                              })
-                            }
-                            placeholder="e.g. Coffee machine, garbage disposal, ice maker…"
-                          />
-                        </div>
-                        <div className="sm:col-span-2">
                           <FieldLabel hint="Rooms that may use this space (same room can be checked on multiple spaces).">Room access</FieldLabel>
                           <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 lg:grid-cols-3">
                             {sub.rooms.map((room) => (
@@ -1645,7 +1570,7 @@ export function ManagerAddListingForm({
                 <span className="text-sm font-medium text-slate-800">Pet-friendly (subject to approval)</span>
               </label>
               <div>
-                <FieldLabel hint="Tap to add common amenities; anything else goes in the box below.">Common amenities</FieldLabel>
+                <FieldLabel hint="Tap all that apply.">Common amenities</FieldLabel>
                 <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
                   {listingPresets.houseWide.map((p) => {
                     const on = splitLineList(sub.amenitiesText).includes(p.label);
@@ -1668,20 +1593,6 @@ export function ManagerAddListingForm({
                   })}
                 </div>
               </div>
-              <div>
-                <FieldLabel hint="One per line — merged with the checkboxes above on the public listing.">Additional amenities</FieldLabel>
-                <Textarea
-                  className="mt-2 min-h-[100px]"
-                  value={extraLinesOutsidePresetSet(sub.amenitiesText, HOUSE_WIDE_AMENITY_LABEL_SET)}
-                  onChange={(e) =>
-                    setSub((s) => ({
-                      ...s,
-                      amenitiesText: setExtraLinesPreservingPresets(s.amenitiesText, e.target.value, HOUSE_WIDE_AMENITY_LABEL_SET),
-                    }))
-                  }
-                  placeholder="Anything not in the list above — community room, sauna, piano, etc."
-                />
-              </div>
               <div className="rounded-2xl border border-primary/15 bg-primary/[0.04] p-4 sm:p-5">
                 <p className="text-sm font-bold text-slate-950">{isEditMode ? "Ready to submit changes?" : "Ready to submit this listing?"}</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
@@ -1700,7 +1611,7 @@ export function ManagerAddListingForm({
           ) : null}
         </div>
 
-        <div className="sticky bottom-0 z-20 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-10px_28px_-12px_rgba(15,23,42,0.14)] sm:px-6">
+        <div className="z-20 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-10px_28px_-12px_rgba(15,23,42,0.14)] sm:px-6">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>

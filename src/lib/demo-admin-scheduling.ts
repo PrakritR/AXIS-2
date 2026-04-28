@@ -59,6 +59,14 @@ function scheduleRecordScope(key: string): { managerUserId: string | null; prope
   if (key === AVAIL_V2_KEY) {
     return { managerUserId: null, propertyId: null, recordType: "admin_availability" };
   }
+  const adminScoped = key.match(/^axis_admin_avail_slots_v2_admin_(.+)$/);
+  if (adminScoped) {
+    return {
+      managerUserId: adminScoped[1] ?? null,
+      propertyId: null,
+      recordType: "admin_availability",
+    };
+  }
   const propertyScoped = key.match(/^axis_mgr_avail_slots_v2_(.+)_prop_(.+)$/);
   if (propertyScoped) {
     return {
@@ -94,6 +102,7 @@ function writeJson(key: string, value: unknown) {
         recordType: scope.recordType,
         managerUserId: scope.managerUserId,
         propertyId: scope.propertyId,
+        adminLabel: typeof memoryStore.get(`${key}:adminLabel`) === "string" ? memoryStore.get(`${key}:adminLabel`) : undefined,
         payload: value,
       },
     }),
@@ -203,6 +212,11 @@ export function managerPropertyAvailabilityStorageKey(userId: string, propertyId
   return `axis_mgr_avail_slots_v2_${userId}_prop_${safe}`;
 }
 
+/** Per-admin partner meeting availability. Legacy ADMIN_AVAILABILITY_STORAGE_KEY is still read as a shared fallback. */
+export function adminAvailabilityStorageKey(userId: string): string {
+  return `axis_admin_avail_slots_v2_admin_${userId}`;
+}
+
 /** Read/write availability for an arbitrary storage key (admin v2 or manager-scoped). */
 export function readAvailabilityDateSetForStorageKey(storageKey: string): Set<string> {
   if (storageKey === AVAIL_V2_KEY) return readAvailabilityDateSet();
@@ -210,10 +224,13 @@ export function readAvailabilityDateSetForStorageKey(storageKey: string): Set<st
   return Array.isArray(arr) ? new Set(arr) : new Set();
 }
 
-export function writeAvailabilityDateSetForStorageKey(next: Set<string>, storageKey: string) {
+export function writeAvailabilityDateSetForStorageKey(next: Set<string>, storageKey: string, metadata?: { adminLabel?: string | null }) {
   if (storageKey === AVAIL_V2_KEY) {
     writeAvailabilityDateSet(next);
     return;
+  }
+  if (metadata?.adminLabel?.trim()) {
+    memoryStore.set(`${storageKey}:adminLabel`, metadata.adminLabel.trim());
   }
   writeJson(storageKey, [...next]);
 }
@@ -294,6 +311,8 @@ export type PartnerInquiryStatus = "pending" | "accepted" | "declined";
 export type PartnerInquiryWindow = {
   start: string;
   end: string;
+  adminUserId?: string;
+  adminLabel?: string;
 };
 
 export type PartnerInquiry = {
@@ -307,6 +326,8 @@ export type PartnerInquiry = {
   propertyId?: string;
   propertyTitle?: string;
   roomLabel?: string;
+  adminUserId?: string;
+  adminLabel?: string;
   requestedWindows?: PartnerInquiryWindow[];
   proposedStart: string;
   proposedEnd: string;
@@ -325,6 +346,8 @@ export type PlannedEvent = {
   propertyId?: string;
   propertyTitle?: string;
   roomLabel?: string;
+  adminUserId?: string;
+  adminLabel?: string;
   attendeeName?: string;
   attendeeEmail?: string;
   attendeePhone?: string;
@@ -352,6 +375,8 @@ export function appendPartnerInquiry(payload: Omit<PartnerInquiry, "id" | "statu
     requestedWindows: normalizedWindows,
     proposedStart: normalizedWindows[0]?.start ?? payload.proposedStart,
     proposedEnd: normalizedWindows[0]?.end ?? payload.proposedEnd,
+    adminUserId: payload.adminUserId ?? normalizedWindows[0]?.adminUserId,
+    adminLabel: payload.adminLabel ?? normalizedWindows[0]?.adminLabel,
     id: crypto.randomUUID(),
     status: "pending",
     createdAt: new Date().toISOString(),
@@ -414,6 +439,7 @@ export function acceptPartnerInquiry(id: string, opts?: { instructions?: string;
   const instructions = opts?.instructions?.trim() || undefined;
   const start = opts?.start ?? row.proposedStart;
   const end = opts?.end ?? row.proposedEnd;
+  const selectedWindow = getPartnerInquiryWindows(row).find((window) => window.start === start && window.end === end);
   updatePartnerInquiry(id, { status: "accepted" });
   appendPlannedEvent({
     id: crypto.randomUUID(),
@@ -426,6 +452,8 @@ export function acceptPartnerInquiry(id: string, opts?: { instructions?: string;
     propertyId: row.propertyId,
     propertyTitle: row.propertyTitle,
     roomLabel: row.roomLabel,
+    adminUserId: selectedWindow?.adminUserId ?? row.adminUserId,
+    adminLabel: selectedWindow?.adminLabel ?? row.adminLabel,
     attendeeName: row.name,
     attendeeEmail: row.email,
     attendeePhone: row.phone,
@@ -479,7 +507,7 @@ export function formatRangeLabel(isoStart: string, isoEnd: string) {
   }
 }
 
-function normalizePartnerInquiryWindows(row: Pick<PartnerInquiry, "requestedWindows" | "proposedStart" | "proposedEnd">) {
+function normalizePartnerInquiryWindows(row: Pick<PartnerInquiry, "requestedWindows" | "proposedStart" | "proposedEnd" | "adminUserId" | "adminLabel">): PartnerInquiryWindow[] {
   const requested = Array.isArray(row.requestedWindows)
     ? row.requestedWindows
         .filter(
@@ -489,7 +517,12 @@ function normalizePartnerInquiryWindows(row: Pick<PartnerInquiry, "requestedWind
             !Number.isNaN(new Date(window.start).getTime()) &&
             !Number.isNaN(new Date(window.end).getTime()),
         )
-        .map((window) => ({ start: window.start, end: window.end }))
+        .map((window) => ({
+          start: window.start,
+          end: window.end,
+          adminUserId: typeof window.adminUserId === "string" ? window.adminUserId : undefined,
+          adminLabel: typeof window.adminLabel === "string" ? window.adminLabel : undefined,
+        }))
     : [];
 
   if (requested.length > 0) {
@@ -502,7 +535,12 @@ function normalizePartnerInquiryWindows(row: Pick<PartnerInquiry, "requestedWind
     !Number.isNaN(new Date(row.proposedStart).getTime()) &&
     !Number.isNaN(new Date(row.proposedEnd).getTime())
   ) {
-    return [{ start: row.proposedStart, end: row.proposedEnd }];
+    return [{
+      start: row.proposedStart,
+      end: row.proposedEnd,
+      adminUserId: typeof row.adminUserId === "string" ? row.adminUserId : undefined,
+      adminLabel: typeof row.adminLabel === "string" ? row.adminLabel : undefined,
+    }];
   }
 
   return [];

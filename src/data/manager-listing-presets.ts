@@ -49,6 +49,8 @@ export const BATHROOM_EXTRA_AMENITY_PRESETS = [
   { id: "storage", label: "Built-in storage / linen" },
 ] as const;
 
+export const DISALLOWED_BATHROOM_AMENITY_LABELS = new Set(["Shower", "Toilet", "Bathtub"]);
+
 /** @deprecated Use HOUSE_WIDE_AMENITY_PRESETS — kept as alias for older imports/tests. */
 export const LISTING_AMENITY_PRESETS = [
   ...HOUSE_WIDE_AMENITY_PRESETS,
@@ -73,6 +75,14 @@ export const ROOM_AMENITY_PRESETS = [
   { id: "keypad", label: "Keypad lock" },
 ] as const;
 
+export const DISALLOWED_ROOM_AMENITY_LABELS = new Set(["Bed", "Desk", "Private bathroom"]);
+
+export function sanitizeRoomAmenityText(text: string): string {
+  return splitLineList(text)
+    .filter((line) => !DISALLOWED_ROOM_AMENITY_LABELS.has(line))
+    .join("\n");
+}
+
 export const ROOM_AVAILABILITY_OPTIONS = [
   "Available now",
   "Available soon",
@@ -81,16 +91,18 @@ export const ROOM_AVAILABILITY_OPTIONS = [
 ] as const;
 
 export const ROOM_FURNISHING_OPTIONS = [
-  { value: "", label: "Select…" },
+  { value: "", label: "Select" },
   { value: "Unfurnished", label: "Unfurnished" },
+  { value: "Bed only", label: "Bed only" },
+  { value: "Bed and desk", label: "Bed and desk" },
+  { value: "Bed, desk, and chair", label: "Bed, desk, and chair" },
   { value: "Partially furnished", label: "Partially furnished" },
   { value: "Fully furnished", label: "Fully furnished" },
-  { value: "__custom__", label: "Custom (describe below)" },
 ] as const;
 
-/** Known single-value furnishing presets (not "" or __custom__). */
+/** Known single-value furnishing presets (not ""). */
 const FURNISHING_KNOWN: Set<string> = new Set(
-  ROOM_FURNISHING_OPTIONS.map((o) => o.value).filter((v) => Boolean(v) && v !== "__custom__") as string[],
+  ROOM_FURNISHING_OPTIONS.map((o) => o.value).filter((v) => Boolean(v)) as string[],
 );
 
 export function splitLineList(text: string): string[] {
@@ -115,7 +127,5 @@ export function furnishingSelectState(furnishing: string): { select: FurnishingS
   if (raw.length === 0) return { select: "", custom: "" };
   const t = raw.trim();
   if (FURNISHING_KNOWN.has(t)) return { select: t as FurnishingSelectValue, custom: "" };
-  /** Whitespace-only keeps "custom" selected (preset → Custom with no typed text yet uses a space draft). */
-  if (t.length === 0) return { select: "__custom__", custom: "" };
-  return { select: "__custom__", custom: t };
+  return { select: "", custom: "" };
 }
