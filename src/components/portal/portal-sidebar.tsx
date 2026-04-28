@@ -48,7 +48,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
             const href = hrefForSection(definition, s.section);
             const active = activeSection === s.section;
             return (
-              <Link
+              <a
                 key={s.section}
                 href={href}
                 className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
@@ -64,7 +64,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                 <span className={`text-xs tabular-nums ${active ? "text-slate-400" : "text-slate-400"}`} aria-hidden>
                   →
                 </span>
-              </Link>
+              </a>
             );
           })}
         </div>
@@ -106,10 +106,11 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
             <div className="space-y-1">
               {definition.sections.map((s) => {
                 const active = activeSection === s.section;
+                const href = hrefForSection(definition, s.section);
                 return (
-                  <Link
+                  <a
                     key={s.section}
-                    href={hrefForSection(definition, s.section)}
+                    href={href}
                     onClick={() => setOpen(false)}
                     className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
                       active ? "bg-white text-slate-950 shadow-[0_10px_26px_-22px_rgba(15,23,42,0.35)]" : "text-slate-600 hover:bg-white hover:text-slate-950"
@@ -121,7 +122,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                       </span>
                     ) : null}
                     <span className="min-w-0 flex-1">{s.label}</span>
-                  </Link>
+                  </a>
                 );
               })}
             </div>
