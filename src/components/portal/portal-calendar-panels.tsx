@@ -477,39 +477,37 @@ export function PortalCalendarPanels({
     return (
       <>
         <Card className="p-4 sm:p-5">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
-                  ←
-                </Button>
-                <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Availability</p>
-                  <p className="truncate text-sm font-semibold text-slate-900">Week of {formatWeekRangeMonSun(weekMonday)}</p>
-                  {tourScopeLabel ? <p className="truncate text-xs font-medium text-primary">{tourScopeLabel}</p> : null}
-                </div>
-                <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next week">
-                  →
-                </Button>
-                <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open this week</div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
+                ←
+              </Button>
+              <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Availability</p>
+                <p className="truncate text-sm font-semibold text-slate-900">Week of {formatWeekRangeMonSun(weekMonday)}</p>
+                {tourScopeLabel ? <p className="truncate text-xs font-medium text-primary">{tourScopeLabel}</p> : null}
               </div>
+              <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next week">
+                →
+              </Button>
             </div>
+            <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open this week</div>
+          </div>
 
-            <div className="flex flex-wrap gap-2 xl:justify-end">
-              {timeWindowControl}
-              <Button type="button" variant="outline" className="rounded-full" onClick={jumpToToday}>
-                Today
-              </Button>
-              <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
-                Copy previous week
-              </Button>
-              <Button type="button" variant="outline" className="rounded-full" onClick={openBlockModal}>
-                Create block
-              </Button>
-              <Button type="button" variant="outline" className="rounded-full" onClick={clearCurrentWeek}>
-                Clear week
-              </Button>
-            </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {timeWindowControl}
+            <Button type="button" variant="outline" className="rounded-full" onClick={jumpToToday}>
+              Today
+            </Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
+              Copy previous week
+            </Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={openBlockModal}>
+              Create block
+            </Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={clearCurrentWeek}>
+              Clear week
+            </Button>
           </div>
 
           <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
