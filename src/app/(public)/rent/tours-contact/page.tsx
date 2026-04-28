@@ -10,8 +10,10 @@ import {
   appendPartnerInquiry,
   dateHasAvailability,
   formatAvailabilitySlotLabel,
+  getManagersForProperty,
   localDateAtSlotStart,
   managerPropertyAvailabilityStorageKey,
+  type PropertyManagerEntry,
   readAvailabilityDateSetForStorageKey,
   toLocalDateStr,
 } from "@/lib/demo-admin-scheduling";
@@ -164,6 +166,18 @@ export default function ToursContactPage() {
 /* ────────────────────────────────────────────────────────────
    TOUR FLOW
 ──────────────────────────────────────────────────────────── */
+function formatManagerLabel(entry: PropertyManagerEntry): string {
+  const raw = entry.label;
+  if (raw.includes("@")) {
+    const name = raw.split("@")[0] ?? raw;
+    return name
+      .replace(/[._-]+/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim();
+  }
+  return raw;
+}
+
 function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuccess: () => void }) {
   const { showToast } = useAppUi();
   const [step, setStep] = useState<TourStep>(1);
@@ -181,6 +195,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
 
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
+  const [selectedManagerUserId, setSelectedManagerUserId] = useState<string | null>(null);
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const buildings = useMemo(() => groupByBuilding(properties), [properties]);
@@ -195,16 +210,76 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
     };
   }, []);
 
-  const selectedAvailability = useMemo(() => {
+  // All managers offering tours for this property (registered + primary fallback).
+  const managersForProperty = useMemo(() => {
     void tick;
-    if (!selectedProperty?.managerUserId?.trim()) return new Set<string>();
-    return readAvailabilityDateSetForStorageKey(
-      managerPropertyAvailabilityStorageKey(selectedProperty.managerUserId, selectedProperty.id),
-    );
+    if (!selectedProperty) return [];
+    const registered = getManagersForProperty(selectedProperty.id);
+    if (selectedProperty.managerUserId?.trim()) {
+      const alreadyIn = registered.some((e) => e.userId === selectedProperty.managerUserId);
+      if (!alreadyIn) {
+        return [{ userId: selectedProperty.managerUserId, label: "Property Manager" }, ...registered];
+      }
+    }
+    return registered;
   }, [selectedProperty, tick]);
 
+  // Union of all managers' availability slots.
+  const selectedAvailability = useMemo(() => {
+    void tick;
+    if (!selectedProperty) return new Set<string>();
+    const combined = new Set<string>();
+    for (const mgr of managersForProperty) {
+      for (const slot of readAvailabilityDateSetForStorageKey(
+        managerPropertyAvailabilityStorageKey(mgr.userId, selectedProperty.id),
+      )) {
+        combined.add(slot);
+      }
+    }
+    return combined;
+  }, [selectedProperty, managersForProperty, tick]);
+
+  // Map from slot key ("YYYY-MM-DD:slotIndex") to managers available at that slot.
+  const slotManagerMap = useMemo(() => {
+    if (!selectedProperty) return new Map<string, PropertyManagerEntry[]>();
+    const map = new Map<string, PropertyManagerEntry[]>();
+    for (const mgr of managersForProperty) {
+      for (const slot of readAvailabilityDateSetForStorageKey(
+        managerPropertyAvailabilityStorageKey(mgr.userId, selectedProperty.id),
+      )) {
+        const existing = map.get(slot) ?? [];
+        map.set(slot, [...existing, mgr]);
+      }
+    }
+    return map;
+  }, [selectedProperty, managersForProperty]);
+
+  // Managers available at the currently selected slot.
+  const managersAtSelectedSlot = useMemo(() => {
+    if (selectedDay == null || selectedSlotIndex == null) return [];
+    const dateStr = toLocalDateStr(new Date(calYear, calMonth, selectedDay, 12, 0, 0, 0));
+    return slotManagerMap.get(`${dateStr}:${selectedSlotIndex}`) ?? [];
+  }, [selectedDay, selectedSlotIndex, calYear, calMonth, slotManagerMap]);
+
+  // Auto-select the manager when only one is available at the chosen slot.
+  useEffect(() => {
+    if (managersAtSelectedSlot.length === 1) {
+      setSelectedManagerUserId(managersAtSelectedSlot[0]!.userId);
+    } else if (managersAtSelectedSlot.length !== 1) {
+      setSelectedManagerUserId(null);
+    }
+  }, [managersAtSelectedSlot]);
+
+  // Clear manager selection when slot is cleared.
+  useEffect(() => {
+    if (selectedDay == null || selectedSlotIndex == null) setSelectedManagerUserId(null);
+  }, [selectedDay, selectedSlotIndex]);
+
   const canContinue1 = selectedProperty !== null && selectedRoomKey !== null;
-  const canContinue2 = selectedDay !== null && selectedSlotIndex !== null;
+  const canContinue2 =
+    selectedDay !== null &&
+    selectedSlotIndex !== null &&
+    (managersAtSelectedSlot.length <= 1 || selectedManagerUserId !== null);
 
   const steps = [
     { n: 1, label: "Property & room" },
@@ -216,10 +291,11 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
     return (
       <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-white p-7 shadow-sm">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Meeting request sent</p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">Axis team has your request</h2>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Tour request sent</p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">Your tour request is in</h2>
           <p className="mt-3 text-sm leading-relaxed text-slate-700">
-            Your meeting request was sent to the Axis team. Check your email for the meeting link and next steps.
+            We sent your tour request to the Axis team. Check your email for tour confirmation, the meeting link if needed,
+            and next steps.
           </p>
           {selectedProperty ? (
             <p className="mt-3 text-sm font-medium text-slate-800">
@@ -246,7 +322,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
             }}
             className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            Request another meeting
+            Request another tour
           </button>
           <Link
             href="/rent/listings"
@@ -355,6 +431,9 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
             }}
             selectedSlotIndex={selectedSlotIndex}
             onSelectSlotIndex={setSelectedSlotIndex}
+            managersAtSelectedSlot={managersAtSelectedSlot}
+            selectedManagerUserId={selectedManagerUserId}
+            onSelectManager={setSelectedManagerUserId}
           />
         )}
         {step === 3 && (
@@ -563,6 +642,7 @@ function Step2({
   availability,
   calMonth, calYear, onPrevMonth, onNextMonth,
   selectedDay, onSelectDay, selectedSlotIndex, onSelectSlotIndex,
+  managersAtSelectedSlot, selectedManagerUserId, onSelectManager,
 }: {
   property: MockProperty | null;
   availability: Set<string>;
@@ -570,6 +650,9 @@ function Step2({
   onPrevMonth: () => void; onNextMonth: () => void;
   selectedDay: number | null; onSelectDay: (d: number) => void;
   selectedSlotIndex: number | null; onSelectSlotIndex: (slotIndex: number) => void;
+  managersAtSelectedSlot: PropertyManagerEntry[];
+  selectedManagerUserId: string | null;
+  onSelectManager: (userId: string) => void;
 }) {
   const daysInMonth = getDaysInMonth(calYear, calMonth);
   const firstDay = getFirstDayOfMonth(calYear, calMonth);
@@ -665,6 +748,42 @@ function Step2({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Host picker — only shown when 2+ managers share the selected slot */}
+      {selectedSlotIndex != null && managersAtSelectedSlot.length > 1 && (
+        <div>
+          <p className="mb-3 text-sm font-semibold text-slate-700">Choose your host</p>
+          <p className="mb-3 text-xs text-slate-500">
+            Multiple hosts are available at this time. Pick who you'd like to meet with.
+          </p>
+          <div className="space-y-2">
+            {managersAtSelectedSlot.map((mgr) => {
+              const isSelected = selectedManagerUserId === mgr.userId;
+              return (
+                <button
+                  key={mgr.userId}
+                  type="button"
+                  onClick={() => onSelectManager(mgr.userId)}
+                  className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                    isSelected
+                      ? "border-primary bg-primary/[0.08] ring-2 ring-primary/20"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <div
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                      isSelected ? "border-primary bg-primary" : "border-slate-300 bg-white"
+                    }`}
+                  >
+                    {isSelected && <span className="text-white"><CheckSmIcon /></span>}
+                  </div>
+                  <span className="font-medium text-slate-900">{formatManagerLabel(mgr)}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

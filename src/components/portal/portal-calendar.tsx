@@ -9,6 +9,7 @@ import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
   managerPropertyAvailabilityStorageKey,
   readAvailabilityDateSetForStorageKey,
+  registerManagerForProperty,
   writeAvailabilityDateSetForStorageKey,
   toLocalDateStr,
   startOfWeekMonday,
@@ -109,6 +110,14 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
       setCalendarPropertyId("");
     }
   }, [portal, calendarPropertyId, managerProperties]);
+
+  // Register this manager as a tour host for the selected property so the public
+  // booking page can discover combined availability across all linked managers.
+  useEffect(() => {
+    if (portal !== "manager" || !userId || !calendarPropertyId) return;
+    const label = email || userId;
+    registerManagerForProperty(userId, calendarPropertyId, label);
+  }, [portal, userId, email, calendarPropertyId]);
 
   const openCopyModal = useCallback(() => {
     setCopySourceId(calendarPropertyId);

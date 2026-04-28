@@ -7,6 +7,37 @@ export const ADMIN_AVAILABILITY_STORAGE_KEY = "axis_admin_avail_slots_v2";
 const AVAIL_V2_KEY = ADMIN_AVAILABILITY_STORAGE_KEY;
 const INQ_KEY = "axis_admin_partner_inquiries_v1";
 const PLANNED_KEY = "axis_admin_planned_events_v1";
+const PROP_MGR_REGISTRY_KEY = "axis_property_mgr_registry_v1";
+
+/** A manager registered as available for tours at a property. */
+export type PropertyManagerEntry = { userId: string; label: string };
+
+type ManagerRegistry = Record<string, PropertyManagerEntry[]>;
+
+function readManagerRegistry(): ManagerRegistry {
+  return readJson<ManagerRegistry>(PROP_MGR_REGISTRY_KEY, {});
+}
+
+/** Register a manager as offering tours for a property (idempotent, updates label). */
+export function registerManagerForProperty(userId: string, propertyId: string, label: string): void {
+  if (!isBrowser() || !userId || !propertyId) return;
+  const registry = readManagerRegistry();
+  const existing = registry[propertyId] ?? [];
+  const idx = existing.findIndex((e) => e.userId === userId);
+  if (idx === -1) {
+    registry[propertyId] = [...existing, { userId, label }];
+  } else if (existing[idx]!.label !== label) {
+    registry[propertyId] = existing.map((e, i) => (i === idx ? { userId, label } : e));
+  } else {
+    return;
+  }
+  writeJson(PROP_MGR_REGISTRY_KEY, registry);
+}
+
+/** All managers registered to offer tours for a property. */
+export function getManagersForProperty(propertyId: string): PropertyManagerEntry[] {
+  return readManagerRegistry()[propertyId] ?? [];
+}
 
 /** Monday = 0 … Sunday = 6 */
 export const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
@@ -263,6 +294,12 @@ export function readPartnerInquiries(): PartnerInquiry[] {
   return Array.isArray(rows) ? rows : [];
 }
 
+function isFutureOrCurrentIsoWindow(iso: string): boolean {
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return false;
+  return when.getTime() >= Date.now() - 30 * 60 * 1000;
+}
+
 export function appendPartnerInquiry(payload: Omit<PartnerInquiry, "id" | "status" | "createdAt">) {
   const rows = readPartnerInquiries();
   const normalizedWindows = normalizePartnerInquiryWindows(payload);
@@ -298,7 +335,7 @@ export function updatePartnerInquiry(id: string, patch: Partial<PartnerInquiry>)
 
 export function readPlannedEvents(): PlannedEvent[] {
   const rows = readJson<PlannedEvent[] | null>(PLANNED_KEY, null);
-  return Array.isArray(rows) ? rows : [];
+  return Array.isArray(rows) ? rows.filter((row) => isFutureOrCurrentIsoWindow(row.end || row.start)) : [];
 }
 
 function appendPlannedEvent(ev: PlannedEvent) {
@@ -316,7 +353,14 @@ export function deletePlannedEvent(id: string): boolean {
 }
 
 export function pendingInquiryCount() {
-  return readPartnerInquiries().filter((r) => r.status === "pending").length;
+  return readPartnerInquiries().filter((r) => {
+    if (r.status !== "pending") return false;
+    const windows = getPartnerInquiryWindows(r);
+    if (windows.length > 0) {
+      return windows.some((window) => isFutureOrCurrentIsoWindow(window.end || window.start));
+    }
+    return isFutureOrCurrentIsoWindow(r.proposedEnd || r.proposedStart);
+  }).length;
 }
 
 export function acceptPartnerInquiry(id: string, opts?: { instructions?: string }): boolean {
