@@ -4,6 +4,7 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 export const runtime = "nodejs";
 
 const INQUIRIES_RECORD_ID = "axis_admin_partner_inquiries_v1";
+const INQUIRY_EVENT_RECORD_TYPE = "partner_inquiry_request";
 
 type PartnerInquiryRow = {
   id?: unknown;
@@ -19,6 +20,22 @@ function inquiryRowsFromRecord(rowData: unknown): Record<string, unknown>[] {
   if (!isObject(rowData)) return [];
   const payload = rowData.payload;
   return Array.isArray(payload) ? payload.filter(isObject) : [];
+}
+
+function requestedWindowsFromRow(row: Record<string, unknown>): { start: string; end: string; adminUserId?: string }[] {
+  const windows = Array.isArray(row.requestedWindows) ? row.requestedWindows : [];
+  const normalized = windows
+    .filter(isObject)
+    .map((window) => ({
+      start: typeof window.start === "string" ? window.start : "",
+      end: typeof window.end === "string" ? window.end : "",
+      adminUserId: typeof window.adminUserId === "string" ? window.adminUserId : undefined,
+    }))
+    .filter((window) => window.start && window.end);
+  if (normalized.length > 0) return normalized;
+  return typeof row.proposedStart === "string" && typeof row.proposedEnd === "string"
+    ? [{ start: row.proposedStart, end: row.proposedEnd, adminUserId: typeof row.adminUserId === "string" ? row.adminUserId : undefined }]
+    : [];
 }
 
 export async function POST(req: Request) {
@@ -55,7 +72,7 @@ export async function POST(req: Request) {
     const existing = inquiryRowsFromRecord(data?.row_data);
     const next = [row, ...existing.filter((item) => item.id !== id)];
 
-    const { error: writeError } = await db.from("portal_schedule_records").upsert(
+    const records: Record<string, unknown>[] = [
       {
         id: INQUIRIES_RECORD_ID,
         manager_user_id: null,
@@ -72,8 +89,32 @@ export async function POST(req: Request) {
         },
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "id" },
-    );
+    ];
+
+    requestedWindowsFromRow(row).forEach((window, index) => {
+      const managerUserId =
+        typeof row.managerUserId === "string" && row.managerUserId.trim()
+          ? row.managerUserId
+          : window.adminUserId;
+      records.push({
+        id: `${INQUIRY_EVENT_RECORD_TYPE}_${id}_${index}`,
+        manager_user_id: managerUserId || null,
+        property_id: propertyId,
+        record_type: INQUIRY_EVENT_RECORD_TYPE,
+        starts_at: window.start,
+        ends_at: window.end,
+        row_data: {
+          id: `${INQUIRY_EVENT_RECORD_TYPE}_${id}_${index}`,
+          recordType: INQUIRY_EVENT_RECORD_TYPE,
+          managerUserId: managerUserId || null,
+          propertyId,
+          payload: row,
+        },
+        updated_at: new Date().toISOString(),
+      });
+    });
+
+    const { error: writeError } = await db.from("portal_schedule_records").upsert(records, { onConflict: "id" });
 
     if (writeError) return NextResponse.json({ error: writeError.message }, { status: 500 });
     return NextResponse.json({ ok: true, row });
