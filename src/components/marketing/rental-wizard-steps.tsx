@@ -94,6 +94,7 @@ export type WizardStepsProps = {
   setRef2Phone: (next: string) => void;
   setSsn: (next: string) => void;
   goToStep: (n: number) => void;
+  editFromReview: (n: number) => void;
 };
 
 function displayOrDash(v: string | null | undefined) {
@@ -108,7 +109,7 @@ function maskSsnReview(ssn: string) {
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, propertyOptions, patch, goToStep, applicationFeeGate } = p;
+  const { step, form, errors, propertyOptions, patch, goToStep, editFromReview, applicationFeeGate } = p;
 
   if (step === 1) {
     return (
@@ -386,8 +387,17 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Input
               id="leaseStart"
               type="date"
+              min="2020-01-01"
+              max="2035-12-31"
               value={form.leaseStart}
-              onChange={(e) => patch({ leaseStart: e.target.value })}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (!raw) { patch({ leaseStart: "" }); return; }
+                const [y, m, d] = raw.split("-");
+                const year = parseInt(y ?? "0", 10);
+                const clamped = year > 2035 ? "2035" : year < 2020 ? "2020" : y!;
+                patch({ leaseStart: `${clamped}-${m}-${d}` });
+              }}
               className={errors.leaseStart ? "border-red-400 ring-2 ring-red-100" : ""}
             />
             <FieldError msg={errors.leaseStart} />
@@ -400,8 +410,17 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <Input
                 id="leaseEnd"
                 type="date"
+                min="2020-01-01"
+                max="2040-12-31"
                 value={form.leaseEnd}
-                onChange={(e) => patch({ leaseEnd: e.target.value })}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (!raw) { patch({ leaseEnd: "" }); return; }
+                  const [y, m, d] = raw.split("-");
+                  const year = parseInt(y ?? "0", 10);
+                  const clamped = year > 2040 ? "2040" : year < 2020 ? "2020" : y!;
+                  patch({ leaseEnd: `${clamped}-${m}-${d}` });
+                }}
                 className={errors.leaseEnd ? "border-red-400 ring-2 ring-red-100" : ""}
               />
               <FieldError msg={errors.leaseEnd} />
@@ -1157,7 +1176,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
       <section className="rounded-2xl border border-slate-100 bg-slate-50/60 p-5">
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{title}</h3>
-          <button type="button" onClick={() => goToStep(stepTarget)} className="shrink-0 text-sm font-semibold text-primary hover:underline">
+          <button type="button" onClick={() => editFromReview(stepTarget)} className="shrink-0 text-sm font-semibold text-primary hover:underline">
             Edit
           </button>
         </div>
