@@ -18,6 +18,14 @@ function getScrollRootFromSubnav(subnavEl: HTMLElement | null): HTMLElement | nu
   return subnavEl?.closest<HTMLElement>(PREVIEW_SCROLL_SELECTOR) ?? null;
 }
 
+function getSectionElement(id: string, mode: "page" | "modal", subnavEl: HTMLElement | null): HTMLElement | null {
+  if (mode === "modal") {
+    const root = getScrollRootFromSubnav(subnavEl);
+    return root?.querySelector<HTMLElement>(`#${CSS.escape(id)}`) ?? null;
+  }
+  return document.getElementById(id);
+}
+
 function getListingScrollOffsetPx(mode: "page" | "modal", subnavEl: HTMLElement | null): number {
   if (mode === "modal") {
     const raw = getComputedStyle(document.documentElement).getPropertyValue("--listing-sticky-stack").trim();
@@ -38,7 +46,7 @@ function getListingScrollOffsetPx(mode: "page" | "modal", subnavEl: HTMLElement 
 }
 
 function scrollToSection(id: string, mode: "page" | "modal", subnavEl: HTMLElement | null) {
-  const el = document.getElementById(id);
+  const el = getSectionElement(id, mode, subnavEl);
   if (!el) return;
 
   if (mode === "modal") {
@@ -78,7 +86,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
       const line = subEl.getBoundingClientRect().bottom + 6;
       let next: (typeof nav)[number]["id"] = nav[0].id;
       for (const item of nav) {
-        const sec = document.getElementById(item.id);
+        const sec = getSectionElement(item.id, mode, subEl);
         if (sec && sec.getBoundingClientRect().top <= line) {
           next = item.id;
         }
@@ -99,7 +107,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
     const line = subEl.getBoundingClientRect().bottom + 6;
     let next: (typeof nav)[number]["id"] = nav[0].id;
     for (const item of nav) {
-      const sec = document.getElementById(item.id);
+      const sec = getSectionElement(item.id, mode, subEl);
       if (sec && sec.getBoundingClientRect().top <= line) {
         next = item.id;
       }

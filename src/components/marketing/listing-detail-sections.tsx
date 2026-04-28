@@ -137,17 +137,20 @@ function Sidebar({
   rich: ListingRichContent;
   className?: string;
 }) {
-  const rent = property.rentLabel.replace(/\s*\/\s*mo.*$/i, "").trim();
+  const primaryPrice = rich.estimatedMonthlyTotalLabel ?? rich.startingRentLabel;
+  const showsEstimatedTotal = Boolean(rich.estimatedMonthlyTotalLabel);
   return (
     <aside
       className={`order-1 space-y-6 lg:order-2 lg:sticky lg:top-[calc(env(safe-area-inset-top,0px)+7.5rem)] lg:self-start ${className}`}
     >
       <Card className="p-6">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-          Starting from
+          {showsEstimatedTotal ? "Estimated monthly from" : "Base rent from"}
         </p>
-        <p className="mt-1 text-4xl font-bold text-primary">{rent}</p>
-        <p className="text-sm text-slate-500">per month</p>
+        <p className="mt-1 text-4xl font-bold text-primary">{primaryPrice}</p>
+        <p className="text-sm text-slate-500">
+          {showsEstimatedTotal ? `Includes rent + utilities estimate. Base rent from ${rich.startingRentLabel}.` : "Before utilities and other fees."}
+        </p>
         <Link
           href="/rent/tours-contact"
           className={`${primaryCtaClass} min-h-[48px]`}
@@ -337,31 +340,36 @@ export function ListingDetailSections({
 
               <section id="bundles" className={sectionScroll}>
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                  <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">
-                    Bundles & leasing
-                  </h2>
-                  <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Grouped packages
-                  </p>
-                  <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
-                    Compare bundles at a glance. Open{" "}
-                    <span className="font-semibold text-slate-800">
-                      Details
-                    </span>{" "}
-                    for scope and pricing notes.
-                  </p>
-                  <div className="mt-4 md:overflow-x-auto">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
+                        Grouped packages
+                      </p>
+                      <h2 className="mt-1 text-xl font-bold tracking-tight text-[#0f172a]">
+                        Bundles & leasing
+                      </h2>
+                      <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
+                        Compare rooms, pricing, utilities, and signing costs without digging through one long row.
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+                      {rich.bundleCards.length} package{rich.bundleCards.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <div className="mt-5">
                     <BundleTableInteractive
                       rows={rich.bundleCards}
                       listingPropertyId={property.id}
                     />
                   </div>
-                  <p className="mt-8 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Lease lengths
-                  </p>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-700">
-                    {formatBoldSegments(rich.bundlesText)}
-                  </p>
+                  <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                      Lease lengths
+                    </p>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                      {formatBoldSegments(rich.bundlesText)}
+                    </p>
+                  </div>
                 </div>
               </section>
 

@@ -437,11 +437,31 @@ function ListingDetailModal({
               <span className="text-2xl font-bold text-slate-900">{state.row.price}</span>
               {state.row.promo ? <AvailabilityPill text={state.row.promo} /> : null}
             </div>
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Rooms & scope</p>
-              <p className="mt-2 text-sm leading-relaxed text-slate-800">{state.row.roomsLine}</p>
+            {state.row.summaryItems?.length ? (
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                {state.row.summaryItems.map((item) => (
+                  <div key={`${item.label}-${item.value}`} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{item.label}</p>
+                    <p className="mt-1.5 text-sm font-semibold leading-snug text-slate-900">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Included rooms</p>
+              {state.row.roomLines?.length ? (
+                <div className="mt-3 grid gap-2">
+                  {state.row.roomLines.map((line) => (
+                    <div key={line} className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2 text-sm leading-relaxed text-slate-800">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm leading-relaxed text-slate-800">{state.row.roomsLine}</p>
+              )}
             </div>
-            <p className="mt-4 text-xs text-slate-500">Demo pricing — confirm availability and final rent with leasing.</p>
+            <p className="mt-4 text-xs text-slate-500">Confirm availability, utilities, and final rent with leasing before applying.</p>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
               <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
@@ -729,48 +749,67 @@ export function LeaseBasicsTableInteractive({ rows, listingPropertyId }: { rows:
   );
 }
 
+function BundleRoomPreview({ row }: { row: BundleCard }) {
+  const roomLines = row.roomLines ?? [];
+  if (roomLines.length === 0) {
+    return <p className="mt-2 text-sm leading-relaxed text-slate-600">{row.roomsLine}</p>;
+  }
+  const preview = roomLines.slice(0, 4);
+  const remaining = roomLines.length - preview.length;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {preview.map((line) => (
+        <span
+          key={line}
+          className="inline-flex max-w-full items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+        >
+          <span className="truncate">{line}</span>
+        </span>
+      ))}
+      {remaining > 0 ? (
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+          +{remaining} more
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function BundleTableInteractive({ rows, listingPropertyId }: { rows: BundleCard[]; listingPropertyId: string }) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
     <>
-      <div className="space-y-2.5 md:hidden">
+      <div className="grid gap-4 md:grid-cols-2">
         {rows.map((c) => (
-          <div key={c.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
-            <p className="text-sm font-semibold text-slate-900">{c.label}</p>
-            <p className="mt-0.5 text-xs text-slate-500">{c.roomsLine}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {c.strikethrough ? <span className="text-xs text-slate-400 line-through">{c.strikethrough}</span> : null}
-              <p className="text-xs font-semibold text-slate-900 sm:text-sm">{c.price}</p>
+          <div
+            key={c.id}
+            className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/80 p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md sm:p-5"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Package</p>
+                <p className="mt-1 text-base font-bold tracking-tight text-slate-900">{c.label}</p>
+              </div>
+              {c.promo ? <AvailabilityPill text={c.promo} /> : null}
             </div>
-            <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "bundle", row: c })} />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-100 bg-white/80 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Price</p>
+                <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                  {c.strikethrough ? <span className="text-xs text-slate-400 line-through">{c.strikethrough}</span> : null}
+                  <span className="text-lg font-bold text-slate-900">{c.price}</span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-white/80 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Rooms</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{c.roomsLine}</p>
+              </div>
+            </div>
+            <BundleRoomPreview row={c} />
+            <DetailsButton className="mt-4 w-full" onClick={() => setModal({ kind: "bundle", row: c })} />
           </div>
         ))}
-      </div>
-      <div className="hidden min-w-0 md:block">
-        <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
-            <span>Bundle</span>
-            <span>Price</span>
-            <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
-          </div>
-          {rows.map((c) => (
-            <div
-              key={c.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
-            >
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{c.label}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{c.roomsLine}</p>
-              </div>
-              <div className="text-xs font-semibold text-slate-900 sm:text-sm">
-                {c.strikethrough ? <span className="mr-1.5 text-slate-400 line-through">{c.strikethrough}</span> : null}
-                <span>{c.price}</span>
-              </div>
-              <DetailsButton onClick={() => setModal({ kind: "bundle", row: c })} />
-            </div>
-          ))}
-        </div>
       </div>
       <ListingDetailModal state={modal} onClose={() => setModal(null)} listingPropertyId={listingPropertyId} />
     </>

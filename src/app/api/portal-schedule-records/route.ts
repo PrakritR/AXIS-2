@@ -5,9 +5,12 @@ export const runtime = "nodejs";
 const route = createJsonRecordRoute({
   table: "portal_schedule_records",
   scope: (query, user) => {
-    const q = query as { eq: (column: string, value: string) => unknown };
+    const q = query as {
+      eq: (column: string, value: string) => unknown;
+      or: (filters: string) => unknown;
+    };
     if (user.role === "admin") return query;
-    return q.eq("manager_user_id", user.id);
+    return q.or(`manager_user_id.eq.${user.id},id.like.axis_mgr_avail_slots_v2_${user.id}%`);
   },
   buildUpsert: (row) => ({
     id: row.id,

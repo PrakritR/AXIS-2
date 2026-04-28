@@ -268,6 +268,7 @@ export function ManagerAddListingForm({
 
   const isEditMode = Boolean(editPendingId ?? editListingId);
   const lastStepIndex = LISTING_STEP_COUNT - 1;
+  const isFinalStep = stepIndex === lastStepIndex;
   const HOUSE_WIDE_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.houseWide.map((p) => p.label)), [listingPresets.houseWide]);
   const SHARED_SPACE_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.sharedSpace.map((p) => p.label)), [listingPresets.sharedSpace]);
   const BATHROOM_EXTRA_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.bathroom.map((p) => p.label)), [listingPresets.bathroom]);
@@ -717,21 +718,21 @@ export function ManagerAddListingForm({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-2 sm:p-4 lg:p-6">
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-hidden bg-slate-900/50 px-2 py-3 sm:px-4 sm:py-5 lg:px-6 lg:py-6">
       <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Close" />
       <form
         id="manager-add-listing-form"
         onSubmit={handleSubmit}
-        className="relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)] lg:max-h-[calc(100dvh-3rem)]"
+        className="relative z-10 flex h-[calc(100dvh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:h-[calc(100dvh-2.5rem)] lg:h-[calc(100dvh-3rem)]"
       >
-        <div className="shrink-0 border-b border-slate-100 p-6 pb-4 sm:p-8 sm:pb-4">
+        <div className="shrink-0 border-b border-slate-100 p-4 pb-3 sm:p-5 sm:pb-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "Create listing"}</h2>
               <p className="mt-1 text-sm text-slate-600">
                 {isEditMode
                   ? "Update any step below. Use Back and Continue to move between categories, then save when you are done — your public listing updates from this data."
-                  : "Work through each step. You can go back to change anything. Most fields are optional until you add rooms and submit at the end."}
+                  : "Work through each step. Nothing is submitted automatically — use the Submit listing button on the final step when everything is ready."}
               </p>
             </div>
             <button
@@ -743,7 +744,7 @@ export function ManagerAddListingForm({
               ×
             </button>
           </div>
-          <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
             {LISTING_FORM_STEPS.map((step, i) => (
               <button
                 key={step.id}
@@ -774,7 +775,7 @@ export function ManagerAddListingForm({
           </div>
         </div>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           {/* ── Step 0: Building & listing ── */}
           {stepIndex === 0 ? (
           <FormSection
@@ -1681,12 +1682,25 @@ export function ManagerAddListingForm({
                   placeholder="Anything not in the list above — community room, sauna, piano, etc."
                 />
               </div>
+              <div className="rounded-2xl border border-primary/15 bg-primary/[0.04] p-4 sm:p-5">
+                <p className="text-sm font-bold text-slate-950">{isEditMode ? "Ready to submit changes?" : "Ready to submit this listing?"}</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  {isEditMode
+                    ? "Review each step, then submit your changes when the listing is ready for review."
+                    : "This form does not auto-save or auto-submit. Click Submit listing below when the listing is complete and ready for admin approval."}
+                </p>
+                <div className="mt-4">
+                  <Button type="submit" form="manager-add-listing-form" className="rounded-full" disabled={busy}>
+                    {busy ? (isEditMode ? "Submitting changes…" : "Submitting listing…") : isEditMode ? "Submit changes" : "Submit listing"}
+                  </Button>
+                </div>
+              </div>
             </div>
           </FormSection>
           ) : null}
         </div>
 
-        <div className="sticky bottom-0 z-20 shrink-0 border-t border-slate-200 bg-white px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-10px_28px_-12px_rgba(15,23,42,0.14)] sm:px-8">
+        <div className="sticky bottom-0 z-20 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-10px_28px_-12px_rgba(15,23,42,0.14)] sm:px-6">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
@@ -1699,13 +1713,13 @@ export function ManagerAddListingForm({
               ) : null}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              {stepIndex < lastStepIndex ? (
+              {!isFinalStep ? (
                 <Button type="button" className="rounded-full" onClick={goNext} disabled={busy}>
-                  Continue
+                  {stepIndex === lastStepIndex - 1 ? "Review & submit" : "Continue"}
                 </Button>
               ) : (
                 <Button type="submit" form="manager-add-listing-form" className="rounded-full" disabled={busy}>
-                  {busy ? (isEditMode ? "Saving…" : "Submitting…") : isEditMode ? "Save listing" : "Submit for approval"}
+                  {busy ? (isEditMode ? "Submitting changes…" : "Submitting listing…") : isEditMode ? "Submit changes" : "Submit listing"}
                 </Button>
               )}
             </div>

@@ -374,7 +374,10 @@ function AdminPropertyInlineDetails({
           </Link>
         ) : null}
       </div>
-      <div className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/90 bg-white">
+      <div
+        data-listing-preview-scroll
+        className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/90 bg-white"
+      >
         <ListingDetailSections property={mock} rich={rich} previewModal />
       </div>
       <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-4 sm:px-5">{footer}</div>

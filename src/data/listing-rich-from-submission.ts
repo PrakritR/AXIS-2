@@ -271,18 +271,52 @@ function bundleScopeLineFromRow(b: ManagerBundleRow, rooms: ManagerRoomSubmissio
   const ids = b.includedRoomIds ?? [];
   if (ids.length > 0) {
     const names = ids.map((id) => rooms.find((r) => r.id === id)?.name?.trim()).filter(Boolean);
-    if (names.length) return names.join(" · ");
+    if (names.length) return names.join(", ");
   }
   return b.roomsLine.trim();
+}
+
+function roomNamesForBundle(b: ManagerBundleRow, rooms: ManagerRoomSubmission[]): string[] {
+  const ids = b.includedRoomIds ?? [];
+  if (ids.length === 0) return [];
+  return ids.map((id) => rooms.find((r) => r.id === id)?.name?.trim()).filter(Boolean) as string[];
 }
 
 function perRoomBundleSummaryLine(r: ManagerRoomSubmission): string {
   const u = r.utilitiesEstimate?.trim();
   const f = r.furnishing?.trim();
-  let s = `${r.name.trim()}: rent $${r.monthlyRent}/mo`;
+  let s = `${r.name.trim()}: $${r.monthlyRent}/mo`;
   if (u) s += ` · utilities ~ ${u}`;
   if (f) s += ` · ${f}`;
   return s;
+}
+
+function bundleSummaryItems(
+  rooms: ManagerRoomSubmission[],
+  sub: ManagerListingSubmissionV1,
+): { label: string; value: string }[] {
+  const rents = rooms.map((r) => r.monthlyRent).filter((n) => n > 0);
+  const utilities = rooms.map((r) => r.utilitiesEstimate?.trim()).filter(Boolean);
+  return [
+    { label: "Rooms", value: String(rooms.length) },
+    rents.length
+      ? { label: "Rent range", value: `$${Math.min(...rents)} - $${Math.max(...rents)}/mo` }
+      : { label: "Rent", value: "Ask manager" },
+    { label: "Utilities", value: utilities.length ? [...new Set(utilities)].join(", ") : utilitiesListingEstimateLabel(sub) },
+    { label: "Signing", value: paymentAtSigningPriceLabel(sub) },
+  ];
+}
+
+function moneyLabel(value: number): string {
+  return Number.isInteger(value) ? `$${value}` : `$${value.toFixed(2)}`;
+}
+
+function monthlyRangeLabel(values: number[], prefix = ""): string {
+  const clean = values.filter((n) => Number.isFinite(n) && n > 0);
+  if (!clean.length) return "—";
+  const lo = Math.min(...clean);
+  const hi = Math.max(...clean);
+  return lo === hi ? `${prefix}${moneyLabel(lo)}/mo` : `${prefix}${moneyLabel(lo)}–${moneyLabel(hi)}/mo`;
 }
 
 function deriveQuickFacts(
@@ -309,13 +343,19 @@ function buildBundleCards(sub: ManagerListingSubmissionV1, rooms: ManagerRoomSub
   if (custom.length > 0) {
     return custom.map((b) => {
       const scope = bundleScopeLineFromRow(b, rooms);
+      const customRoomNames = roomNamesForBundle(b, rooms);
+      const scopedRooms = customRoomNames.length
+        ? rooms.filter((room) => customRoomNames.includes(room.name.trim()))
+        : rooms;
       return {
         id: b.id,
         label: b.label.trim() || "Package",
         price: b.price.trim() || "—",
         strikethrough: b.strikethrough.trim() || undefined,
         promo: b.promo.trim() || undefined,
-        roomsLine: scope || rooms.map(perRoomBundleSummaryLine).join(" | ") || "—",
+        roomsLine: scope || `${scopedRooms.length} room${scopedRooms.length === 1 ? "" : "s"} included`,
+        roomLines: scopedRooms.map(perRoomBundleSummaryLine),
+        summaryItems: bundleSummaryItems(scopedRooms, sub),
       };
     });
   }
@@ -341,7 +381,9 @@ function buildBundleCards(sub: ManagerListingSubmissionV1, rooms: ManagerRoomSub
       id: "bundle-listed-rooms",
       label: "Listed rooms",
       price: `from ${priceSummary}`,
-      roomsLine: rooms.map(perRoomBundleSummaryLine).join(" | "),
+      roomsLine: `${rooms.length} room${rooms.length === 1 ? "" : "s"} available`,
+      roomLines: rooms.map(perRoomBundleSummaryLine),
+      summaryItems: bundleSummaryItems(rooms, sub),
     },
   ];
 }
@@ -594,9 +636,13 @@ export function listingRichFromManagerSubmission(
   const amenities = houseWideAmenityItems(sub.amenitiesText);
 
   const mids = rooms.map((r) => r.monthlyRent).filter((n) => n > 0);
-  const mid = mids.length ? mids.reduce((a, b) => a + b, 0) / mids.length : parseMonthlyRent(property.rentLabel) ?? 875;
-  const low = Math.max(400, Math.floor(mid - 75));
-  const high = Math.ceil(mid + 100);
+  const monthlyTotals = rooms
+    .filter((r) => r.monthlyRent > 0)
+    .map((r) => {
+      const utilities = parseMoneyAmount(r.utilitiesEstimate ?? "");
+      return utilities > 0 ? r.monthlyRent + utilities : null;
+    })
+    .filter((n): n is number => n !== null);
 
   const bundleCards = buildBundleCards(sub, rooms, property);
 
@@ -617,7 +663,11 @@ export function listingRichFromManagerSubmission(
     heroHousePhotoUrls: heroHouse.length ? heroHouse : undefined,
     heroOverview: overview || undefined,
     houseRulesBody: rules || undefined,
-    priceRangeLabel: mids.length ? `from $${low}–$${high}/mo` : "—",
+    priceRangeLabel: mids.length ? `base rent ${monthlyRangeLabel(mids)}` : "—",
+    startingRentLabel: mids.length
+      ? monthlyRangeLabel([Math.min(...mids)])
+      : property.rentLabel.trim().replace(/\s*\/\s*/g, "/") || "—",
+    estimatedMonthlyTotalLabel: monthlyTotals.length ? monthlyRangeLabel([Math.min(...monthlyTotals)]) : undefined,
     floorPlansSectionTitle: floorPlansSectionTitle ?? undefined,
     floorPlans:
       floorPlans.length > 0

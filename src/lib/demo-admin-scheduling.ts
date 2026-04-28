@@ -55,10 +55,34 @@ function readJson<T>(key: string, fallback: T): T {
   return memoryStore.has(key) ? (memoryStore.get(key) as T) : fallback;
 }
 
+function scheduleRecordScope(key: string): { managerUserId: string | null; propertyId: string | null; recordType: string } {
+  if (key === AVAIL_V2_KEY) {
+    return { managerUserId: null, propertyId: null, recordType: "admin_availability" };
+  }
+  const propertyScoped = key.match(/^axis_mgr_avail_slots_v2_(.+)_prop_(.+)$/);
+  if (propertyScoped) {
+    return {
+      managerUserId: propertyScoped[1] ?? null,
+      propertyId: propertyScoped[2] ?? null,
+      recordType: "manager_property_availability",
+    };
+  }
+  const managerScoped = key.match(/^axis_mgr_avail_slots_v2_(.+)$/);
+  if (managerScoped) {
+    return {
+      managerUserId: managerScoped[1] ?? null,
+      propertyId: null,
+      recordType: "manager_availability",
+    };
+  }
+  return { managerUserId: null, propertyId: null, recordType: key };
+}
+
 function writeJson(key: string, value: unknown) {
   if (!isBrowser()) return;
   memoryStore.set(key, value);
   emitAdminUi();
+  const scope = scheduleRecordScope(key);
   void fetch("/api/portal-schedule-records", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -67,11 +91,36 @@ function writeJson(key: string, value: unknown) {
       action: "upsert",
       row: {
         id: key,
-        recordType: key,
+        recordType: scope.recordType,
+        managerUserId: scope.managerUserId,
+        propertyId: scope.propertyId,
         payload: value,
       },
     }),
   }).catch(() => undefined);
+}
+
+export async function syncScheduleRecordsFromServer(): Promise<boolean> {
+  if (!isBrowser()) return false;
+  try {
+    const res = await fetch("/api/portal-schedule-records", {
+      cache: "no-store",
+      credentials: "include",
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { rows?: unknown[] };
+    if (!Array.isArray(body.rows)) return false;
+    for (const raw of body.rows) {
+      if (!raw || typeof raw !== "object") continue;
+      const row = raw as { id?: unknown; payload?: unknown };
+      if (typeof row.id !== "string") continue;
+      memoryStore.set(row.id, Array.isArray(row.payload) || row.payload !== undefined ? row.payload : []);
+    }
+    emitAdminUi();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function slotKey(dayIndex: number, slotIndex: number) {

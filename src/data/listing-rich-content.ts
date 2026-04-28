@@ -104,7 +104,12 @@ export type BundleCard = {
   price: string;
   strikethrough?: string;
   promo?: string;
+  /** Short row/subtitle shown on the bundle card. */
   roomsLine: string;
+  /** Individual room lines shown as chips/cards instead of one long paragraph. */
+  roomLines?: string[];
+  /** Small facts shown in the bundle modal/card. */
+  summaryItems?: { label: string; value: string }[];
 };
 
 export type ListingRichContent = {
@@ -116,6 +121,10 @@ export type ListingRichContent = {
   /** House rules / community guidelines for the listing (House rules tab). */
   houseRulesBody?: string;
   priceRangeLabel: string;
+  /** Lowest base rent from submitted rooms, displayed in the sidebar when totals are not available. */
+  startingRentLabel: string;
+  /** Lowest rent + utility estimate from submitted rooms, when utilities were entered. */
+  estimatedMonthlyTotalLabel?: string;
   /** Section title above room cards (e.g. bathroom grouping vs floor plan). */
   floorPlansSectionTitle?: string;
   floorPlans: ListingFloorCard[];
@@ -496,6 +505,7 @@ export function getListingRichContent(property: MockProperty): ListingRichConten
     heroTagline: property.tagline,
     houseRulesBody: DEFAULT_LISTING_HOUSE_RULES_FALLBACK,
     priceRangeLabel: `from $${low}–$${high}/mo`,
+    startingRentLabel: `$${mid}/mo`,
     floorPlans: defaultFloors,
     bathrooms: defaultBathrooms,
     sharedSpaces: defaultShared,

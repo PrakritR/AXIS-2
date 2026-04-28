@@ -21,6 +21,7 @@ import {
   readPlannedEvents,
   readAvailabilityDateSetForStorageKey,
   startOfWeekMonday,
+  syncScheduleRecordsFromServer,
   toLocalDateStr,
   writeAvailabilityDateSetForStorageKey,
 } from "@/lib/demo-admin-scheduling";
@@ -190,7 +191,17 @@ export function PortalCalendarPanels({
 
   useEffect(() => {
     if (!storageKey) return;
-    setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+    let cancelled = false;
+    const load = async () => {
+      await syncScheduleRecordsFromServer();
+      if (!cancelled) {
+        setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [storageKey]);
 
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
@@ -307,7 +318,9 @@ export function PortalCalendarPanels({
 
   const reloadAvailability = useCallback(() => {
     if (!storageKey) return;
-    setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+    void syncScheduleRecordsFromServer().finally(() => {
+      setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+    });
   }, [storageKey]);
 
   const writeAvailability = useCallback(
