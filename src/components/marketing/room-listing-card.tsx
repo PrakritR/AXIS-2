@@ -115,7 +115,6 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
 
   const bedLabel =
     row.propertyBeds === 0 ? "Studio" : `${row.propertyBeds} bedroom${row.propertyBeds === 1 ? "" : "s"}`;
-  const bathLabel = `${row.propertyBaths} bathroom${row.propertyBaths === 1 ? "" : "s"}`;
   const availabilityTone = roomAvailabilityTone(row.availabilityRaw);
 
   return (
@@ -140,7 +139,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
         <div className="pointer-events-none absolute bottom-3 right-3 text-right text-white drop-shadow-md">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/90">from</p>
           <p className="text-2xl font-bold leading-none tracking-tight">
-            {row.priceOverlayLabel}
+            {row.priceLabel.replace("/month", "").replace("/mo", "").trim()}
             <span className="text-sm font-semibold text-white/90"> /mo</span>
           </p>
         </div>
@@ -180,8 +179,9 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
       </div>
 
       <div className="flex flex-1 flex-col px-4 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-4">
-        <h2 className="text-lg font-bold leading-snug tracking-tight text-slate-900">{row.headlineAddress}</h2>
-        <p className="mt-0.5 text-sm text-slate-500">{row.fullAddress}</p>
+        <h2 className="text-lg font-bold leading-snug tracking-tight text-slate-900">{row.roomName}</h2>
+        <p className="mt-0.5 text-sm font-medium text-slate-700">{row.title}</p>
+        <p className="mt-0.5 text-sm text-slate-500">{row.headlineAddress}</p>
 
         <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
           <span className="inline-flex items-center gap-1.5">
@@ -190,7 +190,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
           </span>
           <span className="inline-flex items-center gap-1.5">
             <BathIcon className="h-4 w-4 shrink-0 text-slate-400" />
-            <span>{bathLabel}</span>
+            <span>{row.bathroomHint}</span>
           </span>
         </p>
 
