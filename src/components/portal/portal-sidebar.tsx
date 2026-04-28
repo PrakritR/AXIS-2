@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AdminPortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
+import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 function hrefForSection(def: PortalDefinition, section: string) {
@@ -68,7 +69,8 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
           })}
         </div>
         {hasSignOut ? (
-          <div className="mt-auto border-t border-slate-100 pt-3">
+          <div className="mt-auto border-t border-slate-100 pt-3 space-y-0.5">
+            <PortalRoleSwitcher currentKind={definition.kind} />
             <Link
               href="/auth/sign-in"
               className="block rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-white hover:text-slate-900"
@@ -124,7 +126,8 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               })}
             </div>
             {hasSignOut ? (
-              <div className="mt-3 border-t border-slate-100 pt-3">
+              <div className="mt-3 border-t border-slate-100 pt-3 space-y-0.5">
+                <PortalRoleSwitcher currentKind={definition.kind} />
                 <Link
                   href="/auth/sign-in"
                   onClick={() => setOpen(false)}

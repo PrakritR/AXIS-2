@@ -30,9 +30,14 @@ export async function GET(req: Request) {
       if (role) roles.add(role);
     }
 
+    const sortedRoles = [...roles].sort();
+    const isResident = sortedRoles.includes("resident");
+    const axisId = isResident ? `AXIS-R-${userId.slice(0, 8).toUpperCase()}` : null;
+
     return NextResponse.json({
       exists: true,
-      roles: [...roles].sort(),
+      roles: sortedRoles,
+      axisId,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
