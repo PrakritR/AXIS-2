@@ -8,7 +8,6 @@ import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/p
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
-import { ManagerPayoutSplitsForm } from "@/components/portal/manager-payout-splits-form";
 import { Input, Select } from "@/components/ui/input";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
@@ -332,13 +331,10 @@ export function ManagerPayments() {
         open={payoutsOpen}
         title="Payouts"
         onClose={() => setPayoutsOpen(false)}
-        panelClassName="relative z-[71] max-h-[90vh] w-full max-w-[1100px] overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-2xl"
+        panelClassName="relative z-[71] max-h-[90vh] w-full max-w-[760px] overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-2xl"
       >
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.05fr)]">
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
-            <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
-          </div>
-          <ManagerPayoutSplitsForm />
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
+          <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
         </div>
       </Modal>
     </ManagerPortalPageShell>

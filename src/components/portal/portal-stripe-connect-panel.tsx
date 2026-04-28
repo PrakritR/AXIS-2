@@ -221,7 +221,13 @@ export function PortalStripeConnectPanel({
         variant === "embedded" ? "max-h-[min(72vh,560px)] overflow-y-auto pr-1" : "max-w-lg"
       }`}
     >
-      <p className="font-medium text-slate-900">You must set up payout before creating a listing.</p>
+      <div className="space-y-2">
+        <p className="font-medium text-slate-900">Link your personal payout account before creating a listing.</p>
+        <p className="text-sm text-slate-600">
+          This step is only for connecting the bank account or debit card where your Stripe payouts should land.
+          Revenue split amounts are configured separately inside account linking after you choose the manager or owner.
+        </p>
+      </div>
 
       {status?.demo ? (
         <p className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
@@ -251,7 +257,7 @@ export function PortalStripeConnectPanel({
       {needsOnboarding ? (
         <div className="pt-1">
           <Button type="button" className="min-h-[44px] rounded-full px-6" disabled={busy} onClick={() => void refreshEmbeddedComponent()}>
-            {busy ? "Loading…" : "Reload setup"}
+            {busy ? "Loading…" : "Reload account linking"}
           </Button>
         </div>
       ) : null}
@@ -259,7 +265,7 @@ export function PortalStripeConnectPanel({
       {ready ? (
         <div className="pt-1">
           <Button type="button" className="min-h-[44px] rounded-full px-6" disabled={busy} onClick={() => void refreshEmbeddedComponent()}>
-            {busy ? "Loading…" : "Reload payout tools"}
+            {busy ? "Loading…" : "Reload linked account"}
           </Button>
         </div>
       ) : null}

@@ -383,6 +383,7 @@ export function ProAccountLinksPanel({
   const peerLabel = mode === "owner" ? "owner" : "manager";
   const title =
     mode === "owner" ? "Link another owner workspace" : "Link another manager workspace";
+  const splitLabel = mode === "owner" ? "Owner split amount" : "Manager split amount";
 
   const activeCards = useRemote ? activeRemote : localRows;
 
@@ -395,8 +396,8 @@ export function ProAccountLinksPanel({
           </p>
           <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900">{title}</h2>
           <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            Verify their <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span>, choose properties and payout, then send an invite. They approve on
-            the same tab ({mode === "owner" ? "Owner" : "Manager"}) before it goes live.
+            Verify their <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span>, choose the properties they should manage, then set the split amount for
+            that relationship. They approve on the same tab ({mode === "owner" ? "Owner" : "Manager"}) before it goes live.
           </p>
           {!useRemote && remoteLoaded ? (
             <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900">
@@ -490,7 +491,7 @@ export function ProAccountLinksPanel({
 
               <div>
                 <div className="flex items-center justify-between gap-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Payout share</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{splitLabel}</p>
                   <span className="text-sm font-bold tabular-nums text-primary">{payoutDraft}%</span>
                 </div>
                 <input
@@ -503,8 +504,7 @@ export function ProAccountLinksPanel({
                   className="mt-2 w-full accent-primary"
                 />
                 <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                  On the selected properties, this split applies to managed revenue after platform fees where relevant. You can edit this after the link is
-                  active.
+                  This is the split amount for this linked {peerLabel}. It applies to the selected properties, and you can change it later after the link is active.
                 </p>
               </div>
 
@@ -600,7 +600,7 @@ export function ProAccountLinksPanel({
                 </div>
 
                 <div className="mt-4">
-                  <p className="text-xs font-semibold text-slate-500">Payout share</p>
+                  <p className="text-xs font-semibold text-slate-500">{splitLabel}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-4">
                     <input
                       type="range"
@@ -656,7 +656,7 @@ export function ProAccountLinksPanel({
                 </div>
 
                 <div className="mt-4">
-                  <p className="text-xs font-semibold text-slate-500">Payout share</p>
+                  <p className="text-xs font-semibold text-slate-500">{splitLabel}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-4">
                     <input
                       type="range"
