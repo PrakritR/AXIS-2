@@ -6,6 +6,15 @@ import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import { PROPERTY_PIPELINE_EVENT, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  appendPartnerInquiry,
+  dateHasAvailability,
+  formatAvailabilitySlotLabel,
+  localDateAtSlotStart,
+  managerPropertyAvailabilityStorageKey,
+  readAvailabilityDateSetForStorageKey,
+  toLocalDateStr,
+} from "@/lib/demo-admin-scheduling";
 import Link from "next/link";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 
@@ -23,9 +32,6 @@ const TOPICS = [
   "Other",
 ];
 
-// Generate some fake time slots for demo
-const TIME_SLOTS = ["9:00 AM", "10:00 AM", "11:30 AM", "1:00 PM", "2:30 PM", "4:00 PM"];
-
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
 }
@@ -34,9 +40,6 @@ function getFirstDayOfMonth(year: number, month: number) {
 }
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
-
-// Fake "available" days (just some days for demo)
-const AVAILABLE_DAYS = new Set([3,7,8,10,14,15,17,21,22,24,28]);
 
 type BuildingGroup = {
   buildingId: string;
@@ -101,6 +104,17 @@ function groupByBuilding(properties: MockProperty[]): BuildingGroup[] {
   return list;
 }
 
+function openSlotIndicesForDateStr(availability: Set<string>, dateStr: string): number[] {
+  const out: number[] = [];
+  for (const key of availability) {
+    const [keyDate, slotText] = key.split(":");
+    if (keyDate !== dateStr) continue;
+    const slotIndex = Number.parseInt(slotText ?? "", 10);
+    if (Number.isFinite(slotIndex)) out.push(slotIndex);
+  }
+  return out.sort((a, b) => a - b);
+}
+
 export default function ToursContactPage() {
   const { showToast } = useAppUi();
   const [tab, setTab] = useState<Tab>("tour");
@@ -151,8 +165,10 @@ export default function ToursContactPage() {
    TOUR FLOW
 ──────────────────────────────────────────────────────────── */
 function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuccess: () => void }) {
+  const { showToast } = useAppUi();
   const [step, setStep] = useState<TourStep>(1);
   const [submitted, setSubmitted] = useState(false);
+  const [tick, setTick] = useState(0);
   const [step1Phase, setStep1Phase] = useState<"property" | "room">("property");
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<MockProperty | null>(null);
@@ -164,13 +180,31 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
   }, [selectedProperty, selectedRoomKey]);
 
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const buildings = useMemo(() => groupByBuilding(properties), [properties]);
 
+  useEffect(() => {
+    const sync = () => setTick((n) => n + 1);
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  const selectedAvailability = useMemo(() => {
+    void tick;
+    if (!selectedProperty?.managerUserId?.trim()) return new Set<string>();
+    return readAvailabilityDateSetForStorageKey(
+      managerPropertyAvailabilityStorageKey(selectedProperty.managerUserId, selectedProperty.id),
+    );
+  }, [selectedProperty, tick]);
+
   const canContinue1 = selectedProperty !== null && selectedRoomKey !== null;
-  const canContinue2 = selectedDay !== null && selectedTime !== null;
+  const canContinue2 = selectedDay !== null && selectedSlotIndex !== null;
 
   const steps = [
     { n: 1, label: "Property & room" },
@@ -190,7 +224,9 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
           {selectedProperty ? (
             <p className="mt-3 text-sm font-medium text-slate-800">
               Requested tour: {selectedProperty.title}
-              {selectedDay && selectedTime ? ` · ${MONTHS[calMonth]} ${selectedDay}, ${calYear} · ${selectedTime}` : ""}
+              {selectedDay && selectedSlotIndex != null
+                ? ` · ${MONTHS[calMonth]} ${selectedDay}, ${calYear} · ${formatAvailabilitySlotLabel(selectedSlotIndex)}`
+                : ""}
             </p>
           ) : null}
         </div>
@@ -206,7 +242,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               setSelectedProperty(null);
               setSelectedRoomKey(null);
               setSelectedDay(null);
-              setSelectedTime(null);
+              setSelectedSlotIndex(null);
             }}
             className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
@@ -296,20 +332,29 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
         )}
         {step === 2 && (
           <Step2
+            property={selectedProperty}
+            availability={selectedAvailability}
             calMonth={calMonth}
             calYear={calYear}
             onPrevMonth={() => {
               if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
               else setCalMonth(m => m - 1);
+              setSelectedDay(null);
+              setSelectedSlotIndex(null);
             }}
             onNextMonth={() => {
               if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); }
               else setCalMonth(m => m + 1);
+              setSelectedDay(null);
+              setSelectedSlotIndex(null);
             }}
             selectedDay={selectedDay}
-            onSelectDay={setSelectedDay}
-            selectedTime={selectedTime}
-            onSelectTime={setSelectedTime}
+            onSelectDay={(day) => {
+              setSelectedDay(day);
+              setSelectedSlotIndex(null);
+            }}
+            selectedSlotIndex={selectedSlotIndex}
+            onSelectSlotIndex={setSelectedSlotIndex}
           />
         )}
         {step === 3 && (
@@ -317,10 +362,33 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
             property={selectedProperty}
             roomLabel={selectedRoomLabel}
             day={selectedDay}
-            time={selectedTime}
+            slotIndex={selectedSlotIndex}
             month={calMonth}
             year={calYear}
-            onSubmit={() => {
+            onSubmit={({ name, email, phone, notes }) => {
+              if (!name.trim() || !email.trim()) {
+                showToast("Please enter your name and email.");
+                return;
+              }
+              if (!selectedProperty || selectedDay == null || selectedSlotIndex == null) return;
+              const dateStr = toLocalDateStr(new Date(calYear, calMonth, selectedDay, 12, 0, 0, 0));
+              const start = localDateAtSlotStart(dateStr, selectedSlotIndex);
+              const end = new Date(start.getTime() + 30 * 60 * 1000);
+              const propertyContext = [
+                `Property: ${selectedProperty.title}`,
+                selectedRoomLabel ? `Room: ${selectedRoomLabel}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n");
+              appendPartnerInquiry({
+                name: name.trim(),
+                email: email.trim(),
+                phone: phone.trim(),
+                notes: [propertyContext, notes.trim()].filter(Boolean).join("\n\n"),
+                requestedWindows: [{ start: start.toISOString(), end: end.toISOString() }],
+                proposedStart: start.toISOString(),
+                proposedEnd: end.toISOString(),
+              });
               setSubmitted(true);
               onSuccess();
             }}
@@ -491,20 +559,39 @@ function Step1({
 }
 
 function Step2({
+  property,
+  availability,
   calMonth, calYear, onPrevMonth, onNextMonth,
-  selectedDay, onSelectDay, selectedTime, onSelectTime,
+  selectedDay, onSelectDay, selectedSlotIndex, onSelectSlotIndex,
 }: {
+  property: MockProperty | null;
+  availability: Set<string>;
   calMonth: number; calYear: number;
   onPrevMonth: () => void; onNextMonth: () => void;
   selectedDay: number | null; onSelectDay: (d: number) => void;
-  selectedTime: string | null; onSelectTime: (t: string) => void;
+  selectedSlotIndex: number | null; onSelectSlotIndex: (slotIndex: number) => void;
 }) {
   const daysInMonth = getDaysInMonth(calYear, calMonth);
   const firstDay = getFirstDayOfMonth(calYear, calMonth);
   const today = new Date();
+  const selectedDateStr = selectedDay != null ? toLocalDateStr(new Date(calYear, calMonth, selectedDay, 12, 0, 0, 0)) : null;
+  const openSlots = selectedDateStr ? openSlotIndicesForDateStr(availability, selectedDateStr) : [];
 
   return (
     <div className="space-y-6">
+      {!property ? (
+        <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+          Pick a property and room first so we can show the right meeting windows.
+        </p>
+      ) : availability.size === 0 ? (
+        <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+          No tour windows are published for this property yet. Pick a different house or send a message to Axis.
+        </p>
+      ) : (
+        <p className="text-sm text-slate-600">
+          Pick one published 30-minute window for <span className="font-semibold text-slate-800">{property.title}</span>.
+        </p>
+      )}
       {/* Calendar */}
       <div>
         <div className="mb-3 flex items-center justify-between">
@@ -524,7 +611,9 @@ function Step2({
           {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
-            const isAvailable = AVAILABLE_DAYS.has(day);
+            const isAvailable = property
+              ? dateHasAvailability(new Date(calYear, calMonth, day, 12, 0, 0, 0), availability)
+              : false;
             const isSelected = selectedDay === day;
             const isPast = calYear === today.getFullYear() && calMonth === today.getMonth() && day < today.getDate();
             return (
@@ -532,7 +621,7 @@ function Step2({
                 key={day}
                 type="button"
                 disabled={!isAvailable || isPast}
-                onClick={() => { onSelectDay(day); onSelectTime(null!); }}
+                onClick={() => onSelectDay(day)}
                 className={`aspect-square rounded-xl text-sm font-medium transition-all ${
                   isSelected
                     ? "bg-primary text-white shadow-sm"
@@ -554,22 +643,28 @@ function Step2({
           <p className="mb-3 text-sm font-semibold text-slate-700">
             Available times — {MONTHS[calMonth]} {selectedDay}
           </p>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-            {TIME_SLOTS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => onSelectTime(t)}
-                className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
-                  selectedTime === t
-                    ? "border-primary bg-primary text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+          {openSlots.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              No published tour windows for this day.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {openSlots.map((slotIndex) => (
+                <button
+                  key={slotIndex}
+                  type="button"
+                  onClick={() => onSelectSlotIndex(slotIndex)}
+                  className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
+                    selectedSlotIndex === slotIndex
+                      ? "border-primary bg-primary text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {formatAvailabilitySlotLabel(slotIndex)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -577,39 +672,46 @@ function Step2({
 }
 
 function Step3({
-  property, roomLabel, day, time, month, year, onSubmit,
+  property, roomLabel, day, slotIndex, month, year, onSubmit,
 }: {
-  property: MockProperty | null; roomLabel: string; day: number | null; time: string | null;
-  month: number; year: number; onSubmit: () => void;
+  property: MockProperty | null; roomLabel: string; day: number | null; slotIndex: number | null;
+  month: number;
+  year: number;
+  onSubmit: (payload: { name: string; email: string; phone: string; notes: string }) => void;
 }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
+
   return (
     <div className="space-y-5">
       {/* Summary */}
       <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm">
         <p className="font-semibold text-slate-800">{roomLabel || property?.title}</p>
         <p className="mt-0.5 text-slate-500">
-          {MONTHS[month]} {day}, {year} · {time}
+          {MONTHS[month]} {day}, {year} · {slotIndex != null ? formatAvailabilitySlotLabel(slotIndex) : ""}
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name *">
-          <input type="text" placeholder="Jane Smith" className={inputCls} />
+          <input id="tour-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Smith" className={inputCls} />
         </Field>
         <Field label="Email *">
-          <input type="email" placeholder="jane@email.com" className={inputCls} />
+          <input id="tour-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@email.com" className={inputCls} />
         </Field>
       </div>
       <Field label="Phone">
-        <input type="tel" placeholder="(206) 555-0100" className={inputCls} />
+        <input id="tour-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(206) 555-0100" className={inputCls} />
       </Field>
       <Field label="Notes (optional)">
-        <textarea rows={3} placeholder="Anything we should prepare in advance?" className={`${inputCls} resize-none`} />
+        <textarea id="tour-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything we should prepare in advance?" className={`${inputCls} resize-none`} />
       </Field>
 
       <button
         type="button"
-        onClick={onSubmit}
+        onClick={() => onSubmit({ name, email, phone, notes })}
         className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98]"
         style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
       >
