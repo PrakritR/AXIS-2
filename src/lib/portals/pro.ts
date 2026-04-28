@@ -19,14 +19,14 @@ export const proPortal: PortalDefinition = {
         { id: "payouts", label: "Payouts" },
       ],
     },
+    { section: "leases", label: "Leases", tabs: [] },
+    { section: "work-orders", label: "Work orders", tabs: [] },
+    { section: "calendar", label: "Calendar", tabs: [] },
     {
       section: "relationships",
       label: "Account links",
       tabs: [],
     },
-    { section: "leases", label: "Leases", tabs: [] },
-    { section: "work-orders", label: "Work orders", tabs: [] },
-    { section: "calendar", label: "Calendar", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",

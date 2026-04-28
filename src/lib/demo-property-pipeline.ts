@@ -160,7 +160,12 @@ export function isRentCatalogPublished(p: Pick<MockProperty, "adminPublishLive">
 
 /** Public Rent with Axis catalog: extras that are approved for live search (demo localStorage). */
 export function readExtraListingsPublic(): MockProperty[] {
-  return readAllExtraListings().filter(isRentCatalogPublished);
+  const byPropertyKey = new Map<string, MockProperty>();
+  for (const property of readAllExtraListings().filter(isRentCatalogPublished)) {
+    const key = `${property.buildingName}::${property.address}`.trim().toLowerCase();
+    byPropertyKey.set(key, property);
+  }
+  return [...byPropertyKey.values()];
 }
 
 /** Listed properties for one manager (portal). */

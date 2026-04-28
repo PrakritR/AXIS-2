@@ -29,7 +29,7 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center px-4 py-6 sm:py-8">
+    <div className="fixed inset-0 z-[70] overflow-y-auto px-2 pb-3 pt-4 sm:px-4 sm:pb-6 sm:pt-8">
       <button
         type="button"
         aria-label="Close"
@@ -39,7 +39,7 @@ export function Modal({
       <div
         className={
           panelClassName ??
-          "relative z-[71] max-h-[calc(100vh-3rem)] w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+          "relative z-[71] mx-auto my-0 w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
         }
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
@@ -52,7 +52,7 @@ export function Modal({
             Close
           </button>
         </div>
-        <div className="max-h-[calc(100vh-9rem)] overflow-y-auto pt-4">{children}</div>
+        <div className="max-h-[calc(100dvh-7rem)] overflow-y-auto pt-4 sm:max-h-[calc(100dvh-8.5rem)]">{children}</div>
       </div>
     </div>
   );

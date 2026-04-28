@@ -75,23 +75,27 @@ function deferCatalogMutation(fn: () => void) {
   });
 }
 
-/** Matches manager-facing stages: bucket 1 is admin “request change” / pre-list work (shown as Approved). */
-const MANAGER_TAB_LABELS = ["Pending review", "Approved", "Listed", "Unlisted", "Rejected"] as const;
+const MANAGER_STAGES = [
+  { key: "pending", label: "Pending review", buckets: [0, 1] as AdminPropertyBucketIndex[] },
+  { key: "listed", label: "Listed", buckets: [2] as AdminPropertyBucketIndex[] },
+  { key: "unlisted", label: "Unlisted", buckets: [3] as AdminPropertyBucketIndex[] },
+  { key: "rejected", label: "Rejected", buckets: [4] as AdminPropertyBucketIndex[] },
+] as const;
 
-const EMPTY_COPY: Record<AdminPropertyBucketIndex, string> = {
-  0: "Nothing awaiting review.",
-  1: "Nothing in this stage.",
-  2: "No listed properties.",
-  3: "No unlisted properties.",
-  4: "No rejected properties.",
+type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
+
+const EMPTY_COPY: Record<ManagerStageKey, string> = {
+  pending: "Nothing awaiting review.",
+  listed: "No listed properties.",
+  unlisted: "No unlisted properties.",
+  rejected: "No rejected properties.",
 };
 
-const BANNER_COPY: Record<AdminPropertyBucketIndex, string> = {
-  0: "New submissions and edited live listings appear here until Axis admin approves them. The public Rent with Axis catalog only shows listings after approval.",
-  1: "Axis admin has approved moving forward but requested changes before the listing goes live. Revise and resubmit from here.",
-  2: "Live on Rent with Axis — published listings you can unlist or remove.",
-  3: "These listings are off the public site. You can relist or delete them from your queue.",
-  4: "Rejected submissions stay here until you restore them to pending or delete them permanently.",
+const BANNER_COPY: Record<ManagerStageKey, string> = {
+  pending: "New submissions and listings that need updates appear here until Axis admin clears them to go live.",
+  listed: "Live on Rent with Axis — published listings you can unlist or remove.",
+  unlisted: "These listings are off the public site. You can relist or delete them from your queue.",
+  rejected: "Rejected submissions stay here until you restore them to pending or delete them permanently.",
 };
 
 function HouseIcon({ className }: { className?: string }) {
@@ -474,7 +478,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
-  const [activeBucket, setActiveBucket] = useState<AdminPropertyBucketIndex>(0);
+  const [activeStage, setActiveStage] = useState<ManagerStageKey>("pending");
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -488,16 +492,35 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
 
   const kpiValues = useMemo(() => adminKpiCounts(managerUserId), [tick, managerUserId]);
 
-  const rows = useMemo(
-    () => (managerUserId ? readAdminPropertyRows(activeBucket, managerUserId) : []),
-    [tick, managerUserId, activeBucket],
+  const stageCounts = useMemo(
+    () => ({
+      pending: kpiValues[0] + kpiValues[1],
+      listed: kpiValues[2],
+      unlisted: kpiValues[3],
+      rejected: kpiValues[4],
+    }),
+    [kpiValues],
   );
+
+  const rows = useMemo(() => {
+    if (!managerUserId) return [] as Array<{ sourceBucket: AdminPropertyBucketIndex; row: AdminPropertyRow }>;
+    const stage = MANAGER_STAGES.find((item) => item.key === activeStage);
+    if (!stage) return [];
+    return stage.buckets.flatMap((bucket) =>
+      readAdminPropertyRows(bucket, managerUserId).map((row) => ({ sourceBucket: bucket, row })),
+    );
+  }, [tick, managerUserId, activeStage]);
 
   useEffect(() => {
     setExpandedRowKey(null);
-  }, [activeBucket]);
+  }, [activeStage]);
 
-  const status = rowStatus(activeBucket);
+  useEffect(() => {
+    if (activeStage !== "pending") return;
+    if ((stageCounts.pending ?? 0) === 0 && (stageCounts.listed ?? 0) > 0) {
+      setActiveStage("listed");
+    }
+  }, [activeStage, stageCounts]);
 
   if (!authReady) {
     return <p className="text-sm text-slate-500">Loading your properties…</p>;
@@ -509,28 +532,28 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
   return (
     <>
       <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-        {MANAGER_TAB_LABELS.map((label, i) => (
+        {MANAGER_STAGES.map((stage) => (
           <button
-            key={label}
+            key={stage.key}
             type="button"
-            onClick={() => setActiveBucket(i as AdminPropertyBucketIndex)}
+            onClick={() => setActiveStage(stage.key)}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
-              activeBucket === i ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              activeStage === stage.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            {label}
+            {stage.label}
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                activeBucket === i ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+                activeStage === stage.key ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
               }`}
             >
-              {kpiValues[i]}
+              {stageCounts[stage.key]}
             </span>
           </button>
         ))}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">{BANNER_COPY[activeBucket]}</div>
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">{BANNER_COPY[activeStage]}</div>
 
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>
         {rows.length === 0 ? (
@@ -538,7 +561,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
             <AxisHeaderMarkTile>
               <HouseIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
-            <p className="mt-4 max-w-sm text-sm font-medium text-slate-500">{EMPTY_COPY[activeBucket]}</p>
+            <p className="mt-4 max-w-sm text-sm font-medium text-slate-500">{EMPTY_COPY[activeStage]}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -552,9 +575,10 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {rows.map(({ sourceBucket, row }) => {
                   const rowKey = row.adminRefId + (row.listingId ?? "");
                   const expanded = expandedRowKey === rowKey;
+                  const status = rowStatus(sourceBucket);
 
                   return (
                     <Fragment key={rowKey}>
@@ -594,7 +618,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                         <tr key={`${rowKey}-details`} className="border-b border-slate-100">
                           <td colSpan={4} className="bg-slate-50/40 px-4 py-4">
                             <ManagerPropertyInlineDetails
-                              bucket={activeBucket}
+                              bucket={sourceBucket}
                               row={row}
                               onUpdated={() => setTick((t) => t + 1)}
                               showToast={showToast}

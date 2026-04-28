@@ -167,10 +167,7 @@ export async function POST(req: Request) {
     if (!inviterOk) {
       return NextResponse.json(
         {
-          error:
-            tabKind === "owner"
-              ? "Only an owner workspace can send owner links."
-              : "Only a manager workspace can send manager links.",
+          error: "Your account doesn't support creating this type of link.",
         },
         { status: 403 },
       );
@@ -217,10 +214,7 @@ export async function POST(req: Request) {
     if (ir !== inviteeRole) {
       return NextResponse.json(
         {
-          error:
-            tabKind === "owner"
-              ? "Select owner only when entering another owner workspace's Axis ID."
-              : "Select manager only when entering another manager workspace's Axis ID.",
+          error: "Choose the matching link role for that Axis ID.",
         },
         { status: 400 },
       );
@@ -256,7 +250,7 @@ export async function POST(req: Request) {
       if ((used ?? 0) >= inviterLinkCap) {
         return NextResponse.json(
           {
-            error: `Plan limit: ${inviterLinkCap} link${inviterLinkCap === 1 ? "" : "s"} max for ${tabKind} links on your plan.`,
+            error: `Plan limit: ${inviterLinkCap} link${inviterLinkCap === 1 ? "" : "s"} max for this link type on your plan.`,
           },
           { status: 403 },
         );
@@ -290,7 +284,7 @@ export async function POST(req: Request) {
       if ((inviteeUsed ?? 0) >= inviteeLinkCap) {
         return NextResponse.json(
           {
-            error: `Invitee needs to upgrade. They already have ${inviteeUsed ?? 0} of ${inviteeLinkCap} allowed ${tabKind} link${inviteeLinkCap === 1 ? "" : "s"}.`,
+            error: `Invitee needs to upgrade. They already have ${inviteeUsed ?? 0} of ${inviteeLinkCap} allowed links for this role.`,
           },
           { status: 403 },
         );
@@ -349,7 +343,7 @@ export async function POST(req: Request) {
       }
       const msg = insertErr.message ?? "";
       if (msg.includes("account_link_invites_unique_pending") || msg.includes("duplicate")) {
-        return NextResponse.json({ error: "You already have a pending invite for this workspace on this tab." }, { status: 409 });
+        return NextResponse.json({ error: "You already have a pending invite for this account and link role." }, { status: 409 });
       }
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }

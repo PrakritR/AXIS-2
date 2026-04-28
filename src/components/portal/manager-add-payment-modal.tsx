@@ -142,8 +142,13 @@ export function ManagerAddPaymentModal({
   };
 
   return (
-    <Modal open={open} title="Add payment" onClose={handleClose}>
-      <div className="flex flex-col gap-3">
+    <Modal
+      open={open}
+      title="Add payment"
+      onClose={handleClose}
+      panelClassName="relative z-[71] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:my-4 sm:p-6"
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium text-slate-700">Property</span>
           <Input value={propertyName} onChange={(e) => setPropertyName(e.target.value)} placeholder="Demo Building" autoComplete="off" />
@@ -184,7 +189,7 @@ export function ManagerAddPaymentModal({
             <option value="paid">Paid</option>
           </Select>
         </label>
-        <div className="mt-2 flex justify-end gap-2">
+        <div className="mt-2 flex justify-end gap-2 sm:col-span-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={handleClose}>
             Cancel
           </Button>

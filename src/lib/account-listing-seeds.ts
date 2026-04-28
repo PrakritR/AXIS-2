@@ -1,5 +1,5 @@
 import type { MockProperty } from "@/data/types";
-import { appendExtraListing, readExtraListingsForUser, removeExtraListing } from "@/lib/demo-property-pipeline";
+import { appendExtraListing, readAllExtraListings, readExtraListingsForUser, removeExtraListing } from "@/lib/demo-property-pipeline";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 
 const PRAKRIT_LISTING_EMAILS = new Set(["prakritramachandran@gmai.com", "prakritramachandran@gmail.com"]);
@@ -450,6 +450,7 @@ function buildSeeds(managerUserId: string): MockProperty[] {
 export function ensureAccountListingSeeds(userId: string | null, email: string | null): boolean {
   if (!userId || !email || !PRAKRIT_LISTING_EMAILS.has(email.trim().toLowerCase())) return false;
   const existing = readExtraListingsForUser(userId);
+  const allListings = readAllExtraListings();
   const seeds = buildSeeds(userId);
   const updated4709a = seeds.find((p) => p.id === "mgr-seed-4709a-8th-ave-ne");
   const current4709a = existing.find((p) => p.id === "mgr-seed-4709a-8th-ave-ne");
@@ -490,6 +491,10 @@ export function ensureAccountListingSeeds(userId: string | null, email: string |
   const existingIds = new Set(refreshed.map((p) => p.id));
   const missingSeeds = seeds.filter((p) => !existingIds.has(p.id));
   for (const seed of missingSeeds) {
+    const currentOwner = allListings.find((p) => p.id === seed.id)?.managerUserId?.trim() ?? "";
+    if (currentOwner && currentOwner !== userId) {
+      removeExtraListing(seed.id);
+    }
     appendExtraListing(seed, userId);
     changed = true;
   }

@@ -331,7 +331,7 @@ export function ManagerPayments() {
         open={payoutsOpen}
         title="Payouts"
         onClose={() => setPayoutsOpen(false)}
-        panelClassName="relative z-[71] max-h-[90vh] w-full max-w-[760px] overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-2xl"
+        panelClassName="relative z-[71] mx-auto my-0 w-full max-w-[760px] overflow-hidden rounded-3xl border border-border bg-card p-5 shadow-2xl sm:p-6"
       >
         <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
           <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />

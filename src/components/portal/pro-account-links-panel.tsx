@@ -109,6 +109,7 @@ export function ProAccountLinksPanel({
   const propertyOptions = useMemo(() => propertyChoices(userId), [userId, localTick]);
 
   const [axisInput, setAxisInput] = useState("");
+  const [selectedKind, setSelectedKind] = useState<"manager" | "owner">("manager");
   const [lookupBusy, setLookupBusy] = useState(false);
   const [draftAxisId, setDraftAxisId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState<string | null>(null);
@@ -183,18 +184,13 @@ export function ProAccountLinksPanel({
         setDraftAxisId(null);
         return;
       }
-
-      // Check if invitee is already at their link cap (e.g. Pro account with 2 links).
-      if (body.userId) {
-        const inviteeTier = normalizeManagerSkuTier(body.role ?? null) ?? (body.role ?? null);
-        const inviteeCap = maxAccountLinksForTier(inviteeTier);
-        const inviteeCurrentLinks = readProRelationships(body.userId).length;
-        if (inviteeCap != null && inviteeCurrentLinks >= inviteeCap) {
-          setInviteeAtCap(true);
-          showToast(`This account has reached its ${inviteeCap}-link limit and cannot accept new links.`);
-          setDraftAxisId(null);
-          return;
-        }
+      const lookedUpRole = String(body.role ?? "").toLowerCase();
+      if (lookedUpRole && lookedUpRole !== selectedKind) {
+        showToast("Choose the matching link role for that Axis ID.");
+        setDraftAxisId(null);
+        setDraftName(null);
+        setDraftUserId(null);
+        return;
       }
 
       setDraftAxisId(raw);
@@ -239,13 +235,14 @@ export function ProAccountLinksPanel({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             inviteeAxisId: draftAxisId,
-            tabKind: "manager",
+            tabKind: selectedKind,
             assignedPropertyIds: ids,
             payoutPercentForManager: payout,
           }),
         });
         const data = (await res.json()) as { error?: string; migrationRequired?: boolean };
         if (!res.ok) {
+          setInviteeAtCap(Boolean(data.error?.includes("Invitee needs to upgrade")));
           showToast(data.error ?? "Could not send invite.");
           return;
         }
@@ -274,7 +271,7 @@ export function ProAccountLinksPanel({
       id: generateRelationshipId(),
       linkedAxisId: draftAxisId,
       linkedDisplayName: draftName ?? draftAxisId,
-      perspective: "manager_tab",
+      perspective: selectedKind === "owner" ? "owner_tab" : "manager_tab",
       payoutPercentForManager: payout,
       assignedPropertyIds: ids,
       createdAt: new Date().toISOString(),
@@ -392,7 +389,7 @@ export function ProAccountLinksPanel({
         id: inv.id,
         linkedAxisId: inv.linkedAxisId,
         linkedDisplayName: inv.linkedDisplayName ?? undefined,
-        perspective: "manager_tab",
+        perspective: inv.tabKind === "owner" ? "owner_tab" : "manager_tab",
         payoutPercentForManager: inv.payoutPercentForManager,
         assignedPropertyIds: inv.assignedPropertyIds,
         createdAt: inv.createdAt,
@@ -436,7 +433,7 @@ export function ProAccountLinksPanel({
             >
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span className={`font-semibold tabular-nums ${atLinkCap ? "text-rose-900" : "text-slate-900"}`}>{linksUsed}/{linkCap}</span>
-                <span className="text-slate-500">links</span>
+                <span className="text-slate-500">links in use</span>
                 {tierShort ? (
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${atLinkCap ? "bg-white/80 text-rose-800" : "bg-white text-slate-600"}`}>
                     {tierShort}
@@ -452,7 +449,26 @@ export function ProAccountLinksPanel({
 
         <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-6 shadow-sm">
           <p className="text-sm font-semibold text-slate-900">New invite</p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <div className="mt-4 grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)_auto] sm:items-end">
+            <label className="block text-xs font-semibold text-slate-600">
+              Link role
+              <select
+                value={selectedKind}
+                onChange={(e) => {
+                  const next = e.target.value === "owner" ? "owner" : "manager";
+                  setSelectedKind(next);
+                  setDraftAxisId(null);
+                  setDraftName(null);
+                  setDraftUserId(null);
+                  setSelectedProps({});
+                  setInviteeAtCap(false);
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              >
+                <option value="manager">Manager</option>
+                <option value="owner">Owner</option>
+              </select>
+            </label>
             <label className="block flex-1 text-xs font-semibold text-slate-600">
               {AXIS_ID_LABEL}
               <input

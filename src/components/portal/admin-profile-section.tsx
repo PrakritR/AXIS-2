@@ -7,6 +7,13 @@ function safeLine(value: unknown): string {
   return t.length ? t : "—";
 }
 
+function adminAxisIdFrom(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "—";
+  const compact = raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  return `AXIS-A-${compact.slice(0, 8)}`;
+}
+
 /**
  * Admin profile — isolated server fetch with safe coercion so transient Supabase/auth
  * issues or odd row shapes don’t take down the whole `/admin/profile` segment.
@@ -19,7 +26,7 @@ export async function AdminProfileSection() {
         fullName={safeLine(profile?.full_name)}
         email={safeLine(profile?.email ?? user?.email)}
         phone={safeLine(profile?.phone)}
-        adminId={safeLine(profile?.id ?? user?.id)}
+        adminId={adminAxisIdFrom(profile?.id ?? user?.id)}
       />
     );
   } catch {

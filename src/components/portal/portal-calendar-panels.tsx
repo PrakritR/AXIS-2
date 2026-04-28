@@ -190,6 +190,9 @@ export function PortalCalendarPanels({
         getPartnerInquiryWindows(row).map((window, index) => {
           const start = new Date(window.start);
           const end = new Date(window.end);
+          if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end.getTime() < Date.now() - 30 * 60 * 1000) {
+            return null;
+          }
           const mins = Math.max(30, end.getTime() - start.getTime());
           return {
             id: `inquiry-${row.id}-${index}`,
@@ -201,7 +204,8 @@ export function PortalCalendarPanels({
             statusLabel: "Requested",
           } satisfies DemoMeeting;
         }),
-      );
+      )
+      .filter(Boolean) as DemoMeeting[];
 
     return [...planned, ...pending];
   }, [storageKey, activeSlots, calendarRefreshSignal]);

@@ -621,7 +621,7 @@ export function ensureAccountApplicationSeeds(userId: string | null, email: stri
       ...seed,
       ...row,
       propertyId: row.propertyId?.trim() || seed.propertyId,
-      managerUserId: row.managerUserId ?? seed.managerUserId,
+      managerUserId: userId,
       application: row.application ?? seed.application,
     };
     if (JSON.stringify(merged) !== JSON.stringify(row)) changed = true;

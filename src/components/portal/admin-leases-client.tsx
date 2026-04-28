@@ -24,6 +24,7 @@ import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/po
 import { PORTAL_DATA_TABLE_WRAP, PORTAL_DATA_TABLE_SCROLL, PORTAL_TABLE_DETAIL_ROW, PORTAL_TABLE_TR } from "@/components/portal/portal-data-table";
 
 const KPI_LABELS = ["Manager review", "Admin review", "With resident", "Signed"] as const;
+const ADMIN_VISIBLE_LEASE_BUCKETS: AdminLeaseBucketIndex[] = [0, 1];
 
 function naturalLabelSort(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -350,22 +351,22 @@ export function AdminLeasesClient() {
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-          {KPI_LABELS.map((label, i) => (
+          {ADMIN_VISIBLE_LEASE_BUCKETS.map((bucketIndex) => (
             <button
-              key={label}
+              key={KPI_LABELS[bucketIndex]}
               type="button"
-              onClick={() => setActiveBucket(i as AdminLeaseBucketIndex)}
+              onClick={() => setActiveBucket(bucketIndex)}
               className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-                activeBucket === i ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                activeBucket === bucketIndex ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              {label}
+              {KPI_LABELS[bucketIndex]}
               <span
                 className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                  activeBucket === i ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+                  activeBucket === bucketIndex ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
                 }`}
               >
-                {kpiValues[i] ?? 0}
+                {kpiValues[bucketIndex] ?? 0}
               </span>
             </button>
           ))}
