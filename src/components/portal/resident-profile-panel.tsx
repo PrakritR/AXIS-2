@@ -8,10 +8,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 
-function fallbackApplicationId(userId: string) {
-  return `APP-${userId.replace(/-/g, "").slice(0, 12).toUpperCase()}`;
-}
-
 export function ResidentProfilePanel() {
   const { showToast } = useAppUi();
   const [userId, setUserId] = useState<string | null>(null);
@@ -19,7 +15,6 @@ export function ResidentProfilePanel() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [axisId, setAxisId] = useState("");
-  const [applicationId, setApplicationId] = useState("");
   const [emName, setEmName] = useState("");
   const [emPhone, setEmPhone] = useState("");
 
@@ -42,10 +37,6 @@ export function ResidentProfilePanel() {
           .reverse()
           .find((row) => row.email?.trim().toLowerCase() === normalizedEmail);
 
-        const resolvedApplicationId =
-          (typeof user.user_metadata?.application_id === "string" ? user.user_metadata.application_id.trim() : "") ||
-          matchingApplication?.id?.trim() ||
-          fallbackApplicationId(user.id);
         const resolvedName =
           profile?.full_name?.trim() ||
           matchingApplication?.application?.fullLegalName?.trim() ||
@@ -61,13 +52,11 @@ export function ResidentProfilePanel() {
         setName(resolvedName);
         setPhone(resolvedPhone);
         setAxisId(profile?.id ? `AXIS-R-${profile.id.slice(0, 8).toUpperCase()}` : "");
-        setApplicationId(resolvedApplicationId);
 
         const needsProfileBackfill =
           !profile ||
           !String(profile.full_name ?? "").trim() ||
-          !String(profile.phone ?? "").trim() ||
-          (typeof user.user_metadata?.application_id !== "string" || !user.user_metadata.application_id.trim());
+          !String(profile.phone ?? "").trim();
 
         if (needsProfileBackfill) {
           void fetch("/api/profile/backfill", {
@@ -76,7 +65,6 @@ export function ResidentProfilePanel() {
             body: JSON.stringify({
               fullName: resolvedName || undefined,
               phone: resolvedPhone || undefined,
-              applicationId: resolvedApplicationId,
             }),
           }).catch(() => undefined);
         }
@@ -137,10 +125,6 @@ export function ResidentProfilePanel() {
           <label className="text-sm font-semibold text-slate-800">Axis ID</label>
           <Input value={axisId} readOnly className="bg-slate-50/80 font-mono text-sm" />
         </div>
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-800">Application ID</label>
-          <Input value={applicationId} readOnly className="bg-slate-50/80 font-mono text-sm" />
-        </div>
         <div className="space-y-2 sm:col-span-2">
           <p className="text-sm font-semibold text-slate-800">Emergency contact</p>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -152,7 +136,6 @@ export function ResidentProfilePanel() {
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Resident access</p>
           <p className="mt-3 text-sm font-semibold text-slate-900">{axisId || "Axis ID pending"}</p>
-          <p className="mt-2 text-sm font-semibold text-slate-900">{applicationId || "Application ID pending"}</p>
           <p className="mt-1 text-sm text-slate-600">Keep this profile current so your manager can reach you for lease, payment, and work-order updates.</p>
         </div>
       </div>
