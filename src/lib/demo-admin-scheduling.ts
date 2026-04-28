@@ -90,8 +90,22 @@ function writeJson(key: string, value: unknown) {
   if (!isBrowser()) return;
   memoryStore.set(key, value);
   emitAdminUi();
+  void writeJsonToServer(key, value).catch(() => undefined);
+}
+
+function persistPublicPartnerInquiry(row: PartnerInquiry) {
+  if (!isBrowser()) return;
+  void fetch("/api/public/partner-inquiries", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ row }),
+  }).catch(() => undefined);
+}
+
+async function writeJsonToServer(key: string, value: unknown): Promise<boolean> {
+  if (!isBrowser()) return false;
   const scope = scheduleRecordScope(key);
-  void fetch("/api/portal-schedule-records", {
+  const res = await fetch("/api/portal-schedule-records", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -106,7 +120,8 @@ function writeJson(key: string, value: unknown) {
         payload: value,
       },
     }),
-  }).catch(() => undefined);
+  });
+  return res.ok;
 }
 
 export async function syncScheduleRecordsFromServer(): Promise<boolean> {
@@ -233,6 +248,19 @@ export function writeAvailabilityDateSetForStorageKey(next: Set<string>, storage
     memoryStore.set(`${storageKey}:adminLabel`, metadata.adminLabel.trim());
   }
   writeJson(storageKey, [...next]);
+}
+
+export async function writeAvailabilityDateSetForStorageKeyToServer(
+  next: Set<string>,
+  storageKey: string,
+  metadata?: { adminLabel?: string | null },
+): Promise<boolean> {
+  if (metadata?.adminLabel?.trim()) {
+    memoryStore.set(`${storageKey}:adminLabel`, metadata.adminLabel.trim());
+  }
+  memoryStore.set(storageKey, [...next]);
+  emitAdminUi();
+  return writeJsonToServer(storageKey, [...next]);
 }
 
 export function dateHasAvailability(d: Date, availability: Set<string>) {
@@ -383,6 +411,7 @@ export function appendPartnerInquiry(payload: Omit<PartnerInquiry, "id" | "statu
   };
   rows.unshift(row);
   writeJson(INQ_KEY, rows);
+  persistPublicPartnerInquiry(row);
 }
 
 export function updatePartnerInquiry(id: string, patch: Partial<PartnerInquiry>) {

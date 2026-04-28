@@ -31,6 +31,7 @@ import {
 } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
@@ -40,7 +41,7 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
 
 export function ManagerPayments() {
   const { showToast } = useAppUi();
-  const { userId } = useManagerUserId();
+  const { userId, ready: authReady } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [hcTick, setHcTick] = useState(0);
@@ -53,6 +54,7 @@ export function ManagerPayments() {
   const [rentAmount, setRentAmount] = useState("");
   const [rentDueDay, setRentDueDay] = useState("1");
   const [applicationTick, setApplicationTick] = useState(0);
+  const [propertyTick, setPropertyTick] = useState(0);
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -69,6 +71,11 @@ export function ManagerPayments() {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
     };
   }, []);
+
+  useEffect(() => {
+    if (!authReady || !userId) return;
+    void syncPropertyPipelineFromServer().then(() => setPropertyTick((n) => n + 1));
+  }, [authReady, userId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -121,6 +128,7 @@ export function ManagerPayments() {
   const mergedRows = useMemo(() => {
     void hcTick;
     void applicationTick;
+    void propertyTick;
     const applications = readManagerApplicationRows();
     const fromHc = readChargesForManager(userId).map((charge) => {
       const ledgerRow = householdChargeToLedgerRow(charge);
@@ -135,7 +143,7 @@ export function ManagerPayments() {
       return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
     });
     return [...fromHc, ...mergeManagerPaymentLedger()];
-  }, [userId, hcTick, applicationTick]);
+  }, [userId, hcTick, applicationTick, propertyTick]);
 
   const propertyOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -188,7 +196,7 @@ export function ManagerPayments() {
       readManagerApplicationRows()
         .filter((row) => row.bucket === "approved" && row.email?.trim() && applicationVisibleToPortalUser(row, userId))
         .map((row) => {
-          const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
+          const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
           const property = propertyId ? getPropertyById(propertyId) : null;
           const roomLabel = getRoomChoiceLabel(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "");
           return {
@@ -201,7 +209,7 @@ export function ManagerPayments() {
             signedMonthlyRent: row.signedMonthlyRent ?? null,
           };
         }),
-    [userId, hcTick, applicationTick],
+    [userId, hcTick, applicationTick, propertyTick],
   );
 
   const selectedApprovedResident = useMemo(

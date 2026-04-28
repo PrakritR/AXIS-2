@@ -11,6 +11,7 @@ import {
   readPendingManagerPropertiesForUser,
   readExtraListingsForUser,
   readAllExtraListings,
+  syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 import {
   AXIS_ID_LABEL,
@@ -85,6 +86,16 @@ export function ProAccountLinksPanel({
   useEffect(() => {
     void loadRemoteInvites();
   }, [loadRemoteInvites]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void syncPropertyPipelineFromServer().then(() => {
+      if (!cancelled) refreshLocal();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshLocal]);
 
   useEffect(() => {
     const on = () => refreshLocal();

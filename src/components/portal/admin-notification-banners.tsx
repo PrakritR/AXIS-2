@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
 import { readPartnerInboxMessages } from "@/lib/demo-admin-partner-inbox";
-import { pendingInquiryCount } from "@/lib/demo-admin-scheduling";
+import { pendingInquiryCount, syncScheduleRecordsFromServer } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { LEASE_PIPELINE_EVENT } from "@/lib/lease-pipeline-storage";
@@ -14,6 +14,7 @@ export function AdminNotificationBanners() {
 
   useEffect(() => {
     const bump = () => setTick((t) => t + 1);
+    void syncScheduleRecordsFromServer().then(bump);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
     window.addEventListener(ADMIN_UI_EVENT, bump);
     window.addEventListener(LEASE_PIPELINE_EVENT, bump);

@@ -9,6 +9,7 @@ import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { collectAccessiblePropertyIds } from "@/lib/manager-portfolio-access";
+import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import {
   MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
   MANAGER_WORK_ORDERS_EVENT,
@@ -36,12 +37,13 @@ function countWorkOrders(rows: DemoManagerWorkOrderRow[]) {
 
 export function ManagerWorkOrders() {
   const { showToast } = useAppUi();
-  const { userId } = useManagerUserId();
+  const { userId, ready: authReady } = useManagerUserId();
   const [bucket, setBucket] = useState<ManagerWorkOrderBucket>("open");
   /** Avoid SSR / hydration mismatch before backend records hydrate. */
   const [storageReady, setStorageReady] = useState(false);
   /** Bumps when backend work orders change. */
   const [storeTick, setStoreTick] = useState(0);
+  const [propertyTick, setPropertyTick] = useState(0);
 
   useEffect(() => setStorageReady(true), []);
 
@@ -53,6 +55,11 @@ export function ManagerWorkOrders() {
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
     };
   }, []);
+
+  useEffect(() => {
+    if (!authReady || !userId) return;
+    void syncPropertyPipelineFromServer().then(() => setPropertyTick((t) => t + 1));
+  }, [authReady, userId]);
 
   const allRows = useMemo(
     () =>
@@ -68,7 +75,7 @@ export function ManagerWorkOrders() {
       const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim();
       return Boolean(pid && propertyIds.has(pid));
     });
-  }, [allRows, userId]);
+  }, [allRows, userId, propertyTick]);
 
   const counts = useMemo(() => countWorkOrders(scopedRows), [scopedRows]);
   const tabs = useMemo(

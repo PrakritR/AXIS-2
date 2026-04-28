@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import {
   syncScheduleRecordsFromServer,
   toLocalDateStr,
   writeAvailabilityDateSetForStorageKey,
+  writeAvailabilityDateSetForStorageKeyToServer,
 } from "@/lib/demo-admin-scheduling";
 
 type CalendarMode = "day" | "week" | "month";
@@ -125,6 +126,12 @@ type CalendarBlockSelection =
   | { kind: "availability"; dateStr: string; slotIndex: number }
   | { kind: "meeting"; meeting: DemoMeeting };
 
+type CalendarPopoverAnchor = {
+  top: number;
+  left: number;
+  width: number;
+};
+
 const slotRowIndices = Array.from({ length: SLOT_ROW_END - SLOT_ROW_START + 1 }, (_, i) => SLOT_ROW_START + i);
 
 function formatSlotEndLabel(slotIndexExclusive: number): string {
@@ -140,6 +147,23 @@ function localIsoForSlot(dateStr: string, slotIndex: number): string {
   const d = new Date(year!, month! - 1, day!, 0, 0, 0, 0);
   d.setMinutes(slotIndex * 30);
   return d.toISOString();
+}
+
+function anchorPopoverToElement(el: HTMLElement): CalendarPopoverAnchor {
+  const rect = el.getBoundingClientRect();
+  const margin = 12;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const width = Math.min(420, Math.max(280, viewportWidth - margin * 2));
+  const estimatedHeight = 360;
+  const left = Math.min(
+    Math.max(margin, rect.left + rect.width / 2 - width / 2),
+    Math.max(margin, viewportWidth - width - margin),
+  );
+  const below = rect.bottom + 10;
+  const above = rect.top - estimatedHeight - 10;
+  const top = below + estimatedHeight <= viewportHeight - margin ? below : Math.max(margin, above);
+  return { top, left, width };
 }
 
 function weekdayLabelList(days: number[]) {
@@ -189,7 +213,9 @@ export function PortalCalendarPanels({
   const [updateToHousesOpen, setUpdateToHousesOpen] = useState(false);
   const [selectedHouseIds, setSelectedHouseIds] = useState<Set<string>>(new Set());
   const [selectedBlock, setSelectedBlock] = useState<CalendarBlockSelection | null>(null);
+  const [selectedBlockAnchor, setSelectedBlockAnchor] = useState<CalendarPopoverAnchor | null>(null);
   const [meetingRefresh, setMeetingRefresh] = useState(0);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
     if (!storageKey) return;
@@ -211,7 +237,8 @@ export function PortalCalendarPanels({
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
 
   const meetings = useMemo<DemoMeeting[]>(() => {
-    const showAdminMeetings = storageKey === ADMIN_AVAILABILITY_STORAGE_KEY;
+    const showAdminMeetings =
+      storageKey === ADMIN_AVAILABILITY_STORAGE_KEY || Boolean(storageKey?.startsWith("axis_admin_avail_slots_v2_admin_"));
     const showManagerTours = Boolean(scheduledTourFilter?.managerUserId && scheduledTourFilter.propertyId);
 
     const planned = (showAdminMeetings || showManagerTours) ? readPlannedEvents()
@@ -328,14 +355,30 @@ export function PortalCalendarPanels({
   const writeAvailability = useCallback(
     (next: Set<string>) => {
       if (!storageKey) return;
-      writeAvailabilityDateSetForStorageKey(next, storageKey, { adminLabel: scheduleOwnerLabel });
       setActiveSlots(next);
+      setSaveStatus("saving");
+      void writeAvailabilityDateSetForStorageKeyToServer(next, storageKey, { adminLabel: scheduleOwnerLabel })
+        .then(async (ok) => {
+          if (!ok) {
+            setSaveStatus("error");
+            reloadAvailability();
+            return;
+          }
+          await syncScheduleRecordsFromServer();
+          setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+          setSaveStatus("saved");
+        })
+        .catch(() => {
+          setSaveStatus("error");
+          reloadAvailability();
+        });
     },
-    [scheduleOwnerLabel, storageKey],
+    [reloadAvailability, scheduleOwnerLabel, storageKey],
   );
 
   const openSlotDetails = useCallback(
-    (dateStr: string, slotIdx: number, meeting?: DemoMeeting) => {
+    (dateStr: string, slotIdx: number, target: HTMLElement, meeting?: DemoMeeting) => {
+      setSelectedBlockAnchor(anchorPopoverToElement(target));
       if (meeting) {
         setSelectedBlock({ kind: "meeting", meeting });
         return;
@@ -353,6 +396,7 @@ export function PortalCalendarPanels({
     next.delete(dateSlotKey(selectedBlock.dateStr, selectedBlock.slotIndex));
     writeAvailability(next);
     setSelectedBlock(null);
+    setSelectedBlockAnchor(null);
   }, [activeSlots, selectedBlock, writeAvailability]);
 
   const approveSelectedInquiry = useCallback(() => {
@@ -364,6 +408,7 @@ export function PortalCalendarPanels({
       })
     ) {
       setSelectedBlock(null);
+      setSelectedBlockAnchor(null);
       setMeetingRefresh((n) => n + 1);
       reloadAvailability();
     }
@@ -377,6 +422,7 @@ export function PortalCalendarPanels({
         : deletePartnerInquiry(selectedBlock.meeting.sourceId);
     if (ok) {
       setSelectedBlock(null);
+      setSelectedBlockAnchor(null);
       setMeetingRefresh((n) => n + 1);
       reloadAvailability();
     }
@@ -611,12 +657,49 @@ export function PortalCalendarPanels({
     return `${days} · ${formatAvailabilitySlotLabel(blockStartSlot)}-${formatSlotEndLabel(blockEndSlotExclusive)} · ${repeats}`;
   }, [blockCadence, blockEndSlotExclusive, blockOccurrences, blockStartSlot, blockWeekdays]);
 
+  const closeSelectedBlock = useCallback(() => {
+    setSelectedBlock(null);
+    setSelectedBlockAnchor(null);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedBlock) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeSelectedBlock();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closeSelectedBlock, selectedBlock]);
+
   const selectedBlockModal = (
-    <Modal
-      open={Boolean(selectedBlock)}
-      title={selectedBlock?.kind === "meeting" ? selectedBlock.meeting.title : "Availability block"}
-      onClose={() => setSelectedBlock(null)}
-    >
+    selectedBlock ? (
+    <div className="fixed inset-0 z-[80]">
+      <button
+        type="button"
+        aria-label="Close calendar details"
+        className="absolute inset-0 bg-slate-900/15 backdrop-blur-[1px]"
+        onClick={closeSelectedBlock}
+      />
+      <div
+        className="absolute z-[81] max-h-[min(520px,calc(100svh-1.5rem))] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-slate-900/5 sm:p-5"
+        style={{
+          top: selectedBlockAnchor?.top ?? 24,
+          left: selectedBlockAnchor?.left ?? 16,
+          width: selectedBlockAnchor?.width ?? "min(420px, calc(100vw - 1.5rem))",
+        }}
+      >
+      <div className="mb-4 flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+        <h3 className="min-w-0 text-base font-bold text-slate-950">
+          {selectedBlock.kind === "meeting" ? selectedBlock.meeting.title : "Availability block"}
+        </h3>
+        <button
+          type="button"
+          onClick={closeSelectedBlock}
+          className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+        >
+          Close
+        </button>
+      </div>
       {selectedBlock?.kind === "meeting" ? (
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
@@ -671,7 +754,7 @@ export function PortalCalendarPanels({
           ) : null}
 
           <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setSelectedBlock(null)}>
+            <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
               Close
             </Button>
             <Button
@@ -702,7 +785,7 @@ export function PortalCalendarPanels({
           </div>
           <p className="text-sm text-slate-600">Delete this slot if you no longer want applicants to book it.</p>
           <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setSelectedBlock(null)}>
+            <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
               Close
             </Button>
             <Button
@@ -716,7 +799,9 @@ export function PortalCalendarPanels({
           </div>
         </div>
       ) : null}
-    </Modal>
+      </div>
+    </div>
+    ) : null
   );
 
   if (!storageKey) {
@@ -745,7 +830,12 @@ export function PortalCalendarPanels({
                 →
               </Button>
             </div>
-            <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open this week</div>
+            <div className="flex flex-wrap items-center gap-2">
+              {saveStatus === "saving" ? <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">Saving…</span> : null}
+              {saveStatus === "saved" ? <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">Saved</span> : null}
+              {saveStatus === "error" ? <span className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700">Save failed</span> : null}
+              <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open this week</div>
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -818,7 +908,7 @@ export function PortalCalendarPanels({
                             if (meeting || active) return;
                             finishDragSelection();
                           }}
-                          onClick={() => openSlotDetails(ds, slotIdx, meeting)}
+                          onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
                           className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
                             meeting
                               ? `${meeting.color} ring-1 ring-inset`
@@ -1136,7 +1226,7 @@ export function PortalCalendarPanels({
                               <button
                                 type="button"
                                 className={`w-full rounded-xl border px-2 py-2 text-left text-xs font-semibold shadow-sm transition hover:brightness-95 ${meeting.color}`}
-                                onClick={() => openSlotDetails(ds, slotIdx, meeting)}
+                                onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
                               >
                                 {meeting.statusLabel ? `${meeting.statusLabel}: ` : ""}
                                 {meeting.title}
@@ -1175,7 +1265,7 @@ export function PortalCalendarPanels({
                         type="button"
                         className={`absolute inset-1 z-[1] rounded-xl border px-2 py-2 text-left text-xs font-semibold shadow-sm transition hover:brightness-95 ${meeting.color}`}
                         style={{ height: `calc(${meeting.span} * 40px - 4px)` }}
-                        onClick={() => openSlotDetails(ds, slotIdx, meeting)}
+                        onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
                       >
                         {meeting.statusLabel ? `${meeting.statusLabel}: ` : ""}
                         {meeting.title}
@@ -1215,7 +1305,12 @@ export function PortalCalendarPanels({
             </Button>
           </div>
         </div>
-        <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open slots</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {saveStatus === "saving" ? <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">Saving…</span> : null}
+          {saveStatus === "saved" ? <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">Saved</span> : null}
+          {saveStatus === "error" ? <span className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700">Save failed</span> : null}
+          <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open slots</div>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1262,7 +1357,7 @@ export function PortalCalendarPanels({
                         if (active) return;
                         finishDragSelection();
                       }}
-                      onClick={() => openSlotDetails(ds, slotIdx)}
+                      onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget)}
                       className={`flex min-h-10 items-center justify-between rounded-xl border px-3 text-left text-xs font-semibold transition ${
                         selected
                           ? "border-primary/40 bg-primary/[0.12] text-primary"

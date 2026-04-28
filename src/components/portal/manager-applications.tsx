@@ -38,9 +38,9 @@ import {
   MANAGER_PORTFOLIO_REFRESH_EVENTS,
   applicationVisibleToPortalUser,
   buildManagerPropertyFilterOptions,
-  collectAccessiblePropertyIds,
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
+import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "@/lib/rental-application/data";
 import {
   HOUSEHOLD_CHARGES_EVENT,
@@ -153,17 +153,6 @@ function ManagerApplicationPlacementEditor({
     }
   }, [row]);
 
-  const availablePropertyOptions = useMemo(() => {
-    return propertyOptions.filter((opt) => {
-      const hasAvailableRooms = getRoomOptionsForProperty(opt.id, {
-        leaseStart: row.application?.leaseStart,
-        leaseEnd: row.application?.leaseEnd,
-        excludeApplicationId: row.id,
-      }).length > 0;
-      return hasAvailableRooms || opt.id === propertyId;
-    });
-  }, [propertyId, propertyOptions, row.application?.leaseEnd, row.application?.leaseStart, row.id]);
-
   const roomOptions = useMemo(
     () =>
       propertyId
@@ -217,7 +206,7 @@ function ManagerApplicationPlacementEditor({
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">House</span>
             <Select value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
               <option value="">Select property</option>
-              {availablePropertyOptions.map((opt) => (
+              {propertyOptions.map((opt) => (
                 <option key={opt.id} value={opt.id}>
                   {opt.label}
                 </option>
@@ -295,6 +284,7 @@ export function ManagerApplications() {
   const [rows, setRows] = useState<DemoApplicantRow[]>([]);
   const [portfolioTick, setPortfolioTick] = useState(0);
   const [roomSortDir, setRoomSortDir] = useState<"asc" | "desc">("asc");
+  const [propertyDataLoading, setPropertyDataLoading] = useState(false);
 
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
@@ -305,6 +295,21 @@ export function ManagerApplications() {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
     };
   }, []);
+
+  useEffect(() => {
+    if (!authReady || !userId) return;
+    let cancelled = false;
+    setPropertyDataLoading(true);
+    syncPropertyPipelineFromServer()
+      .finally(() => {
+        if (cancelled) return;
+        setPropertyDataLoading(false);
+        setPortfolioTick((n) => n + 1);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, userId]);
 
   useEffect(() => {
     const bump = () => setPortfolioTick((n) => n + 1);
@@ -344,20 +349,7 @@ export function ManagerApplications() {
   }, []);
 
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId, portfolioTick]);
-  const placementPropertyOptions = useMemo(() => {
-    if (!userId) return [];
-    return [...collectAccessiblePropertyIds(userId)]
-      .map((id) => {
-        const property = getPropertyById(id);
-        if (!property) return null;
-        return {
-          id,
-          label: property.title?.trim() || property.address?.trim() || id,
-        };
-      })
-      .filter((value): value is ManagerPropertyFilterOption => Boolean(value))
-      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [userId, portfolioTick]);
+  const placementPropertyOptions = propertyOptions;
 
   const scopedRows = useMemo(() => {
     if (!authReady) return [];
@@ -377,7 +369,9 @@ export function ManagerApplications() {
 
   const rowsForBucket = useMemo(() => {
     const inBucket = scopedRows.filter((r) => r.bucket === bucket);
-    const filtered = !propertyFilter.trim() ? inBucket : inBucket.filter((r) => r.propertyId === propertyFilter);
+    const filtered = !propertyFilter.trim()
+      ? inBucket
+      : inBucket.filter((r) => (r.assignedPropertyId?.trim() || r.propertyId?.trim() || r.application?.propertyId?.trim()) === propertyFilter);
     const sorted = sortApplicationRows(filtered, bucket);
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
     return [...sorted].sort((a, b) => {
@@ -388,6 +382,7 @@ export function ManagerApplications() {
 
   const refreshTable = useCallback(() => {
     setRows(readManagerApplicationRows());
+    void syncPropertyPipelineFromServer().then(() => setPortfolioTick((n) => n + 1));
     showToast("Refreshed.");
   }, [showToast]);
 
@@ -519,6 +514,7 @@ export function ManagerApplications() {
       filterRow={
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
+          {propertyDataLoading ? <p className="text-xs text-slate-500">Loading properties from backend…</p> : null}
         </div>
       }
     >

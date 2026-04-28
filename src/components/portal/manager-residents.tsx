@@ -27,11 +27,16 @@ import {
   readChargesForResident,
   type HouseholdCharge,
 } from "@/lib/household-charges";
-import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
-import { readExtraListingsForUser, readPendingManagerPropertiesForUser, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
+import {
+  PROPERTY_PIPELINE_EVENT,
+  readExtraListingsForUser,
+  readPendingManagerPropertiesForUser,
+  syncPropertyPipelineFromServer,
+} from "@/lib/demo-property-pipeline";
 
 type ActiveResident = {
   id: string;
@@ -57,7 +62,7 @@ function centsFromLabel(label: string): number {
 
 export function ManagerResidents() {
   const { showToast } = useAppUi();
-  const { userId } = useManagerUserId();
+  const { userId, ready: authReady } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
   const [hcTick, setHcTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
@@ -85,6 +90,17 @@ export function ManagerResidents() {
       window.removeEventListener("storage", bump);
     };
   }, []);
+
+  useEffect(() => {
+    if (!authReady || !userId) return;
+    let cancelled = false;
+    void Promise.allSettled([syncPropertyPipelineFromServer(), syncManagerApplicationsFromServer()]).then(() => {
+      if (!cancelled) setPropertyTick((n) => n + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, userId]);
 
   useEffect(() => {
     const emails = [

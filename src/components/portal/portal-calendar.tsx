@@ -10,7 +10,8 @@ import {
   managerPropertyAvailabilityStorageKey,
   readAvailabilityDateSetForStorageKey,
   registerManagerForProperty,
-  writeAvailabilityDateSetForStorageKey,
+  syncScheduleRecordsFromServer,
+  writeAvailabilityDateSetForStorageKeyToServer,
   toLocalDateStr,
   startOfWeekMonday,
 } from "@/lib/demo-admin-scheduling";
@@ -177,9 +178,13 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
       dstSlots.add(key);
     }
 
-    writeAvailabilityDateSetForStorageKey(dstSlots, dstKey);
     setCopyModalOpen(false);
-    setCalendarRefreshSignal((n) => n + 1);
+    void writeAvailabilityDateSetForStorageKeyToServer(dstSlots, dstKey)
+      .then((ok) => {
+        if (!ok) showToast("Could not save copied schedule to backend.");
+        return syncScheduleRecordsFromServer();
+      })
+      .finally(() => setCalendarRefreshSignal((n) => n + 1));
     const srcName = managerProperties.find((p) => p.id === copySourceId)?.name ?? copySourceId;
     const dstName = managerProperties.find((p) => p.id === copyDestId)?.name ?? copyDestId;
     showToast(`Copied schedule from ${srcName} → ${dstName}.`);
@@ -393,19 +398,25 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
             }
             onCopyWeekToHouses={
               portal === "manager" && userId && calendarPropertyId
-                ? (propertyIds, weekDateStrs) => {
+              ? (propertyIds, weekDateStrs) => {
                     if (!userId || !calendarPropertyId) return;
                     const srcKey = managerPropertyAvailabilityStorageKey(userId, calendarPropertyId);
                     const srcSlots = readAvailabilityDateSetForStorageKey(srcKey);
                     const weekStrs = new Set(weekDateStrs);
                     const weekSrcSlots = [...srcSlots].filter((key) => weekStrs.has(key.split(":")[0] ?? ""));
-                    for (const pid of propertyIds) {
+                    void Promise.all(
+                      propertyIds.map((pid) => {
                       const dstKey = managerPropertyAvailabilityStorageKey(userId, pid);
                       const dstSlots = new Set(readAvailabilityDateSetForStorageKey(dstKey));
                       for (const slot of weekSrcSlots) dstSlots.add(slot);
-                      writeAvailabilityDateSetForStorageKey(dstSlots, dstKey);
-                    }
-                    setCalendarRefreshSignal((n) => n + 1);
+                        return writeAvailabilityDateSetForStorageKeyToServer(dstSlots, dstKey);
+                      }),
+                    )
+                      .then((results) => {
+                        if (results.some((ok) => !ok)) showToast("Could not save every house schedule to backend.");
+                        return syncScheduleRecordsFromServer();
+                      })
+                      .finally(() => setCalendarRefreshSignal((n) => n + 1));
                     const destNames = propertyIds
                       .map((id) => managerProperties.find((p) => p.id === id)?.name ?? id)
                       .join(", ");

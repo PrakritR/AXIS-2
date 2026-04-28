@@ -29,7 +29,7 @@ export function collectAccessiblePropertyIds(userId: string): Set<string> {
 export function applicationVisibleToPortalUser(row: DemoApplicantRow, userId: string | null): boolean {
   if (!userId) return false;
   if (row.managerUserId && row.managerUserId === userId) return true;
-  const pid = row.propertyId?.trim();
+  const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim();
   if (pid && collectAccessiblePropertyIds(userId).has(pid)) return true;
   return false;
 }
@@ -60,7 +60,7 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
 
   for (const row of readManagerApplicationRows()) {
     if (!applicationVisibleToPortalUser(row, userId)) continue;
-    const pid = row.propertyId?.trim();
+    const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim();
     if (pid && !labelById.has(pid)) {
       labelById.set(pid, row.property.trim() || pid);
     }

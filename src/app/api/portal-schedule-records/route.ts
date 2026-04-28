@@ -10,7 +10,9 @@ const route = createJsonRecordRoute({
       or: (filters: string) => unknown;
     };
     if (user.role === "admin") return query;
-    return q.or(`manager_user_id.eq.${user.id},id.like.axis_mgr_avail_slots_v2_${user.id}%`);
+    return q.or(
+      `manager_user_id.eq.${user.id},id.like.axis_mgr_avail_slots_v2_${user.id}%,id.eq.axis_admin_partner_inquiries_v1,id.eq.axis_admin_planned_events_v1`,
+    );
   },
   buildUpsert: (row) => ({
     id: row.id,
