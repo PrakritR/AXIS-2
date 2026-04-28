@@ -38,9 +38,9 @@ export function ManagerWorkOrders() {
   const { showToast } = useAppUi();
   const { userId } = useManagerUserId();
   const [bucket, setBucket] = useState<ManagerWorkOrderBucket>("open");
-  /** Avoid SSR / hydration mismatch: server and first client paint must not read localStorage yet. */
+  /** Avoid SSR / hydration mismatch before backend records hydrate. */
   const [storageReady, setStorageReady] = useState(false);
-  /** Bumps when work orders or cross-tab storage changes — avoid useSyncExternalStore with unstable array snapshots. */
+  /** Bumps when backend work orders change. */
   const [storeTick, setStoreTick] = useState(0);
 
   useEffect(() => setStorageReady(true), []);
@@ -49,10 +49,8 @@ export function ManagerWorkOrders() {
     const bump = () => setStoreTick((t) => t + 1);
     void syncManagerWorkOrdersFromServer().then(bump);
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
-    window.addEventListener("storage", bump);
     return () => {
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
-      window.removeEventListener("storage", bump);
     };
   }, []);
 

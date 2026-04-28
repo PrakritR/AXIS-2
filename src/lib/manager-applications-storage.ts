@@ -1,10 +1,10 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
-const KEY = "axis_manager_applications_v1";
 export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
 
 const EMPTY_FALLBACK: DemoApplicantRow[] = [];
+let memoryRows: DemoApplicantRow[] = [];
 
 export function normalizeApplicationAxisId(id: string): string {
   const raw = id.trim();
@@ -29,7 +29,7 @@ function normalizeApplicationRows(rows: DemoApplicantRow[]): DemoApplicantRow[] 
 }
 
 function canUseStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return typeof window !== "undefined";
 }
 
 function emit() {
@@ -74,14 +74,8 @@ export async function syncManagerApplicationsFromServer(): Promise<DemoApplicant
     if (!res.ok) return readManagerApplicationRows();
     const body = (await res.json()) as { rows?: DemoApplicantRow[] };
     const rows = normalizeApplicationRows(Array.isArray(body.rows) ? body.rows : []);
-    if (rows.length > 0) {
-      window.localStorage.setItem(KEY, JSON.stringify(rows));
-      mirrorApplicationsToServer(rows);
-      emit();
-    } else {
-      const localRows = normalizeApplicationRows(readManagerApplicationRows());
-      if (localRows.length > 0) mirrorApplicationsToServer(localRows);
-    }
+    memoryRows = rows;
+    emit();
     return rows;
   } catch {
     return readManagerApplicationRows();
@@ -89,45 +83,35 @@ export async function syncManagerApplicationsFromServer(): Promise<DemoApplicant
 }
 
 export function readManagerApplicationRows(fallback: DemoApplicantRow[] = EMPTY_FALLBACK): DemoApplicantRow[] {
-  if (!canUseStorage()) return [...fallback];
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return [...fallback];
-    const v = JSON.parse(raw) as unknown;
-    if (!Array.isArray(v) || v.length === 0) return [...fallback];
-    const stored = normalizeApplicationRows(v as DemoApplicantRow[]);
-    return stored.map((r) => {
-      const seed = fallback.find((f) => f.id === r.id);
-      if (!seed) return r;
-      return {
-        ...seed,
-        ...r,
-        application: r.application ?? seed.application,
-      };
-    });
-  } catch {
-    return [...fallback];
-  }
+  const stored = normalizeApplicationRows(memoryRows);
+  if (stored.length === 0) return [...fallback];
+  return stored.map((r) => {
+    const seed = fallback.find((f) => f.id === r.id);
+    if (!seed) return r;
+    return {
+      ...seed,
+      ...r,
+      application: r.application ?? seed.application,
+    };
+  });
 }
 
 export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
-  if (!canUseStorage()) return;
   try {
     const normalizedRows = normalizeApplicationRows(rows);
-    window.localStorage.setItem(KEY, JSON.stringify(normalizedRows));
+    memoryRows = normalizedRows;
     emit();
     mirrorApplicationsToServer(normalizedRows);
     void import("@/lib/lease-pipeline-storage").then(({ readLeasePipeline }) => {
       readLeasePipeline();
     });
   } catch {
-    /* quota */
+    /* ignore */
   }
 }
 
 export function resetManagerApplicationRowsToDemo(): void {
-  if (!canUseStorage()) return;
-  window.localStorage.removeItem(KEY);
+  memoryRows = [];
   emit();
 }
 

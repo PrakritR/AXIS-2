@@ -1,7 +1,7 @@
 import { leasePipelineBucketCounts } from "@/lib/lease-pipeline-storage";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 
-const KEY = "axis_admin_leases_v1";
+let adminLeaseRows: AdminLeaseRow[] = [];
 
 /** Public sample PDF for preview/download demos (embed may depend on browser). */
 export const DEMO_LEASE_PDF_URL =
@@ -24,28 +24,13 @@ export type AdminLeaseRow = {
 };
 
 function isBrowser() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
-
-function readJson<T>(key: string, fallback: T): T {
-  if (!isBrowser()) return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return typeof window !== "undefined";
 }
 
 function write(rows: AdminLeaseRow[]) {
   if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(rows));
-    window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
-  } catch {
-    /* ignore */
-  }
+  adminLeaseRows = rows;
+  window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
 }
 
 function normalizeAdminLeaseRow(raw: Partial<AdminLeaseRow> & { id?: string }): AdminLeaseRow | null {
@@ -68,21 +53,8 @@ function normalizeAdminLeaseRow(raw: Partial<AdminLeaseRow> & { id?: string }): 
 }
 
 export function readAdminLeases(): AdminLeaseRow[] {
-  const raw = readJson<unknown>(KEY, null);
-  if (raw === null) {
-    write([]);
-    return [];
-  }
-  if (!Array.isArray(raw)) {
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.removeItem(KEY);
-      } catch {
-        /* ignore */
-      }
-    }
-    return [];
-  }
+  const raw: unknown = adminLeaseRows;
+  if (!Array.isArray(raw)) return [];
   const out: AdminLeaseRow[] = [];
   for (const item of raw) {
     const row = normalizeAdminLeaseRow((item ?? {}) as Partial<AdminLeaseRow>);

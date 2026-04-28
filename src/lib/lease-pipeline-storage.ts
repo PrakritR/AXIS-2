@@ -1,5 +1,5 @@
 /**
- * Unified manager / admin / resident lease workflow (demo localStorage).
+ * Unified manager / admin / resident lease workflow backed by Supabase records.
  * Buckets match UI tabs: manager → admin → resident → signed.
  */
 
@@ -15,8 +15,7 @@ import { clearUploadedOwnLease, readUploadedOwnLease, saveUploadedOwnLease } fro
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
 
-/** Bumped to drop legacy demo-seeded rows from localStorage; pipeline now starts empty until apps sync. */
-const STORAGE_KEY = "axis_lease_pipeline_v3";
+let memoryRows: LeasePipelineRow[] = [];
 
 /** Demo-only email map so residents can load their lease row. */
 const DEMO_RESIDENT_EMAIL: Record<string, string> = {
@@ -106,7 +105,7 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
 }
 
 function canUseStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return typeof window !== "undefined";
 }
 
 function emit() {
@@ -167,25 +166,19 @@ function demoRowToPipeline(seed: DemoManagerLeaseDraftRow): LeasePipelineRow {
 }
 
 function readRaw(): LeasePipelineRow[] | null {
-  if (!canUseStorage()) return null;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const v = JSON.parse(raw) as unknown;
-    return Array.isArray(v) ? (v as LeasePipelineRow[]) : null;
-  } catch {
-    return null;
-  }
+  return canUseStorage() ? memoryRows : null;
 }
 
 function write(rows: LeasePipelineRow[]) {
   if (!canUseStorage()) return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
-    emit();
-  } catch {
-    /* quota */
-  }
+  memoryRows = rows;
+  emit();
+  void fetch("/api/portal-lease-pipeline", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "replace", rows }),
+  }).catch(() => undefined);
 }
 
 function syncApprovedApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] {
@@ -243,9 +236,6 @@ export function readLeasePipeline(): LeasePipelineRow[] {
   try {
     let stored = readRaw() ?? [];
     stored = stored.map(normalizeLeasePipelineRow);
-    if (stored.length === 0) {
-      stored = demoManagerLeaseDraftRows.map(demoRowToPipeline);
-    }
     const rows = enrichFromApplications(stored);
     const merged = syncApprovedApplications(rows);
     if (merged.length > stored.length) {
@@ -253,14 +243,19 @@ export function readLeasePipeline(): LeasePipelineRow[] {
     }
     return rows;
   } catch {
-    /* Corrupt lease pipeline JSON or unexpected shape — reset to empty pipeline. */
-    try {
-      if (canUseStorage()) window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
+    memoryRows = [];
     return [];
   }
+}
+
+export async function syncLeasePipelineFromServer(): Promise<LeasePipelineRow[]> {
+  if (!canUseStorage()) return [];
+  const res = await fetch("/api/portal-lease-pipeline", { credentials: "include", cache: "no-store" });
+  if (!res.ok) return readLeasePipeline();
+  const body = (await res.json()) as { rows?: unknown[] };
+  memoryRows = (body.rows ?? []).map(normalizeLeasePipelineRow);
+  emit();
+  return readLeasePipeline();
 }
 
 export function leasePipelineBucketCounts(): [number, number, number, number] {

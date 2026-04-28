@@ -21,6 +21,7 @@ import type { ManagerPropertyRecordStatus } from "@/lib/persisted-property-recor
 
 /** Admin-wide queue (all managers). Manager portal passes `forManagerUserId` for isolated side-buckets. */
 const SIDE_KEY_GLOBAL = "axis_admin_property_buckets_v1";
+const sideMemory = new Map<string, unknown>();
 
 function sideKey(forManagerUserId?: string | null): string {
   if (forManagerUserId) return `axis_mgr_property_side_v1_${forManagerUserId}`;
@@ -63,28 +64,18 @@ type SideBuckets = {
 };
 
 function isBrowser() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return typeof window !== "undefined";
 }
 
 function readJson<T>(key: string, fallback: T): T {
   if (!isBrowser()) return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return sideMemory.has(key) ? (sideMemory.get(key) as T) : fallback;
 }
 
 function writeSideStorage(side: SideBuckets, forManagerUserId?: string | null) {
   if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(sideKey(forManagerUserId), JSON.stringify(side));
-    window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
-  } catch {
-    /* ignore */
-  }
+  sideMemory.set(sideKey(forManagerUserId), side);
+  window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
 }
 
 function mirrorAdminPropertyRecord(input: {

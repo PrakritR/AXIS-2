@@ -2,37 +2,25 @@ import type { RentalWizardFormState } from "./types";
 
 const RENTAL_WIZARD_DRAFT_KEY = "axis:rental-application:draft:v1";
 const COSIGNER_DRAFT_KEY = "axis:rental-cosigner:draft:v1";
+const memoryDrafts = new Map<string, unknown>();
 
 function canUseStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return typeof window !== "undefined";
 }
 
 function readJson<T>(key: string): T | null {
   if (!canUseStorage()) return null;
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
+  return memoryDrafts.has(key) ? (memoryDrafts.get(key) as T) : null;
 }
 
 function writeJson(key: string, value: unknown) {
   if (!canUseStorage()) return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Ignore storage write failures so the form remains usable.
-  }
+  memoryDrafts.set(key, value);
 }
 
 function removeItem(key: string) {
   if (!canUseStorage()) return;
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // Ignore storage removal failures.
-  }
+  memoryDrafts.delete(key);
 }
 
 export function loadRentalWizardDraft(): Partial<RentalWizardFormState> | null {

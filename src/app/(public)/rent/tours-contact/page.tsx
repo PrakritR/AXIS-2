@@ -129,10 +129,8 @@ export default function ToursContactPage() {
     };
     sync();
     window.addEventListener(PROPERTY_PIPELINE_EVENT, sync);
-    window.addEventListener("storage", sync);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, sync);
-      window.removeEventListener("storage", sync);
     };
   }, []);
 
@@ -206,10 +204,8 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
   useEffect(() => {
     const sync = () => setTick((n) => n + 1);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, sync);
-    window.addEventListener("storage", sync);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, sync);
-      window.removeEventListener("storage", sync);
     };
   }, []);
 

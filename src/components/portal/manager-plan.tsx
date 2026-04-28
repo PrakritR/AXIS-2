@@ -5,9 +5,10 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import { MANAGER_PLAN_TIERS } from "@/data/manager-plan-tiers";
+import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition } from "@/data/manager-plan-tiers";
 import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { loadManagerPlanTiers } from "@/lib/site-content";
 
 type SubPayload = {
   tier: string | null;
@@ -64,6 +65,7 @@ export function ManagerPlan() {
   const [sub, setSub] = useState<SubPayload | null>(null);
   const [pendingTier, setPendingTier] = useState<ManagerSkuTier>("free");
   const [pendingBilling, setPendingBilling] = useState<"monthly" | "annual">("monthly");
+  const [planTiers, setPlanTiers] = useState<ManagerPlanTierDefinition[]>(MANAGER_PLAN_TIERS);
   /** Paid-tier checkout / subscription API — never reuse for billing portal (avoid clobbering Free card). */
   const [busyTier, setBusyTier] = useState<ManagerSkuTier | null>(null);
   const [billingSyncBusy, setBillingSyncBusy] = useState(false);
@@ -88,6 +90,18 @@ export function ManagerPlan() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadManagerPlanTiers()
+      .then((tiers) => {
+        if (!cancelled) setPlanTiers(tiers);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!sub?.billing) return;
@@ -432,7 +446,7 @@ export function ManagerPlan() {
           </div>
         ) : (
           <div className="grid gap-5 lg:grid-cols-3">
-            {MANAGER_PLAN_TIERS.map((t) => {
+            {planTiers.map((t) => {
               const tierId = t.id as ManagerSkuTier;
               const pb = pendingBilling === "monthly" ? t.monthly : t.annual;
               const current = isCurrent(tierId);

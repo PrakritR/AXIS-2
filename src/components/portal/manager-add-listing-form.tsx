@@ -1,14 +1,14 @@
 "use client";
 
 import type { DragEvent, FormEvent, ReactNode } from "react";
-import { Children, useEffect, useRef, useState } from "react";
+import { Children, useEffect, useMemo, useRef, useState } from "react";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import {
-  submitManagerPendingProperty,
-  updateExtraListingFromSubmission,
-  updatePendingManagerProperty,
+  submitManagerPendingPropertyToServer,
+  updateExtraListingFromSubmissionOnServer,
+  updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
 import {
   BUSINESS_MAX_PROPERTIES,
@@ -47,14 +47,19 @@ import {
   mergeToggleLine,
   splitLineList,
 } from "@/data/manager-listing-presets";
+import { loadListingPresetConfig, type ListingPresetConfig } from "@/lib/site-content";
 
 const selectInputCls =
   "min-h-[44px] w-full rounded-xl border border-black/[0.08] bg-black/[0.04] px-3.5 py-2.5 text-[14px] text-[#1d1d1f] outline-none transition focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/20";
 
-const HOUSE_WIDE_AMENITY_LABEL_SET = new Set(HOUSE_WIDE_AMENITY_PRESETS.map((p) => p.label));
-const SHARED_SPACE_AMENITY_LABEL_SET = new Set(SHARED_SPACE_AMENITY_PRESETS.map((p) => p.label));
-const BATHROOM_EXTRA_AMENITY_LABEL_SET = new Set(BATHROOM_EXTRA_AMENITY_PRESETS.map((p) => p.label));
-const ROOM_AMENITY_LABEL_SET = new Set(ROOM_AMENITY_PRESETS.map((p) => p.label));
+const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
+  houseWide: [...HOUSE_WIDE_AMENITY_PRESETS],
+  sharedSpace: [...SHARED_SPACE_AMENITY_PRESETS],
+  bathroom: [...BATHROOM_EXTRA_AMENITY_PRESETS],
+  room: [...ROOM_AMENITY_PRESETS],
+  availability: ROOM_AVAILABILITY_OPTIONS,
+  furnishing: ROOM_FURNISHING_OPTIONS,
+};
 
 /** Lines in `fullText` that are not preset labels (free-form additions). */
 function extraLinesOutsidePresetSet(fullText: string, presetSet: Set<string>): string {
@@ -220,6 +225,7 @@ export function ManagerAddListingForm({
   );
   const [busy, setBusy] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [listingPresets, setListingPresets] = useState<ListingPresetConfig>(DEFAULT_LISTING_PRESETS);
   const [showQuickFacts, setShowQuickFacts] = useState(() => Boolean(initialSubmission?.quickFacts?.length));
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -227,10 +233,26 @@ export function ManagerAddListingForm({
 
   const isEditMode = Boolean(editPendingId ?? editListingId);
   const lastStepIndex = LISTING_STEP_COUNT - 1;
+  const HOUSE_WIDE_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.houseWide.map((p) => p.label)), [listingPresets.houseWide]);
+  const SHARED_SPACE_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.sharedSpace.map((p) => p.label)), [listingPresets.sharedSpace]);
+  const BATHROOM_EXTRA_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.bathroom.map((p) => p.label)), [listingPresets.bathroom]);
+  const ROOM_AMENITY_LABEL_SET = useMemo(() => new Set(listingPresets.room.map((p) => p.label)), [listingPresets.room]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [stepIndex]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadListingPresetConfig()
+      .then((presets) => {
+        if (!cancelled) setListingPresets(presets);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const canContinueFromStep = (i: number): boolean => {
     if (i === 0) {
@@ -569,7 +591,7 @@ export function ManagerAddListingForm({
     void onPickRoomVideo(roomIndex, event.dataTransfer.files?.[0] ?? null);
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const roomsOk = sub.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
     if (!sub.buildingName.trim() || !sub.address.trim() || !sub.zip.trim() || !sub.neighborhood.trim()) {
@@ -603,7 +625,7 @@ export function ManagerAddListingForm({
         return;
       }
       if (editPendingId) {
-        const ok = updatePendingManagerProperty(editPendingId, sub, userId);
+        const ok = await updatePendingManagerPropertyOnServer(editPendingId, sub, userId);
         if (!ok) {
           showToast("Could not save changes.");
           return;
@@ -612,7 +634,7 @@ export function ManagerAddListingForm({
         return;
       }
       if (editListingId) {
-        const ok = updateExtraListingFromSubmission(editListingId, userId, sub);
+        const ok = await updateExtraListingFromSubmissionOnServer(editListingId, userId, sub);
         if (!ok) {
           showToast("Could not save changes.");
           return;
@@ -621,7 +643,11 @@ export function ManagerAddListingForm({
         onSubmitted();
         return;
       }
-      submitManagerPendingProperty(sub, userId);
+      const id = await submitManagerPendingPropertyToServer(sub, userId);
+      if (!id) {
+        showToast("Could not submit listing.");
+        return;
+      }
       onSubmitted();
     } finally {
       setBusy(false);
@@ -976,7 +1002,7 @@ export function ManagerAddListingForm({
                             placeholder="Available now"
                           />
                           <datalist id={`room-avail-${room.id}`}>
-                            {ROOM_AVAILABILITY_OPTIONS.map((opt) => (
+                            {listingPresets.availability.map((opt) => (
                               <option key={opt} value={opt} />
                             ))}
                           </datalist>
@@ -995,7 +1021,7 @@ export function ManagerAddListingForm({
                             } else setRoom(i, { furnishing: v });
                           }}
                         >
-                          {ROOM_FURNISHING_OPTIONS.map((o) => (
+                          {listingPresets.furnishing.map((o) => (
                             <option key={o.value || "blank"} value={o.value}>
                               {o.label}
                             </option>
@@ -1016,7 +1042,7 @@ export function ManagerAddListingForm({
                       <div className="sm:col-span-2">
                         <FieldLabel hint="Check common items; add extras below.">Room amenities</FieldLabel>
                         <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
-                          {ROOM_AMENITY_PRESETS.map((p) => {
+                          {listingPresets.room.map((p) => {
                             const on = splitLineList(room.roomAmenitiesText).includes(p.label);
                             return (
                               <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -1276,7 +1302,7 @@ export function ManagerAddListingForm({
                           Bathroom amenities
                         </FieldLabel>
                         <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2">
-                          {BATHROOM_EXTRA_AMENITY_PRESETS.map((p) => {
+                          {listingPresets.bathroom.map((p) => {
                             const on = splitLineList(b.amenitiesText ?? "").includes(p.label);
                             return (
                               <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -1375,7 +1401,7 @@ export function ManagerAddListingForm({
                             Space amenities
                           </FieldLabel>
                           <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-3">
-                            {SHARED_SPACE_AMENITY_PRESETS.map((p) => {
+                            {listingPresets.sharedSpace.map((p) => {
                               const on = splitLineList(sp.amenitiesText ?? "").includes(p.label);
                               return (
                                 <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -1493,7 +1519,7 @@ export function ManagerAddListingForm({
               <div>
                 <FieldLabel hint="Tap to add common amenities; anything else goes in the box below.">Common amenities</FieldLabel>
                 <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {HOUSE_WIDE_AMENITY_PRESETS.map((p) => {
+                  {listingPresets.houseWide.map((p) => {
                     const on = splitLineList(sub.amenitiesText).includes(p.label);
                     return (
                       <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">

@@ -6,7 +6,7 @@ import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-p
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
-import { LEASE_PIPELINE_EVENT, readLeasePipeline } from "@/lib/lease-pipeline-storage";
+import { LEASE_PIPELINE_EVENT, readLeasePipeline, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
@@ -30,13 +30,12 @@ export function ManagerLeases() {
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
+    void syncLeasePipelineFromServer().then(on);
     window.addEventListener(LEASE_PIPELINE_EVENT, on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
-    window.addEventListener("storage", on);
     return () => {
       window.removeEventListener(LEASE_PIPELINE_EVENT, on);
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
-      window.removeEventListener("storage", on);
     };
   }, []);
 

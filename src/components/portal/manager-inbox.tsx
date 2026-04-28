@@ -13,6 +13,7 @@ import {
   PORTAL_INBOX_CHANGED_EVENT,
   loadPersistedInbox,
   persistInbox,
+  syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
 
@@ -66,6 +67,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
   useEffect(() => {
     setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
+    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY).then((rows) => setLocal(rows as InboxThread[]));
     setPersistReady(true);
   }, []);
 
@@ -77,10 +79,8 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       }
       setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
     };
-    window.addEventListener("storage", sync);
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
     return () => {
-      window.removeEventListener("storage", sync);
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
     };
   }, []);

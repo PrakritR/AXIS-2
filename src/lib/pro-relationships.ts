@@ -19,15 +19,7 @@ export type ProRelationshipRecord = {
   createdAt: string;
 };
 
-const STORAGE_VERSION = "v2";
-
-function storageKey(userId: string): string {
-  return `axis_pro_relationships_${userId}_${STORAGE_VERSION}`;
-}
-
-function legacyStorageKey(userId: string): string {
-  return `axis_pro_relationships_${userId}_v1`;
-}
+const memoryByUser = new Map<string, ProRelationshipRecord[]>();
 
 function migrateLegacyPerspective(p: string): ProRelationshipPerspective {
   if (p === "manager_tab" || p === "owner_tab") return p;
@@ -59,36 +51,35 @@ function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
 }
 
 export function readProRelationships(userId: string): ProRelationshipRecord[] {
-  if (typeof window === "undefined") return [];
-  try {
-    let raw = window.localStorage.getItem(storageKey(userId));
-    if (!raw) {
-      const leg = window.localStorage.getItem(legacyStorageKey(userId));
-      if (leg) {
-        const parsed = JSON.parse(leg) as unknown;
-        const arr = Array.isArray(parsed) ? parsed : [];
-        const rows = arr.map((x) => migrateRow(x as Record<string, unknown>)).filter(Boolean) as ProRelationshipRecord[];
-        window.localStorage.setItem(storageKey(userId), JSON.stringify(rows));
-        raw = window.localStorage.getItem(storageKey(userId));
-      }
-    }
-    if (!raw) return [];
-    const v = JSON.parse(raw) as unknown;
-    if (!Array.isArray(v)) return [];
-    return v.map((x) => migrateRow(x as Record<string, unknown>)).filter(Boolean) as ProRelationshipRecord[];
-  } catch {
-    return [];
-  }
+  if (typeof window === "undefined" || !userId.trim()) return [];
+  if (!memoryByUser.has(userId)) void syncProRelationshipsFromServer(userId).catch(() => undefined);
+  return memoryByUser.get(userId) ?? [];
 }
 
 export function writeProRelationships(userId: string, rows: ProRelationshipRecord[]): void {
   if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(storageKey(userId), JSON.stringify(rows));
-    window.dispatchEvent(new Event("axis-pro-relationships"));
-  } catch {
-    /* ignore quota */
-  }
+  memoryByUser.set(userId, rows);
+  window.dispatchEvent(new Event("axis-pro-relationships"));
+  void fetch("/api/portal-pro-relationships", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      action: "replace",
+      rows: rows.map((row) => ({ ...row, managerUserId: userId })),
+    }),
+  }).catch(() => undefined);
+}
+
+export async function syncProRelationshipsFromServer(userId: string): Promise<ProRelationshipRecord[]> {
+  if (typeof window === "undefined" || !userId.trim()) return [];
+  const res = await fetch("/api/portal-pro-relationships", { credentials: "include", cache: "no-store" });
+  if (!res.ok) return memoryByUser.get(userId) ?? [];
+  const body = (await res.json()) as { rows?: unknown[] };
+  const rows = (body.rows ?? []).map((x) => migrateRow(x as Record<string, unknown>)).filter(Boolean) as ProRelationshipRecord[];
+  memoryByUser.set(userId, rows);
+  window.dispatchEvent(new Event("axis-pro-relationships"));
+  return rows;
 }
 
 export function generateRelationshipId(): string {

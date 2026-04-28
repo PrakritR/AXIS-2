@@ -19,10 +19,8 @@ export function RentListingDetailClient({ id }: { id: string }) {
     void loadPublicExtraListingsFromServer().then((rows) => setExtra(rows.find((p) => p.id === id) ?? pick()));
     const on = () => setExtra(pick());
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
-    window.addEventListener("storage", on);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
-      window.removeEventListener("storage", on);
     };
   }, [id, base]);
 

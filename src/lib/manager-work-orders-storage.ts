@@ -1,10 +1,10 @@
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { removePendingWorkOrderChargesForWorkOrder } from "@/lib/household-charges";
 
-const KEY = "axis_manager_work_orders_v3";
 export const MANAGER_WORK_ORDERS_EVENT = "axis:manager-work-orders";
 
 const EMPTY_FALLBACK: DemoManagerWorkOrderRow[] = [];
+let memoryRows: DemoManagerWorkOrderRow[] = [];
 
 /**
  * Stable snapshot for SSR, hydration, and empty localStorage.
@@ -12,7 +12,7 @@ const EMPTY_FALLBACK: DemoManagerWorkOrderRow[] = [];
 export const MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT: DemoManagerWorkOrderRow[] = EMPTY_FALLBACK;
 
 function canUseStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return typeof window !== "undefined";
 }
 
 function emit() {
@@ -47,13 +47,8 @@ export async function syncManagerWorkOrdersFromServer(): Promise<DemoManagerWork
     if (!res.ok) return readManagerWorkOrderRows();
     const body = (await res.json()) as { rows?: DemoManagerWorkOrderRow[] };
     const rows = Array.isArray(body.rows) ? body.rows : [];
-    if (rows.length > 0) {
-      window.localStorage.setItem(KEY, JSON.stringify(rows));
-      emit();
-    } else {
-      const localRows = readManagerWorkOrderRows();
-      if (localRows.length > 0) mirrorWorkOrdersToServer(localRows);
-    }
+    memoryRows = rows;
+    emit();
     return rows;
   } catch {
     return readManagerWorkOrderRows();
@@ -61,41 +56,22 @@ export async function syncManagerWorkOrdersFromServer(): Promise<DemoManagerWork
 }
 
 export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = EMPTY_FALLBACK): DemoManagerWorkOrderRow[] {
-  if (!canUseStorage()) {
-    return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
-  }
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) {
-      return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
-    }
-    const v = JSON.parse(raw) as unknown;
-    if (!Array.isArray(v)) {
-      return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
-    }
-    const stored = v as DemoManagerWorkOrderRow[];
-    const byId = new Map(stored.map((r) => [r.id, r]));
-    const fallbackIds = new Set(fallback.map((f) => f.id));
-    const merged = fallback.map((seed) => {
-      const o = byId.get(seed.id);
-      return o ? { ...seed, ...o } : seed;
-    });
-    const extras = stored.filter((s) => s.id && !fallbackIds.has(s.id));
-    return [...merged, ...extras];
-  } catch {
-    return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
-  }
+  const stored = memoryRows;
+  if (stored.length === 0) return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
+  const byId = new Map(stored.map((r) => [r.id, r]));
+  const fallbackIds = new Set(fallback.map((f) => f.id));
+  const merged = fallback.map((seed) => {
+    const o = byId.get(seed.id);
+    return o ? { ...seed, ...o } : seed;
+  });
+  const extras = stored.filter((s) => s.id && !fallbackIds.has(s.id));
+  return [...merged, ...extras];
 }
 
 export function writeManagerWorkOrderRows(rows: DemoManagerWorkOrderRow[]): void {
-  if (!canUseStorage()) return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(rows));
-    emit();
-    mirrorWorkOrdersToServer(rows);
-  } catch {
-    /* quota */
-  }
+  memoryRows = rows;
+  emit();
+  mirrorWorkOrdersToServer(rows);
 }
 
 export function updateManagerWorkOrder(
@@ -121,8 +97,7 @@ export function deleteManagerWorkOrderRow(id: string): boolean {
 }
 
 export function resetManagerWorkOrderRows(): void {
-  if (!canUseStorage()) return;
-  window.localStorage.removeItem(KEY);
+  memoryRows = [];
   emit();
 }
 

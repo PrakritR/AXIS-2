@@ -31,6 +31,8 @@ import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-ap
 import { appendManagerApplicationRow } from "@/lib/manager-applications-storage";
 import { RentalWizardStepBody } from "./rental-wizard-steps";
 
+const processedApplicationFeeSessions = new Set<string>();
+
 function makeNewApplicationId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `AXIS-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -157,18 +159,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       setForm((current) => ({ ...current, ...draft }));
     }
     setDraftReady(true);
-    try {
-      const raw = typeof window !== "undefined" ? window.sessionStorage.getItem("axis_application_fee_resume") : null;
-      if (raw) {
-        const parsed = JSON.parse(raw) as { step?: number };
-        if (typeof parsed.step === "number" && parsed.step >= 1 && parsed.step <= 12) {
-          setStep(parsed.step);
-        }
-        window.sessionStorage.removeItem("axis_application_fee_resume");
-      }
-    } catch {
-      /* ignore */
-    }
   }, []);
 
   useEffect(() => {
@@ -357,8 +347,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     const em = form.email.trim();
     if (!pid || !em.includes("@")) return;
 
-    const okKey = `axis_application_fee_marked_${sessionId}`;
-    if (typeof window !== "undefined" && window.sessionStorage.getItem(okKey)) {
+    if (processedApplicationFeeSessions.has(sessionId)) {
       router.replace("/rent/apply");
       return;
     }
@@ -406,7 +395,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         return;
       }
       setChargeTick((n) => n + 1);
-      if (typeof window !== "undefined") window.sessionStorage.setItem(okKey, "1");
+      processedApplicationFeeSessions.add(sessionId);
       finalizeApplicationSubmit(feeStepUserId);
       router.replace("/rent/apply");
     })();
@@ -474,7 +463,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
             const checkoutUrl = typeof payload.url === "string" ? payload.url : "";
             if (checkoutUrl && typeof window !== "undefined") {
-              window.sessionStorage.setItem("axis_application_fee_resume", JSON.stringify({ step: 12 }));
               window.location.href = checkoutUrl;
               return;
             }

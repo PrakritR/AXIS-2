@@ -1,6 +1,6 @@
 /**
- * Demo: per-resident charge lines (application fee, security deposit, etc.) tied to listings.
- * Managers mark Zelle/offline payments as paid; lease signing can be gated until required lines are paid.
+ * Per-resident charge lines (application fee, security deposit, etc.) tied to listings.
+ * Supabase is the persistence layer; this module keeps only in-memory page-session state.
  */
 
 import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
@@ -12,8 +12,8 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 
 export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
-const STORAGE_KEY = "axis_household_charges_v1";
-const RENT_PROFILE_KEY = "axis_household_recurring_rent_profiles_v1";
+let memoryCharges: HouseholdCharge[] = [];
+let memoryRentProfiles: RecurringRentProfile[] = [];
 
 /** When no manager Supabase session, work-order pass-through charges use this scope so Payments still lists them. */
 export const HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE = "__axis_demo_manager_scope__";
@@ -70,7 +70,7 @@ export type RecurringRentProfile = {
 };
 
 function isBrowser() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return typeof window !== "undefined";
 }
 
 function emit() {
@@ -78,48 +78,69 @@ function emit() {
   window.dispatchEvent(new Event(HOUSEHOLD_CHARGES_EVENT));
 }
 
-function readAll(): HouseholdCharge[] {
-  if (!isBrowser()) return [];
+function postHouseholdPayload(body: unknown) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/portal-household-charges", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+  }).catch(() => undefined);
+}
+
+function mirrorChargeRows(rows: HouseholdCharge[]) {
+  postHouseholdPayload({ action: "replace", charges: rows, rentProfiles: readRentProfiles() });
+}
+
+function mirrorRentProfiles(rows: RecurringRentProfile[]) {
+  postHouseholdPayload({ action: "replace", charges: readAll(), rentProfiles: rows });
+}
+
+export async function syncHouseholdChargesFromServer(): Promise<{
+  charges: HouseholdCharge[];
+  rentProfiles: RecurringRentProfile[];
+}> {
+  if (!isBrowser()) return { charges: [], rentProfiles: [] };
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const v = JSON.parse(raw) as unknown;
-    return Array.isArray(v) ? (v as HouseholdCharge[]) : [];
+    const res = await fetch("/api/portal-household-charges", { credentials: "include", cache: "no-store" });
+    if (!res.ok) {
+      return { charges: readAll(), rentProfiles: readRentProfiles() };
+    }
+    const body = (await res.json()) as {
+      charges?: HouseholdCharge[];
+      rentProfiles?: RecurringRentProfile[];
+    };
+    const charges = Array.isArray(body.charges) ? body.charges : [];
+    const rentProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
+    memoryCharges = charges;
+    memoryRentProfiles = rentProfiles;
+    emit();
+    return { charges, rentProfiles };
   } catch {
-    return [];
+    return { charges: readAll(), rentProfiles: readRentProfiles() };
   }
+}
+
+function readAll(): HouseholdCharge[] {
+  return isBrowser() ? memoryCharges : [];
 }
 
 function writeAll(rows: HouseholdCharge[], silent = false) {
   if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
-    if (!silent) emit();
-  } catch {
-    /* ignore */
-  }
+  memoryCharges = rows;
+  mirrorChargeRows(rows);
+  if (!silent) emit();
 }
 
 function readRentProfiles(): RecurringRentProfile[] {
-  if (!isBrowser()) return [];
-  try {
-    const raw = window.localStorage.getItem(RENT_PROFILE_KEY);
-    if (!raw) return [];
-    const v = JSON.parse(raw) as unknown;
-    return Array.isArray(v) ? (v as RecurringRentProfile[]) : [];
-  } catch {
-    return [];
-  }
+  return isBrowser() ? memoryRentProfiles : [];
 }
 
 function writeRentProfiles(rows: RecurringRentProfile[]) {
   if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(RENT_PROFILE_KEY, JSON.stringify(rows));
-    emit();
-  } catch {
-    /* ignore */
-  }
+  memoryRentProfiles = rows;
+  mirrorRentProfiles(rows);
+  emit();
 }
 
 export { parseMoneyAmount } from "@/lib/parse-money";
@@ -620,6 +641,69 @@ export function recordApplicationCharges(
   ensurePendingApplicationFeeCharge(input);
 }
 
+export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, managerUserId: string | null): boolean {
+  if (!isBrowser()) return false;
+  const residentEmail = row.email?.trim();
+  if (!residentEmail || !residentEmail.includes("@")) return false;
+  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  if (!propertyId) return false;
+
+  const existingApplicationFee = findApplicationFeeCharge(residentEmail, propertyId, null);
+  const appFeeChannel = row.application?.applicationFeePayChannel === "zelle" ? "zelle" : "stripe";
+  const prop = getPropertyById(propertyId);
+  const effectiveManagerUserId = managerUserId ?? row.managerUserId ?? prop?.managerUserId ?? null;
+  let changed = false;
+
+  if (existingApplicationFee) {
+    const rows = readAll();
+    const idx = rows.findIndex((charge) => charge.id === existingApplicationFee.id);
+    if (idx !== -1) {
+      const nextCharge = {
+        ...rows[idx]!,
+        managerUserId: effectiveManagerUserId,
+        propertyLabel: prop?.title ?? rows[idx]!.propertyLabel,
+      };
+      if (
+        nextCharge.managerUserId !== rows[idx]!.managerUserId ||
+        nextCharge.propertyLabel !== rows[idx]!.propertyLabel
+      ) {
+        const next = [...rows];
+        next[idx] = nextCharge;
+        writeAll(next);
+        changed = true;
+      }
+    }
+    if (appFeeChannel !== "zelle" && existingApplicationFee.status !== "paid") {
+      changed = markChargePaidById(existingApplicationFee.id) || changed;
+    }
+    return changed;
+  }
+
+  const fee = ensurePendingApplicationFeeCharge({
+    residentEmail,
+    residentName: row.name?.trim() || row.application?.fullLegalName?.trim() || "Applicant",
+    residentUserId: null,
+    propertyId,
+  });
+  if (!fee) return false;
+
+  if (effectiveManagerUserId && fee.managerUserId !== effectiveManagerUserId) {
+    const rows = readAll();
+    const idx = rows.findIndex((charge) => charge.id === fee.id);
+    if (idx !== -1) {
+      const next = [...rows];
+      next[idx] = { ...next[idx]!, managerUserId: effectiveManagerUserId };
+      writeAll(next);
+    }
+  }
+
+  changed = true;
+  if (appFeeChannel !== "zelle") {
+    changed = markChargePaidById(fee.id) || changed;
+  }
+  return changed;
+}
+
 export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null): boolean {
   if (!isBrowser()) return false;
   const residentEmail = row.email?.trim();
@@ -636,26 +720,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   let changed = false;
   const now = Date.now();
 
-  const existingApplicationFee = findApplicationFeeCharge(residentEmail, propertyId, null);
-  const appFeeChannel = row.application?.applicationFeePayChannel === "zelle" ? "zelle" : "stripe";
-  if (existingApplicationFee) {
-    if (appFeeChannel !== "zelle" && existingApplicationFee.status !== "paid") {
-      changed = markChargePaidById(existingApplicationFee.id) || changed;
-    }
-  } else {
-    const fee = ensurePendingApplicationFeeCharge({
-      residentEmail,
-      residentName,
-      residentUserId: null,
-      propertyId,
-    });
-    if (fee) {
-      changed = true;
-      if (appFeeChannel !== "zelle") {
-        changed = markChargePaidById(fee.id) || changed;
-      }
-    }
-  }
+  changed = recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId) || changed;
 
   const signedRent = Number(row.signedMonthlyRent ?? 0);
   if (signedRent > 0) {

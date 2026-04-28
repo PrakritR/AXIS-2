@@ -1,8 +1,6 @@
 import { emitAdminUi } from "@/lib/demo-admin-ui";
 
-const STORAGE_KEY = "axis_admin_inbox_messages_v2";
-/** Pre–v2 partner-only inbox (migrated once into STORAGE_KEY). */
-const LEGACY_PARTNER_KEY = "axis_admin_partner_inbox_threads_v1";
+let inboxMessages: InboxMessage[] = [];
 
 export type InboxSenderRole = "partner" | "manager" | "resident" | "owner" | "admin";
 
@@ -41,83 +39,24 @@ export type InboxMessage = {
 };
 
 function isBrowser() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
-
-function migrateLegacyRow(m: Record<string, unknown>): InboxMessage {
-  return {
-    id: typeof m.id === "string" ? m.id : crypto.randomUUID(),
-    name: String(m.name ?? ""),
-    email: String(m.email ?? ""),
-    topic: String(m.topic ?? ""),
-    body: String(m.body ?? ""),
-    createdAt: typeof m.createdAt === "string" ? m.createdAt : new Date().toISOString(),
-    read: Boolean(m.read),
-    folder: "inbox",
-    senderRole: "partner",
-    thread: [],
-    trashedFrom: undefined,
-    composeAudience: undefined,
-    composeRecipientLabel: undefined,
-  };
+  return typeof window !== "undefined";
 }
 
 function readAll(): InboxMessage[] {
   if (!isBrowser()) return [];
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw === null) {
-      const legacyRaw = window.localStorage.getItem(LEGACY_PARTNER_KEY);
-      if (legacyRaw) {
-        try {
-          const legacy = JSON.parse(legacyRaw) as unknown;
-          if (Array.isArray(legacy)) {
-            const migrated = legacy.map((row) => migrateLegacyRow(row as Record<string, unknown>));
-            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-            emitAdminUi();
-            return migrated;
-          }
-        } catch {
-          /* fall through to seed */
-        }
-      }
-      const s = seedInbox();
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-      return s;
-    }
-    const v = JSON.parse(raw) as unknown;
-    return Array.isArray(v) ? (v as InboxMessage[]) : [];
-  } catch {
-    return [];
-  }
+  return inboxMessages;
 }
 
 function writeAll(rows: InboxMessage[]) {
   if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
-    emitAdminUi();
-  } catch {
-    /* ignore */
-  }
-}
-
-function seedInbox(): InboxMessage[] {
-  const now = new Date().toISOString();
-  return [
-    {
-      id: "seed-1",
-      name: "Jordan Lee",
-      email: "jordan@example.com",
-      topic: "Partner inquiry",
-      body: "We are interested in listing our building on Axis.",
-      createdAt: now,
-      read: false,
-      folder: "inbox",
-      senderRole: "partner",
-      thread: [],
-    },
-  ];
+  inboxMessages = rows;
+  emitAdminUi();
+  void fetch("/api/portal-inbox-threads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "replace", rows: rows.map((row) => ({ ...row, scope: "admin" })) }),
+  }).catch(() => undefined);
 }
 
 export function readInboxMessages(): InboxMessage[] {

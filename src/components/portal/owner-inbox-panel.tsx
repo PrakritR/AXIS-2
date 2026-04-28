@@ -17,6 +17,7 @@ import {
   OWNER_INBOX_STORAGE_KEY,
   loadPersistedInbox,
   persistInbox,
+  syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
@@ -70,6 +71,7 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
 
   useEffect(() => {
     setLocal(loadPersistedInbox(OWNER_INBOX_STORAGE_KEY, []) as InboxThread[]);
+    void syncPersistedInboxFromServer(OWNER_INBOX_STORAGE_KEY).then((rows) => setLocal(rows as InboxThread[]));
     setPersistReady(true);
   }, []);
 

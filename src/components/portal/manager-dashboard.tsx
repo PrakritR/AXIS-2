@@ -12,16 +12,17 @@ import { getPartnerInquiryWindows, readPartnerInquiries } from "@/lib/demo-admin
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import { LEASE_PIPELINE_EVENT, readLeasePipeline } from "@/lib/lease-pipeline-storage";
-import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import { LEASE_PIPELINE_EVENT, readLeasePipeline, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
+import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import {
   countUnopenedPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
   OWNER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
   type PersistedInboxThread,
+  syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
-import { readManagerWorkOrderRows, subscribeManagerWorkOrders } from "@/lib/manager-work-orders-storage";
+import { readManagerWorkOrderRows, subscribeManagerWorkOrders, syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilter } from "./manager-section-shell";
 import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "./portal-metrics";
@@ -78,11 +79,10 @@ export function ManagerDashboard() {
   const [pipelineTick, setPipelineTick] = useState(0);
   useEffect(() => {
     const on = () => setPipelineTick((n) => n + 1);
+    void syncManagerApplicationsFromServer().then(on);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
-    window.addEventListener("storage", on);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
-      window.removeEventListener("storage", on);
     };
   }, []);
 
@@ -90,10 +90,8 @@ export function ManagerDashboard() {
   useEffect(() => {
     const on = () => setTourTick((n) => n + 1);
     window.addEventListener(ADMIN_UI_EVENT, on);
-    window.addEventListener("storage", on);
     return () => {
       window.removeEventListener(ADMIN_UI_EVENT, on);
-      window.removeEventListener("storage", on);
     };
   }, []);
 
@@ -145,11 +143,10 @@ export function ManagerDashboard() {
   useEffect(() => {
     const sync = () => setApplicationRows(readManagerApplicationRows());
     sync();
+    void syncManagerApplicationsFromServer().then(sync);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
-    window.addEventListener("storage", sync);
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
-      window.removeEventListener("storage", sync);
     };
   }, []);
 
@@ -158,13 +155,12 @@ export function ManagerDashboard() {
   const [leaseTick, setLeaseTick] = useState(0);
   useEffect(() => {
     const on = () => setLeaseTick((n) => n + 1);
+    void syncLeasePipelineFromServer().then(on);
     window.addEventListener(LEASE_PIPELINE_EVENT, on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
-    window.addEventListener("storage", on);
     return () => {
       window.removeEventListener(LEASE_PIPELINE_EVENT, on);
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
-      window.removeEventListener("storage", on);
     };
   }, []);
 
@@ -175,16 +171,15 @@ export function ManagerDashboard() {
 
   const [inboxTick, setInboxTick] = useState(0);
   useEffect(() => {
-    const onStorage = () => setInboxTick((n) => n + 1);
     const onInboxEvent = (e: Event) => {
       const key = (e as CustomEvent<{ key?: string }>).detail?.key;
       const want = pathname.startsWith("/owner") ? OWNER_INBOX_STORAGE_KEY : MANAGER_INBOX_STORAGE_KEY;
       if (!key || key === want) setInboxTick((n) => n + 1);
     };
-    window.addEventListener("storage", onStorage);
+    const want = pathname.startsWith("/owner") ? OWNER_INBOX_STORAGE_KEY : MANAGER_INBOX_STORAGE_KEY;
+    void syncPersistedInboxFromServer(want).then(() => setInboxTick((n) => n + 1));
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, onInboxEvent as EventListener);
     return () => {
-      window.removeEventListener("storage", onStorage);
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, onInboxEvent as EventListener);
     };
   }, [pathname]);
@@ -199,6 +194,7 @@ export function ManagerDashboard() {
   useEffect(() => {
     const sync = () => setWorkOrderRows(readManagerWorkOrderRows());
     sync();
+    void syncManagerWorkOrdersFromServer().then(sync);
     const sub = subscribeManagerWorkOrders(sync);
     return () => sub();
   }, []);

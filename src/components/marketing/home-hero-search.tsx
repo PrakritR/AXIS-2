@@ -2,7 +2,7 @@
 
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
-import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
+import { loadPublicExtraListingsFromServer, PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
 import { RADIUS_MILE_OPTIONS, parseRadiusParam } from "@/lib/listings-search";
 import { RoomListingCard } from "@/components/marketing/room-listing-card";
 import { filterRoomListings } from "@/lib/room-listings-catalog";
@@ -72,7 +72,10 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   const [extras, setExtras] = useState<MockProperty[]>([]);
 
   useEffect(() => {
-    const sync = () => setExtras(readExtraListings());
+    const sync = () => {
+      setExtras(readExtraListings());
+      void loadPublicExtraListingsFromServer().then(setExtras);
+    };
     sync();
     const on = () => sync();
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);

@@ -1,7 +1,7 @@
 import type { MockProperty } from "@/data/types";
 import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { parseJsonArray, parseLocalStorageJson, parseRecordOfArrays } from "@/lib/safe-local-storage";
+import { parseRecordOfArrays } from "@/lib/safe-local-storage";
 
 /** Admin-only / legacy listings not tied to a real manager auth user (demo localStorage bucket). */
 export const LEGACY_MANAGER_SCOPE_USER_ID = "__axis_legacy__";
@@ -29,6 +29,7 @@ const LEGACY_PENDING_KEY = "axis_manager_pending_properties_v1";
 const LEGACY_EXTRAS_KEY = "axis_public_extra_listings_v1";
 
 export const PROPERTY_PIPELINE_EVENT = "axis-property-pipeline";
+const memoryStore = new Map<string, unknown>();
 
 export type ManagerPendingPropertyRow = {
   id: string;
@@ -55,32 +56,22 @@ type PendingMap = Record<string, ManagerPendingPropertyRow[]>;
 type ExtrasMap = Record<string, MockProperty[]>;
 
 function isBrowser() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return typeof window !== "undefined";
 }
 
 function readJson<T>(key: string, fallback: T): T {
   if (!isBrowser()) return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return memoryStore.has(key) ? (memoryStore.get(key) as T) : fallback;
 }
 
 function writeJson(key: string, value: unknown) {
   if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-    window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
-  } catch {
-    /* ignore quota */
-  }
+  memoryStore.set(key, value);
+  window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
 }
 
 function readPendingMap(): PendingMap {
-  return parseRecordOfArrays<ManagerPendingPropertyRow>(parseLocalStorageJson(PENDING_BY_USER_KEY));
+  return parseRecordOfArrays<ManagerPendingPropertyRow>(readJson(PENDING_BY_USER_KEY, {}));
 }
 
 function writePendingMap(m: PendingMap) {
@@ -88,7 +79,7 @@ function writePendingMap(m: PendingMap) {
 }
 
 function readExtrasMap(): ExtrasMap {
-  return parseRecordOfArrays<MockProperty>(parseLocalStorageJson(EXTRAS_BY_USER_KEY));
+  return parseRecordOfArrays<MockProperty>(readJson(EXTRAS_BY_USER_KEY, {}));
 }
 
 function writeExtrasMap(m: ExtrasMap) {
@@ -117,6 +108,36 @@ function mirrorPropertyRecord(input: {
       editRequestNote: input.editRequestNote ?? null,
     }),
   }).catch(() => {});
+}
+
+async function upsertPropertyRecordToServer(input: {
+  id: string;
+  managerUserId: string | null;
+  status: ManagerPropertyRecordStatus;
+  rowData?: unknown;
+  propertyData?: unknown;
+  editRequestNote?: string | null;
+}): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const res = await fetch("/api/property-records", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        action: "upsert",
+        id: input.id,
+        managerUserId: input.managerUserId,
+        status: input.status,
+        rowData: input.rowData ?? null,
+        propertyData: input.propertyData ?? null,
+        editRequestNote: input.editRequestNote ?? null,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 export function deleteMirroredPropertyRecord(id: string) {
@@ -149,11 +170,11 @@ export async function syncPropertyPipelineFromServer(): Promise<boolean> {
     const res = await fetch("/api/property-records", { credentials: "include", cache: "no-store" });
     const body = (await res.json()) as { snapshot?: PropertyPipelineSnapshot };
     if (!res.ok || !body.snapshot) return false;
-    window.localStorage.setItem(PENDING_BY_USER_KEY, JSON.stringify(body.snapshot.pendingByUser));
-    window.localStorage.setItem(EXTRAS_BY_USER_KEY, JSON.stringify(body.snapshot.extrasByUser));
-    window.localStorage.setItem("axis_admin_property_buckets_v1", JSON.stringify(body.snapshot.sideGlobal));
+    memoryStore.set(PENDING_BY_USER_KEY, body.snapshot.pendingByUser);
+    memoryStore.set(EXTRAS_BY_USER_KEY, body.snapshot.extrasByUser);
+    memoryStore.set("axis_admin_property_buckets_v1", body.snapshot.sideGlobal);
     for (const [userId, side] of Object.entries(body.snapshot.sideByUser)) {
-      window.localStorage.setItem(`axis_mgr_property_side_v1_${userId}`, JSON.stringify(side));
+      memoryStore.set(`axis_mgr_property_side_v1_${userId}`, side);
     }
     window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
     return true;
@@ -215,32 +236,7 @@ export async function loadPublicExtraListingsFromServer(): Promise<MockProperty[
  * One-time: moves flat legacy arrays into the signed-in user's bucket so other accounts stay isolated.
  */
 function migrateLegacyGlobalIntoUser(userId: string) {
-  if (!isBrowser()) return;
-  const map = readPendingMap();
-  const em = readExtrasMap();
-  if (map[userId]?.length || em[userId]?.length) return;
-
-  const legacyP = parseJsonArray<ManagerPendingPropertyRow>(parseLocalStorageJson(LEGACY_PENDING_KEY));
-  const legacyE = parseJsonArray<MockProperty>(parseLocalStorageJson(LEGACY_EXTRAS_KEY));
-  if (legacyP.length === 0 && legacyE.length === 0) return;
-
-  map[userId] = legacyP.map((r) => ({
-    ...r,
-    submittedByUserId: r.submittedByUserId ?? userId,
-  }));
-  em[userId] = legacyE.map((p) => ({
-    ...p,
-    managerUserId: p.managerUserId ?? userId,
-  }));
-  writePendingMap(map);
-  writeExtrasMap(em);
-  try {
-    window.localStorage.removeItem(LEGACY_PENDING_KEY);
-    window.localStorage.removeItem(LEGACY_EXTRAS_KEY);
-  } catch {
-    /* ignore */
-  }
-  window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+  void userId;
 }
 
 /** All pending rows (admin queue). Legacy global pending key is no longer merged — only per-account storage. */
@@ -366,6 +362,28 @@ export function submitManagerPendingProperty(input: ManagerPropertyDraftInput, m
   return id;
 }
 
+export async function submitManagerPendingPropertyToServer(
+  input: ManagerPropertyDraftInput,
+  managerUserId: string,
+): Promise<string | null> {
+  if (!managerUserId.trim()) return null;
+  const id = `pend-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const legacy = deriveLegacyFields(input);
+  const row: ManagerPendingPropertyRow = {
+    ...legacy,
+    id,
+    submittedAt: new Date().toISOString(),
+    submission: input,
+    submittedByUserId: managerUserId,
+  };
+  const ok = await upsertPropertyRecordToServer({ id, managerUserId, status: "pending", rowData: row });
+  if (!ok) return null;
+  const map = readPendingMap();
+  map[managerUserId] = [...(map[managerUserId] ?? []), row];
+  writePendingMap(map);
+  return id;
+}
+
 export function updatePendingManagerProperty(
   pendingId: string,
   input: ManagerPropertyDraftInput,
@@ -389,6 +407,32 @@ export function updatePendingManagerProperty(
   return true;
 }
 
+export async function updatePendingManagerPropertyOnServer(
+  pendingId: string,
+  input: ManagerPropertyDraftInput,
+  managerUserId: string,
+): Promise<boolean> {
+  if (!managerUserId.trim()) return false;
+  const map = readPendingMap();
+  const list = map[managerUserId] ?? [];
+  const idx = list.findIndex((p) => p.id === pendingId);
+  const legacy = deriveLegacyFields(input);
+  const row: ManagerPendingPropertyRow = {
+    ...(idx === -1 ? { id: pendingId, submittedAt: new Date().toISOString(), submittedByUserId: managerUserId } : list[idx]!),
+    ...legacy,
+    submission: input,
+  };
+  const ok = await upsertPropertyRecordToServer({ id: pendingId, managerUserId, status: "pending", rowData: row });
+  if (!ok) return false;
+  const nextList = [...list];
+  if (idx === -1) nextList.push(row);
+  else nextList[idx] = row;
+  map[managerUserId] = nextList;
+  writePendingMap(map);
+  await syncPropertyPipelineFromServer();
+  return true;
+}
+
 export function updateExtraListingFromSubmission(
   listingId: string,
   managerUserId: string,
@@ -396,10 +440,8 @@ export function updateExtraListingFromSubmission(
 ): boolean {
   if (!managerUserId.trim()) return false;
   const map = readExtrasMap();
-  const list = map[managerUserId];
-  if (!list) return false;
+  const list = map[managerUserId] ?? [];
   const idx = list.findIndex((p) => p.id === listingId);
-  if (idx === -1) return false;
   const legacy = deriveLegacyFields(input);
   const pendingLike: ManagerPendingPropertyRow = {
     ...legacy,
@@ -422,6 +464,46 @@ export function updateExtraListingFromSubmission(
     propertyData: list[idx],
     rowData: { ...legacy, adminRefId: listingId, listingId, managerUserId },
   });
+  return true;
+}
+
+export async function updateExtraListingFromSubmissionOnServer(
+  listingId: string,
+  managerUserId: string,
+  input: ManagerPropertyDraftInput,
+): Promise<boolean> {
+  if (!managerUserId.trim()) return false;
+  const map = readExtrasMap();
+  const list = map[managerUserId];
+  if (!list) return false;
+  const idx = list.findIndex((p) => p.id === listingId);
+  if (idx === -1) return false;
+  const legacy = deriveLegacyFields(input);
+  const pendingLike: ManagerPendingPropertyRow = {
+    ...legacy,
+    id: listingId,
+    submittedAt: new Date().toISOString(),
+    submission: input,
+    submittedByUserId: managerUserId,
+  };
+  const next = buildMockPropertyFromDraft(pendingLike, listingId);
+  const owner = next.managerUserId ?? managerUserId;
+  const propertyData: MockProperty = { ...next, managerUserId: owner, adminPublishLive: false };
+  const rowData = { ...legacy, adminRefId: listingId, listingId, managerUserId };
+  const ok = await upsertPropertyRecordToServer({
+    id: listingId,
+    managerUserId,
+    status: "review",
+    propertyData,
+    rowData,
+  });
+  if (!ok) return false;
+  const nextList = [...list];
+  if (idx === -1) nextList.push(propertyData);
+  else nextList[idx] = propertyData;
+  map[managerUserId] = nextList;
+  writeExtrasMap(map);
+  await syncPropertyPipelineFromServer();
   return true;
 }
 
@@ -539,14 +621,7 @@ export function takePendingManagerProperty(pendingId: string): ManagerPendingPro
       return row;
     }
   }
-  const legacy = parseJsonArray<ManagerPendingPropertyRow>(parseLocalStorageJson(LEGACY_PENDING_KEY));
-  const idx = legacy.findIndex((p) => p.id === pendingId);
-  if (idx === -1) return null;
-  const row = legacy[idx]!;
-  const next = [...legacy.slice(0, idx), ...legacy.slice(idx + 1)];
-  writeJson(LEGACY_PENDING_KEY, next);
-  window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
-  return row;
+  return null;
 }
 
 /** Removes a live listing from whichever account owns it. */
@@ -563,14 +638,7 @@ export function removeExtraListing(listingId: string): MockProperty | null {
       return row;
     }
   }
-  const legacy = parseJsonArray<MockProperty>(parseLocalStorageJson(LEGACY_EXTRAS_KEY));
-  const idx = legacy.findIndex((p) => p.id === listingId);
-  if (idx === -1) return null;
-  const row = legacy[idx]!;
-  const next = [...legacy.slice(0, idx), ...legacy.slice(idx + 1)];
-  writeJson(LEGACY_EXTRAS_KEY, next);
-  window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
-  return row;
+  return null;
 }
 
 /** Promotes a manager submission to a public listing (per-owner storage). */

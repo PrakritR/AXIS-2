@@ -1,6 +1,6 @@
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 
-const KEY = "axis_admin_managers_demo_v1";
+let managerRows: AdminManagerRow[] = [];
 
 export type AdminManagerRow = {
   id: string;
@@ -13,41 +13,17 @@ export type AdminManagerRow = {
 };
 
 function isBrowser() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
-
-function readJson<T>(key: string, fallback: T): T {
-  if (!isBrowser()) return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return typeof window !== "undefined";
 }
 
 function write(rows: AdminManagerRow[]) {
   if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(rows));
-    window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
-  } catch {
-    /* ignore */
-  }
+  managerRows = rows;
+  window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
 }
 
 export function readAdminManagers(): AdminManagerRow[] {
-  const raw = readJson<unknown>(KEY, null);
-  if (raw === null) {
-    write([]);
-    return [];
-  }
-  if (!Array.isArray(raw)) {
-    write([]);
-    return [];
-  }
-  return raw as AdminManagerRow[];
+  return managerRows;
 }
 
 export function adminManagerCounts() {

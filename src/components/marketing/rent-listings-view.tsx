@@ -53,10 +53,8 @@ export function RentListingsView() {
     refreshExtras();
     const on = () => refreshExtras();
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
-    window.addEventListener("storage", on);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
-      window.removeEventListener("storage", on);
     };
   }, [refreshExtras]);
 

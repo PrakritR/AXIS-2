@@ -1,10 +1,9 @@
 import { type DemoManagerPaymentLedgerRow, type ManagerPaymentBucket } from "@/data/demo-portal";
 import { HOUSEHOLD_CHARGES_EVENT } from "@/lib/household-charges";
-import { parseJsonArray, parseLocalStorageJson } from "@/lib/safe-local-storage";
 
-const PAID_KEY = "axis_demo_manager_ledger_marked_paid_v1";
-const DELETED_KEY = "axis_demo_manager_ledger_deleted_v1";
-const CUSTOM_KEY = "axis_manager_payment_custom_lines_v1";
+let paidIds = new Set<string>();
+let deletedIds = new Set<string>();
+let customLines: DemoManagerPaymentLedgerRow[] = [];
 
 function emitChargesRefresh() {
   if (typeof window === "undefined") return;
@@ -12,44 +11,27 @@ function emitChargesRefresh() {
 }
 
 function readPaidIds(): Set<string> {
-  const arr = parseJsonArray<string>(parseLocalStorageJson(PAID_KEY));
-  return new Set(arr.filter((id) => typeof id === "string"));
+  return paidIds;
 }
 
 function writePaidIds(s: Set<string>) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(PAID_KEY, JSON.stringify([...s]));
-  } catch {
-    /* ignore */
-  }
+  paidIds = new Set(s);
 }
 
 function readDeletedIds(): Set<string> {
-  const arr = parseJsonArray<string>(parseLocalStorageJson(DELETED_KEY));
-  return new Set(arr.filter((id) => typeof id === "string"));
+  return deletedIds;
 }
 
 function writeDeletedIds(s: Set<string>) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(DELETED_KEY, JSON.stringify([...s]));
-  } catch {
-    /* ignore */
-  }
+  deletedIds = new Set(s);
 }
 
 function readCustomPaymentLines(): DemoManagerPaymentLedgerRow[] {
-  return parseJsonArray<DemoManagerPaymentLedgerRow>(parseLocalStorageJson(CUSTOM_KEY));
+  return customLines;
 }
 
 function writeCustom(lines: DemoManagerPaymentLedgerRow[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(CUSTOM_KEY, JSON.stringify(lines));
-  } catch {
-    /* ignore */
-  }
+  customLines = lines;
 }
 
 function removePaidId(id: string) {

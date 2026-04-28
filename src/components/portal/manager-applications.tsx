@@ -168,12 +168,22 @@ function ManagerApplicationPlacementEditor({
     [propertyId, row.application?.leaseEnd, row.application?.leaseStart, row.id],
   );
 
+  const roomChoiceBelongsToProperty =
+    Boolean(roomChoice) && (roomChoice === propertyId || roomChoice.startsWith(`${propertyId}::`));
+  const displayedRoomOptions = useMemo(() => {
+    if (!roomChoice || !roomChoiceBelongsToProperty || roomOptions.some((opt) => opt.value === roomChoice)) {
+      return roomOptions;
+    }
+    const label = getRoomChoiceLabel(roomChoice);
+    return label ? [{ value: roomChoice, label }, ...roomOptions] : roomOptions;
+  }, [roomChoice, roomChoiceBelongsToProperty, roomOptions]);
+
   useEffect(() => {
     if (!roomChoice) return;
-    if (!roomOptions.some((opt) => opt.value === roomChoice)) {
+    if (!roomChoiceBelongsToProperty) {
       setRoomChoice("");
     }
-  }, [roomChoice, roomOptions]);
+  }, [roomChoice, roomChoiceBelongsToProperty]);
 
   useEffect(() => {
     if (userEditedRentRef.current || signedRent.trim()) return;
@@ -208,9 +218,9 @@ function ManagerApplicationPlacementEditor({
           </label>
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Room</span>
-            <Select value={roomChoice} onChange={(e) => setRoomChoice(e.target.value)} disabled={!propertyId || roomOptions.length === 0}>
+            <Select value={roomChoice} onChange={(e) => setRoomChoice(e.target.value)} disabled={!propertyId || displayedRoomOptions.length === 0}>
               <option value="">{propertyId ? "Select room" : "Select house first"}</option>
-              {roomOptions.map((opt) => (
+              {displayedRoomOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
@@ -283,10 +293,8 @@ export function ManagerApplications() {
     sync();
     void syncManagerApplicationsFromServer().then(sync);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
-    window.addEventListener("storage", sync);
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
-      window.removeEventListener("storage", sync);
     };
   }, []);
 

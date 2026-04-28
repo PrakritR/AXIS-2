@@ -8,6 +8,7 @@ const AVAIL_V2_KEY = ADMIN_AVAILABILITY_STORAGE_KEY;
 const INQ_KEY = "axis_admin_partner_inquiries_v1";
 const PLANNED_KEY = "axis_admin_planned_events_v1";
 const PROP_MGR_REGISTRY_KEY = "axis_property_mgr_registry_v1";
+const memoryStore = new Map<string, unknown>();
 
 /** A manager registered as available for tours at a property. */
 export type PropertyManagerEntry = { userId: string; label: string };
@@ -46,28 +47,31 @@ export const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] 
 export const SLOTS_PER_DAY = 48;
 
 function isBrowser() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return typeof window !== "undefined";
 }
 
 function readJson<T>(key: string, fallback: T): T {
   if (!isBrowser()) return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  return memoryStore.has(key) ? (memoryStore.get(key) as T) : fallback;
 }
 
 function writeJson(key: string, value: unknown) {
   if (!isBrowser()) return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-    emitAdminUi();
-  } catch {
-    /* ignore */
-  }
+  memoryStore.set(key, value);
+  emitAdminUi();
+  void fetch("/api/portal-schedule-records", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      action: "upsert",
+      row: {
+        id: key,
+        recordType: key,
+        payload: value,
+      },
+    }),
+  }).catch(() => undefined);
 }
 
 export function slotKey(dayIndex: number, slotIndex: number) {
@@ -131,22 +135,8 @@ export function writeAvailabilitySet(next: Set<string>) {
 
 /** Date-specific availability (`YYYY-MM-DD:slotIndex`). Migrates legacy weekly v1 into the current week when v2 is unset. */
 export function readAvailabilityDateSet(): Set<string> {
-  if (!isBrowser()) return new Set();
-  const rawV2 = window.localStorage.getItem(AVAIL_V2_KEY);
-  if (rawV2 === null) {
-    const legacy = readJson<string[] | null>(AVAIL_KEY, null);
-    if (Array.isArray(legacy) && legacy.length > 0) {
-      const migrated = migrateLegacyWeeklyToDateKeys(legacy);
-      return new Set(migrated);
-    }
-    return new Set();
-  }
-  try {
-    const arr = JSON.parse(rawV2) as string[];
-    return Array.isArray(arr) ? new Set(arr) : new Set();
-  } catch {
-    return new Set();
-  }
+  const arr = readJson<string[]>(AVAIL_V2_KEY, []);
+  return Array.isArray(arr) ? new Set(arr) : new Set();
 }
 
 export function writeAvailabilityDateSet(next: Set<string>) {
@@ -167,17 +157,8 @@ export function managerPropertyAvailabilityStorageKey(userId: string, propertyId
 /** Read/write availability for an arbitrary storage key (admin v2 or manager-scoped). */
 export function readAvailabilityDateSetForStorageKey(storageKey: string): Set<string> {
   if (storageKey === AVAIL_V2_KEY) return readAvailabilityDateSet();
-  if (!isBrowser()) return new Set();
-  const rawV2 = window.localStorage.getItem(storageKey);
-  if (rawV2 === null) {
-    return new Set();
-  }
-  try {
-    const arr = JSON.parse(rawV2) as string[];
-    return Array.isArray(arr) ? new Set(arr) : new Set();
-  } catch {
-    return new Set();
-  }
+  const arr = readJson<string[]>(storageKey, []);
+  return Array.isArray(arr) ? new Set(arr) : new Set();
 }
 
 export function writeAvailabilityDateSetForStorageKey(next: Set<string>, storageKey: string) {

@@ -11,26 +11,16 @@ import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox"
 import { appendPersistedInboxThread, MANAGER_INBOX_STORAGE_KEY } from "@/lib/portal-inbox-storage";
 import type { DemoResidentInboxThread } from "@/data/demo-portal";
 
-const RESIDENT_SENT_KEY = "axis_resident_sent_inbox_v1";
+let residentSentRows: DemoResidentInboxThread[] = [];
 
 function readSentRows(): DemoResidentInboxThread[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(RESIDENT_SENT_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return residentSentRows;
 }
 
 function writeSentRows(rows: DemoResidentInboxThread[]) {
   if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(RESIDENT_SENT_KEY, JSON.stringify(rows));
-  } catch {
-    /* ignore */
-  }
+  residentSentRows = rows;
+  window.dispatchEvent(new Event("axis-resident-inbox"));
 }
 
 function toRows(
@@ -64,8 +54,8 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   useEffect(() => {
     setSent(readSentRows());
     const sync = () => setSent(readSentRows());
-    window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
+    window.addEventListener("axis-resident-inbox", sync);
+    return () => window.removeEventListener("axis-resident-inbox", sync);
   }, []);
 
   useEffect(() => {

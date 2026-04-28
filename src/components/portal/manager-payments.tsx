@@ -16,13 +16,18 @@ import {
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
   recordApprovedApplicationCharges,
+  recordSubmittedApplicationFeeCharge,
   readChargesForManager,
   upsertRecurringRentProfile,
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
-import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import {
+  MANAGER_APPLICATIONS_EVENT,
+  readManagerApplicationRows,
+  syncManagerApplicationsFromServer,
+} from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 
@@ -46,11 +51,21 @@ export function ManagerPayments() {
   const [selectedApplicationId, setSelectedApplicationId] = useState("");
   const [rentAmount, setRentAmount] = useState("");
   const [rentDueDay, setRentDueDay] = useState("1");
+  const [applicationTick, setApplicationTick] = useState(0);
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+  }, []);
+
+  useEffect(() => {
+    const on = () => setApplicationTick((n) => n + 1);
+    void syncManagerApplicationsFromServer().then(on);
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
+    return () => {
+      window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
+    };
   }, []);
 
   useEffect(() => {
@@ -103,9 +118,22 @@ export function ManagerPayments() {
 
   const mergedRows = useMemo(() => {
     void hcTick;
-    const fromHc = readChargesForManager(userId).map(householdChargeToLedgerRow);
+    void applicationTick;
+    const applications = readManagerApplicationRows();
+    const fromHc = readChargesForManager(userId).map((charge) => {
+      const ledgerRow = householdChargeToLedgerRow(charge);
+      const chargeEmail = charge.residentEmail.trim().toLowerCase();
+      const application = applications.find((row) => {
+        const rowEmail = row.email?.trim().toLowerCase();
+        const rowPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+        return rowEmail === chargeEmail && rowPropertyId === charge.propertyId;
+      });
+      const roomChoice = application?.assignedRoomChoice?.trim() || application?.application?.roomChoice1?.trim() || "";
+      const roomLabel = getRoomChoiceLabel(roomChoice).split(" · ")[0]?.trim() || "";
+      return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
+    });
     return [...fromHc, ...mergeManagerPaymentLedger()];
-  }, [userId, hcTick]);
+  }, [userId, hcTick, applicationTick]);
 
   const propertyOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -171,7 +199,7 @@ export function ManagerPayments() {
             signedMonthlyRent: row.signedMonthlyRent ?? null,
           };
         }),
-    [userId, hcTick],
+    [userId, hcTick, applicationTick],
   );
 
   const selectedApprovedResident = useMemo(
@@ -185,7 +213,9 @@ export function ManagerPayments() {
     if (!userId) return;
     let createdCharges = false;
     for (const row of readManagerApplicationRows()) {
-      if (row.bucket === "approved" && applicationVisibleToPortalUser(row, userId)) {
+      if (!applicationVisibleToPortalUser(row, userId)) continue;
+      createdCharges = recordSubmittedApplicationFeeCharge(row, userId) || createdCharges;
+      if (row.bucket === "approved") {
         createdCharges = recordApprovedApplicationCharges(row, userId) || createdCharges;
       }
     }
