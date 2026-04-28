@@ -7,7 +7,7 @@ import { PropertyCard } from "@/components/marketing/property-card";
 import { RoomListingCard } from "@/components/marketing/room-listing-card";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
-import { PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
+import { PROPERTY_PIPELINE_EVENT, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
 import { parseRadiusParam, parseUSZip } from "@/lib/listings-search";
 import { filterRoomListings } from "@/lib/room-listings-catalog";
 
@@ -45,7 +45,7 @@ export function RentListingsView() {
   }, [searchParams]);
 
   const refreshExtras = useCallback(() => {
-    setExtras(readExtraListings());
+    setExtras(readExtraListingsPublic());
   }, []);
 
   useEffect(() => {
@@ -59,7 +59,14 @@ export function RentListingsView() {
     };
   }, [refreshExtras]);
 
-  const combined = useMemo(() => [...mockProperties, ...extras], [extras]);
+  const combined = useMemo(() => {
+    const byPropertyKey = new Map<string, MockProperty>();
+    for (const property of [...mockProperties, ...extras]) {
+      const key = `${property.buildingName}::${property.address}`.trim().toLowerCase();
+      byPropertyKey.set(key, property);
+    }
+    return [...byPropertyKey.values()];
+  }, [extras]);
 
   const centerZip = parseUSZip(props.zipRaw);
   const hasSearch =
@@ -76,8 +83,10 @@ export function RentListingsView() {
         radiusMiles: props.radiusMiles,
         maxBudgetNum: props.maxBudgetNum,
         bathroom: props.bathroom,
+        moveIn: props.moveIn,
+        moveOut: props.moveOut,
       }),
-    [combined, props.bathroom, props.maxBudgetNum, props.radiusMiles, props.zipRaw],
+    [combined, props.bathroom, props.maxBudgetNum, props.radiusMiles, props.zipRaw, props.moveIn, props.moveOut],
   );
 
   return (
@@ -144,7 +153,7 @@ export function RentListingsView() {
         <div className="mt-12 rounded-3xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-14 text-center">
           <p className="text-base font-semibold text-slate-800">No rooms match these filters</p>
           <p className="mt-2 text-sm text-slate-600">
-            Try a larger radius, a nearby ZIP, a higher max rent, or set bathroom to Any.
+            Try a later move-in date, a larger radius, a higher max rent, or set bathroom to Any.
           </p>
           <Link href="/rent/listings" className="mt-6 inline-flex text-sm font-semibold text-primary hover:opacity-90">
             View all properties

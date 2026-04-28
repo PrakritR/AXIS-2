@@ -124,6 +124,45 @@ export function roomMatchesBathroomFilter(room: ListingRoomRow, bathroomId: stri
   return true;
 }
 
+/** Parse YYYY-MM-DD or MM/DD/YYYY or any Date-parseable string into midnight local Date. */
+function parseLocalDate(raw: string): Date | null {
+  const s = raw.trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+    const [m, d, y] = s.split("/").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  const dt = new Date(s);
+  return isNaN(dt.getTime()) ? null : new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
+/**
+ * Returns false when the room should be excluded based on its availability string:
+ * - always false if explicitly unavailable/waitlist
+ * - false if "Available after [date]" and the requested move-in is before that date
+ */
+function roomAvailableForMoveIn(availabilityRaw: string, moveInDate: Date | null): boolean {
+  const raw = availabilityRaw.trim();
+  const lower = raw.toLowerCase();
+
+  if (/\bunavailable\b|not available|no longer available|not open\b|signed.*not available/i.test(lower)) return false;
+  if (/\bwaitlist\b|\bavailable soon\b/i.test(lower)) return false;
+
+  const afterMatch = raw.match(/available\s+after\s+([A-Za-z]+\s+\d{1,2},?\s+\d{4})/i);
+  if (afterMatch) {
+    const afterDate = parseLocalDate(afterMatch[1]);
+    if (afterDate && moveInDate && moveInDate.getTime() < afterDate.getTime()) return false;
+  }
+
+  return true;
+}
+
 export function filterRoomListings(
   properties: MockProperty[],
   opts: {
@@ -131,9 +170,13 @@ export function filterRoomListings(
     radiusMiles: number;
     maxBudgetNum: number | null;
     bathroom: string;
+    moveIn?: string;
+    moveOut?: string;
   },
 ): RoomListingRow[] {
   const centerZip = parseUSZip(opts.zipRaw);
+  const moveInDate = opts.moveIn ? parseLocalDate(opts.moveIn) : null;
+  const hasMoveInFilter = moveInDate !== null || Boolean(opts.moveIn);
   const rows: RoomListingRow[] = [];
 
   for (const p of properties) {
@@ -143,6 +186,8 @@ export function filterRoomListings(
 
     for (const floor of rich.floorPlans) {
       for (const room of floor.rooms) {
+        // Always exclude rooms marked unavailable; when move-in is set, also filter by date.
+        if (!roomAvailableForMoveIn(room.availability, hasMoveInFilter ? (moveInDate ?? new Date()) : null)) continue;
         if (!roomMatchesBathroomFilter(room, opts.bathroom)) continue;
         const rentNumeric = parseMonthlyRent(room.price.replace("/month", "/ mo"));
         const budgetOk =
