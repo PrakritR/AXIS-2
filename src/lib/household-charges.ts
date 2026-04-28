@@ -616,6 +616,92 @@ export function seedDemoHouseholdChargesIfEmpty(_managerUserId: string): void {
   /* no-op */
 }
 
+/** Manager-created charge (fine, fee, custom) against a specific resident. */
+export function createManagerCharge(input: {
+  residentEmail: string;
+  residentName: string;
+  propertyId: string;
+  propertyLabel: string;
+  managerUserId: string | null;
+  title: string;
+  amount: number;
+  blocksLeaseUntilPaid?: boolean;
+}): HouseholdCharge | null {
+  const email = input.residentEmail.trim();
+  if (!email || !Number.isFinite(input.amount) || input.amount <= 0) return null;
+  const balance = `$${input.amount.toFixed(2)}`;
+  const charge: HouseholdCharge = {
+    id: `hc_mgr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+    residentEmail: email,
+    residentName: input.residentName.trim() || "Resident",
+    residentUserId: null,
+    propertyId: input.propertyId,
+    propertyLabel: input.propertyLabel,
+    managerUserId: input.managerUserId,
+    kind: "work_order_charge",
+    title: input.title.trim() || "Manager charge",
+    amountLabel: balance,
+    balanceLabel: balance,
+    status: "pending",
+    blocksLeaseUntilPaid: input.blocksLeaseUntilPaid ?? false,
+  };
+  writeAll([...readAll(), charge]);
+  return charge;
+}
+
+/**
+ * Creates recurring rent profiles for approved residents who don't already have one.
+ * Writes + emits only if at least one profile is new; otherwise returns false without side effects.
+ * Safe to call on every render cycle — acts as a no-op once all profiles exist.
+ */
+export function autoSeedRecurringRentProfiles(
+  residents: Array<{
+    email: string;
+    name: string;
+    propertyId: string;
+    propertyLabel: string | undefined;
+    roomLabel: string | undefined;
+    managerUserId: string | null;
+    monthlyRent: number;
+    dueDay?: number;
+  }>,
+): boolean {
+  if (!isBrowser() || residents.length === 0) return false;
+  const existing = readRentProfiles();
+  const existingKeys = new Set(
+    existing.filter((p) => p.active).map((p) => `${p.residentEmail.trim().toLowerCase()}|${p.propertyId}`),
+  );
+
+  const toAdd: RecurringRentProfile[] = [];
+  for (const r of residents) {
+    const email = r.email.trim().toLowerCase();
+    if (!email || !Number.isFinite(r.monthlyRent) || r.monthlyRent <= 0) continue;
+    const key = `${email}|${r.propertyId}`;
+    if (existingKeys.has(key)) continue;
+    toAdd.push({
+      id: `rent_profile_${crypto.randomUUID()}`,
+      residentEmail: r.email.trim(),
+      residentName: r.name.trim() || "Resident",
+      residentUserId: null,
+      propertyId: r.propertyId,
+      propertyLabel: (r.propertyLabel ?? "").trim() || "Property",
+      roomLabel: (r.roomLabel ?? "").trim() || "Room",
+      managerUserId: r.managerUserId,
+      monthlyRent: Number(r.monthlyRent.toFixed(2)),
+      dueDay: Math.min(28, Math.max(1, Math.round(r.dueDay ?? 1))),
+      startMonth: currentRentMonth(),
+      active: true,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  if (toAdd.length === 0) return false;
+  writeRentProfiles([...existing, ...toAdd]);
+  toAdd.forEach(ensureRecurringRentCharge);
+  return true;
+}
+
 export function residentLeaseBlockedReasons(email: string, userId: string | null): string[] {
   const charges = readChargesForResident(email, userId);
   const out: string[] = [];

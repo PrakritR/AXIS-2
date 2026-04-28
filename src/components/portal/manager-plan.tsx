@@ -599,61 +599,29 @@ export function ManagerPlan() {
           </div>
         ) : null}
 
-        <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-5 py-4 text-sm text-slate-600">
-          <span className="font-semibold text-slate-900">Billing: </span>
-          {sub?.stripeManaged ? (
-            <>
-              Upgrades charge your saved card (Stripe invoices any proration). Downgrades to a lower paid tier start at your{" "}
-              <span className="font-medium text-slate-800">next renewal</span>. Canceling ends paid access after the current period — use{" "}
-              <span className="font-medium text-slate-800">Cancel plan</span> on Free or the button below. First-time paid signup opens Stripe
-              Checkout in this tab.
-            </>
-          ) : (
-            <>
-              After you subscribe to Pro or Business, payment method and invoices are managed in Stripe (same card is reused when you upgrade or
-              change billing interval).
-            </>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            className="ml-3 mt-2 inline-flex rounded-full px-4 py-2 text-[13px] sm:mt-0"
-            disabled={billingPortalBusy || busyTier !== null || billingSyncBusy || !sub?.stripeManaged}
-            title={
-              sub && !sub.stripeManaged && !sub.isFree
-                ? "Subscribe to a paid plan first to manage billing."
-                : undefined
-            }
-            onClick={() => void openBillingPortal()}
-          >
-            Manage payment method & invoices
-          </Button>
-          {sub?.stripeManaged && !sub.isFree && !sub.cancelAtPeriodEnd ? (
+        <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          <p className="text-sm font-semibold text-slate-900">Billing</p>
+          <p className="mt-1.5 text-sm text-slate-600">
+            {sub?.stripeManaged
+              ? "Update your card, download invoices, or review subscription details in Stripe."
+              : "After you join Pro or Business, your payment method and invoices are available in Stripe."}
+          </p>
+          <div className="mt-4">
             <Button
               type="button"
               variant="outline"
-              className="ml-2 mt-2 inline-flex rounded-full border-rose-200 px-4 py-2 text-[13px] text-rose-800 hover:bg-rose-50 sm:mt-0"
-              disabled={busyTier !== null || billingSyncBusy || billingPortalBusy}
-              onClick={() => {
-                setPendingTier("free");
-                void (async () => {
-                  if (
-                    !window.confirm(
-                      `Cancel your paid subscription? You keep ${tierLabel(committedTier)} features until ${
-                        currentPeriodEndLabel ?? "Stripe confirms the billing-period end date"
-                      }, then the account becomes Free.`,
-                    )
-                  ) {
-                    setPendingTier(committedTier);
-                    return;
-                  }
-                  await setTierViaApi("free");
-                })();
-              }}
+              className="rounded-full px-4 py-2 text-[13px]"
+              disabled={billingPortalBusy || busyTier !== null || billingSyncBusy || !sub?.stripeManaged}
+              title={
+                sub && !sub.stripeManaged && !sub.isFree
+                  ? "Subscribe to a paid plan first to manage billing."
+                  : undefined
+              }
+              onClick={() => void openBillingPortal()}
             >
-              Cancel plan
+              Manage payment method & invoices
             </Button>
-          ) : null}
+          </div>
         </div>
       </div>
     </ManagerPortalPageShell>

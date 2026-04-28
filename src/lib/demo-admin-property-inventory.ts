@@ -231,9 +231,8 @@ export function readAdminPropertyRows(
   if (bucket === 1) return side.requestChange.map((r) => normalizeAdminPropertyRow(r));
   if (bucket === 2) {
     const extras = forManagerUserId ? readExtraListingsForUser(forManagerUserId) : readAllExtraListings();
-    const live = forManagerUserId
-      ? extras.filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive === true)
-      : extras.filter((p) => p.id.startsWith("mgr-"));
+    /** Must match {@link adminKpiCounts}: only catalog-live mgr listings. Edits set `adminPublishLive: false` until admin re-approves (see {@link updateExtraListingFromSubmission}). */
+    const live = extras.filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive === true);
     return live.map((p) => mockToAdminRow(p, p.id));
   }
   if (bucket === 3) return side.unlisted.map((r) => normalizeAdminPropertyRow(r));

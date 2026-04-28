@@ -193,8 +193,11 @@ export function AdminDashboard() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Properties" value={propertiesTotal} href="/admin/properties" />
-        <StatCard label="Managers" value={String(counts.managers)} href="/admin/managers" />
-        <StatCard label="Owners" value={String(counts.owners)} href="/admin/owners" />
+        <StatCard
+          label="Axis users"
+          value={String(counts.managers + counts.owners + counts.residents)}
+          href="/admin/axis-users"
+        />
         <StatCard label="Calendar" value={eventsTotal} href="/admin/events" />
       </div>
     </div>

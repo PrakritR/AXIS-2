@@ -222,7 +222,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         },
       ];
     if (
-      section === "managers" ||
+      section === "axis-users" ||
       section === "leases" ||
       section === "events" ||
       section === "applications" ||
@@ -632,10 +632,10 @@ export function buildPortalWorkspaceModel(
     };
   }
 
-  if (portal === "admin" && section === "managers") {
+  if (portal === "admin" && section === "axis-users") {
     return {
       eyebrow,
-      title: "Managers",
+      title: "Axis users",
       subtitle: "",
       kpis: [
         { label: "Current subscribers", value: demoKpis.managers.current, hint: "" },

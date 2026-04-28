@@ -9,8 +9,7 @@ import { ManagerPayments } from "@/components/portal/manager-payments";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
 import { AdminCreateResidentClient } from "@/components/portal/admin-create-resident-client";
-import { AdminManagersClient } from "@/components/portal/admin-managers-client";
-import { AdminOwnersClient } from "@/components/portal/admin-owners-client";
+import { AdminAxisUsersClient } from "@/components/portal/admin-axis-users-client";
 import { AdminLeasesClient } from "@/components/portal/admin-leases-client";
 import { AdminPropertiesClient } from "@/components/portal/admin-properties-client";
 import { AdminEventsClient } from "@/components/portal/admin-events-client";
@@ -81,6 +80,10 @@ export async function renderPortalSection(
   tabParts?: string[],
 ) {
   const def = await getPortalDefinition(kind);
+
+  if (kind === "admin" && (section === "managers" || section === "owners")) {
+    redirect(`${def.basePath}/axis-users`);
+  }
 
   if ((kind === "manager" || kind === "pro") && section === "upgrade") {
     redirect(`${def.basePath}/plan`);
@@ -155,14 +158,9 @@ export async function renderPortalSection(
     return <AdminPropertiesClient />;
   }
 
-  if (kind === "admin" && section === "managers") {
+  if (kind === "admin" && section === "axis-users") {
     if (tabParts?.length) notFound();
-    return <AdminManagersClient />;
-  }
-
-  if (kind === "admin" && section === "owners") {
-    if (tabParts?.length) notFound();
-    return <AdminOwnersClient />;
+    return <AdminAxisUsersClient />;
   }
 
   if (kind === "admin" && section === "leases") {

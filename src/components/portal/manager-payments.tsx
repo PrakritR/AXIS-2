@@ -13,6 +13,7 @@ import { Input, Select } from "@/components/ui/input";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import {
+  autoSeedRecurringRentProfiles,
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
   readChargesForManager,
@@ -177,6 +178,24 @@ export function ManagerPayments() {
     () => approvedResidents.find((row) => row.id === selectedApplicationId) ?? null,
     [approvedResidents, selectedApplicationId],
   );
+
+  // Auto-create recurring rent profiles for approved residents with a signed rent.
+  // No-ops if all profiles already exist, so this is safe to run on every render cycle.
+  useEffect(() => {
+    if (!userId) return;
+    const toSeed = approvedResidents
+      .filter((r) => r.propertyId && r.signedMonthlyRent && r.signedMonthlyRent > 0)
+      .map((r) => ({
+        email: r.email,
+        name: r.name,
+        propertyId: r.propertyId,
+        propertyLabel: r.propertyLabel,
+        roomLabel: r.roomLabel,
+        managerUserId: userId,
+        monthlyRent: r.signedMonthlyRent!,
+      }));
+    autoSeedRecurringRentProfiles(toSeed);
+  }, [approvedResidents, userId]);
 
   return (
     <ManagerPortalPageShell

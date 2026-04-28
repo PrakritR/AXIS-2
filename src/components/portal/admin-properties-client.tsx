@@ -1,19 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ListingPublicPreviewModal } from "@/components/portal/listing-public-preview-modal";
 import { PropertyRequestEditForm } from "@/components/portal/property-request-edit-form";
+import { getListingRichContent } from "@/data/listing-rich-content";
+import {
+  PORTAL_DATA_TABLE_WRAP,
+  PORTAL_TABLE_DETAIL_ROW,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TD,
+  PORTAL_TABLE_TR,
+} from "@/components/portal/portal-data-table";
+import { MANAGER_TABLE_TH, ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import {
   PROPERTY_PIPELINE_EVENT,
   approvePendingManagerProperty,
   republishManagerListingAfterReview,
 } from "@/lib/demo-property-pipeline";
 import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
-import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import {
   adminKpiCounts,
   approveFromRequestChange,
@@ -49,6 +58,14 @@ const EMPTY_COPY: Record<AdminPropertyBucketIndex, string> = {
   2: "No listed properties.",
   3: "No unlisted properties.",
   4: "No rejected properties.",
+};
+
+const ADMIN_TAB_BANNER: Record<AdminPropertyBucketIndex, string> = {
+  0: "New manager submissions and edited live listings re-enter the queue here until you approve, request changes, or reject them.",
+  1: "Managers should revise and resubmit. When ready, you can return items to the pending review queue or close them out from the property detail view.",
+  2: "These listings are on the public Rent with Axis catalog. Unlist, request edits, or open the detail view for full review actions.",
+  3: "Listings the manager took off the public site. You can request changes, reject, or work from the detail view if needed.",
+  4: "Declined or removed from the catalog. Use the detail view to move back to pending or clear from the queue.",
 };
 
 function HouseIcon({ className }: { className?: string }) {
@@ -105,7 +122,7 @@ function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: 
     case 0:
       return { label: "Pending review", variant: "amber" };
     case 1:
-      return { label: "Changes requested", variant: "amber" };
+      return { label: "Approved · edits requested", variant: "amber" };
     case 2:
       return { label: "Listed", variant: "green" };
     case 3:
@@ -115,28 +132,28 @@ function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: 
   }
 }
 
-function AdminPropertyPreviewModal({
-  open,
-  onClose,
+function AdminPropertyInlineDetails({
   bucket,
   row,
   onUpdated,
+  onDismiss,
   showToast,
 }: {
-  open: boolean;
-  onClose: () => void;
   bucket: AdminPropertyBucketIndex;
-  row: AdminPropertyRow | null;
+  row: AdminPropertyRow;
   onUpdated: () => void;
+  onDismiss: () => void;
   showToast: (m: string) => void;
 }) {
-  const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
-  const listingId = row?.listingId;
+  const mock = useMemo(() => resolveAdminPropertyRowPreview(row), [row]);
+  const listingId = row.listingId;
   const [composeEdit, setComposeEdit] = useState<null | "pending" | "listed">(null);
+  const rich = useMemo(() => getListingRichContent(mock), [mock]);
+  const publicHref = publicListingHrefForPropertyRow(row);
 
   useEffect(() => {
     setComposeEdit(null);
-  }, [row?.adminRefId, open]);
+  }, [row.adminRefId]);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
@@ -145,10 +162,8 @@ function AdminPropertyPreviewModal({
     }
     showToast(label);
     onUpdated();
-    onClose();
+    onDismiss();
   };
-
-  if (!open || !row || !mock) return null;
 
   const footer = (
     <div className="flex flex-col gap-2">
@@ -182,7 +197,7 @@ function AdminPropertyPreviewModal({
             showToast("Edit request sent (demo: check sessionStorage axis_demo_outbound_mail_v1).");
             setComposeEdit(null);
             onUpdated();
-            onClose();
+            onDismiss();
           }}
         />
       ) : null}
@@ -209,7 +224,7 @@ function AdminPropertyPreviewModal({
             showToast("Edit request sent (demo: check sessionStorage axis_demo_outbound_mail_v1).");
             setComposeEdit(null);
             onUpdated();
-            onClose();
+            onDismiss();
           }}
         />
       ) : null}
@@ -343,13 +358,25 @@ function AdminPropertyPreviewModal({
   );
 
   return (
-    <ListingPublicPreviewModal
-      open={open}
-      onClose={onClose}
-      property={mock}
-      publicHref={publicListingHrefForPropertyRow(row)}
-      footer={footer}
-    />
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Public listing preview</p>
+        {publicHref ? (
+          <Link
+            href={publicHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold text-slate-700 underline-offset-2 hover:underline"
+          >
+            Open public page
+          </Link>
+        ) : null}
+      </div>
+      <div className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/90 bg-white">
+        <ListingDetailSections property={mock} rich={rich} previewModal />
+      </div>
+      <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-4 sm:px-5">{footer}</div>
+    </div>
   );
 }
 
@@ -357,7 +384,7 @@ export function AdminPropertiesClient() {
   const { showToast } = useAppUi();
   const [activeKpi, setActiveKpi] = useState<AdminPropertyBucketIndex>(0);
   const [tick, setTick] = useState(0);
-  const [detailRow, setDetailRow] = useState<AdminPropertyRow | null>(null);
+  const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     setTick((t) => t + 1);
@@ -375,7 +402,7 @@ export function AdminPropertiesClient() {
   }, []);
 
   useEffect(() => {
-    setDetailRow(null);
+    setExpandedRowKey(null);
   }, [activeKpi]);
 
   const kpiValues = useMemo(() => adminKpiCounts(), [tick]);
@@ -383,41 +410,43 @@ export function AdminPropertiesClient() {
   const status = rowStatus(activeKpi);
 
   return (
-    <div className={PORTAL_SECTION_SURFACE}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Properties</h1>
+    <ManagerPortalPageShell
+      title="Properties"
+      titleAside={
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
           Refresh
         </Button>
-      </div>
-
-      <div className="mt-5">
-        <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-          {KPI_LABELS.map((label, i) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setActiveKpi(i as AdminPropertyBucketIndex)}
-              className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-                activeKpi === i ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+      }
+    >
+      <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+        {KPI_LABELS.map((label, i) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => setActiveKpi(i as AdminPropertyBucketIndex)}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
+              activeKpi === i ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {label}
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                activeKpi === i ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
               }`}
             >
-              {label}
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                  activeKpi === i ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
-                }`}
-              >
-                {kpiValues[i]}
-              </span>
-            </button>
-          ))}
-        </div>
+              {kpiValues[i]}
+            </span>
+          </button>
+        ))}
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
+        {ADMIN_TAB_BANNER[activeKpi]}
+      </div>
+
+      <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>
         {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
+          <div className="flex flex-col items-center justify-center bg-slate-50/20 px-4 py-14 text-center sm:py-16">
             <AxisHeaderMarkTile>
               <HouseIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
@@ -427,57 +456,67 @@ export function AdminPropertiesClient() {
           <div className="overflow-x-auto">
             <table className="min-w-[800px] w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200/90 bg-white">
+                <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                  <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
+                  <th className={`${MANAGER_TABLE_TH} text-right`}>Details</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => {
-                  const publicHref = publicListingHrefForPropertyRow(row);
+                  const rowKey = row.adminRefId + (row.listingId ?? "");
+                  const expanded = expandedRowKey === rowKey;
                   return (
-                    <tr key={row.adminRefId + (row.listingId ?? "")} className="border-b border-slate-100 align-top last:border-0">
-                      <td className="px-5 py-4">
-                        <p className="font-semibold text-slate-900">
-                          {row.buildingName} · {row.unitLabel}
-                        </p>
-                        <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                          {row.address}
-                          {row.zip ? `, ${row.zip}` : ""}
-                        </p>
-                      </td>
-                      <td className="px-5 py-4">
-                        <p className="text-xs text-slate-600">
-                          <span className="font-semibold text-slate-800">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths} ba ·{" "}
-                          {row.neighborhood}
-                        </p>
-                        {String(row.tagline ?? "").trim() ? (
-                          <p className="mt-2 line-clamp-2 text-xs text-slate-500">{row.tagline}</p>
-                        ) : null}
-                      </td>
-                      <td className="px-5 py-4">
-                        <StatusPill label={status.label} variant={status.variant} />
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                          {publicHref ? (
-                            <Link
-                              href={publicHref}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                            >
-                              View listing
-                            </Link>
+                    <Fragment key={rowKey}>
+                      <tr className={PORTAL_TABLE_TR}>
+                        <td className={PORTAL_TABLE_TD}>
+                          <p className="font-medium text-slate-900">
+                            {row.buildingName} · {row.unitLabel}
+                          </p>
+                          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                            {row.address}
+                            {row.zip ? `, ${row.zip}` : ""}
+                          </p>
+                        </td>
+                        <td className={PORTAL_TABLE_TD}>
+                          <p className="text-xs text-slate-600">
+                            <span className="font-medium text-slate-800">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths} ba ·{" "}
+                            {row.neighborhood}
+                          </p>
+                          {String(row.tagline ?? "").trim() ? (
+                            <p className="mt-1.5 line-clamp-2 text-xs text-slate-500">{row.tagline}</p>
                           ) : null}
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setDetailRow(row)}>
-                            More details
+                        </td>
+                        <td className={PORTAL_TABLE_TD}>
+                          <StatusPill label={status.label} variant={status.variant} />
+                        </td>
+                        <td className={`${PORTAL_TABLE_TD} text-right`}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                            onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
+                            aria-expanded={expanded}
+                          >
+                            {expanded ? "Hide details" : "Details"}
                           </Button>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      {expanded ? (
+                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                          <td colSpan={4} className="bg-slate-50/50 px-4 py-4">
+                            <AdminPropertyInlineDetails
+                              bucket={activeKpi}
+                              row={row}
+                              onUpdated={() => setTick((t) => t + 1)}
+                              onDismiss={() => setExpandedRowKey(null)}
+                              showToast={showToast}
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -485,15 +524,6 @@ export function AdminPropertiesClient() {
           </div>
         )}
       </div>
-
-      <AdminPropertyPreviewModal
-        open={Boolean(detailRow)}
-        onClose={() => setDetailRow(null)}
-        bucket={activeKpi}
-        row={detailRow}
-        onUpdated={() => setTick((t) => t + 1)}
-        showToast={showToast}
-      />
-    </div>
+    </ManagerPortalPageShell>
   );
 }
