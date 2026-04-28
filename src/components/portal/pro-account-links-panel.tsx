@@ -10,6 +10,7 @@ import {
   PROPERTY_PIPELINE_EVENT,
   readPendingManagerPropertiesForUser,
   readExtraListingsForUser,
+  readAllExtraListings,
 } from "@/lib/demo-property-pipeline";
 import {
   AXIS_ID_LABEL,
@@ -34,6 +35,14 @@ function propertyChoices(userId: string): { id: string; label: string }[] {
     out.push({ id: r.id, label: `${r.buildingName} · ${r.unitLabel} (pending)` });
   }
   return out;
+}
+
+/** Resolve a property label from the global catalog (all managers' extra listings). */
+function resolvePropertyLabel(id: string, fallback: string): string {
+  const all = readAllExtraListings();
+  const found = all.find((p) => p.id === id);
+  if (!found) return fallback || id;
+  return [found.buildingName, found.unitLabel || found.address].filter(Boolean).join(" · ").trim() || id;
 }
 
 export function ProAccountLinksPanel({
@@ -385,6 +394,38 @@ export function ProAccountLinksPanel({
     mode === "owner" ? "Link another owner workspace" : "Link another manager workspace";
   const splitLabel = mode === "owner" ? "Owner split amount" : "Manager split amount";
 
+  // Sync accepted remote invites into this user's localStorage so collectAccessiblePropertyIds
+  // picks up linked property IDs (enables Applications and Residents tabs to filter correctly).
+  useEffect(() => {
+    if (!useRemote || activeRemote.length === 0) return;
+    const existing = readProRelationships(userId);
+    const existingIds = new Set(existing.map((r) => r.id));
+    let changed = false;
+    const next = [...existing];
+    for (const inv of activeRemote) {
+      if (existingIds.has(inv.id)) continue;
+      next.push({
+        id: inv.id,
+        linkedAxisId: inv.linkedAxisId,
+        linkedDisplayName: inv.linkedDisplayName ?? undefined,
+        perspective,
+        payoutPercentForManager: inv.payoutPercentForManager,
+        assignedPropertyIds: inv.assignedPropertyIds,
+        createdAt: inv.createdAt,
+      });
+      changed = true;
+    }
+    // Remove synced records that are no longer accepted.
+    const activeIds = new Set(activeRemote.map((i) => i.id));
+    const filtered = next.filter((r) => {
+      if (activeRemote.some((i) => i.id === r.id)) return activeIds.has(r.id);
+      return true;
+    });
+    if (changed || filtered.length !== next.length) {
+      writeProRelationships(userId, filtered);
+    }
+  }, [activeRemote, useRemote, userId, perspective]);
+
   const activeCards = useRemote ? activeRemote : localRows;
 
   return (
@@ -593,6 +634,9 @@ export function ProAccountLinksPanel({
                   <div>
                     <p className="font-semibold text-slate-900">{r.linkedDisplayName ?? r.linkedAxisId}</p>
                     <p className="font-mono text-xs text-slate-500">{r.linkedAxisId}</p>
+                    {mode === "manager" ? (
+                      <p className="mt-1 text-xs font-medium text-emerald-700">You are a manager for this account</p>
+                    ) : null}
                   </div>
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void removeLink(r.id)}>
                     Remove
@@ -618,23 +662,38 @@ export function ProAccountLinksPanel({
                 <div className="mt-4">
                   <p className="text-xs font-semibold text-slate-500">Properties in this link</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {propertyOptions.map((p) => {
-                      const on = r.assignedPropertyIds.includes(p.id);
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => void toggleAssignedProp(r.id, p.id)}
-                          className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                            on
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                          }`}
+                    {r.assignedPropertyIds.length === 0 ? (
+                      <span className="text-xs text-slate-400">No properties assigned</span>
+                    ) : r.direction === "incoming" ? (
+                      // Invitee view: show assigned properties as read-only labels
+                      r.assignedPropertyIds.map((pid) => (
+                        <span
+                          key={pid}
+                          className="rounded-full border border-primary bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
                         >
-                          {p.label}
-                        </button>
-                      );
-                    })}
+                          {resolvePropertyLabel(pid, pid)}
+                        </span>
+                      ))
+                    ) : (
+                      // Inviter view: show all own properties with toggle
+                      propertyOptions.map((p) => {
+                        const on = r.assignedPropertyIds.includes(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => void toggleAssignedProp(r.id, p.id)}
+                            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                              on
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               </div>
@@ -649,6 +708,9 @@ export function ProAccountLinksPanel({
                   <div>
                     <p className="font-semibold text-slate-900">{r.linkedDisplayName ?? r.linkedAxisId}</p>
                     <p className="font-mono text-xs text-slate-500">{r.linkedAxisId}</p>
+                    {mode === "manager" ? (
+                      <p className="mt-1 text-xs font-medium text-emerald-700">You are a manager for this account</p>
+                    ) : null}
                   </div>
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void removeLink(r.id)}>
                     Remove
@@ -674,23 +736,27 @@ export function ProAccountLinksPanel({
                 <div className="mt-4">
                   <p className="text-xs font-semibold text-slate-500">Properties in this link</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {propertyOptions.map((p) => {
-                      const on = r.assignedPropertyIds.includes(p.id);
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => void toggleAssignedProp(r.id, p.id)}
-                          className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                            on
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                          }`}
-                        >
-                          {p.label}
-                        </button>
-                      );
-                    })}
+                    {r.assignedPropertyIds.length === 0 ? (
+                      <span className="text-xs text-slate-400">No properties assigned</span>
+                    ) : (
+                      propertyOptions.map((p) => {
+                        const on = r.assignedPropertyIds.includes(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => void toggleAssignedProp(r.id, p.id)}
+                            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                              on
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               </div>
