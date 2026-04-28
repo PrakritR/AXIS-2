@@ -77,10 +77,12 @@ function setExtraLinesPreservingPresets(fullText: string, extraRaw: string, pres
 
 function FormSection({ id, title, description, children }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode }) {
   return (
-    <section id={id} className="mb-6 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm sm:p-6">
-      <h3 className="text-base font-bold tracking-tight text-slate-900">{title}</h3>
-      {description ? <div className="mt-1 text-sm text-slate-600">{description}</div> : null}
-      <div className="mt-4">{children}</div>
+    <section id={id} className="mb-6 overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-sm">
+      <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-4 sm:px-6">
+        <h3 className="text-base font-bold tracking-tight text-slate-950">{title}</h3>
+        {description ? <div className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{description}</div> : null}
+      </div>
+      <div className="p-4 sm:p-6">{children}</div>
     </section>
   );
 }
@@ -99,7 +101,7 @@ function togglePaymentAtSigning(
 const MAX_IMG_BYTES = 10 * 1024 * 1024;
 const MAX_VID_BYTES = 14 * 1024 * 1024;
 const MAX_HOUSE_PHOTOS = 12;
-/** Max pixel width after compression — keeps localStorage size manageable. */
+/** Max pixel width after compression. */
 const IMG_MAX_WIDTH = 1280;
 const IMG_QUALITY = 0.75;
 
@@ -111,12 +113,37 @@ function mediaDropZoneClass(active: boolean) {
   }`;
 }
 
-/** Multi-step flow — 5 steps, combining related sections to reduce friction. */
+const SHARED_SPACE_TEMPLATES = [
+  {
+    label: "Kitchen & dining",
+    detail: "Shared kitchen and dining area. Add appliances, storage, cleanup expectations, and how residents share the space.",
+    amenities: ["Refrigerator", "Microwave", "Oven / range", "Dishwasher"],
+  },
+  {
+    label: "Living room / lounge",
+    detail: "Shared lounge or living area. Add seating, TV, quiet hours, guest expectations, and any usage rules.",
+    amenities: ["Living / lounge seating", "TV in common area"],
+  },
+  {
+    label: "Laundry",
+    detail: "Laundry area access, machines, scheduling expectations, and whether supplies are included.",
+    amenities: ["In-unit laundry"],
+  },
+  {
+    label: "Outdoor / yard",
+    detail: "Shared outdoor space, patio, deck, or yard. Add access, storage, guest rules, and maintenance expectations.",
+    amenities: [],
+  },
+] as const;
+
+/** Multi-step flow for all listing data used by the public page. */
 const LISTING_FORM_STEPS = [
   { id: "building", label: "Building" },
   { id: "lease", label: "Lease & costs" },
   { id: "rooms", label: "Rooms" },
-  { id: "spaces", label: "Bathrooms & spaces" },
+  { id: "bathrooms", label: "Bathrooms" },
+  { id: "spaces", label: "Shared spaces" },
+  { id: "facts", label: "Quick facts" },
   { id: "amenities", label: "Amenities" },
 ] as const;
 
@@ -199,6 +226,14 @@ function ListingSubsection({
       <div className="mt-4 space-y-4">{children}</div>
     </div>
   );
+}
+
+function roomAccessSummary(space: ManagerSharedSpaceSubmission, rooms: ManagerRoomSubmission[]) {
+  const ids = new Set(space.roomAccessIds ?? []);
+  if (rooms.length === 0) return "No rooms added yet";
+  if (ids.size === 0) return "No room access selected";
+  if (ids.size === rooms.length) return "All rooms have access";
+  return `${ids.size} of ${rooms.length} rooms have access`;
 }
 
 export function ManagerAddListingForm({
@@ -393,8 +428,31 @@ export function ManagerAddListingForm({
     setSub((s) => ({ ...s, sharedSpaces: [...s.sharedSpaces, emptySharedSpace(s.sharedSpaces.length)] }));
   };
 
+  const addSharedSpaceFromTemplate = (template: (typeof SHARED_SPACE_TEMPLATES)[number]) => {
+    if (sub.sharedSpaces.length >= 24) return;
+    setSub((s) => {
+      const row = {
+        ...emptySharedSpace(s.sharedSpaces.length),
+        name: template.label,
+        detail: template.detail,
+        amenitiesText: template.amenities.join("\n"),
+        roomAccessIds: s.rooms.map((room) => room.id),
+      };
+      return { ...s, sharedSpaces: [...s.sharedSpaces, row] };
+    });
+  };
+
   const removeSharedSpace = (i: number) => {
     setSub((s) => ({ ...s, sharedSpaces: s.sharedSpaces.filter((_, j) => j !== i) }));
+  };
+
+  const setSharedSpaceRoomAccess = (spaceIndex: number, mode: "all" | "none") => {
+    setSub((s) => {
+      const sharedSpaces = s.sharedSpaces.map((ss, si) =>
+        si === spaceIndex ? { ...ss, roomAccessIds: mode === "all" ? s.rooms.map((room) => room.id) : [] } : ss,
+      );
+      return { ...s, sharedSpaces };
+    });
   };
 
   const toggleSharedSpaceRoom = (spaceIndex: number, roomId: string, on: boolean) => {
@@ -606,6 +664,10 @@ export function ManagerAddListingForm({
       showToast("Name each bathroom or remove empty bathroom rows.");
       return;
     }
+    if (sub.sharedSpaces.some((space) => !space.name.trim())) {
+      showToast("Name each shared space or remove empty shared space rows.");
+      return;
+    }
 
     setBusy(true);
     try {
@@ -660,7 +722,7 @@ export function ManagerAddListingForm({
       <form
         id="manager-add-listing-form"
         onSubmit={handleSubmit}
-        className="relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)] lg:max-h-[calc(100dvh-3rem)]"
+        className="relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)] lg:max-h-[calc(100dvh-3rem)]"
       >
         <div className="shrink-0 border-b border-slate-100 p-6 pb-4 sm:p-8 sm:pb-4">
           <div className="flex items-start justify-between gap-3">
@@ -681,7 +743,7 @@ export function ManagerAddListingForm({
               ×
             </button>
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-1">
+          <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
             {LISTING_FORM_STEPS.map((step, i) => (
               <button
                 key={step.id}
@@ -689,14 +751,17 @@ export function ManagerAddListingForm({
                 onClick={() => {
                   if (i < stepIndex || canContinueFromStep(stepIndex)) setStepIndex(i);
                 }}
-                className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                className={`flex min-h-10 items-center justify-center rounded-2xl border px-3 py-2 text-center text-[11px] font-semibold transition ${
                   i === stepIndex
-                    ? "bg-primary text-white"
+                    ? "border-primary bg-primary text-white shadow-sm"
                     : i < stepIndex
-                      ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      : "text-slate-400"
+                      ? "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700"
                 }`}
               >
+                <span className={`mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${i === stepIndex ? "bg-white/20 text-white" : "bg-slate-200/70 text-slate-600"}`}>
+                  {i + 1}
+                </span>
                 {step.label}
               </button>
             ))}
@@ -1183,7 +1248,7 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {stepIndex === 5 ? (
+          {stepIndex === 3 ? (
           <FormSection
             id="edit-bath"
             title="Bathrooms"
@@ -1349,35 +1414,81 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {stepIndex === 6 ? (
+          {stepIndex === 4 ? (
           <FormSection
             id="edit-shared"
             title="Shared spaces"
-            description="Add each common area (kitchen, laundry, yard, etc.), then choose which bedrooms have access. Put appliances and in-space equipment (dishwasher, fridge, desk, TV, etc.) in Space amenities — not the house-wide Amenities step."
+            description="Add every common area residents can use: kitchen, dining, living room, laundry, yard, storage, parking, office, roof deck, and any other shared feature. Each row can have its own details, equipment, rules, and room access."
           >
-              <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-                <p className="text-sm text-slate-500">Shown as separate rows on the public listing.</p>
-                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addSharedSpace}>
-                  + Add shared space
-                </Button>
-              </div>
-              {sub.sharedSpaces.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center text-sm text-slate-600">
-                  No shared spaces yet. Click <span className="font-semibold">Add shared space</span> to list kitchens, laundry, living room, yard,
-                  etc.
+              <div className="mb-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                <p className="text-sm font-semibold text-blue-950">Quick add common shared spaces</p>
+                <p className="mt-1 text-xs leading-5 text-blue-900/75">
+                  These create fully editable rows with all current rooms selected. Use them for common spaces, then adjust details, amenities, and room access.
                 </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {SHARED_SPACE_TEMPLATES.map((template) => (
+                    <Button
+                      key={template.label}
+                      type="button"
+                      variant="outline"
+                      className="rounded-full bg-white text-xs"
+                      onClick={() => addSharedSpaceFromTemplate(template)}
+                      disabled={sub.sharedSpaces.length >= 24}
+                    >
+                      + {template.label}
+                    </Button>
+                  ))}
+                  <Button type="button" variant="primary" className="rounded-full text-xs" onClick={addSharedSpace}>
+                    + Blank shared space
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-2xl font-bold tabular-nums text-slate-950">{sub.sharedSpaces.length}</p>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Spaces</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-2xl font-bold tabular-nums text-slate-950">{sub.rooms.length}</p>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Rooms to assign</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-sm font-semibold text-slate-900">Put equipment here</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">Dishwasher, fridge, desk, TV, laundry, storage, and parking belong to the specific space.</p>
+                </div>
+              </div>
+
+              {sub.sharedSpaces.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-8 text-center">
+                  <p className="text-sm font-semibold text-slate-800">No shared spaces added yet.</p>
+                  <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
+                    Add at least the kitchen/common area so applicants understand what rooms share. Add laundry, living room, outdoor areas, parking, storage, or study spaces if they exist.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-6">
                   {sub.sharedSpaces.map((sp, i) => (
-                    <div key={sp.id} className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-                      <div className="flex justify-between gap-2">
-                        <p className="text-sm font-semibold text-slate-900">Shared space {i + 1}</p>
-                        <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeSharedSpace(i)}>
-                          Remove
-                        </button>
+                    <div key={sp.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                        <div>
+                          <p className="text-sm font-bold text-slate-950">Shared space {i + 1}</p>
+                          <p className="mt-1 text-xs text-slate-500">{roomAccessSummary(sp, sub.rooms)}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setSharedSpaceRoomAccess(i, "all")}>
+                            All rooms
+                          </Button>
+                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setSharedSpaceRoomAccess(i, "none")}>
+                            Clear rooms
+                          </Button>
+                          <button type="button" className="rounded-full px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50" onClick={() => removeSharedSpace(i)}>
+                            Remove
+                          </button>
+                        </div>
                       </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        <div className="sm:col-span-2">
+                      <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
+                        <div>
                           <FieldLabel>Name *</FieldLabel>
                           <Input
                             value={sp.name}
@@ -1385,15 +1496,31 @@ export function ManagerAddListingForm({
                             placeholder="e.g. Kitchen & dining, Laundry, Backyard"
                           />
                         </div>
+                        <div>
+                          <FieldLabel hint="Optional label for where it is.">Location / level</FieldLabel>
+                          <Input
+                            value={sp.detail.split("\n").find((line) => line.startsWith("Location: "))?.replace("Location: ", "") ?? ""}
+                            onChange={(e) => {
+                              const rest = sp.detail
+                                .split("\n")
+                                .filter((line) => !line.startsWith("Location: "))
+                                .join("\n")
+                                .trim();
+                              const loc = e.target.value.trim();
+                              setSharedSpace(i, { detail: [loc ? `Location: ${loc}` : "", rest].filter(Boolean).join("\n\n") });
+                            }}
+                            placeholder="Main floor, basement, backyard"
+                          />
+                        </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel hint="Rules, hours, parking for guests, policies — not individual appliances (those go below).">
-                            Details
+                          <FieldLabel hint="Use this for rules, hours, storage, cleaning expectations, guest policy, scheduling, and anything applicants should know.">
+                            Details and use rules
                           </FieldLabel>
                           <Textarea
-                            className="min-h-[72px]"
+                            className="min-h-[96px]"
                             value={sp.detail}
                             onChange={(e) => setSharedSpace(i, { detail: e.target.value })}
-                            placeholder="How the space works, what's included, any house rules."
+                            placeholder="Example: Shared kitchen with assigned pantry shelves. Residents clean after use; quiet hours after 10pm. Dining area seats six."
                           />
                         </div>
                         <div className="sm:col-span-2">
@@ -1442,9 +1569,9 @@ export function ManagerAddListingForm({
                         </div>
                         <div className="sm:col-span-2">
                           <FieldLabel hint="Rooms that may use this space (same room can be checked on multiple spaces).">Room access</FieldLabel>
-                          <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                          <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 lg:grid-cols-3">
                             {sub.rooms.map((room) => (
-                              <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
+                              <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-sm">
                                 <input
                                   type="checkbox"
                                   className="h-4 w-4 rounded border-slate-300"
@@ -1464,7 +1591,7 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {stepIndex === 7 ? (
+          {stepIndex === 5 ? (
           <FormSection
             id="edit-quick-facts"
             title="Quick facts (sidebar)"
@@ -1493,7 +1620,7 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {stepIndex === 8 ? (
+          {stepIndex === 6 ? (
           <FormSection
             id="edit-amenities"
             title="Amenities"
