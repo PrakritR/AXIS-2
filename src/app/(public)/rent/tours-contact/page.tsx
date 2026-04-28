@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
-import { PROPERTY_PIPELINE_EVENT, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
+import { loadPublicExtraListingsFromServer, PROPERTY_PIPELINE_EVENT, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   appendPartnerInquiry,
@@ -123,7 +123,10 @@ export default function ToursContactPage() {
   const [extras, setExtras] = useState<MockProperty[]>([]);
 
   useEffect(() => {
-    const sync = () => setExtras(readExtraListingsPublic());
+    const sync = () => {
+      setExtras(readExtraListingsPublic());
+      void loadPublicExtraListingsFromServer().then(setExtras);
+    };
     sync();
     window.addEventListener(PROPERTY_PIPELINE_EVENT, sync);
     window.addEventListener("storage", sync);
