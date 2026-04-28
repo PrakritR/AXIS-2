@@ -7,6 +7,7 @@ export const ADMIN_AVAILABILITY_STORAGE_KEY = "axis_admin_avail_slots_v2";
 const AVAIL_V2_KEY = ADMIN_AVAILABILITY_STORAGE_KEY;
 const INQ_KEY = "axis_admin_partner_inquiries_v1";
 const PLANNED_KEY = "axis_admin_planned_events_v1";
+const INQUIRY_EVENT_RECORD_TYPE = "partner_inquiry_request";
 const PROP_MGR_REGISTRY_KEY = "axis_property_mgr_registry_v1";
 const memoryStore = new Map<string, unknown>();
 
@@ -120,6 +121,17 @@ async function writeJsonToServer(key: string, value: unknown): Promise<boolean> 
         payload: value,
       },
     }),
+  });
+  return res.ok;
+}
+
+async function deleteJsonRecordFromServer(id: string): Promise<boolean> {
+  if (!isBrowser()) return false;
+  const res = await fetch("/api/portal-schedule-records", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "delete", id }),
   });
   return res.ok;
 }
@@ -462,6 +474,11 @@ export function deletePlannedEvent(id: string): boolean {
   return true;
 }
 
+export async function deletePlannedEventFromServer(id: string): Promise<boolean> {
+  if (!deletePlannedEvent(id)) return false;
+  return writeJsonToServer(PLANNED_KEY, readPlannedEvents());
+}
+
 export function pendingInquiryCount() {
   return readPartnerInquiries().filter((r) => {
     if (r.status !== "pending") return false;
@@ -512,6 +529,29 @@ export function acceptPartnerInquiry(id: string, opts?: { instructions?: string;
   return true;
 }
 
+function partnerInquiryEventRecordIds(row: PartnerInquiry): string[] {
+  return getPartnerInquiryWindows(row).map((_, index) => `${INQUIRY_EVENT_RECORD_TYPE}_${row.id}_${index}`);
+}
+
+async function deletePartnerInquiryEventRecords(row: PartnerInquiry): Promise<boolean> {
+  const results = await Promise.all(partnerInquiryEventRecordIds(row).map((id) => deleteJsonRecordFromServer(id)));
+  return results.every(Boolean);
+}
+
+export async function acceptPartnerInquiryFromServer(
+  id: string,
+  opts?: { instructions?: string; start?: string; end?: string },
+): Promise<boolean> {
+  const row = readPartnerInquiries().find((r) => r.id === id);
+  if (!row || !acceptPartnerInquiry(id, opts)) return false;
+  const [inquiriesOk, plannedOk, eventRecordsOk] = await Promise.all([
+    writeJsonToServer(INQ_KEY, readPartnerInquiries()),
+    writeJsonToServer(PLANNED_KEY, readPlannedEvents()),
+    deletePartnerInquiryEventRecords(row),
+  ]);
+  return inquiriesOk && plannedOk && eventRecordsOk;
+}
+
 export function declinePartnerInquiry(id: string) {
   return updatePartnerInquiry(id, { status: "declined" });
 }
@@ -522,6 +562,16 @@ export function deletePartnerInquiry(id: string): boolean {
   if (next.length === rows.length) return false;
   writeJson(INQ_KEY, next);
   return true;
+}
+
+export async function deletePartnerInquiryFromServer(id: string): Promise<boolean> {
+  const row = readPartnerInquiries().find((r) => r.id === id);
+  if (!row || !deletePartnerInquiry(id)) return false;
+  const [inquiriesOk, eventRecordsOk] = await Promise.all([
+    writeJsonToServer(INQ_KEY, readPartnerInquiries()),
+    deletePartnerInquiryEventRecords(row),
+  ]);
+  return inquiriesOk && eventRecordsOk;
 }
 
 export function getPartnerInquiryWindows(row: PartnerInquiry): PartnerInquiryWindow[] {

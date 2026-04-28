@@ -16,6 +16,11 @@ type PropertyManagerEntry = {
   label: string;
 };
 
+type PropertyRecordRow = {
+  manager_user_id: string | null;
+  property_data: unknown;
+};
+
 function safePropertyId(propertyId: string): string {
   return propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
 }
@@ -26,6 +31,19 @@ function payloadSlots(rowData: unknown): string[] {
   return Array.isArray(payload) ? payload.filter((item): item is string => typeof item === "string") : [];
 }
 
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function textField(row: Record<string, unknown>, key: string): string {
+  const value = row[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function propertyMatchKey(row: Record<string, unknown>): string {
+  return `${textField(row, "buildingName")}::${textField(row, "address")}`.toLowerCase();
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -34,7 +52,46 @@ export async function GET(req: Request) {
 
     const safeId = safePropertyId(propertyId);
     const db = createSupabaseServiceRoleClient();
-    const { data, error } = await db
+
+    const { data: propertyRows, error: propertyError } = await db
+      .from("manager_property_records")
+      .select("manager_user_id, property_data")
+      .eq("status", "live");
+
+    if (propertyError) return NextResponse.json({ error: propertyError.message }, { status: 500 });
+
+    const propertyRecords = ((propertyRows ?? []) as PropertyRecordRow[])
+      .map((row) => ({ managerUserId: row.manager_user_id?.trim() ?? "", property: asObject(row.property_data) }))
+      .filter((row): row is { managerUserId: string; property: Record<string, unknown> } => Boolean(row.managerUserId && row.property));
+
+    const directMatches = propertyRecords.filter(({ property }) => {
+      const id = textField(property, "id");
+      const buildingId = textField(property, "buildingId");
+      return id === propertyId || safePropertyId(id) === safeId || buildingId === propertyId || safePropertyId(buildingId) === safeId;
+    });
+    const houseKeys = new Set(directMatches.map(({ property }) => propertyMatchKey(property)).filter(Boolean));
+    const managerIds = [
+      ...new Set(
+        propertyRecords
+          .filter(({ property }) => directMatches.some((match) => match.property === property) || houseKeys.has(propertyMatchKey(property)))
+          .map(({ managerUserId }) => managerUserId),
+      ),
+    ];
+
+    const globalAvailabilityRows =
+      managerIds.length > 0
+        ? await db
+            .from("portal_schedule_records")
+            .select("id, manager_user_id, property_id, record_type, row_data")
+            .eq("record_type", "manager_availability")
+            .in("manager_user_id", managerIds)
+        : { data: [], error: null };
+
+    if (globalAvailabilityRows.error) {
+      return NextResponse.json({ error: globalAvailabilityRows.error.message }, { status: 500 });
+    }
+
+    const { data: legacyData, error } = await db
       .from("portal_schedule_records")
       .select("id, manager_user_id, property_id, record_type, row_data")
       .eq("record_type", "manager_property_availability")
@@ -42,11 +99,16 @@ export async function GET(req: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const rows = (data ?? []) as ScheduleRecordRow[];
-    const managerIds = [...new Set(rows.map((row) => row.manager_user_id).filter((id): id is string => Boolean(id)))];
+    const globalRows = (globalAvailabilityRows.data ?? []) as ScheduleRecordRow[];
+    const legacyRows = ((legacyData ?? []) as ScheduleRecordRow[]).filter((row) => {
+      const managerUserId = row.manager_user_id?.trim();
+      return managerUserId && !globalRows.some((globalRow) => globalRow.manager_user_id === managerUserId);
+    });
+    const rows = [...globalRows, ...legacyRows];
+    const availabilityManagerIds = [...new Set(rows.map((row) => row.manager_user_id).filter((id): id is string => Boolean(id)))];
     const labelByManagerId = new Map<string, string>();
-    if (managerIds.length > 0) {
-      const { data: profiles } = await db.from("profiles").select("id, email, full_name").in("id", managerIds);
+    if (availabilityManagerIds.length > 0) {
+      const { data: profiles } = await db.from("profiles").select("id, email, full_name").in("id", availabilityManagerIds);
       for (const profile of (profiles ?? []) as { id?: string | null; email?: string | null; full_name?: string | null }[]) {
         if (!profile.id) continue;
         labelByManagerId.set(profile.id, profile.email?.trim() || profile.full_name?.trim() || "Property manager");

@@ -9,11 +9,11 @@ import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics"
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
   SLOTS_PER_DAY,
-  acceptPartnerInquiry,
+  acceptPartnerInquiryFromServer,
   dateHasAvailability,
   dateSlotKey,
-  deletePartnerInquiry,
-  deletePlannedEvent,
+  deletePartnerInquiryFromServer,
+  deletePlannedEventFromServer,
   formatRangeLabel,
   formatAvailabilitySlotLabel,
   getPartnerInquiryWindows,
@@ -399,10 +399,10 @@ export function PortalCalendarPanels({
     setSelectedBlockAnchor(null);
   }, [activeSlots, selectedBlock, writeAvailability]);
 
-  const approveSelectedInquiry = useCallback(() => {
+  const approveSelectedInquiry = useCallback(async () => {
     if (selectedBlock?.kind !== "meeting" || selectedBlock.meeting.source !== "inquiry") return;
     if (
-      acceptPartnerInquiry(selectedBlock.meeting.sourceId, {
+      await acceptPartnerInquiryFromServer(selectedBlock.meeting.sourceId, {
         start: selectedBlock.meeting.startIso,
         end: selectedBlock.meeting.endIso,
       })
@@ -414,12 +414,12 @@ export function PortalCalendarPanels({
     }
   }, [reloadAvailability, selectedBlock]);
 
-  const deleteSelectedMeeting = useCallback(() => {
+  const deleteSelectedMeeting = useCallback(async () => {
     if (selectedBlock?.kind !== "meeting") return;
     const ok =
       selectedBlock.meeting.source === "planned"
-        ? deletePlannedEvent(selectedBlock.meeting.sourceId)
-        : deletePartnerInquiry(selectedBlock.meeting.sourceId);
+        ? await deletePlannedEventFromServer(selectedBlock.meeting.sourceId)
+        : await deletePartnerInquiryFromServer(selectedBlock.meeting.sourceId);
     if (ok) {
       setSelectedBlock(null);
       setSelectedBlockAnchor(null);
