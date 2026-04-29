@@ -11,7 +11,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
   await assertPortalLayoutRole("resident", "resident");
 
   const residentPortal = await getResidentPortalDefinition();
-  const { profile, user } = await getEffectiveSessionForPortal("resident");
+  const { profile } = await getEffectiveSessionForPortal("resident");
 
   const ctx = await getPortalAccessContext();
   const preview = await getAdminPreviewFromCookies();
@@ -25,10 +25,10 @@ export default async function ResidentLayout({ children }: { children: React.Rea
     <div className="flex min-h-screen flex-col bg-[#f5f5f7]">
       <PublicNavbar />
       {showPreviewBanner ? <AdminPreviewBanner label={previewLabel} /> : null}
-      <div className="flex min-h-0 w-full flex-1 flex-col lg:flex-row">
+      <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-x-hidden lg:flex-row">
         <PortalSidebar definition={residentPortal} />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <main className="flex min-h-0 flex-1 flex-col px-4 py-6 lg:px-8 lg:py-8">{children}</main>
+        <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip">
+          <main className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip px-4 py-6 lg:px-8 lg:py-8">{children}</main>
         </div>
       </div>
     </div>

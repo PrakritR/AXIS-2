@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 
 /** Outer frame for tabbed portal tables — light border, minimal shadow. */
 export const PORTAL_DATA_TABLE_WRAP =
-  "overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
+  "relative z-0 max-w-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
 
-export const PORTAL_DATA_TABLE_SCROLL = "overflow-x-auto";
+export const PORTAL_DATA_TABLE_SCROLL = "relative z-0 max-w-full overflow-x-auto";
 
 /** Table header row (use under `<thead>`). */
 export const PORTAL_TABLE_HEAD_ROW = "border-b border-slate-200/60 bg-slate-50/40";

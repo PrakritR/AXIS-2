@@ -36,10 +36,10 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
         previewLabel={previewLabel}
         showPlanBanner={showPlanBanner}
       />
-      <div className="flex min-h-0 w-full flex-1 flex-col lg:flex-row">
+      <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-x-hidden lg:flex-row">
         <PortalSidebar definition={ownerPortal} />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden px-4 py-6 lg:px-8 lg:py-8">{children}</main>
+        <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip">
+          <main className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip px-4 py-6 lg:px-8 lg:py-8">{children}</main>
         </div>
       </div>
     </div>
