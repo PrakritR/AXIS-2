@@ -8,7 +8,7 @@ import { PortalPropertyFilterPill } from "@/components/portal/manager-section-sh
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
-import { collectAccessiblePropertyIds } from "@/lib/manager-portfolio-access";
+import { buildManagerPropertyFilterOptions, collectAccessiblePropertyIds } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import {
   MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
@@ -44,8 +44,12 @@ export function ManagerWorkOrders() {
   /** Bumps when backend work orders change. */
   const [storeTick, setStoreTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
+  const [propertyFilter, setPropertyFilter] = useState("");
 
-  useEffect(() => setStorageReady(true), []);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setStorageReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     const bump = () => setStoreTick((t) => t + 1);
@@ -62,12 +66,15 @@ export function ManagerWorkOrders() {
   }, [authReady, userId]);
 
   const allRows = useMemo(
-    () =>
-      storageReady ? readManagerWorkOrderRows() : MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT,
+    () => {
+      void storeTick;
+      return storageReady ? readManagerWorkOrderRows() : MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT;
+    },
     [storageReady, storeTick],
   );
 
   const scopedRows = useMemo(() => {
+    void propertyTick;
     if (!userId) return [];
     const propertyIds = collectAccessiblePropertyIds(userId);
     return allRows.filter((row) => {
@@ -77,7 +84,17 @@ export function ManagerWorkOrders() {
     });
   }, [allRows, userId, propertyTick]);
 
-  const counts = useMemo(() => countWorkOrders(scopedRows), [scopedRows]);
+  const propertyOptions = useMemo(() => {
+    void propertyTick;
+    return buildManagerPropertyFilterOptions(userId);
+  }, [userId, propertyTick]);
+
+  const filteredRows = useMemo(() => {
+    if (!propertyFilter.trim()) return scopedRows;
+    return scopedRows.filter((row) => (row.assignedPropertyId?.trim() || row.propertyId?.trim() || "") === propertyFilter);
+  }, [scopedRows, propertyFilter]);
+
+  const counts = useMemo(() => countWorkOrders(filteredRows), [filteredRows]);
   const tabs = useMemo(
     () => WO_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),
     [counts],
@@ -88,7 +105,11 @@ export function ManagerWorkOrders() {
       title="Work orders"
       titleAside={
         <>
-          <PortalPropertyFilterPill applications />
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Work orders refreshed.")}>
             Refresh
           </Button>
@@ -101,7 +122,7 @@ export function ManagerWorkOrders() {
       }
     >
       <ManagerWorkOrdersPanel
-        allRows={scopedRows}
+        allRows={filteredRows}
         bucket={bucket}
         onAfterSchedule={() => setBucket("scheduled")}
       />

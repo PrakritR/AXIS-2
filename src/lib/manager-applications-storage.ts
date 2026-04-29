@@ -109,8 +109,8 @@ export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
     memoryRows = normalizedRows;
     emit();
     mirrorApplicationsToServer(normalizedRows);
-    void import("@/lib/lease-pipeline-storage").then(({ readLeasePipeline }) => {
-      readLeasePipeline();
+    void import("@/lib/lease-pipeline-storage").then(({ syncLeasePipelineFromApplications }) => {
+      syncLeasePipelineFromApplications();
     });
   } catch {
     /* ignore */

@@ -20,9 +20,11 @@ import {
 } from "@/components/portal/portal-data-table";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
+  chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
   linkHouseholdChargesToResidentUser,
   readChargesForResident,
+  syncHouseholdChargesFromServer,
   type HouseholdCharge,
 } from "@/lib/household-charges";
 
@@ -70,9 +72,10 @@ export function ResidentPaymentsPanel() {
         setUserId(user.id);
         setEmail(em);
         if (em) linkHouseholdChargesToResidentUser(em, user.id);
-        refresh();
+        await syncHouseholdChargesFromServer();
+        if (!cancelled) refresh();
       } catch {
-        /* ignore */
+        if (!cancelled) refresh();
       }
     })();
     return () => {
@@ -81,6 +84,7 @@ export function ResidentPaymentsPanel() {
   }, [refresh]);
 
   const charges = useMemo(() => {
+    void tick;
     if (!email) return [] as HouseholdCharge[];
     return readChargesForResident(email, userId);
   }, [email, userId, tick]);
@@ -119,8 +123,10 @@ export function ResidentPaymentsPanel() {
           variant="outline"
           className="shrink-0 rounded-full"
           onClick={() => {
-            refresh();
-            showToast("Refreshed payments.");
+            void syncHouseholdChargesFromServer().then(() => {
+              refresh();
+              showToast("Refreshed payments.");
+            });
           }}
         >
           Refresh
@@ -159,6 +165,7 @@ export function ResidentPaymentsPanel() {
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Due</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Balance</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
@@ -171,6 +178,7 @@ export function ResidentPaymentsPanel() {
                     <tr className={PORTAL_TABLE_TR}>
                       <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
                       <td className={PORTAL_TABLE_TD}>{row.propertyLabel}</td>
+                      <td className={PORTAL_TABLE_TD}>{chargeDueLabel(row)}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums text-slate-800`}>{row.amountLabel}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-slate-900`}>{row.balanceLabel}</td>
                       <td className={PORTAL_TABLE_TD}>
@@ -193,7 +201,10 @@ export function ResidentPaymentsPanel() {
                     </tr>
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={6} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
+                        <td colSpan={7} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
+                          <p className="mb-3 text-sm text-slate-700">
+                            Due: <span className="font-semibold text-slate-900">{chargeDueLabel(row)}</span>
+                          </p>
                           {row.zelleContactSnapshot ? (
                             <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/50 px-3 py-2.5 text-emerald-950">
                               <p className="text-xs font-semibold">Pay with Zelle</p>

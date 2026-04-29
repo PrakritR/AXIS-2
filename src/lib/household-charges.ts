@@ -54,6 +54,7 @@ export type HouseholdCharge = {
   recurringRentProfileId?: string;
   rentMonth?: string;
   dueDay?: number;
+  dueDateLabel?: string;
 };
 
 export type RecurringRentProfile = {
@@ -164,6 +165,34 @@ function formatRecurringRentDueLabel(month: string, dueDay: number) {
     : dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+function dueLabelForLeaseStart(leaseStart?: string | null): string {
+  const raw = leaseStart?.trim();
+  if (!raw) return "Before move-in";
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return "Before move-in";
+  return `Before ${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+}
+
+export function chargeDueLabel(charge: HouseholdCharge): string {
+  if (charge.dueDateLabel?.trim()) return charge.dueDateLabel.trim();
+  if (charge.kind === "rent" && charge.rentMonth) {
+    return formatRecurringRentDueLabel(charge.rentMonth, charge.dueDay ?? 1);
+  }
+  switch (charge.kind) {
+    case "application_fee":
+      return "Before approval";
+    case "security_deposit":
+    case "move_in_fee":
+      return "Before lease signing";
+    case "first_month_rent":
+    case "prorated_rent":
+    case "prorated_utilities":
+      return "Before move-in";
+    default:
+      return new Date(charge.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+}
+
 function chargeTitle(kind: HouseholdChargeKind): string {
   switch (kind) {
     case "application_fee":
@@ -239,16 +268,6 @@ function leaseStartProration(leaseStart: string | undefined): { prorated: boolea
     factor: billableDays / daysInMonth,
     label: `${billableDays}/${daysInMonth} days from lease start`,
   };
-}
-
-function findChargeByKind(residentEmail: string, propertyId: string, kind: HouseholdChargeKind): HouseholdCharge | undefined {
-  const email = residentEmail.trim().toLowerCase();
-  return readAll().find(
-    (row) =>
-      row.kind === kind &&
-      row.propertyId === propertyId &&
-      row.residentEmail.trim().toLowerCase() === email,
-  );
 }
 
 function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId">): {
@@ -765,8 +784,27 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   let changed = false;
   const now = Date.now();
   let firstChargeMonth = row.application?.leaseStart?.trim().slice(0, 7) || currentRentMonth();
+  const leaseStart = row.application?.leaseStart?.trim();
+  const moveInDue = dueLabelForLeaseStart(leaseStart);
 
   changed = recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId) || changed;
+
+  const residentEmailKey = residentEmail.trim().toLowerCase();
+  const staleKinds = new Set<HouseholdChargeKind>([
+    "first_month_rent",
+    "prorated_rent",
+    "utilities",
+    "prorated_utilities",
+    "security_deposit",
+    "move_in_fee",
+  ]);
+  let baseRows = readAll().filter((charge) => {
+    if (charge.propertyId !== propertyId) return true;
+    if (charge.residentEmail.trim().toLowerCase() !== residentEmailKey) return true;
+    if (!staleKinds.has(charge.kind)) return true;
+    return charge.status === "paid";
+  });
+  if (baseRows.length !== readAll().length) changed = true;
 
   const created: HouseholdCharge[] = [];
   const pushCharge = (
@@ -774,10 +812,10 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     raw: string,
     blocksLeaseUntilPaid: boolean,
     titleOverride?: string,
+    dueDateLabel?: string,
   ) => {
     const amount = parseMoneyAmount(raw);
     if (amount <= 0) return;
-    if (findChargeByKind(residentEmail, propertyId, kind)) return;
     const label = normalizeMoneyLabel(raw, amount);
     created.push({
       id: `hc_${row.id}_${kind}_${now}`,
@@ -795,6 +833,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       status: "pending",
       zelleContactSnapshot: zelleSnap,
       blocksLeaseUntilPaid,
+      dueDateLabel,
     });
   };
 
@@ -811,7 +850,6 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
 
   const signedRent = selectedRoomRentAmount(row);
   if (signedRent > 0) {
-    const leaseStart = row.application?.leaseStart?.trim();
     firstChargeMonth = leaseStart?.slice(0, 7) || firstChargeMonth;
     const start = leaseStartProration(leaseStart);
     const firstRentKind: HouseholdChargeKind = start.prorated ? "prorated_rent" : "first_month_rent";
@@ -821,6 +859,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       moneyAmountLabel(firstRentAmount),
       false,
       start.prorated ? "Prorated first month's rent" : "First month's rent",
+      moveInDue,
     );
     const profile = upsertRecurringRentProfile({
       residentEmail,
@@ -837,11 +876,11 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   }
 
   if (sub) {
-    pushCharge("security_deposit", sub.securityDeposit, true);
-    pushCharge("move_in_fee", sub.moveInFee, false);
+    pushCharge("security_deposit", sub.securityDeposit, true, undefined, "Before lease signing");
+    pushCharge("move_in_fee", sub.moveInFee, true, undefined, "Before lease signing");
     const utilities = selectedRoomUtilities(row);
     if (utilities.amount > 0) {
-      const start = leaseStartProration(row.application?.leaseStart);
+      const start = leaseStartProration(leaseStart);
       const utilityKind: HouseholdChargeKind = start.prorated ? "prorated_utilities" : "utilities";
       const utilityAmount = start.prorated ? utilities.amount * start.factor : utilities.amount;
       pushCharge(
@@ -849,14 +888,15 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         moneyAmountLabel(utilityAmount),
         false,
         start.prorated ? "Prorated utilities" : "Utilities",
+        moveInDue,
       );
     }
   }
 
   if (created.length > 0) {
     const createsExplicitFirstRent = created.some((charge) => charge.kind === "first_month_rent" || charge.kind === "prorated_rent");
-    const existingRows = createsExplicitFirstRent
-      ? readAll().filter(
+    baseRows = createsExplicitFirstRent
+      ? baseRows.filter(
           (charge) =>
             !(
               charge.kind === "rent" &&
@@ -866,9 +906,11 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
               charge.rentMonth === firstChargeMonth
             ),
         )
-      : readAll();
-    writeAll([...existingRows, ...created]);
+      : baseRows;
+    writeAll([...baseRows, ...created]);
     changed = true;
+  } else if (changed) {
+    writeAll(baseRows);
   }
 
   return changed;
@@ -940,6 +982,7 @@ export function recordLegacyApplicationSigningCharges(
 
 /** Reserved for seeding sample charges; does not inject data. */
 export function seedDemoHouseholdChargesIfEmpty(_managerUserId: string): void {
+  void _managerUserId;
   /* no-op */
 }
 
@@ -1052,10 +1095,7 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     lineAmount: c.amountLabel,
     amountPaid: c.status === "paid" ? c.amountLabel : "$0.00",
     balanceDue: c.status === "paid" ? "$0.00" : c.balanceLabel,
-    dueDate:
-      c.kind === "rent" && c.rentMonth
-        ? formatRecurringRentDueLabel(c.rentMonth, c.dueDay ?? 1)
-        : new Date(c.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+    dueDate: chargeDueLabel(c),
     bucket,
     statusLabel: c.status === "paid" ? "Paid" : "Pending",
     notes:

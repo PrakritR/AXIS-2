@@ -17,6 +17,7 @@ import {
   HOUSEHOLD_CHARGES_EVENT,
   linkHouseholdChargesToResidentUser,
   residentLeaseBlockedReasons,
+  syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
 import {
   buildAiGeneratedLeaseHtml,
@@ -31,6 +32,7 @@ import {
   printLeaseAsPdf,
   residentRequestEdits,
   residentSignLease,
+  syncLeasePipelineFromServer,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
@@ -227,6 +229,7 @@ export function ResidentLeasePanel() {
           return;
         }
         linkHouseholdChargesToResidentUser(em, user.id);
+        await syncHouseholdChargesFromServer();
         setLeaseBlockers(residentLeaseBlockedReasons(em, user.id));
         setEmail(em);
         setOwnLease(readUploadedOwnLease(em));
@@ -250,6 +253,7 @@ export function ResidentLeasePanel() {
 
   useEffect(() => {
     const on = () => setPipelineTick((t) => t + 1);
+    void syncLeasePipelineFromServer().then(on);
     window.addEventListener(LEASE_PIPELINE_EVENT, on);
     window.addEventListener("storage", on);
     return () => {
@@ -308,10 +312,11 @@ export function ResidentLeasePanel() {
   })();
 
   const leaseLocked = leaseBlockers.length > 0;
+  const leaseVisibleToResident = Boolean(pipelineRow && (pipelineRow.bucket === "resident" || pipelineRow.bucket === "signed"));
 
   const canSignElectronically = Boolean(pipelineRow?.bucket === "resident" && !leaseLocked);
   /** Request edits, upload your copy, extension — only after manager sends lease to resident. */
-  const residentLeaseActions = Boolean(pipelineRow?.bucket === "resident");
+  const residentLeaseActions = Boolean(pipelineRow?.bucket === "resident" && !leaseLocked);
 
   const onDownloadAiLease = useCallback(() => {
     downloadAiGeneratedLeaseHtml(leaseCtx);
@@ -421,6 +426,27 @@ export function ResidentLeasePanel() {
     showToast("Removed uploaded lease.");
   };
 
+  if ((!pipelineRow || !leaseVisibleToResident) && email) {
+    return (
+      <ManagerPortalPageShell title="Lease">
+        <div className="flex flex-col items-center gap-4 py-16 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
+            <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-lg font-bold text-slate-900">Your lease is being prepared</p>
+            <p className="mt-1.5 max-w-sm text-sm text-slate-600">
+              Once your manager finalises and sends your lease to you, it will appear here ready for review and signature.
+            </p>
+          </div>
+          <p className="text-xs text-slate-400">Check back soon — this page updates automatically.</p>
+        </div>
+      </ManagerPortalPageShell>
+    );
+  }
+
   return (
     <>
     {showSigningModal && pipelineRow ? (
@@ -455,21 +481,11 @@ export function ResidentLeasePanel() {
         </>
       }
     >
-      {pipelineRow && !residentLeaseActions ? (
-        <div className="mb-5 rounded-2xl border border-sky-200/90 bg-sky-50/80 px-4 py-3 text-sm text-sky-950">
-          <p className="font-semibold">Lease not yet in your signing queue</p>
-          <p className="mt-1 text-sky-900/90">
-            Current stage: <strong>{pipelineRow.stageLabel}</strong>. Request edits, upload your countersigned PDF, e-sign, and extension
-            requests are available only in the <strong>With resident</strong> stage — after your manager sends the lease to you.
-          </p>
-        </div>
-      ) : null}
-
       {leaseLocked ? (
         <div className="mb-5 rounded-2xl border border-amber-200/90 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
           <p className="font-semibold">Lease signing is blocked until required payments are confirmed</p>
           <p className="mt-1">
-            Your listing set these amounts on the application. Pay via Zelle if your manager enabled it, then they mark each line paid.
+            Your listing set these amounts on the application. Pay via Zelle if your manager enabled it, then they mark each line paid. Until then, lease upload, edit requests, and electronic signing stay locked.
           </p>
           <ul className="mt-2 list-inside list-disc">
             {leaseBlockers.map((b) => (
@@ -482,7 +498,7 @@ export function ResidentLeasePanel() {
         </div>
       ) : null}
 
-      {pipelineRow ? (
+      {leaseVisibleToResident && pipelineRow ? (
         <div className="mb-6">
           <LeaseDocumentPreview
             className="mt-0"
@@ -492,7 +508,7 @@ export function ResidentLeasePanel() {
         </div>
       ) : null}
 
-      {pipelineRow?.thread?.length ? (
+      {leaseVisibleToResident && pipelineRow?.thread?.length ? (
         <Card className="border-slate-200/80 p-5">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Messages</p>
           <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto">
@@ -671,7 +687,7 @@ export function ResidentLeasePanel() {
               Add comment for manager
             </Button>
           ) : (
-            <p className="mt-4 text-xs text-slate-500">Comments to your manager are available once the lease is with you (With resident).</p>
+            <p className="mt-4 text-xs text-slate-500">Comments to your manager are available once the lease is with you and the required signing charges are paid.</p>
           )}
         </Card>
       </div>

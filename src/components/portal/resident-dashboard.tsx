@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
@@ -31,6 +30,9 @@ type ResidentApplicationStatus = "pending" | "approved" | "rejected";
 
 export function ResidentDashboard({
   applicationApproved = false,
+  applicationFeePaid = false,
+  initialPendingFeeLabel = null,
+  initialApplicationId = null,
   showTestAccessNote = false,
   displayName = "Resident",
   residentEmail = "",
@@ -38,13 +40,15 @@ export function ResidentDashboard({
   managerSubscriptionTier = null,
 }: {
   applicationApproved?: boolean;
+  applicationFeePaid?: boolean;
+  initialPendingFeeLabel?: string | null;
+  initialApplicationId?: string | null;
   showTestAccessNote?: boolean;
   displayName?: string;
   residentEmail?: string;
   residentUserId?: string | null;
   managerSubscriptionTier?: "free" | "paid" | null;
 }) {
-  const router = useRouter();
   const { showToast } = useAppUi();
   const initialEmail = residentEmail.trim().toLowerCase();
   const [email, setEmail] = useState(initialEmail);
@@ -52,13 +56,12 @@ export function ResidentDashboard({
   const [applicationStatus, setApplicationStatus] = useState<ResidentApplicationStatus>(applicationApproved ? "approved" : "pending");
   const [applicationStage, setApplicationStage] = useState(applicationApproved ? "Approved" : "Submitted");
   const [applicationProperty, setApplicationProperty] = useState<string | null>(null);
-  const [pendingFeeLabel, setPendingFeeLabel] = useState<string | null>(null);
+  const [pendingFeeLabel, setPendingFeeLabel] = useState<string | null>(initialPendingFeeLabel);
+  const [applicationId, setApplicationId] = useState<string | null>(initialApplicationId);
   const [balanceDue, setBalanceDue] = useState("—");
-  const [approvalSyncing, setApprovalSyncing] = useState(false);
   const openWorkOrders = 0;
   const inboxUnread = 0;
   const managerIsFree = managerSubscriptionTier === "free";
-  const syncStartedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,10 +99,12 @@ export function ResidentDashboard({
         setApplicationStatus(row.bucket);
         setApplicationStage(row.stage?.trim() || (row.bucket === "approved" ? "Approved" : row.bucket === "rejected" ? "Rejected" : "Submitted"));
         setApplicationProperty(row.property?.trim() || null);
+        setApplicationId(row.id?.trim() || null);
       } else {
         setApplicationStatus(applicationApproved ? "approved" : "pending");
         setApplicationStage(applicationApproved ? "Approved" : "Submitted");
         setApplicationProperty(null);
+        setApplicationId(initialApplicationId);
       }
 
       const charges = email ? readChargesForResident(email, resolvedUserId) : [];
@@ -121,44 +126,29 @@ export function ResidentDashboard({
       window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, sync);
       window.removeEventListener("storage", sync);
     };
-  }, [applicationApproved, email, resolvedUserId]);
+  }, [applicationApproved, email, initialApplicationId, resolvedUserId]);
 
-  useEffect(() => {
-    if (!email) return;
-    const desiredApproved = applicationStatus === "approved";
-    if (desiredApproved === applicationApproved) {
-      syncStartedRef.current = false;
-      setApprovalSyncing(false);
-      return;
-    }
-    if (syncStartedRef.current) return;
-    syncStartedRef.current = true;
-    setApprovalSyncing(true);
-    void fetch("/api/portal/resident-approval", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ email, approved: applicationStatus === "approved" }),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("sync failed");
-        router.refresh();
-      })
-      .catch(() => {
-        syncStartedRef.current = false;
-        setApprovalSyncing(false);
-      });
-  }, [applicationApproved, applicationStatus, email, router]);
+  const applicationFeeIsPaid = useMemo(() => {
+    if (pendingFeeLabel) return false;
+    return applicationFeePaid || applicationStatus === "approved";
+  }, [applicationFeePaid, applicationStatus, pendingFeeLabel]);
 
-  const canOpenPayments = applicationApproved;
-  const canOpenFullPortal = applicationApproved && !managerIsFree;
+  const canOpenPayments = Boolean(email);
+  const canOpenFullPortal = applicationStatus === "approved" && applicationFeeIsPaid && !managerIsFree;
 
   const statusNotice = useMemo(() => {
     if (showTestAccessNote) {
       return { tone: "border-sky-200/80 bg-sky-50/80 text-sky-950", body: "Test access active — resident portal is unlocked for this email." };
     }
     if (applicationStatus === "approved") {
-      if (approvalSyncing) return { tone: "border-amber-200/80 bg-amber-50/80 text-amber-950", body: "Your application was approved. Syncing portal access now." };
+      if (!applicationFeeIsPaid) {
+        return {
+          tone: "border-amber-200/80 bg-amber-50/80 text-amber-950",
+          body: pendingFeeLabel
+            ? `Your application is approved, but the application fee is still marked unpaid (${pendingFeeLabel}). You can log in and use Payments, but the rest of the resident portal stays locked until that fee is confirmed paid.`
+            : "Your application is approved, but the application fee is still marked unpaid. You can log in and use Payments, but the rest of the resident portal stays locked until that fee is confirmed paid.",
+        };
+      }
       if (managerIsFree) return { tone: "border-emerald-200/70 bg-emerald-50/80 text-emerald-950", body: applicationProperty ? `${displayName} is approved for ${applicationProperty}. Payments are available; lease and work orders require a paid property plan.` : `${displayName} is approved. Payments are available; lease and work orders require a paid property plan.` };
       return { tone: "border-emerald-200/70 bg-emerald-50/80 text-emerald-950", body: applicationProperty ? `${displayName} is approved for ${applicationProperty}.` : `${displayName} is approved and can use the full resident portal.` };
     }
@@ -168,10 +158,10 @@ export function ResidentDashboard({
     return {
       tone: "border-amber-200/80 bg-amber-50/80 text-amber-950",
       body: pendingFeeLabel
-        ? `Application fee (${pendingFeeLabel}) is pending confirmation. Full portal access unlocks after your manager approves.`
-        : "Application submitted and pending manager review. Full portal access unlocks after approval.",
+        ? `Application fee (${pendingFeeLabel}) is pending confirmation. Keep this account active so your manager can approve the application and unlock the rest of the portal after payment is confirmed.`
+        : "Application submitted and pending manager review. Keep this resident account active so the rest of the portal can unlock after approval.",
     };
-  }, [applicationProperty, applicationStatus, approvalSyncing, displayName, managerIsFree, pendingFeeLabel, showTestAccessNote]);
+  }, [applicationFeeIsPaid, applicationProperty, applicationStatus, displayName, managerIsFree, pendingFeeLabel, showTestAccessNote]);
 
   if (applicationStatus === "approved") {
     return (
@@ -216,7 +206,7 @@ export function ResidentDashboard({
         <p className={`rounded-2xl border px-4 py-3 text-sm ${statusNotice.tone}`}>{statusNotice.body}</p>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatLink label="Application" value={applicationStage} href="/resident/inbox/unopened" />
+          <StatLink label="Application" value={applicationId ?? applicationStage} href="/resident/inbox/unopened" />
           <StatLink label="Application fee" value={pendingFeeLabel ?? "—"} href="/resident/payments" />
           <StatLink label="Inbox" value={String(inboxUnread)} href="/resident/inbox/unopened" />
         </div>

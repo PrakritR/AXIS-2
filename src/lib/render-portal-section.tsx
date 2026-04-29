@@ -27,7 +27,6 @@ import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-pan
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-orders-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import { PortalSectionSubtabs } from "@/components/portal/portal-section-subtabs";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
 import { ProAccountLinksPanelLoader } from "@/components/portal/pro-account-links-panel";
@@ -38,7 +37,7 @@ import type { PreviewPortal } from "@/lib/auth/preview-types";
 import { getPortalAccessContext } from "@/lib/auth/portal-access";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId, managerSectionAllowedForTier } from "@/lib/manager-access";
-import { residentHasFullPortalAccess, residentHasPaymentsPortalAccess } from "@/lib/resident-portal-access";
+import { loadResidentPortalAccessState, residentHasFullPortalAccess, residentHasPaymentsPortalAccess } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
@@ -102,10 +101,18 @@ export async function renderPortalSection(
     kind === "resident" && residentCtx?.profile?.manager_id?.trim()
       ? await getManagerSubscriptionTierByManagerId(residentCtx.profile.manager_id.trim())
       : null;
+  const residentAccess =
+    kind === "resident"
+      ? await loadResidentPortalAccessState({
+          userId: residentCtx?.user?.id ?? null,
+          role: residentCtx?.profile?.role,
+          email: residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null,
+          managerSubscriptionTier: residentManagerTier,
+        })
+      : null;
   const residentPaymentsUnlocked =
     kind === "resident"
       ? residentHasPaymentsPortalAccess({
-          applicationApproved: residentCtx?.profile?.application_approved ?? false,
           role: residentCtx?.profile?.role,
           email: residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null,
         })
@@ -113,7 +120,8 @@ export async function renderPortalSection(
   const residentWorkspaceUnlocked =
     kind === "resident"
       ? residentHasFullPortalAccess({
-          applicationApproved: residentCtx?.profile?.application_approved ?? false,
+          applicationApproved: residentAccess?.applicationApproved ?? false,
+          applicationFeePaid: residentAccess?.applicationFeePaid ?? false,
           role: residentCtx?.profile?.role,
           email: residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null,
           managerSubscriptionTier: residentManagerTier,
@@ -396,7 +404,10 @@ export async function renderPortalSection(
     const profile = residentCtx?.profile;
     return (
       <ResidentDashboard
-        applicationApproved={profile?.application_approved ?? false}
+        applicationApproved={residentAccess?.applicationApproved ?? false}
+        applicationFeePaid={residentAccess?.applicationFeePaid ?? false}
+        initialPendingFeeLabel={residentAccess?.pendingApplicationFeeLabel ?? null}
+        initialApplicationId={residentAccess?.applicationId ?? null}
         displayName={profile?.full_name ?? profile?.email ?? "Resident"}
         residentEmail={profile?.email ?? residentCtx?.user?.email ?? ""}
         residentUserId={profile?.id ?? residentCtx?.user?.id ?? null}
@@ -421,13 +432,13 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident") {
-    if (residentWorkspaceUnlocked || (residentPaymentsUnlocked && (section === "payments" || section === "work-orders"))) {
+    if (residentWorkspaceUnlocked || (residentPaymentsUnlocked && section === "payments")) {
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentLeasePanel />;
       if (section === "payments") return <ResidentPaymentsPanel />;
       if (section === "work-orders") return <ResidentWorkOrdersPanel />;
     }
-    if (residentPaymentsUnlocked && residentManagerTier === "free") {
+    if ((residentAccess?.leaseAccessUnlocked ?? false) && residentManagerTier === "free") {
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentFreeTierFeatureNotice title="Lease" />;
       if (section === "work-orders") return <ResidentFreeTierFeatureNotice title="Work orders" />;

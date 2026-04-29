@@ -6,8 +6,12 @@ import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-p
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { LEASE_PIPELINE_EVENT, readLeasePipeline, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
-import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
+import { MANAGER_APPLICATIONS_EVENT, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
+import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
+import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import { getPropertyById } from "@/lib/rental-application/data";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 const LEASE_LABELS: { id: ManagerLeaseBucket; label: string }[] = [
@@ -25,12 +29,15 @@ function countBuckets(rows: ReturnType<typeof readLeasePipeline>) {
 
 export function ManagerLeases() {
   const { showToast } = useAppUi();
+  const { userId, ready: authReady } = useManagerUserId();
   const [bucket, setBucket] = useState<ManagerLeaseBucket>("manager");
   const [tick, setTick] = useState(0);
+  const [propertyTick, setPropertyTick] = useState(0);
+  const [propertyFilter, setPropertyFilter] = useState("");
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
-    void syncLeasePipelineFromServer().then(on);
+    void Promise.all([syncManagerApplicationsFromServer(), syncLeasePipelineFromServer()]).then(on);
     window.addEventListener(LEASE_PIPELINE_EVENT, on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
     return () => {
@@ -39,7 +46,34 @@ export function ManagerLeases() {
     };
   }, []);
 
-  const counts = useMemo(() => countBuckets(readLeasePipeline()), [tick]);
+  useEffect(() => {
+    if (!authReady || !userId) return;
+    void syncPropertyPipelineFromServer().then(() => setPropertyTick((t) => t + 1));
+  }, [authReady, userId]);
+
+  const propertyOptions = useMemo(() => {
+    void tick;
+    void propertyTick;
+    const base = buildManagerPropertyFilterOptions(userId);
+    const labelById = new Map(base.map((option) => [option.id, option.label]));
+    for (const row of readLeasePipeline()) {
+      const propertyId = row.application?.propertyId?.trim();
+      if (!propertyId || labelById.has(propertyId)) continue;
+      labelById.set(propertyId, getPropertyById(propertyId)?.title?.trim() || row.unit || propertyId);
+    }
+    return [...labelById.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [userId, tick, propertyTick]);
+
+  const rows = useMemo(() => {
+    void tick;
+    const allRows = readLeasePipeline();
+    if (!propertyFilter.trim()) return allRows;
+    return allRows.filter((row) => row.application?.propertyId?.trim() === propertyFilter);
+  }, [tick, propertyFilter]);
+
+  const counts = useMemo(() => countBuckets(rows), [rows]);
   const tabs = useMemo(
     () => LEASE_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),
     [counts],
@@ -51,7 +85,11 @@ export function ManagerLeases() {
       titleAside={
         <>
           <div className="hidden min-w-0 sm:block">
-            <PortalPropertyFilterPill />
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={setPropertyFilter}
+            />
           </div>
           <Button
             type="button"
@@ -69,13 +107,17 @@ export function ManagerLeases() {
       filterRow={
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="sm:hidden">
-            <PortalPropertyFilterPill />
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={setPropertyFilter}
+            />
           </div>
           <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerLeaseBucket)} />
         </div>
       }
     >
-      <ManagerLeasesPipelinePanel bucket={bucket} refreshKey={tick} />
+      <ManagerLeasesPipelinePanel rows={rows} bucket={bucket} refreshKey={tick} />
     </ManagerPortalPageShell>
   );
 }

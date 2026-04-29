@@ -1,15 +1,16 @@
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access";
 import type { PortalDefinition } from "@/lib/portal-types";
-import { residentHasFullPortalAccess } from "@/lib/resident-portal-access";
+import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
 
-const residentPortalUnderReview: PortalDefinition = {
+const residentPortalLimited: PortalDefinition = {
   kind: "resident",
   basePath: "/resident",
   title: "Resident Portal",
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
+    { section: "payments", label: "Payments", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",
@@ -53,13 +54,12 @@ export async function getResidentPortalDefinition(): Promise<PortalDefinition> {
   const managerSubscriptionTier = profile?.manager_id?.trim()
     ? await getManagerSubscriptionTierByManagerId(profile.manager_id.trim())
     : null;
-  const unlocked = residentHasFullPortalAccess({
-    applicationApproved: profile?.application_approved ?? false,
+  const access = await loadResidentPortalAccessState({
+    userId: user?.id ?? null,
     role: profile?.role,
     email: profile?.email ?? user?.email ?? null,
     managerSubscriptionTier,
   });
-  if (unlocked) return residentPortalApproved;
-  if (profile?.application_approved) return residentPortalApproved;
-  return residentPortalUnderReview;
+  if (access.leaseAccessUnlocked) return residentPortalApproved;
+  return residentPortalLimited;
 }

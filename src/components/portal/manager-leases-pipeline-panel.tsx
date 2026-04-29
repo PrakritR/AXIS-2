@@ -27,7 +27,6 @@ import {
   generateLeaseHtmlForRow,
   managerUploadLeasePdf,
   printLeaseAsPdf,
-  readLeasePipeline,
   updateLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
@@ -60,9 +59,11 @@ function ThreadView({ row }: { row: LeasePipelineRow }) {
 }
 
 export function ManagerLeasesPipelinePanel({
+  rows,
   bucket,
   refreshKey,
 }: {
+  rows: LeasePipelineRow[];
   bucket: ManagerLeaseBucket;
   refreshKey: number;
 }) {
@@ -73,8 +74,7 @@ export function ManagerLeasesPipelinePanel({
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
 
   void refreshKey;
-
-  const rows = useMemo(() => readLeasePipeline().filter((r) => r.bucket === bucket), [bucket, refreshKey]);
+  const bucketRows = useMemo(() => rows.filter((r) => r.bucket === bucket), [rows, bucket]);
 
   const onGeneratePdf = (row: LeasePipelineRow) => {
     const res = generateLeaseHtmlForRow(row.id);
@@ -147,11 +147,11 @@ export function ManagerLeasesPipelinePanel({
     } else showToast(res.error ?? "Upload failed.");
   };
 
-  if (rows.length === 0) {
+  if (bucketRows.length === 0) {
     return (
       <PortalDataTableEmpty
         message={
-          readLeasePipeline().length === 0 ? "No lease drafts yet." : "No leases in this stage."
+          rows.length === 0 ? "No lease drafts yet." : "No leases in this stage."
         }
       />
     );
@@ -182,7 +182,7 @@ export function ManagerLeasesPipelinePanel({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {bucketRows.map((row) => (
               <Fragment key={row.id}>
                 <tr className={PORTAL_TABLE_TR}>
                   <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.residentName}</td>
