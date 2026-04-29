@@ -45,6 +45,120 @@ function normalizeProfile(row: RecurringRentProfile): RecurringRentProfile {
   };
 }
 
+function parseMoneyAmount(label: string | undefined | null): number {
+  const n = Number.parseFloat(String(label ?? "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function moneyLabel(amount: number): string {
+  return `$${amount.toFixed(2)}`;
+}
+
+function dueLabelForLeaseStart(leaseStart?: string | null): string {
+  const raw = leaseStart?.trim();
+  if (!raw) return "Before move-in";
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return "Before move-in";
+  return `Before ${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+}
+
+function leaseStartProration(leaseStart?: string | null): { prorated: boolean; factor: number } {
+  if (!leaseStart?.trim()) return { prorated: false, factor: 1 };
+  const [yearRaw, monthRaw, dayRaw] = leaseStart.split("-").map(Number);
+  if (!yearRaw || !monthRaw || !dayRaw) return { prorated: false, factor: 1 };
+  const daysInMonth = new Date(yearRaw, monthRaw, 0).getDate();
+  if (!Number.isFinite(daysInMonth) || daysInMonth <= 0 || dayRaw <= 1) {
+    return { prorated: false, factor: 1 };
+  }
+  const billableDays = Math.max(1, daysInMonth - dayRaw + 1);
+  return { prorated: true, factor: billableDays / daysInMonth };
+}
+
+function nextProratedChargeId(currentId: string, nextKind: HouseholdCharge["kind"]): string {
+  if (nextKind === "prorated_rent") {
+    const replaced = currentId.replace(/_first_month_rent$/, "_prorated_rent");
+    return replaced === currentId ? `${currentId}_prorated_rent` : replaced;
+  }
+  const replaced = currentId.replace(/_utilities$/, "_prorated_utilities");
+  return replaced === currentId ? `${currentId}_prorated_utilities` : replaced;
+}
+
+async function reconcileLegacyProratedCharges(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  charges: HouseholdCharge[],
+): Promise<HouseholdCharge[]> {
+  const candidates = charges.filter(
+    (charge) =>
+      charge.status === "pending" &&
+      !!charge.applicationId &&
+      (charge.kind === "first_month_rent" || charge.kind === "utilities"),
+  );
+  if (candidates.length === 0) return charges;
+
+  const applicationIds = [...new Set(candidates.map((charge) => charge.applicationId!).filter(Boolean))];
+  const { data: applicationRows } = await db
+    .from("manager_application_records")
+    .select("id, row_data")
+    .in("id", applicationIds);
+
+  const applicationById = new Map<string, Record<string, unknown>>();
+  for (const row of applicationRows ?? []) {
+    if (!row?.id || !row.row_data || typeof row.row_data !== "object" || Array.isArray(row.row_data)) continue;
+    applicationById.set(String(row.id), row.row_data as Record<string, unknown>);
+  }
+
+  const replacements = new Map<string, HouseholdCharge>();
+  const deletes = new Set<string>();
+
+  for (const charge of candidates) {
+    const application = applicationById.get(charge.applicationId!);
+    const nestedApplication =
+      application?.application && typeof application.application === "object" && !Array.isArray(application.application)
+        ? (application.application as Record<string, unknown>)
+        : null;
+    const leaseStart = typeof nestedApplication?.leaseStart === "string" ? nestedApplication.leaseStart : "";
+    const proration = leaseStartProration(leaseStart);
+    if (!proration.prorated) continue;
+
+    const baseAmount = parseMoneyAmount(charge.amountLabel);
+    if (!(baseAmount > 0)) continue;
+
+    const amount = Number((baseAmount * proration.factor).toFixed(2));
+    const nextKind = charge.kind === "first_month_rent" ? "prorated_rent" : "prorated_utilities";
+    const nextTitle = nextKind === "prorated_rent" ? "Prorated first month's rent" : "Prorated utilities";
+    const nextId = nextProratedChargeId(charge.id, nextKind);
+    const nextLabel = moneyLabel(amount);
+
+    const nextCharge: HouseholdCharge = normalizeCharge({
+      ...charge,
+      id: nextId,
+      kind: nextKind,
+      title: nextTitle,
+      amountLabel: nextLabel,
+      balanceLabel: charge.status === "paid" ? "$0.00" : nextLabel,
+      dueDateLabel: dueLabelForLeaseStart(leaseStart),
+    });
+
+    replacements.set(nextId, nextCharge);
+    if (nextId !== charge.id) deletes.add(charge.id);
+  }
+
+  if (replacements.size === 0 && deletes.size === 0) return charges;
+
+  for (const id of deletes) {
+    await db.from("portal_household_charge_records").delete().eq("id", id);
+  }
+  for (const charge of replacements.values()) {
+    await upsertCharge(db, charge);
+  }
+
+  const next = charges
+    .filter((charge) => !deletes.has(charge.id) && !replacements.has(charge.id))
+    .concat([...replacements.values()]);
+
+  return next;
+}
+
 async function upsertCharge(db: ReturnType<typeof createSupabaseServiceRoleClient>, charge: HouseholdCharge) {
   const row = normalizeCharge(charge);
   await db.from("portal_household_charge_records").upsert(
@@ -104,8 +218,9 @@ export async function GET() {
     if (chargesError) return NextResponse.json({ error: chargesError.message }, { status: 500 });
     if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 });
 
-    const charges = (chargesData ?? []).map((record) => normalizeCharge(record.row_data as HouseholdCharge));
+    let charges = (chargesData ?? []).map((record) => normalizeCharge(record.row_data as HouseholdCharge));
     const rentProfiles = (profilesData ?? []).map((record) => normalizeProfile(record.row_data as RecurringRentProfile));
+    charges = await reconcileLegacyProratedCharges(db, charges);
     return NextResponse.json({ charges, rentProfiles });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load charges.";

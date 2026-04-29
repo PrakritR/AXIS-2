@@ -1,7 +1,6 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,11 +11,10 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 const LOGIN_TIMEOUT_MS = 6000;
-const PORTAL_LOAD_TIMEOUT_MS = 5000;
 
 type SignInResult = {
   data: {
-    user: { id: string; user_metadata?: Record<string, unknown>; app_metadata?: Record<string, unknown> } | null;
+    user: { id: string } | null;
     session: unknown | null;
   };
   error: { message: string } | null;
@@ -29,20 +27,12 @@ class AuthTimeoutError extends Error {
   }
 }
 
-function roleToPath(role: AuthRole): string {
-  return portalDashboardPath(role);
-}
-
 function friendlyAuthError(raw: string): string {
   const lower = raw.toLowerCase();
   if (lower.includes("failed to fetch") || lower.includes("network") || lower.includes("fetch")) {
     return "We could not reach Supabase. Please check your connection and try again.";
   }
   return raw;
-}
-
-function isAuthRole(value: unknown): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "owner" || value === "admin";
 }
 
 function isAuthTimeoutError(value: unknown): value is AuthTimeoutError {
@@ -57,33 +47,9 @@ function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, message: str
   return Promise.race([Promise.resolve(promise), timeout]).finally(() => window.clearTimeout(timeoutId));
 }
 
-async function fetchProfileAndRoles(
-  supabase: ReturnType<typeof createSupabaseBrowserClient>,
-  userId: string,
-  userMetadata?: Record<string, unknown> | null,
-  appMetadata?: Record<string, unknown> | null,
-): Promise<{ profile: { role?: unknown } | null; roles: AuthRole[] }> {
-  // Parallel fetch — profile and role rows are independent queries.
-  const [profileResult, rolesResult] = await Promise.all([
-    supabase.from("profiles").select("role").eq("id", userId).maybeSingle(),
-    supabase.from("profile_roles").select("role").eq("user_id", userId),
-  ]);
-
-  const profile = profileResult.data ?? null;
-
-  const rows = ((rolesResult.data ?? []) as { role: unknown }[]);
-  const roles = [...new Set(rows.map((r) => r.role).filter((r): r is AuthRole => isAuthRole(r)))];
-  if (roles.length > 0) return { profile, roles };
-
-  const legacyRole = isAuthRole(profile?.role) ? (profile!.role as AuthRole) : null;
-  if (legacyRole) return { profile, roles: [legacyRole] };
-
-  // Fall back to JWT metadata before giving up.
-  const metaRole = userMetadata?.role ?? appMetadata?.role;
-  if (isAuthRole(metaRole)) return { profile, roles: [metaRole] };
-
-  // Default to resident — don't block sign-in for accounts without a profile row.
-  return { profile, roles: ["resident"] };
+function continueHref(nextPath: string): string {
+  if (!nextPath.startsWith("/")) return "/auth/continue";
+  return `/auth/continue?next=${encodeURIComponent(nextPath)}`;
 }
 
 async function tryResidentAutoConfirm(email: string): Promise<boolean> {
@@ -160,23 +126,8 @@ function SignInForm() {
       if (!user) {
         throw new Error("No active session.");
       }
-
-      const { roles } = await withTimeout(
-        fetchProfileAndRoles(supabase, user.id, user.user_metadata as Record<string, unknown>, user.app_metadata as Record<string, unknown>),
-        PORTAL_LOAD_TIMEOUT_MS,
-        "Could not load your portal — redirecting to default portal.",
-      ).catch(() => ({ profile: null, roles: ["resident" as const] as AuthRole[] }));
-
-      let redirectTarget: string;
-      if (roles.length > 1) {
-        const q = nextPath.startsWith("/") ? `?next=${encodeURIComponent(nextPath)}` : "";
-        redirectTarget = `/auth/choose-portal${q}`;
-      } else {
-        const role = roles[0] ?? "resident";
-        redirectTarget = nextPath.startsWith("/") ? nextPath : roleToPath(role);
-      }
       didRedirect = true;
-      window.location.replace(redirectTarget);
+      window.location.replace(continueHref(nextPath));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign-in failed";
       const message = msg.includes("NEXT_PUBLIC_SUPABASE")
