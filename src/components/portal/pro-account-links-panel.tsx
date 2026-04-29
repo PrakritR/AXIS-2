@@ -113,10 +113,6 @@ export function ProAccountLinksPanel({
   const incomingPending = remoteInvites.filter((i) => i.status === "pending" && i.direction === "incoming");
   const outgoingPending = remoteInvites.filter((i) => i.status === "pending" && i.direction === "outgoing");
 
-  const outgoingUsedCount = remoteInvites.filter(
-    (i) => i.direction === "outgoing" && (i.status === "pending" || i.status === "accepted"),
-  ).length;
-
   const propertyOptions = useMemo(() => propertyChoices(userId), [userId, localTick]);
 
   const [axisInput, setAxisInput] = useState("");
@@ -154,11 +150,14 @@ export function ProAccountLinksPanel({
   }, []);
 
   const linkCap = maxAccountLinksForTier(skuTier);
+  const participantUsedCount = remoteInvites.filter(
+    (i) => i.tabKind === selectedKind && (i.status === "pending" || i.status === "accepted"),
+  ).length;
   const atLinkCap =
     linkCap != null &&
-    (useRemote ? outgoingUsedCount >= linkCap : localRows.length >= linkCap);
+    (useRemote ? participantUsedCount >= linkCap : localRows.length >= linkCap);
 
-  const linksUsed = useRemote ? outgoingUsedCount : localRows.length;
+  const linksUsed = useRemote ? participantUsedCount : localRows.length;
 
   const tierShort =
     skuTier === "free"

@@ -77,6 +77,20 @@ async function userHasPortalRole(
   return String((p as { role?: string } | null)?.role ?? "").toLowerCase() === role;
 }
 
+async function countParticipantLinks(
+  supabase: SupabaseClient,
+  userId: string,
+  tabKind: AccountLinkTabKind,
+): Promise<{ count: number | null; error: { message?: string } | null }> {
+  const { count, error } = await supabase
+    .from("account_link_invites")
+    .select("id", { count: "exact", head: true })
+    .eq("tab_kind", tabKind)
+    .in("status", ["pending", "accepted"])
+    .or(`inviter_user_id.eq.${userId},invitee_user_id.eq.${userId}`);
+  return { count: count ?? 0, error };
+}
+
 export async function GET(): Promise<NextResponse<AccountLinksPayload | { error: string }>> {
   try {
     const supabase = await createSupabaseServerClient();
@@ -224,15 +238,41 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "You cannot invite your own workspace." }, { status: 400 });
     }
 
+    const { data: existingLink, error: existingErr } = await svc
+      .from("account_link_invites")
+      .select("id,status")
+      .eq("tab_kind", tabKind)
+      .in("status", ["pending", "accepted"])
+      .or(
+        `and(inviter_user_id.eq.${user.id},invitee_user_id.eq.${inviteeProfile.id}),and(inviter_user_id.eq.${inviteeProfile.id},invitee_user_id.eq.${user.id})`,
+      )
+      .limit(1)
+      .maybeSingle();
+
+    if (existingErr) {
+      if (looksLikeAccountLinksMissingTable(existingErr)) {
+        return NextResponse.json(
+          {
+            error:
+              "Database is missing account_link_invites. Apply supabase/migrations/20260422120000_account_link_invites.sql.",
+            migrationRequired: true,
+          },
+          { status: 503 },
+        );
+      }
+      return NextResponse.json({ error: existingErr.message }, { status: 500 });
+    }
+    if (existingLink) {
+      return NextResponse.json(
+        { error: "These workspaces already have a pending or active link for this role." },
+        { status: 409 },
+      );
+    }
+
     const { tier: inviterTier } = await getManagerPurchaseSku(user.id);
     const inviterLinkCap = maxAccountLinksForTier(inviterTier);
     if (inviterLinkCap != null) {
-      const { count: used, error: capErr } = await svc
-        .from("account_link_invites")
-        .select("id", { count: "exact", head: true })
-        .eq("inviter_user_id", user.id)
-        .eq("tab_kind", tabKind)
-        .in("status", ["pending", "accepted"]);
+      const { count: used, error: capErr } = await countParticipantLinks(svc, user.id, tabKind);
 
       if (capErr) {
         if (looksLikeAccountLinksMissingTable(capErr)) {
@@ -260,12 +300,7 @@ export async function POST(req: Request) {
     const { tier: inviteeTier } = await getManagerPurchaseSku(inviteeProfile.id);
     const inviteeLinkCap = maxAccountLinksForTier(inviteeTier);
     if (inviteeLinkCap != null) {
-      const { count: inviteeUsed, error: inviteeCapErr } = await svc
-        .from("account_link_invites")
-        .select("id", { count: "exact", head: true })
-        .eq("invitee_user_id", inviteeProfile.id)
-        .eq("tab_kind", tabKind)
-        .in("status", ["pending", "accepted"]);
+      const { count: inviteeUsed, error: inviteeCapErr } = await countParticipantLinks(svc, inviteeProfile.id, tabKind);
 
       if (inviteeCapErr) {
         if (looksLikeAccountLinksMissingTable(inviteeCapErr)) {
