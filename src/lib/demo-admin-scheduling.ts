@@ -94,13 +94,22 @@ function writeJson(key: string, value: unknown) {
   void writeJsonToServer(key, value).catch(() => undefined);
 }
 
-function persistPublicPartnerInquiry(row: PartnerInquiry) {
-  if (!isBrowser()) return;
-  void fetch("/api/public/partner-inquiries", {
+async function persistPublicPartnerInquiry(row: PartnerInquiry): Promise<{ ok: boolean; error?: string }> {
+  if (!isBrowser()) return { ok: false, error: "Browser required." };
+  const res = await fetch("/api/public/partner-inquiries", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ row }),
-  }).catch(() => undefined);
+  });
+  if (res.ok) return { ok: true };
+  let error = "Could not save inquiry.";
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    if (typeof body.error === "string" && body.error.trim()) error = body.error;
+  } catch {
+    // Keep the generic message when the response is not JSON.
+  }
+  return { ok: false, error };
 }
 
 async function writeJsonToServer(key: string, value: unknown): Promise<boolean> {
@@ -365,6 +374,7 @@ export type PartnerInquiryWindow = {
   end: string;
   adminUserId?: string;
   adminLabel?: string;
+  slotKey?: string;
 };
 
 export type PartnerInquiry = {
@@ -406,6 +416,7 @@ export type PlannedEvent = {
   notes?: string;
   /** Shown in admin details; emailed to partner when accepted (demo log). */
   instructions?: string;
+  slotKey?: string;
 };
 
 export function readPartnerInquiries(): PartnerInquiry[] {
@@ -420,22 +431,20 @@ function isFutureOrCurrentIsoWindow(iso: string): boolean {
 }
 
 export function appendPartnerInquiry(payload: Omit<PartnerInquiry, "id" | "status" | "createdAt">) {
-  const rows = readPartnerInquiries();
-  const normalizedWindows = normalizePartnerInquiryWindows(payload);
-  const row: PartnerInquiry = {
-    ...payload,
-    requestedWindows: normalizedWindows,
-    proposedStart: normalizedWindows[0]?.start ?? payload.proposedStart,
-    proposedEnd: normalizedWindows[0]?.end ?? payload.proposedEnd,
-    adminUserId: payload.adminUserId ?? normalizedWindows[0]?.adminUserId,
-    adminLabel: payload.adminLabel ?? normalizedWindows[0]?.adminLabel,
-    id: crypto.randomUUID(),
-    status: "pending",
-    createdAt: new Date().toISOString(),
-  };
-  rows.unshift(row);
-  writeJson(INQ_KEY, rows);
-  persistPublicPartnerInquiry(row);
+  const row = buildPartnerInquiry(payload);
+  insertPartnerInquiryLocally(row);
+  void persistPublicPartnerInquiry(row).catch(() => undefined);
+  return row;
+}
+
+export async function appendPartnerInquiryToServer(
+  payload: Omit<PartnerInquiry, "id" | "status" | "createdAt">,
+): Promise<{ ok: boolean; row?: PartnerInquiry; error?: string }> {
+  const row = buildPartnerInquiry(payload);
+  const result = await persistPublicPartnerInquiry(row);
+  if (!result.ok) return { ok: false, error: result.error };
+  insertPartnerInquiryLocally(row);
+  return { ok: true, row };
 }
 
 export function updatePartnerInquiry(id: string, patch: Partial<PartnerInquiry>) {
@@ -518,6 +527,7 @@ export function acceptPartnerInquiry(id: string, opts?: { instructions?: string;
     attendeePhone: row.phone,
     notes: row.notes,
     instructions,
+    slotKey: selectedWindow?.slotKey,
   });
   const when = formatRangeLabel(start, end);
   const extra = instructions ? `\n\nDetails from the host:\n${instructions}` : "";
@@ -599,6 +609,27 @@ export function formatRangeLabel(isoStart: string, isoEnd: string) {
   }
 }
 
+function buildPartnerInquiry(payload: Omit<PartnerInquiry, "id" | "status" | "createdAt">): PartnerInquiry {
+  const normalizedWindows = normalizePartnerInquiryWindows(payload);
+  return {
+    ...payload,
+    requestedWindows: normalizedWindows,
+    proposedStart: normalizedWindows[0]?.start ?? payload.proposedStart,
+    proposedEnd: normalizedWindows[0]?.end ?? payload.proposedEnd,
+    adminUserId: payload.adminUserId ?? normalizedWindows[0]?.adminUserId,
+    adminLabel: payload.adminLabel ?? normalizedWindows[0]?.adminLabel,
+    id: crypto.randomUUID(),
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function insertPartnerInquiryLocally(row: PartnerInquiry) {
+  const rows = readPartnerInquiries();
+  rows.unshift(row);
+  writeJson(INQ_KEY, rows);
+}
+
 function normalizePartnerInquiryWindows(row: Pick<PartnerInquiry, "requestedWindows" | "proposedStart" | "proposedEnd" | "adminUserId" | "adminLabel">): PartnerInquiryWindow[] {
   const requested = Array.isArray(row.requestedWindows)
     ? row.requestedWindows
@@ -614,6 +645,7 @@ function normalizePartnerInquiryWindows(row: Pick<PartnerInquiry, "requestedWind
           end: window.end,
           adminUserId: typeof window.adminUserId === "string" ? window.adminUserId : undefined,
           adminLabel: typeof window.adminLabel === "string" ? window.adminLabel : undefined,
+          slotKey: typeof window.slotKey === "string" ? window.slotKey : undefined,
         }))
     : [];
 

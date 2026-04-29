@@ -7,8 +7,9 @@ import type { MockProperty } from "@/data/types";
 import { loadPublicExtraListingsFromServer, PROPERTY_PIPELINE_EVENT, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
-  appendPartnerInquiry,
+  appendPartnerInquiryToServer,
   dateHasAvailability,
+  dateSlotKey,
   formatAvailabilitySlotLabel,
   localDateAtSlotStart,
   type PropertyManagerEntry,
@@ -198,6 +199,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [slotHosts, setSlotHosts] = useState<Record<string, PropertyManagerEntry[]>>({});
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [bookingTour, setBookingTour] = useState(false);
   const buildings = useMemo(() => groupByBuilding(properties), [properties]);
 
   useEffect(() => {
@@ -209,16 +211,8 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
   }, []);
 
   useEffect(() => {
-    if (!selectedProperty) {
-      setSlotHosts({});
-      return;
-    }
+    if (!selectedProperty) return;
     let cancelled = false;
-    setAvailabilityLoading(true);
-    setSlotHosts({});
-    setSelectedDay(null);
-    setSelectedSlotIndex(null);
-    setSelectedManagerUserId(null);
     const params = new URLSearchParams({
       propertyId: selectedProperty.id,
       buildingName: selectedProperty.buildingName,
@@ -266,20 +260,6 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
     if (!selectedManagerUserId) return null;
     return managersAtSelectedSlot.find((manager) => manager.userId === selectedManagerUserId) ?? null;
   }, [managersAtSelectedSlot, selectedManagerUserId]);
-
-  // Auto-select the manager when only one is available at the chosen slot.
-  useEffect(() => {
-    if (managersAtSelectedSlot.length === 1) {
-      setSelectedManagerUserId(managersAtSelectedSlot[0]!.userId);
-    } else if (managersAtSelectedSlot.length !== 1) {
-      setSelectedManagerUserId(null);
-    }
-  }, [managersAtSelectedSlot]);
-
-  // Clear manager selection when slot is cleared.
-  useEffect(() => {
-    if (selectedDay == null || selectedSlotIndex == null) setSelectedManagerUserId(null);
-  }, [selectedDay, selectedSlotIndex]);
 
   const canContinue1 = selectedProperty !== null && selectedRoomKey !== null;
   const canContinue2 =
@@ -391,23 +371,35 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
             buildings={buildings}
             phase={step1Phase}
             selectedBuildingId={selectedBuildingId}
-            selectedProperty={selectedProperty}
             onSelectBuilding={(id) => {
               setSelectedBuildingId(id);
               setSelectedProperty(null);
               setSelectedRoomKey(null);
+              setSlotHosts({});
+              setSelectedDay(null);
+              setSelectedSlotIndex(null);
+              setSelectedManagerUserId(null);
               setStep1Phase("room");
             }}
             onBackToProperties={() => {
               setSelectedBuildingId(null);
               setSelectedProperty(null);
               setSelectedRoomKey(null);
+              setSlotHosts({});
+              setSelectedDay(null);
+              setSelectedSlotIndex(null);
+              setSelectedManagerUserId(null);
               setStep1Phase("property");
             }}
             onSelectRoom={(p, roomKey) => {
               setSelectedProperty(p);
               setSelectedBuildingId(p.buildingId);
               setSelectedRoomKey(roomKey);
+              setSlotHosts({});
+              setAvailabilityLoading(true);
+              setSelectedDay(null);
+              setSelectedSlotIndex(null);
+              setSelectedManagerUserId(null);
             }}
             selectedRoomKey={selectedRoomKey}
           />
@@ -436,7 +428,10 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               setSelectedSlotIndex(null);
             }}
             selectedSlotIndex={selectedSlotIndex}
-            onSelectSlotIndex={setSelectedSlotIndex}
+            onSelectSlotIndex={(slotIndex) => {
+              setSelectedSlotIndex(slotIndex);
+              setSelectedManagerUserId(null);
+            }}
             managersAtSelectedSlot={managersAtSelectedSlot}
             selectedManagerUserId={selectedManagerUserId}
             onSelectManager={setSelectedManagerUserId}
@@ -451,7 +446,9 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
             slotIndex={selectedSlotIndex}
             month={calMonth}
             year={calYear}
-            onSubmit={({ name, email, phone, notes }) => {
+            submitting={bookingTour}
+            onSubmit={async ({ name, email, phone, notes }) => {
+              if (bookingTour) return;
               if (!name.trim() || !email.trim()) {
                 showToast("Please enter your name and email.");
                 return;
@@ -464,6 +461,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               const dateStr = toLocalDateStr(new Date(calYear, calMonth, selectedDay, 12, 0, 0, 0));
               const start = localDateAtSlotStart(dateStr, selectedSlotIndex);
               const end = new Date(start.getTime() + 30 * 60 * 1000);
+              const selectedSlotKey = dateSlotKey(dateStr, selectedSlotIndex);
               const calendarPropertyId = selectedTourManager.propertyId || selectedProperty.id;
               const propertyContext = [
                 `Property: ${selectedProperty.title}`,
@@ -471,7 +469,8 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               ]
                 .filter(Boolean)
                 .join("\n");
-              appendPartnerInquiry({
+              setBookingTour(true);
+              const result = await appendPartnerInquiryToServer({
                 name: name.trim(),
                 email: email.trim(),
                 phone: phone.trim(),
@@ -488,10 +487,31 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
                   end: end.toISOString(),
                   adminUserId: selectedTourManager.userId,
                   adminLabel: selectedTourManager.label,
+                  slotKey: selectedSlotKey,
                 }],
                 proposedStart: start.toISOString(),
                 proposedEnd: end.toISOString(),
               });
+              setBookingTour(false);
+              if (!result.ok) {
+                showToast(result.error ?? "That tour time is no longer available.");
+                setStep(2);
+                setSelectedSlotIndex(null);
+                const params = new URLSearchParams({
+                  propertyId: selectedProperty.id,
+                  buildingName: selectedProperty.buildingName,
+                  address: selectedProperty.address,
+                });
+                setAvailabilityLoading(true);
+                void fetch(`/api/public/property-tour-availability?${params.toString()}`, { cache: "no-store" })
+                  .then(async (res) => {
+                    const body = (await res.json()) as { slotHosts?: Record<string, PropertyManagerEntry[]> };
+                    setSlotHosts(res.ok && body.slotHosts ? body.slotHosts : {});
+                  })
+                  .catch(() => setSlotHosts({}))
+                  .finally(() => setAvailabilityLoading(false));
+                return;
+              }
               setSubmitted(true);
               onSuccess();
             }}
@@ -542,7 +562,6 @@ function Step1({
   buildings,
   phase,
   selectedBuildingId,
-  selectedProperty,
   onSelectBuilding,
   onBackToProperties,
   onSelectRoom,
@@ -551,7 +570,6 @@ function Step1({
   buildings: BuildingGroup[];
   phase: "property" | "room";
   selectedBuildingId: string | null;
-  selectedProperty: MockProperty | null;
   onSelectBuilding: (buildingId: string) => void;
   onBackToProperties: () => void;
   onSelectRoom: (p: MockProperty, roomKey: string) => void;
@@ -786,7 +804,7 @@ function Step2({
         <div>
           <p className="mb-3 text-sm font-semibold text-slate-700">Choose your host</p>
           <p className="mb-3 text-xs text-slate-500">
-            Multiple hosts are available at this time. Pick who you'd like to meet with.
+            Multiple hosts are available at this time. Pick who you&apos;d like to meet with.
           </p>
           <div className="space-y-2">
             {managersAtSelectedSlot.map((mgr) => {
@@ -821,12 +839,13 @@ function Step2({
 }
 
 function Step3({
-  property, roomLabel, day, slotIndex, month, year, onSubmit,
+  property, roomLabel, day, slotIndex, month, year, submitting, onSubmit,
 }: {
   property: MockProperty | null; roomLabel: string; day: number | null; slotIndex: number | null;
   month: number;
   year: number;
-  onSubmit: (payload: { name: string; email: string; phone: string; notes: string }) => void;
+  submitting: boolean;
+  onSubmit: (payload: { name: string; email: string; phone: string; notes: string }) => void | Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -860,11 +879,12 @@ function Step3({
 
       <button
         type="button"
+        disabled={submitting}
         onClick={() => onSubmit({ name, email, phone, notes })}
-        className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98]"
+        className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
       >
-        Book tour
+        {submitting ? "Booking..." : "Book tour"}
       </button>
     </div>
   );

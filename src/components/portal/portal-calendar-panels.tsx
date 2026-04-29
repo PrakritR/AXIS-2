@@ -143,6 +143,15 @@ function localIsoForSlot(dateStr: string, slotIndex: number): string {
   return d.toISOString();
 }
 
+function safePropertyId(propertyId: string | null | undefined): string {
+  return String(propertyId ?? "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+}
+
+function samePropertyId(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a === b || safePropertyId(a) === safePropertyId(b);
+}
+
 function weekdayLabelList(days: number[]) {
   return WEEKDAY_OPTIONS.filter((option) => days.includes(option.value))
     .map((option) => option.label)
@@ -225,7 +234,7 @@ export function PortalCalendarPanels({
         return (
           event.kind === "tour" &&
           event.managerUserId === scheduledTourFilter?.managerUserId &&
-          event.propertyId === scheduledTourFilter?.propertyId
+          samePropertyId(event.propertyId, scheduledTourFilter?.propertyId)
         );
       })
       .map((event) => {
@@ -263,7 +272,7 @@ export function PortalCalendarPanels({
         return (
           row.kind === "tour" &&
           row.managerUserId === scheduledTourFilter?.managerUserId &&
-          row.propertyId === scheduledTourFilter?.propertyId
+          samePropertyId(row.propertyId, scheduledTourFilter?.propertyId)
         );
       })
       .flatMap((row) =>
@@ -435,7 +444,7 @@ export function PortalCalendarPanels({
   }, [meetings]);
 
   const upcomingMeetingSummary = useMemo(() => {
-    const now = Date.now() - 30 * 60 * 1000;
+    const now = today.getTime() - 30 * 60 * 1000;
     const sorted = meetings
       .map((meeting) => ({ meeting, startMs: new Date(meeting.startIso).getTime() }))
       .filter((item) => Number.isFinite(item.startMs) && item.startMs >= now)
@@ -448,7 +457,7 @@ export function PortalCalendarPanels({
       confirmed,
       next: sorted.slice(0, 3).map((item) => item.meeting),
     };
-  }, [meetings]);
+  }, [meetings, today]);
 
   const meetingSummaryKind = meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting";
 

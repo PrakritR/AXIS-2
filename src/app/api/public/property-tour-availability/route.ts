@@ -23,6 +23,12 @@ type PropertyRecordRow = {
   property_data: unknown;
 };
 
+type TourBlock = {
+  start: string;
+  end: string;
+  slotKey?: string;
+};
+
 function safePropertyId(propertyId: string): string {
   return propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
 }
@@ -40,6 +46,34 @@ function asObject(value: unknown): Record<string, unknown> | null {
 function textField(row: Record<string, unknown>, key: string): string {
   const value = row[key];
   return typeof value === "string" ? value.trim() : "";
+}
+
+function rowPayload(rowData: unknown): Record<string, unknown> | null {
+  const row = asObject(rowData);
+  if (!row) return null;
+  return asObject(row.payload) ?? row;
+}
+
+function windowsFromPayload(payload: Record<string, unknown>): TourBlock[] {
+  const requested = Array.isArray(payload.requestedWindows) ? payload.requestedWindows : [];
+  const windows = requested
+    .map(asObject)
+    .filter((window): window is Record<string, unknown> => Boolean(window))
+    .map((window) => ({
+      start: textField(window, "start"),
+      end: textField(window, "end"),
+      slotKey: textField(window, "slotKey") || undefined,
+    }))
+    .filter((window) => window.start && window.end);
+  if (windows.length > 0) return windows;
+  const start = textField(payload, "proposedStart") || textField(payload, "start");
+  const end = textField(payload, "proposedEnd") || textField(payload, "end");
+  if (!start || !end) return [];
+  return [{ start, end, slotKey: textField(payload, "slotKey") || undefined }];
+}
+
+function slotBlocked(slot: string, blocks: TourBlock[]): boolean {
+  return blocks.some((block) => block.slotKey === slot);
 }
 
 function propertyMatchKey(row: Record<string, unknown>): string {
@@ -155,6 +189,49 @@ export async function GET(req: Request) {
     });
     const rows = [...propertyRowsForHouse, ...globalRows];
     const availabilityManagerIds = [...new Set(rows.map((row) => row.manager_user_id).filter((id): id is string => Boolean(id)))];
+    const blockedSlotsByManager = new Map<string, TourBlock[]>();
+    if (availabilityManagerIds.length > 0) {
+      const { data: pendingRows, error: pendingError } = await db
+        .from("portal_schedule_records")
+        .select("manager_user_id, row_data")
+        .eq("record_type", "partner_inquiry_request")
+        .in("manager_user_id", availabilityManagerIds);
+
+      if (pendingError) return NextResponse.json({ error: pendingError.message }, { status: 500 });
+
+      for (const pending of (pendingRows ?? []) as ScheduleRecordRow[]) {
+        const managerUserId = pending.manager_user_id?.trim();
+        const payload = rowPayload(pending.row_data);
+        if (!managerUserId || !payload) continue;
+        if (textField(payload, "status").toLowerCase() !== "pending") continue;
+        const blocks = blockedSlotsByManager.get(managerUserId) ?? [];
+        blocks.push(...windowsFromPayload(payload));
+        blockedSlotsByManager.set(managerUserId, blocks);
+      }
+
+      const { data: plannedRow, error: plannedError } = await db
+        .from("portal_schedule_records")
+        .select("row_data")
+        .eq("id", "axis_admin_planned_events_v1")
+        .maybeSingle();
+
+      if (plannedError) return NextResponse.json({ error: plannedError.message }, { status: 500 });
+
+      const plannedPayload = asObject(plannedRow?.row_data)?.payload;
+      const plannedEvents = Array.isArray(plannedPayload) ? plannedPayload.map(asObject).filter(Boolean) : [];
+      for (const event of plannedEvents as Record<string, unknown>[]) {
+        if (textField(event, "kind") !== "tour") continue;
+        const managerUserId = textField(event, "managerUserId");
+        if (!managerUserId || !availabilityManagerIds.includes(managerUserId)) continue;
+        const start = textField(event, "start");
+        const end = textField(event, "end");
+        if (!start || !end) continue;
+        const blocks = blockedSlotsByManager.get(managerUserId) ?? [];
+        blocks.push({ start, end, slotKey: textField(event, "slotKey") || undefined });
+        blockedSlotsByManager.set(managerUserId, blocks);
+      }
+    }
+
     const labelByManagerId = new Map<string, string>();
     if (availabilityManagerIds.length > 0) {
       const { data: profiles } = await db.from("profiles").select("id, email, full_name").in("id", availabilityManagerIds);
@@ -175,6 +252,7 @@ export async function GET(req: Request) {
         propertyId: hostPropertyId,
       };
       for (const slot of payloadSlots(row.row_data)) {
+        if (slotBlocked(slot, blockedSlotsByManager.get(managerUserId) ?? [])) continue;
         const hosts = slotHosts[slot] ?? [];
         if (!hosts.some((item) => item.userId === host.userId)) {
           hosts.push(host);
