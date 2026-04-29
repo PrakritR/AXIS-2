@@ -212,7 +212,7 @@ function buildListingFloorCard(
       name: r.name.trim(),
       detail: roomListingTableSubtitle(r),
       utilitiesEstimate: utilRaw || undefined,
-      price: `$${r.monthlyRent}/month`,
+      price: `$${r.monthlyRent}`,
       availability: r.availability.trim() || "Available now",
       modal: {
         setupLine: setup,
@@ -234,7 +234,7 @@ function buildListingFloorCard(
   return {
     cardKey,
     floorLabel,
-    fromPrice: `$${from}/month`,
+    fromPrice: `$${from}`,
     roomCount: rs.length,
     remainingNote: `${rs.length} room${rs.length === 1 ? "" : "s"} in this group`,
     rooms: roomRows,
@@ -276,13 +276,14 @@ function bundleScopeLineFromRow(b: ManagerBundleRow, rooms: ManagerRoomSubmissio
   return b.roomsLine.trim();
 }
 
-/** Normalise utilities to "$X/mo" — handles bare numbers ("175") and legacy formats ("$175/month"). */
+/** Normalise utilities to "$X" — strips legacy "/mo" or "/month" suffixes and ensures $ prefix. */
 function formatUtilitiesEstimate(raw: string | undefined): string | undefined {
   const t = raw?.trim();
   if (!t) return undefined;
-  const num = parseFloat(t.replace(/[^0-9.]/g, ""));
-  if (Number.isFinite(num) && num > 0 && /^\$?[\d.,]+/.test(t)) return `$${num}/mo`;
-  return t;
+  const cleaned = t.replace(/\/mo(nth)?\.?$/i, "").trim();
+  const num = parseFloat(cleaned.replace(/[^0-9.]/g, ""));
+  if (Number.isFinite(num) && num > 0 && /^\$?[\d.,]+$/.test(cleaned)) return `$${num}`;
+  return cleaned || undefined;
 }
 
 /** Normalise furnishing: comma-stored items → human sentence. */
@@ -298,7 +299,7 @@ function formatFurnishing(raw: string | undefined): string | undefined {
 function perRoomBundleSummaryLine(r: ManagerRoomSubmission): string {
   const u = formatUtilitiesEstimate(r.utilitiesEstimate);
   const f = r.furnishing?.trim();
-  let s = `${r.name.trim()}: $${r.monthlyRent}/mo`;
+  let s = `${r.name.trim()}: $${r.monthlyRent}`;
   if (u) s += ` · utilities ~${u}`;
   if (f) s += ` · ${f}`;
   return s;

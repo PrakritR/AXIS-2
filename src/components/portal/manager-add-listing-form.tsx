@@ -1007,19 +1007,29 @@ export function ManagerAddListingForm({
                             </GridField>
                             <GridField>
                               <FieldLabel hint="Auto-summed when generated; edit if offering a discount.">Bundle rent</FieldLabel>
-                              <Input
-                                value={bundle.price}
-                                onChange={(e) => setBundle(i, { price: e.target.value })}
-                                placeholder="$4500/mo"
-                              />
+                              <div className="relative">
+                                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                                <Input
+                                  inputMode="decimal"
+                                  className="pl-8"
+                                  value={bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                                  onChange={(e) => setBundle(i, { price: e.target.value })}
+                                  placeholder="4500"
+                                />
+                              </div>
                             </GridField>
                             <GridField>
                               <FieldLabel hint="Optional old price shown crossed out.">Original price</FieldLabel>
-                              <Input
-                                value={bundle.strikethrough}
-                                onChange={(e) => setBundle(i, { strikethrough: e.target.value })}
-                                placeholder="$4800/mo"
-                              />
+                              <div className="relative">
+                                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                                <Input
+                                  inputMode="decimal"
+                                  className="pl-8"
+                                  value={bundle.strikethrough.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                                  onChange={(e) => setBundle(i, { strikethrough: e.target.value })}
+                                  placeholder="4800"
+                                />
+                              </div>
                             </GridField>
                             <GridField>
                               <FieldLabel>Promo line</FieldLabel>
@@ -1056,28 +1066,46 @@ export function ManagerAddListingForm({
               <ListingSubsection title="Fees">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <GridField>
-                    <FieldLabel>Application fee</FieldLabel>
-                    <Input value={sub.applicationFee} onChange={(e) => setSub((s) => ({ ...s, applicationFee: e.target.value }))} placeholder="$50 or Waived" />
+                    <FieldLabel hint="Enter amount or 'Waived'">Application fee</FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                      <Input className="pl-8" value={sub.applicationFee.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, applicationFee: e.target.value }))} placeholder="50" />
+                    </div>
                   </GridField>
                   <GridField>
                     <FieldLabel>Security deposit</FieldLabel>
-                    <Input value={sub.securityDeposit} onChange={(e) => setSub((s) => ({ ...s, securityDeposit: e.target.value }))} placeholder="$500" />
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                      <Input className="pl-8" inputMode="decimal" value={sub.securityDeposit.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, securityDeposit: e.target.value }))} placeholder="500" />
+                    </div>
                   </GridField>
                   <GridField>
                     <FieldLabel>Move-in fee</FieldLabel>
-                    <Input value={sub.moveInFee} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} placeholder="$200 or —" />
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                      <Input className="pl-8" inputMode="decimal" value={sub.moveInFee.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} placeholder="200" />
+                    </div>
                   </GridField>
                   <GridField>
-                    <FieldLabel hint="Leave blank or $0 to hide.">Parking (monthly)</FieldLabel>
-                    <Input value={sub.parkingMonthly} onChange={(e) => setSub((s) => ({ ...s, parkingMonthly: e.target.value }))} placeholder="$150 or —" />
+                    <FieldLabel hint="Leave blank or 0 to hide.">Parking (monthly)</FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                      <Input className="pl-8" inputMode="decimal" value={sub.parkingMonthly.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, parkingMonthly: e.target.value }))} placeholder="150" />
+                    </div>
                   </GridField>
                   <GridField>
-                    <FieldLabel hint="Leave blank or $0 to hide.">HOA / community</FieldLabel>
-                    <Input value={sub.hoaMonthly} onChange={(e) => setSub((s) => ({ ...s, hoaMonthly: e.target.value }))} placeholder="—" />
+                    <FieldLabel hint="Leave blank or 0 to hide.">HOA / community</FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                      <Input className="pl-8" inputMode="decimal" value={sub.hoaMonthly.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, hoaMonthly: e.target.value }))} placeholder="0" />
+                    </div>
                   </GridField>
                   <GridField>
                     <FieldLabel>Other monthly fees</FieldLabel>
-                    <Input value={sub.otherMonthlyFees} onChange={(e) => setSub((s) => ({ ...s, otherMonthlyFees: e.target.value }))} placeholder="—" />
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                      <Input className="pl-8" inputMode="decimal" value={sub.otherMonthlyFees.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, otherMonthlyFees: e.target.value }))} placeholder="0" />
+                    </div>
                   </GridField>
                 </div>
                 <div className="mt-3">
@@ -1217,12 +1245,11 @@ export function ManagerAddListingForm({
                           <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
                           <Input
                             inputMode="decimal"
-                            className="pl-8 pr-12"
+                            className="pl-8"
                             value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
                             onChange={(e) => setRoom(i, { utilitiesEstimate: e.target.value })}
                             placeholder="175"
                           />
-                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-400">/mo</span>
                         </div>
                       </GridField>
                       <GridField>

@@ -568,7 +568,7 @@ export function buildMockPropertyFromDraft(row: ManagerPendingPropertyRow, listi
     neighborhood: str(row.neighborhood),
     beds,
     baths,
-    rentLabel: `$${monthlyRent} / mo`,
+    rentLabel: `$${monthlyRent}`,
     available: "Now",
     petFriendly: Boolean(row.petFriendly),
     buildingId: `mgr-bld-${slugPart(buildingName)}`,
