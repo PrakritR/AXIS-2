@@ -19,7 +19,7 @@ function roleToPath(role: string): string {
 function friendlyAuthError(raw: string): string {
   const lower = raw.toLowerCase();
   if (lower.includes("invalid login") || lower.includes("invalid credentials")) {
-    return `${raw} Use the correct password, Forgot password, or Create account as Admin (with your admin key) to reset it. Developers: run scripts/ensure-admin-account.mjs with SUPABASE_SERVICE_ROLE_KEY.`;
+    return "Incorrect email or password. Try again or use Forgot password.";
   }
   return raw;
 }

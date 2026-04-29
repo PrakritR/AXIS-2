@@ -1016,12 +1016,17 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             className={errors.occupancyCount ? "border-red-400 ring-2 ring-red-100" : ""}
           >
             <option value="">Select</option>
-            {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
+            {[1, 2, 3, 4, 5].map((n) => (
               <option key={n} value={String(n)}>
                 {n}
               </option>
             ))}
           </Select>
+          {Number(form.occupancyCount) > 1 && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+              <span className="font-semibold">Note:</span> More than 1 occupant may increase the total cost. Each additional occupant must submit their own application — make sure you set up a group in step 1 and share your Group ID so all applications are linked together.
+            </p>
+          )}
           <FieldError msg={errors.occupancyCount} />
         </div>
         <div className="space-y-2">
@@ -1114,7 +1119,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             criminal history) and to verify employment, income, and rental history. You understand that false or incomplete
             information may result in denial or termination of a lease.
           </p>
-          <p className="mt-3 text-xs text-slate-500">This demo does not store or transmit your data to a server.</p>
         </div>
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
           <input

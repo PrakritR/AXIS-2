@@ -27,7 +27,7 @@ export async function assertPasswordMatchesExistingAuthUser(
     password,
   });
 
-  await client.auth.signOut();
+  await client.auth.signOut({ scope: "local" });
 
   if (!error) {
     return { ok: true };

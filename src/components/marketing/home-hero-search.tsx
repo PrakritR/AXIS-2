@@ -101,8 +101,10 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         radiusMiles: radius,
         maxBudgetNum: budgetTouched && budget < BUDGET_MAX ? budget : null,
         bathroom,
+        moveIn,
+        moveOut,
       }),
-    [combinedProperties, zipDigits, radius, budget, budgetTouched, bathroom],
+    [combinedProperties, zipDigits, radius, budget, budgetTouched, bathroom, moveIn, moveOut],
   );
 
   const listingsHref = useMemo(() => {

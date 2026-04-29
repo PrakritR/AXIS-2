@@ -238,11 +238,8 @@ export function ManagerDashboard() {
     >
       <div className="space-y-4">
         {upcomingTour ? (
-          <p className="rounded-2xl border border-sky-200/80 bg-sky-50/70 px-4 py-3 text-sm text-sky-950">
-            <span className="font-semibold">{upcomingTours.length} upcoming tour{upcomingTours.length === 1 ? "" : "s"}:</span>{" "}
-            {pendingTourCount} pending · {confirmedTourCount} confirmed. Next: {upcomingTour.label} for{" "}
-            {upcomingTour.propertyTitle ?? "a property"} {upcomingTour.roomLabel ? `(${upcomingTour.roomLabel}) ` : ""}
-            at <span className="font-semibold">{formatUpcomingTourTime(upcomingTour.start)}</span>.{" "}
+          <p className="rounded-2xl border border-yellow-200/80 bg-yellow-50/70 px-4 py-3 text-sm text-yellow-950">
+            Next tour: <span className="font-semibold">{formatUpcomingTourTime(upcomingTour.start)}</span>.{" "}
             <Link className="font-semibold text-primary underline-offset-2 hover:underline" href={`${portalBase}/calendar`}>
               Open calendar
             </Link>

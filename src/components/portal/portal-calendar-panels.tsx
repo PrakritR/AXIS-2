@@ -219,6 +219,15 @@ export function PortalCalendarPanels({
     };
   }, [storageKey]);
 
+  // Poll every 30 s so approvals/cancellations from linked accounts propagate automatically.
+  useEffect(() => {
+    if (!storageKey) return;
+    const id = setInterval(() => {
+      void syncScheduleRecordsFromServer().then(() => setMeetingRefresh((n) => n + 1));
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [storageKey]);
+
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
   const fullWeekDates = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)), [weekMonday]);
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
