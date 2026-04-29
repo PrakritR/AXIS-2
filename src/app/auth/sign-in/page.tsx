@@ -11,24 +11,15 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
-const LOGIN_TIMEOUT_MS = 30000;
-const PORTAL_LOAD_TIMEOUT_MS = 20000;
-const SESSION_RECOVERY_TIMEOUT_MS = 12000;
-const SESSION_RECOVERY_POLL_MS = 800;
+const LOGIN_TIMEOUT_MS = 6000;
+const PORTAL_LOAD_TIMEOUT_MS = 5000;
 
 type SignInResult = {
   data: {
-    user: { id: string } | null;
+    user: { id: string; user_metadata?: Record<string, unknown>; app_metadata?: Record<string, unknown> } | null;
     session: unknown | null;
   };
   error: { message: string } | null;
-};
-
-type SessionResult = {
-  data: {
-    session: { user: { id: string } } | null;
-  };
-  error: Error | null;
 };
 
 class AuthTimeoutError extends Error {
@@ -58,12 +49,6 @@ function isAuthTimeoutError(value: unknown): value is AuthTimeoutError {
   return value instanceof AuthTimeoutError || (value instanceof Error && value.name === "AuthTimeoutError");
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
 function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
   let timeoutId = 0;
   const timeout = new Promise<never>((_, reject) => {
@@ -72,57 +57,33 @@ function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, message: str
   return Promise.race([Promise.resolve(promise), timeout]).finally(() => window.clearTimeout(timeoutId));
 }
 
-async function waitForRecoveredSession(
-  supabase: ReturnType<typeof createSupabaseBrowserClient>,
-  timeoutMs: number,
-): Promise<SessionResult["data"]["session"] | null> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const result = await withTimeout(
-        supabase.auth.getSession() as PromiseLike<SessionResult>,
-        Math.min(3000, Math.max(1000, deadline - Date.now())),
-        "Session recovery check timed out.",
-      );
-      if (result.data.session?.user?.id) return result.data.session;
-      if (result.error) console.log("session recovery error", result.error);
-    } catch (error) {
-      if (!isAuthTimeoutError(error)) console.log("session recovery error", error);
-    }
-    await sleep(SESSION_RECOVERY_POLL_MS);
-  }
-  return null;
-}
-
 async function fetchProfileAndRoles(
   supabase: ReturnType<typeof createSupabaseBrowserClient>,
   userId: string,
+  userMetadata?: Record<string, unknown> | null,
+  appMetadata?: Record<string, unknown> | null,
 ): Promise<{ profile: { role?: unknown } | null; roles: AuthRole[] }> {
-  const { data: profile, error: profileError } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-  if (profileError) throw profileError;
-  console.log("profile loaded", profile);
+  // Parallel fetch — profile and role rows are independent queries.
+  const [profileResult, rolesResult] = await Promise.all([
+    supabase.from("profiles").select("role").eq("id", userId).maybeSingle(),
+    supabase.from("profile_roles").select("role").eq("user_id", userId),
+  ]);
 
-  if (!profile) {
-    throw new Error("Account found, but no portal profile is linked yet. Please contact Axis.");
-  }
+  const profile = profileResult.data ?? null;
 
-  const { data: roleRows, error: rolesError } = await supabase.from("profile_roles").select("role").eq("user_id", userId);
-  if (rolesError) throw rolesError;
-  const rows = (roleRows ?? []) as { role: unknown }[];
-
-  const roles = [
-    ...new Set(
-      rows
-        .map((row) => row.role)
-        .filter((role): role is AuthRole => isAuthRole(role)),
-    ),
-  ];
+  const rows = ((rolesResult.data ?? []) as { role: unknown }[]);
+  const roles = [...new Set(rows.map((r) => r.role).filter((r): r is AuthRole => isAuthRole(r)))];
   if (roles.length > 0) return { profile, roles };
 
-  const legacyRole = profile && isAuthRole(profile.role) ? profile.role : null;
+  const legacyRole = isAuthRole(profile?.role) ? (profile!.role as AuthRole) : null;
   if (legacyRole) return { profile, roles: [legacyRole] };
 
-  throw new Error("Account found, but no portal profile is linked yet. Please contact Axis.");
+  // Fall back to JWT metadata before giving up.
+  const metaRole = userMetadata?.role ?? appMetadata?.role;
+  if (isAuthRole(metaRole)) return { profile, roles: [metaRole] };
+
+  // Default to resident — don't block sign-in for accounts without a profile row.
+  return { profile, roles: ["resident"] };
 }
 
 async function tryResidentAutoConfirm(email: string): Promise<boolean> {
@@ -157,57 +118,35 @@ function SignInForm() {
     setErrorText(null);
     setIsLoadingPortal(false);
     setIsSigningIn(true);
-    console.log("login started", { email: email.trim() });
     let didRedirect = false;
     try {
       const supabase = createSupabaseBrowserClient();
-      const signInPromise = supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      }) as PromiseLike<SignInResult>;
       let authResult: SignInResult;
       try {
         authResult = await withTimeout(
-          signInPromise,
+          supabase.auth.signInWithPassword({ email: email.trim(), password }) as PromiseLike<SignInResult>,
           LOGIN_TIMEOUT_MS,
-          "Login timed out. We are checking whether the session completed.",
+          "Login is taking too long. Please check your connection and try again.",
         );
       } catch (timeoutError) {
         if (!isAuthTimeoutError(timeoutError)) throw timeoutError;
-        console.log("supabase auth timed out; checking for a recovered session", timeoutError);
-        const recoveredSession = await waitForRecoveredSession(supabase, SESSION_RECOVERY_TIMEOUT_MS);
-        if (!recoveredSession) {
-          throw new Error("Login is taking longer than expected. Please check your connection and try again.");
-        }
-        authResult = {
-          data: {
-            user: recoveredSession.user,
-            session: recoveredSession,
-          },
-          error: null,
-        };
+        throw new Error("Login is taking too long. Please check your connection and try again.");
       }
+
       let { data, error } = authResult;
-      console.log("supabase auth response", { userId: data.user?.id ?? null, hasSession: Boolean(data.session), error });
       if (error?.message.toLowerCase().includes("email not confirmed")) {
         const repaired = await tryResidentAutoConfirm(email);
         if (repaired) {
-          const retryPromise = supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
-          }) as PromiseLike<SignInResult>;
           const retry = await withTimeout(
-            retryPromise,
+            supabase.auth.signInWithPassword({ email: email.trim(), password }) as PromiseLike<SignInResult>,
             LOGIN_TIMEOUT_MS,
-            "Login timed out. We are checking whether the session completed.",
+            "Login is taking too long. Please check your connection and try again.",
           );
           data = retry.data;
           error = retry.error;
-          console.log("supabase auth response", { userId: data.user?.id ?? null, hasSession: Boolean(data.session), error });
         }
       }
       if (error) {
-        console.log("auth error", error);
         const message = friendlyAuthError(error.message);
         setErrorText(message);
         showToast(message);
@@ -216,37 +155,26 @@ function SignInForm() {
 
       setIsSigningIn(false);
       setIsLoadingPortal(true);
-      const sessionResult = await withTimeout(
-        supabase.auth.getSession() as PromiseLike<SessionResult>,
-        PORTAL_LOAD_TIMEOUT_MS,
-        "We could not finish loading your session. Please try again.",
-      );
-      console.log("session loaded", { hasSession: Boolean(sessionResult.data.session), error: sessionResult.error });
-      if (sessionResult.error) throw sessionResult.error;
 
-      const user = sessionResult.data.session?.user ?? data.user;
+      const user = data.user;
       if (!user) {
         throw new Error("No active session.");
       }
 
       const { roles } = await withTimeout(
-        fetchProfileAndRoles(supabase, user.id),
+        fetchProfileAndRoles(supabase, user.id, user.user_metadata as Record<string, unknown>, user.app_metadata as Record<string, unknown>),
         PORTAL_LOAD_TIMEOUT_MS,
-        "We could not load your portal profile. Please try again.",
-      );
+        "Could not load your portal — redirecting to default portal.",
+      ).catch(() => ({ profile: null, roles: ["resident" as const] as AuthRole[] }));
 
       let redirectTarget: string;
       if (roles.length > 1) {
         const q = nextPath.startsWith("/") ? `?next=${encodeURIComponent(nextPath)}` : "";
         redirectTarget = `/auth/choose-portal${q}`;
       } else {
-        const role = roles[0];
-        if (!role) {
-          throw new Error("Account found, but no portal profile is linked yet. Please contact Axis.");
-        }
+        const role = roles[0] ?? "resident";
         redirectTarget = nextPath.startsWith("/") ? nextPath : roleToPath(role);
       }
-      console.log("redirect target", redirectTarget);
       didRedirect = true;
       window.location.replace(redirectTarget);
     } catch (e) {
@@ -254,7 +182,6 @@ function SignInForm() {
       const message = msg.includes("NEXT_PUBLIC_SUPABASE")
         ? "Supabase is not configured. Set env vars in .env.local."
         : friendlyAuthError(msg);
-      console.log("auth error", e);
       setErrorText(message);
       showToast(message);
     } finally {

@@ -40,13 +40,15 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  // getSession reads the JWT from the cookie — no network round-trip, no timeout risk.
+  // API routes and server components call getUser() for full server-side validation.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
   const needsAuth = PROTECTED_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
 
-  if (needsAuth && !user) {
+  if (needsAuth && !session) {
     const redirectUrl = new URL("/auth/sign-in", request.url);
     redirectUrl.searchParams.set("next", path);
     return NextResponse.redirect(redirectUrl);

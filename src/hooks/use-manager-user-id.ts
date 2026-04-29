@@ -28,13 +28,22 @@ export function useManagerUserId(initial?: {
     let cancelled = false;
 
     void (async () => {
+      // Fast path: read from the local session cache (no network round-trip).
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!cancelled) {
+        setUserId(session?.user?.id ?? null);
+        setEmail(session?.user?.email ?? null);
+        setReady(true);
+      }
+      // Background: server-validate the JWT and correct if stale.
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!cancelled) {
+      if (!cancelled && user?.id !== session?.user?.id) {
         setUserId(user?.id ?? null);
         setEmail(user?.email ?? null);
-        setReady(true);
       }
     })();
 
