@@ -76,7 +76,7 @@ export type RecurringRentProfile = {
   updatedAt: string;
 };
 
-const FUTURE_RENT_VISIBILITY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const FUTURE_RENT_VISIBILITY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function isBrowser() {
   return typeof window !== "undefined";
@@ -1168,6 +1168,165 @@ export function recordLegacyApplicationSigningCharges(
 
   if (created.length === 0) return;
   writeAll([...readAll(), ...created]);
+}
+
+/**
+ * Manager-editable override of a charge's amount and title.
+ * Only updates if the charge belongs to this manager and is still pending.
+ */
+export function updateHouseholdChargeAmount(
+  chargeId: string,
+  newAmount: number,
+  managerUserId: string | null,
+  newTitle?: string,
+): boolean {
+  if (!isBrowser() || !Number.isFinite(newAmount) || newAmount < 0) return false;
+  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  const rows = readAll();
+  const i = rows.findIndex((r) => r.id === chargeId && r.managerUserId === scope);
+  if (i === -1) return false;
+  const label = `$${newAmount.toFixed(2)}`;
+  const next = [...rows];
+  next[i] = {
+    ...next[i]!,
+    amountLabel: label,
+    balanceLabel: next[i]!.status === "paid" ? "$0.00" : label,
+    ...(newTitle?.trim() ? { title: newTitle.trim() } : {}),
+  };
+  writeAll(next);
+  return true;
+}
+
+/**
+ * Computes the upgrade charges when a resident converts from short-term to long-term.
+ * Returns a breakdown of what is owed — callers display this; use recordShortToLongTermConversionCharges to persist.
+ */
+export function shortToLongTermUpgradeBreakdown(
+  propertyId: string,
+  isMonthToMonth: boolean,
+): {
+  applicationFee: { amount: number; waived: boolean; label: string };
+  moveInFee: { amount: number; delta: number; label: string };
+  securityDeposit: { amount: number; delta: number; label: string };
+  monthToMonthSurcharge: { amount: number; label: string };
+  totalDue: number;
+} | null {
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  if (!sub) return null;
+
+  const appFeeAmount = parseMoneyAmount(sub.applicationFee);
+  const longTermDeposit = parseMoneyAmount(sub.securityDeposit);
+  const longTermMoveIn = parseMoneyAmount(sub.moveInFee);
+  const shortTermDeposit = parseMoneyAmount(sub.shortTermDeposit ?? "");
+  const shortTermMoveIn = parseMoneyAmount(sub.shortTermMoveInFee ?? "");
+  const mtmSurcharge = parseMoneyAmount(sub.monthToMonthSurcharge ?? "");
+
+  const depositDelta = Math.max(0, longTermDeposit - shortTermDeposit);
+  const moveInDelta = Math.max(0, longTermMoveIn - shortTermMoveIn);
+  const mtm = isMonthToMonth ? mtmSurcharge : 0;
+
+  const totalDue = depositDelta + moveInDelta + mtm;
+
+  return {
+    applicationFee: { amount: appFeeAmount, waived: true, label: appFeeAmount > 0 ? `$${appFeeAmount.toFixed(2)} (waived — already paid)` : "Waived" },
+    moveInFee: { amount: longTermMoveIn, delta: moveInDelta, label: moveInDelta > 0 ? `$${moveInDelta.toFixed(2)} balance` : "Fully paid" },
+    securityDeposit: { amount: longTermDeposit, delta: depositDelta, label: depositDelta > 0 ? `$${depositDelta.toFixed(2)} balance` : "Fully paid" },
+    monthToMonthSurcharge: { amount: mtm, label: mtm > 0 ? `$${mtm.toFixed(2)}/mo added to rent` : "" },
+    totalDue,
+  };
+}
+
+/**
+ * Creates the delta charges when a resident upgrades from short-term to long-term.
+ * Marks application fee as waived. Only creates new delta lines — idempotent per applicationId.
+ */
+export function recordShortToLongTermConversionCharges(
+  row: DemoApplicantRow,
+  managerUserId: string | null,
+  isMonthToMonth: boolean,
+): boolean {
+  if (!isBrowser()) return false;
+  const residentEmail = row.email?.trim();
+  if (!residentEmail || !residentEmail.includes("@")) return false;
+  const applicationId = row.id.trim();
+  if (!applicationId) return false;
+  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  if (!propertyId) return false;
+
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  if (!sub) return false;
+
+  const propertyLabel = prop?.title ?? row.property ?? "Listing";
+  const zelleSnap = sub.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
+  const effectiveManagerUserId = managerUserId ?? row.managerUserId ?? prop?.managerUserId ?? null;
+  const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Resident";
+
+  const breakdown = shortToLongTermUpgradeBreakdown(propertyId, isMonthToMonth);
+  if (!breakdown) return false;
+
+  const rows = readAll();
+  const created: HouseholdCharge[] = [];
+
+  // Mark application fee paid/waived
+  const appFeeId = applicationFeeChargeIdForApplication(applicationId);
+  const appFeeIdx = rows.findIndex((r) => r.id === appFeeId || (r.kind === "application_fee" && r.applicationId === applicationId));
+  if (appFeeIdx !== -1 && rows[appFeeIdx]!.status !== "paid") {
+    rows[appFeeIdx] = { ...rows[appFeeIdx]!, status: "paid", paidAt: new Date().toISOString(), balanceLabel: "$0.00", title: "Application fee (waived — already paid short-term)" };
+  }
+
+  const makeId = (suffix: string) => `hc_upgrade_${chargeKeyPart(applicationId)}_${suffix}`;
+
+  if (breakdown.moveInFee.delta > 0 && !rows.some((r) => r.id === makeId("movein"))) {
+    const label = `$${breakdown.moveInFee.delta.toFixed(2)}`;
+    created.push({
+      id: makeId("movein"),
+      createdAt: new Date().toISOString(),
+      applicationId,
+      residentEmail,
+      residentName,
+      residentUserId: null,
+      propertyId,
+      propertyLabel,
+      managerUserId: effectiveManagerUserId,
+      kind: "move_in_fee",
+      title: `Move-in fee balance (upgrade to long-term)`,
+      amountLabel: label,
+      balanceLabel: label,
+      status: "pending",
+      zelleContactSnapshot: zelleSnap,
+      blocksLeaseUntilPaid: true,
+      dueDateLabel: "Before new lease signing",
+    });
+  }
+
+  if (breakdown.securityDeposit.delta > 0 && !rows.some((r) => r.id === makeId("deposit"))) {
+    const label = `$${breakdown.securityDeposit.delta.toFixed(2)}`;
+    created.push({
+      id: makeId("deposit"),
+      createdAt: new Date().toISOString(),
+      applicationId,
+      residentEmail,
+      residentName,
+      residentUserId: null,
+      propertyId,
+      propertyLabel,
+      managerUserId: effectiveManagerUserId,
+      kind: "security_deposit",
+      title: `Security deposit balance (upgrade to long-term)`,
+      amountLabel: label,
+      balanceLabel: label,
+      status: "pending",
+      zelleContactSnapshot: zelleSnap,
+      blocksLeaseUntilPaid: true,
+      dueDateLabel: "Before new lease signing",
+    });
+  }
+
+  if (created.length === 0 && appFeeIdx === -1) return false;
+  writeAll([...rows, ...created]);
+  return true;
 }
 
 /** Reserved for seeding sample charges; does not inject data. */

@@ -18,6 +18,7 @@ import {
   linkHouseholdChargesToResidentUser,
   residentLeaseBlockedReasons,
   syncHouseholdChargesFromServer,
+  shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
 import {
   buildAiGeneratedLeaseHtml,
@@ -313,6 +314,24 @@ export function ResidentLeasePanel() {
 
   const leaseLocked = leaseBlockers.length > 0;
   const leaseVisibleToResident = Boolean(pipelineRow && (pipelineRow.bucket === "resident" || pipelineRow.bucket === "signed"));
+
+  const upgradeBreakdown = useMemo(() => {
+    const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? leaseCtx.application?.propertyId;
+    if (!propertyId) return null;
+    const leaseTerm = pipelineRow?.application?.leaseTerm ?? leaseCtx.application?.leaseTerm ?? "";
+    const isShortTerm = leaseTerm.toLowerCase().includes("short") || leaseTerm.toLowerCase().includes("daily");
+    if (!isShortTerm) return null;
+    return shortToLongTermUpgradeBreakdown(propertyId, false);
+  }, [pipelineRow, leaseCtx.application]);
+
+  const upgradeBreakdownMtm = useMemo(() => {
+    const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? leaseCtx.application?.propertyId;
+    if (!propertyId) return null;
+    const leaseTerm = pipelineRow?.application?.leaseTerm ?? leaseCtx.application?.leaseTerm ?? "";
+    const isShortTerm = leaseTerm.toLowerCase().includes("short") || leaseTerm.toLowerCase().includes("daily");
+    if (!isShortTerm) return null;
+    return shortToLongTermUpgradeBreakdown(propertyId, true);
+  }, [pipelineRow, leaseCtx.application]);
 
   const canSignElectronically = Boolean(pipelineRow?.bucket === "resident" && !leaseLocked);
   /** Request edits, upload your copy, extension — only after manager sends lease to resident. */
@@ -646,6 +665,60 @@ export function ResidentLeasePanel() {
             </Card>
           ) : null}
         </div>
+      ) : null}
+
+      {upgradeBreakdown ? (
+        <Card className="mt-6 border-blue-200/80 bg-blue-50/40 p-5">
+          <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Upgrade to long-term rental</p>
+          <p className="mt-1.5 text-sm text-slate-700">
+            You are currently on a short-term stay. Upgrading creates a new long-term lease. Rent is due on the <strong>1st of every month</strong>; your first month will be prorated based on your move-in date.
+          </p>
+          <div className="mt-4 space-y-1 text-sm">
+            <div className="flex justify-between gap-3 border-b border-blue-100 pb-2">
+              <span className="text-slate-600">Application fee</span>
+              <span className="font-medium text-emerald-700">{upgradeBreakdown.applicationFee.label}</span>
+            </div>
+            <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
+              <span className="text-slate-600">Move-in fee balance</span>
+              <span className="font-semibold text-slate-900">{upgradeBreakdown.moveInFee.label}</span>
+            </div>
+            <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
+              <span className="text-slate-600">Security deposit balance</span>
+              <span className="font-semibold text-slate-900">{upgradeBreakdown.securityDeposit.label}</span>
+            </div>
+            {upgradeBreakdownMtm?.monthToMonthSurcharge.label ? (
+              <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
+                <span className="text-slate-600">Month-to-month option</span>
+                <span className="font-medium text-amber-700">+{upgradeBreakdownMtm.monthToMonthSurcharge.label}</span>
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-3 pt-2">
+              <span className="font-semibold text-slate-800">Total due to upgrade</span>
+              <span className="font-bold text-slate-900">${upgradeBreakdown.totalDue.toFixed(2)}</span>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full text-sm"
+              onClick={() => showToast("Upgrade request sent to your manager. They will prepare your new long-term lease.")}
+            >
+              Request upgrade to long-term
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full text-sm"
+              onClick={() => showToast("Month-to-month upgrade request sent. Your manager will prepare the lease with the surcharge included.")}
+            >
+              Request month-to-month
+            </Button>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            Payments will update automatically in your Payments tab once the manager processes your upgrade. If you switch to month-to-month, a new lease at the adjusted rate is required.
+          </p>
+        </Card>
       ) : null}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">

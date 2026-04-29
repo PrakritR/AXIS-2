@@ -109,6 +109,8 @@ export type ManagerListingSubmissionV1 = {
   shortTermRequirements?: string;
   shortTermDailyCost?: string;
   shortTermDeposit?: string;
+  /** Move-in fee charged for short-term stays (used to calculate upgrade delta when switching to long-term). */
+  shortTermMoveInFee?: string;
   applicationFee: string;
   securityDeposit: string;
   moveInFee: string;
@@ -118,6 +120,8 @@ export type ManagerListingSubmissionV1 = {
   parkingMonthly: string;
   hoaMonthly: string;
   otherMonthlyFees: string;
+  /** Extra monthly charge added automatically when tenant is on month-to-month (e.g. $25). */
+  monthToMonthSurcharge?: string;
   sharedSpaces: ManagerSharedSpaceSubmission[];
   /** One amenity per line or comma-separated */
   amenitiesText: string;
@@ -346,6 +350,8 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     shortTermRequirements: typeof sub.shortTermRequirements === "string" ? sub.shortTermRequirements : "",
     shortTermDailyCost: typeof sub.shortTermDailyCost === "string" ? sub.shortTermDailyCost : "",
     shortTermDeposit: typeof sub.shortTermDeposit === "string" ? sub.shortTermDeposit : "",
+    shortTermMoveInFee: typeof sub.shortTermMoveInFee === "string" ? sub.shortTermMoveInFee : "",
+    monthToMonthSurcharge: typeof sub.monthToMonthSurcharge === "string" ? sub.monthToMonthSurcharge : "",
     paymentAtSigningIncludes,
     rooms,
     bathrooms,

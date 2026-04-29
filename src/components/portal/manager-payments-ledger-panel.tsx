@@ -20,7 +20,8 @@ import {
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid } from "@/lib/demo-manager-payment-ledger";
-import { deleteHouseholdCharge, markHouseholdChargePaid } from "@/lib/household-charges";
+import { deleteHouseholdCharge, markHouseholdChargePaid, updateHouseholdChargeAmount } from "@/lib/household-charges";
+import { Input } from "@/components/ui/input";
 
 function statusTone(label: string) {
   const l = label.toLowerCase();
@@ -43,6 +44,8 @@ export function ManagerPaymentsLedgerPanel({
 }) {
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
+  const [editAmountDraft, setEditAmountDraft] = useState("");
 
   const hasAnySource = useMemo(() => rows.length > 0, [rows]);
 
@@ -155,6 +158,39 @@ export function ManagerPaymentsLedgerPanel({
                           <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Moved to pending.")}>
                             Move to pending
                           </Button>
+                        ) : null}
+                                        {row.householdChargeId && row.statusLabel !== "Paid" ? (
+                          editingAmountId === row.id ? (
+                            <span className="flex items-center gap-1.5">
+                              <span className="text-xs text-slate-500">$</span>
+                              <Input
+                                className="h-7 w-24 rounded-lg px-2 py-1 text-xs"
+                                inputMode="decimal"
+                                value={editAmountDraft}
+                                onChange={(e) => setEditAmountDraft(e.target.value)}
+                                autoFocus
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN_PRIMARY}
+                                onClick={() => {
+                                  const amt = parseFloat(editAmountDraft.replace(/[^\d.]/g, ""));
+                                  if (!Number.isFinite(amt) || amt < 0) { showToast("Enter a valid amount."); return; }
+                                  if (updateHouseholdChargeAmount(row.householdChargeId!, amt, managerUserId)) {
+                                    showToast("Amount updated.");
+                                    onRowsChanged?.();
+                                  }
+                                  setEditingAmountId(null);
+                                }}
+                              >Save</Button>
+                              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setEditingAmountId(null)}>Cancel</Button>
+                            </span>
+                          ) : (
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => { setEditAmountDraft(row.balanceDue.replace(/[^\d.]/g, "")); setEditingAmountId(row.id); }}>
+                              Edit amount
+                            </Button>
+                          )
                         ) : null}
                         <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => removePayment(row)}>
                           Delete

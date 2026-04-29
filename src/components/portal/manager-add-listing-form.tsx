@@ -987,6 +987,19 @@ export function ManagerAddListingForm({
                         />
                       </div>
                     </GridField>
+                    <GridField>
+                      <FieldLabel hint="Move-in fee for short-term stays — used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                        <Input
+                          className="pl-8"
+                          inputMode="decimal"
+                          value={(sub.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
+                          onChange={(e) => setSub((s) => ({ ...s, shortTermMoveInFee: e.target.value }))}
+                          placeholder="50"
+                        />
+                      </div>
+                    </GridField>
                     <div className="sm:col-span-2">
                       <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
                         Requirements / house rules for short-term stays
@@ -1161,6 +1174,13 @@ export function ManagerAddListingForm({
                     <div className="relative">
                       <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
                       <Input className="pl-8" inputMode="decimal" value={sub.otherMonthlyFees.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, otherMonthlyFees: e.target.value }))} placeholder="0" />
+                    </div>
+                  </GridField>
+                  <GridField>
+                    <FieldLabel hint="Added to monthly rent for month-to-month tenants. Leave blank if none.">Month-to-month surcharge</FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                      <Input className="pl-8" inputMode="decimal" value={(sub.monthToMonthSurcharge ?? "").replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, monthToMonthSurcharge: e.target.value }))} placeholder="25" />
                     </div>
                   </GridField>
                 </div>
