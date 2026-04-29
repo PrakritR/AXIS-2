@@ -10,14 +10,6 @@ export const ownerPortal: PortalDefinition = {
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
-    {
-      section: "payments",
-      label: "Payments",
-      tabs: [
-        { id: "ledger", label: "Ledger" },
-        { id: "payouts", label: "Payouts" },
-      ],
-    },
     { section: "leases", label: "Leases", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },

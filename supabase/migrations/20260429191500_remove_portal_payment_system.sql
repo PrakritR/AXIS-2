@@ -1,0 +1,2 @@
+delete from public.portal_household_charge_records;
+delete from public.portal_recurring_rent_profile_records;

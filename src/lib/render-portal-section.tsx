@@ -5,7 +5,6 @@ import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 import { ManagerInbox } from "@/components/portal/manager-inbox";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { ManagerLeases } from "@/components/portal/manager-leases";
-import { ManagerPayments } from "@/components/portal/manager-payments";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
 import { AdminCreateResidentClient } from "@/components/portal/admin-create-resident-client";
@@ -23,7 +22,6 @@ import { OwnerProperties } from "@/components/portal/owner-properties";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
-import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-orders-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
@@ -33,11 +31,9 @@ import { ProAccountLinksPanel } from "@/components/portal/pro-account-links-pane
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
 import type { ReactNode } from "react";
-import type { PreviewPortal } from "@/lib/auth/preview-types";
-import { getPortalAccessContext } from "@/lib/auth/portal-access";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId, managerSectionAllowedForTier } from "@/lib/manager-access";
-import { loadResidentPortalAccessState, residentHasFullPortalAccess, residentHasPaymentsPortalAccess } from "@/lib/resident-portal-access";
+import { loadResidentPortalAccessState, residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
@@ -67,7 +63,7 @@ function ResidentFreeTierFeatureNotice({ title }: { title: string }) {
           <p className="mt-3 text-sm leading-6 text-slate-700">
             This resident tab is visible so you can see what exists in the portal, but access to{" "}
             <span className="font-semibold text-slate-900">{title.toLowerCase()}</span> is not included while the property stays on the Free tier.
-            Payments, inbox, dashboard, and profile are still available.
+            Inbox, dashboard, and profile are still available.
           </p>
         </div>
       </ManagerPortalPageShell>
@@ -90,11 +86,11 @@ export async function renderPortalSection(
     redirect(`${def.basePath}/plan`);
   }
 
-  if (kind === "manager" || kind === "pro") {
-    if (section === "stripe") redirect(`${def.basePath}/payments/payouts`);
+  if (kind === "manager" || kind === "owner" || kind === "pro") {
+    if (section === "payments" || section === "stripe") redirect(`${def.basePath}/dashboard`);
   }
-  if (kind === "owner") {
-    if (section === "stripe") redirect(`${def.basePath}/payments/payouts`);
+  if (kind === "resident" && section === "payments") {
+    redirect(`${def.basePath}/dashboard`);
   }
 
   const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
@@ -111,18 +107,10 @@ export async function renderPortalSection(
           managerSubscriptionTier: residentManagerTier,
         })
       : null;
-  const residentPaymentsUnlocked =
-    kind === "resident"
-      ? residentHasPaymentsPortalAccess({
-          role: residentCtx?.profile?.role,
-          email: residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null,
-        })
-      : false;
   const residentWorkspaceUnlocked =
     kind === "resident"
       ? residentHasFullPortalAccess({
           applicationApproved: residentAccess?.applicationApproved ?? false,
-          applicationFeePaid: residentAccess?.applicationFeePaid ?? false,
           role: residentCtx?.profile?.role,
           email: residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null,
           managerSubscriptionTier: residentManagerTier,
@@ -218,18 +206,6 @@ export async function renderPortalSection(
         managerOwnerSubscriptionTier,
       );
     }
-    if (section === "payments") {
-      if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
-      const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
-      if (paymentsTab !== "ledger" && paymentsTab !== "payouts") redirect(`${def.basePath}/payments/ledger`);
-      return subscriptionGated(
-        <ManagerPayments view={paymentsTab} />,
-        kind,
-        "payments",
-        managerOwnerSubscriptionTier,
-      );
-    }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
       return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
@@ -302,18 +278,6 @@ export async function renderPortalSection(
         managerOwnerSubscriptionTier,
       );
     }
-    if (section === "payments") {
-      if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
-      const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
-      if (paymentsTab !== "ledger" && paymentsTab !== "payouts") redirect(`${def.basePath}/payments/ledger`);
-      return subscriptionGated(
-        <ManagerPayments view={paymentsTab} />,
-        kind,
-        "payments",
-        managerOwnerSubscriptionTier,
-      );
-    }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
       return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
@@ -373,18 +337,6 @@ export async function renderPortalSection(
         managerOwnerSubscriptionTier,
       );
     }
-    if (section === "payments") {
-      if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
-      const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
-      if (paymentsTab !== "ledger" && paymentsTab !== "payouts") redirect(`${def.basePath}/payments/ledger`);
-      return subscriptionGated(
-        <ManagerPayments view={paymentsTab} />,
-        kind,
-        "payments",
-        managerOwnerSubscriptionTier,
-      );
-    }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
       return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
@@ -423,8 +375,6 @@ export async function renderPortalSection(
     return (
       <ResidentDashboard
         applicationApproved={residentAccess?.applicationApproved ?? false}
-        applicationFeePaid={residentAccess?.applicationFeePaid ?? false}
-        initialPendingFeeLabel={residentAccess?.pendingApplicationFeeLabel ?? null}
         initialApplicationId={residentAccess?.applicationId ?? null}
         displayName={profile?.full_name ?? profile?.email ?? "Resident"}
         residentEmail={profile?.email ?? residentCtx?.user?.email ?? ""}
@@ -450,10 +400,9 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident") {
-    if (residentWorkspaceUnlocked || (residentPaymentsUnlocked && section === "payments")) {
+    if (residentWorkspaceUnlocked) {
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentLeasePanel />;
-      if (section === "payments") return <ResidentPaymentsPanel />;
       if (section === "work-orders") return <ResidentWorkOrdersPanel />;
     }
     if ((residentAccess?.leaseAccessUnlocked ?? false) && residentManagerTier === "free") {

@@ -10,7 +10,6 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import { getPartnerInquiryWindows, readPartnerInquiries, readPlannedEvents, syncScheduleRecordsFromServer } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
-import { HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { LEASE_PIPELINE_EVENT, readLeasePipeline, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
@@ -30,15 +29,6 @@ import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "./portal-metrics";
 function safeLeasePipelineCount(): number {
   try {
     return readLeasePipeline().length;
-  } catch {
-    return 0;
-  }
-}
-
-function safePaymentLineCount(userId: string | null, ready: boolean): number {
-  try {
-    if (!ready) return 0;
-    return userId ? readChargesForManager(userId).length : readChargesForManager(null).length;
   } catch {
     return 0;
   }
@@ -74,7 +64,7 @@ export function ManagerDashboard() {
   const { showToast } = useAppUi();
   const pathname = usePathname();
   const portalBase = pathname.startsWith("/owner") ? "/owner" : "/manager";
-  const { userId, ready } = useManagerUserId();
+  const { userId } = useManagerUserId();
 
   const [pipelineTick, setPipelineTick] = useState(0);
   useEffect(() => {
@@ -87,8 +77,12 @@ export function ManagerDashboard() {
   }, []);
 
   const [tourTick, setTourTick] = useState(0);
+  const [tourCutoffMs, setTourCutoffMs] = useState(() => Date.now() - 30 * 60 * 1000);
   useEffect(() => {
-    const on = () => setTourTick((n) => n + 1);
+    const on = () => {
+      setTourTick((n) => n + 1);
+      setTourCutoffMs(Date.now() - 30 * 60 * 1000);
+    };
     void syncScheduleRecordsFromServer().then(on);
     window.addEventListener(ADMIN_UI_EVENT, on);
     window.addEventListener("storage", on);
@@ -101,7 +95,6 @@ export function ManagerDashboard() {
   const upcomingTours = useMemo(() => {
     void tourTick;
     if (!userId) return [];
-    const now = Date.now() - 30 * 60 * 1000;
     const pending = readPartnerInquiries()
       .filter((row) => row.kind === "tour" && row.status === "pending" && row.managerUserId === userId)
       .flatMap((row) =>
@@ -127,13 +120,11 @@ export function ManagerDashboard() {
         startMs: new Date(event.start).getTime(),
       }));
     return [...pending, ...confirmed]
-      .filter((tour) => Number.isFinite(tour.startMs) && tour.startMs >= now)
+      .filter((tour) => Number.isFinite(tour.startMs) && tour.startMs >= tourCutoffMs)
       .sort((a, b) => a.startMs - b.startMs);
-  }, [userId, tourTick]);
+  }, [userId, tourTick, tourCutoffMs]);
 
   const upcomingTour = upcomingTours[0] ?? null;
-  const pendingTourCount = upcomingTours.filter((tour) => tour.status === "pending").length;
-  const confirmedTourCount = upcomingTours.filter((tour) => tour.status === "confirmed").length;
 
   const pipelineSummary = useMemo(() => {
     void pipelineTick;
@@ -153,14 +144,6 @@ export function ManagerDashboard() {
       return { pendingProperties: 0, totalProperties: 0 };
     }
   }, [userId, pipelineTick]);
-
-  const [paymentLineCount, setPaymentLineCount] = useState(0);
-  useEffect(() => {
-    setPaymentLineCount(safePaymentLineCount(userId, ready));
-    const on = () => setPaymentLineCount(safePaymentLineCount(userId, ready));
-    window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
-    return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
-  }, [userId, ready]);
 
   const [applicationRows, setApplicationRows] = useState<DemoApplicantRow[]>([]);
   useEffect(() => {
@@ -273,7 +256,6 @@ export function ManagerDashboard() {
           <StatLink label="Properties" value={String(pipelineSummary.totalProperties)} href={`${portalBase}/properties`} />
           <StatLink label="Applications" value={String(applicationRows.length)} href={`${portalBase}/applications`} />
           <StatLink label="Leases" value={String(leasePipelineCount)} href={`${portalBase}/leases`} />
-          <StatLink label="Payments" value={String(paymentLineCount)} href={`${portalBase}/payments`} />
           <StatLink label="Work orders" value={String(workOrderRows.length)} href={`${portalBase}/work-orders`} />
           <StatLink label="Inbox" value={String(inboxUnopenedCount)} href={`${portalBase}/inbox/unopened`} />
         </div>

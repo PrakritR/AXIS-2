@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -115,25 +115,28 @@ export function ManagerResidents() {
           .map((row) => row.email!.trim().toLowerCase()),
       ),
     ];
-    if (emails.length === 0) {
-      setResidentAccountEmails(new Set());
-      return;
-    }
     let cancelled = false;
-    void fetch("/api/manager/resident-account-emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ emails }),
-    })
-      .then(async (res) => {
-        const body = (await res.json()) as { emails?: string[] };
-        if (!cancelled && res.ok) {
-          setResidentAccountEmails(new Set((body.emails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean)));
-        }
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      if (emails.length === 0) {
+        setResidentAccountEmails(new Set());
+        return;
+      }
+      return fetch("/api/manager/resident-account-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails }),
       })
-      .catch(() => {
-        if (!cancelled) setResidentAccountEmails(new Set());
-      });
+        .then(async (res) => {
+          const body = (await res.json()) as { emails?: string[] };
+          if (!cancelled && res.ok) {
+            setResidentAccountEmails(new Set((body.emails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean)));
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setResidentAccountEmails(new Set());
+        });
+    });
     return () => {
       cancelled = true;
     };
@@ -455,13 +458,6 @@ export function ManagerResidents() {
                                     className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 transition hover:border-primary/30 hover:bg-white hover:shadow-sm"
                                   >
                                     Leases
-                                    <span className="text-slate-400">→</span>
-                                  </Link>
-                                  <Link
-                                    href={`${portalBase}/payments/ledger`}
-                                    className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 transition hover:border-primary/30 hover:bg-white hover:shadow-sm"
-                                  >
-                                    Payments ledger
                                     <span className="text-slate-400">→</span>
                                   </Link>
                                   <Link

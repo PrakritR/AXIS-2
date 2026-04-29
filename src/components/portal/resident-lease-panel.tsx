@@ -13,10 +13,6 @@ import {
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import {
-  HOUSEHOLD_CHARGES_EVENT,
-  linkHouseholdChargesToResidentUser,
-  residentLeaseBlockedReasons,
-  syncHouseholdChargesFromServer,
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
 import {
@@ -206,48 +202,18 @@ export function ResidentLeasePanel() {
   const [checklist, setChecklist] = useState<ChecklistRow[]>(() =>
     demoResidentLeaseChecklist.map((c) => ({ id: c.id, label: c.label, done: c.done })),
   );
-  const [leaseBlockers, setLeaseBlockers] = useState<string[]>([]);
-  const [email, setEmail] = useState<string | null>(null);
-  const [ownLease, setOwnLease] = useState<UploadedOwnLease | null>(null);
   const [aiPreviewUrl, setAiPreviewUrl] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const aiBlobUrlRef = useRef<string | null>(null);
   const [pipelineTick, setPipelineTick] = useState(0);
   const [editRequestDraft, setEditRequestDraft] = useState("");
   const [showSigningModal, setShowSigningModal] = useState(false);
-
-  const refreshLeaseGate = useCallback(() => {
-    void (async () => {
-      try {
-        const em = session.email?.trim();
-        if (!em || !session.userId) {
-          setLeaseBlockers([]);
-          setEmail(null);
-          setOwnLease(null);
-          return;
-        }
-        linkHouseholdChargesToResidentUser(em, session.userId);
-        await syncHouseholdChargesFromServer();
-        setLeaseBlockers(residentLeaseBlockedReasons(em, session.userId));
-        setEmail(em);
-        setOwnLease(readUploadedOwnLease(em));
-      } catch {
-        setLeaseBlockers([]);
-        setEmail(null);
-        setOwnLease(null);
-      }
-    })();
-  }, [session.email, session.userId]);
-
-  useEffect(() => {
-    refreshLeaseGate();
-  }, [refreshLeaseGate]);
-
-  useEffect(() => {
-    const on = () => refreshLeaseGate();
-    window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
-    return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
-  }, [refreshLeaseGate]);
+  const [uploadTick, setUploadTick] = useState(0);
+  const email = session.email?.trim() || null;
+  const ownLease = useMemo(() => {
+    void uploadTick;
+    return email ? readUploadedOwnLease(email) : null;
+  }, [email, uploadTick]);
 
   useEffect(() => {
     const on = () => setPipelineTick((t) => t + 1);
@@ -309,7 +275,7 @@ export function ResidentLeasePanel() {
     };
   })();
 
-  const leaseLocked = leaseBlockers.length > 0;
+  const leaseLocked = false;
   const leaseVisibleToResident = Boolean(pipelineRow && (pipelineRow.bucket === "resident" || pipelineRow.bucket === "signed"));
 
   const upgradeBreakdown = useMemo(() => {
@@ -426,7 +392,7 @@ export function ResidentLeasePanel() {
         uploadedAt: new Date().toISOString(),
       };
       saveUploadedOwnLease(email, payload);
-      setOwnLease(payload);
+      setUploadTick((tick) => tick + 1);
       window.dispatchEvent(new Event(LEASE_PIPELINE_EVENT));
       showToast("Your lease PDF is saved in this browser.");
     };
@@ -438,7 +404,7 @@ export function ResidentLeasePanel() {
   const onRemoveOwnLease = () => {
     if (!email) return;
     clearUploadedOwnLease(email);
-    setOwnLease(null);
+    setUploadTick((tick) => tick + 1);
     showToast("Removed uploaded lease.");
   };
 
@@ -497,23 +463,6 @@ export function ResidentLeasePanel() {
         </>
       }
     >
-      {leaseLocked ? (
-        <div className="mb-5 rounded-2xl border border-amber-200/90 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
-          <p className="font-semibold">Lease signing is blocked until required payments are confirmed</p>
-          <p className="mt-1">
-            Your listing set these amounts on the application. Pay via Zelle or Venmo if your manager enabled it, then they mark each line paid. Until then, lease upload, edit requests, and electronic signing stay locked.
-          </p>
-          <ul className="mt-2 list-inside list-disc">
-            {leaseBlockers.map((b) => (
-              <li key={b}>{b}</li>
-            ))}
-          </ul>
-          <Link href="/resident/payments" className="mt-3 inline-block font-semibold text-primary underline underline-offset-2">
-            Open Payments
-          </Link>
-        </div>
-      ) : null}
-
       {leaseVisibleToResident && pipelineRow ? (
         <div className="mb-6">
           <LeaseDocumentPreview

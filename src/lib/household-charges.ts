@@ -133,13 +133,7 @@ function emit() {
 }
 
 function postHouseholdPayload(body: unknown) {
-  if (typeof window === "undefined") return;
-  void fetch("/api/portal-household-charges", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(body),
-  }).catch(() => undefined);
+  void body;
 }
 
 function deleteChargeRowFromServer(id: string) {
@@ -159,44 +153,14 @@ export async function syncHouseholdChargesFromServer(): Promise<{
   rentProfiles: RecurringRentProfile[];
 }> {
   if (!isBrowser()) return { charges: [], rentProfiles: [] };
-  hydrateHouseholdStateFromSession();
-  if (householdChargesSyncPromise) return householdChargesSyncPromise;
-  if (householdChargesLastSyncedAt > 0 && Date.now() - householdChargesLastSyncedAt < HOUSEHOLD_CHARGES_SYNC_TTL_MS) {
-    return { charges: readAll(), rentProfiles: readRentProfiles() };
-  }
-  try {
-    householdChargesSyncPromise = (async () => {
-      const res = await fetch("/api/portal-household-charges", { credentials: "include", cache: "no-store" });
-      if (!res.ok) {
-        return { charges: readAll(), rentProfiles: readRentProfiles() };
-      }
-      const body = (await res.json()) as {
-        charges?: HouseholdCharge[];
-        rentProfiles?: RecurringRentProfile[];
-      };
-      const rawCharges = Array.isArray(body.charges) ? body.charges : [];
-      const rawRentProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
-      const rentProfiles = dedupeRecurringRentProfiles(rawRentProfiles);
-      const charges = dedupeCharges(rawCharges);
-      const chargesWereChanged = chargesChanged(memoryCharges, charges);
-      const rentProfilesWereChanged = rentProfilesChanged(memoryRentProfiles, rentProfiles);
-      memoryCharges = charges;
-      memoryRentProfiles = rentProfiles;
-      persistHouseholdStateToSession();
-      householdChargesLastSyncedAt = Date.now();
-      syncAllRecurringRentCharges();
-      if (rawCharges.length !== charges.length || rawRentProfiles.length !== rentProfiles.length) {
-        postHouseholdPayload({ action: "replace", charges, rentProfiles });
-      }
-      if (chargesWereChanged || rentProfilesWereChanged) emit();
-      return { charges, rentProfiles };
-    })();
-    return await householdChargesSyncPromise;
-  } catch {
-    return { charges: readAll(), rentProfiles: readRentProfiles() };
-  } finally {
-    householdChargesSyncPromise = null;
-  }
+  const hadLocalState = memoryCharges.length > 0 || memoryRentProfiles.length > 0;
+  memoryCharges = [];
+  memoryRentProfiles = [];
+  persistHouseholdStateToSession();
+  householdChargesLastSyncedAt = Date.now();
+  householdChargesSyncPromise = null;
+  if (hadLocalState) emit();
+  return { charges: [], rentProfiles: [] };
 }
 
 function readAll(): HouseholdCharge[] {
@@ -733,16 +697,14 @@ export function linkHouseholdChargesToResidentUser(email: string, userId: string
 }
 
 export function readChargesForResident(email: string, userId: string | null): HouseholdCharge[] {
-  const e = email.trim().toLowerCase();
-  return dedupeCharges(readAll()).filter((r) => {
-    if (userId && r.residentUserId === userId) return true;
-    return r.residentEmail.trim().toLowerCase() === e;
-  }).filter((charge) => shouldDisplayChargeInPayments(charge));
+  void email;
+  void userId;
+  return [];
 }
 
 export function readChargesForManager(managerUserId: string | null): HouseholdCharge[] {
-  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
-  return dedupeCharges(readAll()).filter((r) => r.managerUserId === scope).filter((charge) => shouldDisplayChargeInPayments(charge));
+  void managerUserId;
+  return [];
 }
 
 export function deleteHouseholdCharge(chargeId: string, managerUserId: string | null): boolean {
@@ -1164,14 +1126,9 @@ export function autoSeedRecurringRentProfiles(
 }
 
 export function residentLeaseBlockedReasons(email: string, userId: string | null): string[] {
-  const charges = readChargesForResident(email, userId);
-  const out: string[] = [];
-  for (const c of charges) {
-    if (c.status === "pending" && c.blocksLeaseUntilPaid) {
-      out.push(`${c.title} (${c.balanceLabel})`);
-    }
-  }
-  return out;
+  void email;
+  void userId;
+  return [];
 }
 
 export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPaymentLedgerRow {
