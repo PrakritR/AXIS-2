@@ -432,6 +432,24 @@ export function PortalCalendarPanels({
     return map;
   }, [meetings]);
 
+  const upcomingMeetingSummary = useMemo(() => {
+    const now = Date.now() - 30 * 60 * 1000;
+    const sorted = meetings
+      .map((meeting) => ({ meeting, startMs: new Date(meeting.startIso).getTime() }))
+      .filter((item) => Number.isFinite(item.startMs) && item.startMs >= now)
+      .sort((a, b) => a.startMs - b.startMs);
+    const pending = sorted.filter((item) => item.meeting.source === "inquiry").length;
+    const confirmed = sorted.filter((item) => item.meeting.source === "planned").length;
+    return {
+      total: sorted.length,
+      pending,
+      confirmed,
+      next: sorted.slice(0, 3).map((item) => item.meeting),
+    };
+  }, [meetings]);
+
+  const meetingSummaryKind = meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting";
+
   const timeWindowControl = (
     <div className="flex flex-wrap items-center gap-2">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Show</p>
@@ -829,6 +847,38 @@ export function PortalCalendarPanels({
               </Button>
             ) : null}
           </div>
+
+          {upcomingMeetingSummary.total > 0 ? (
+            <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/80 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-sky-950">
+                    {upcomingMeetingSummary.total} upcoming {meetingSummaryKind}
+                    {upcomingMeetingSummary.total === 1 ? "" : "s"} on this calendar
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-sky-800">
+                    {upcomingMeetingSummary.pending} pending · {upcomingMeetingSummary.confirmed} confirmed
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {upcomingMeetingSummary.next.map((meeting) => (
+                  <button
+                    key={meeting.id}
+                    type="button"
+                    className="rounded-xl border border-sky-200 bg-white px-3 py-2 text-left text-xs shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
+                    onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(meeting.dateStr, meeting.startSlot, e.currentTarget, meeting)}
+                  >
+                    <span className="block font-bold text-slate-950">{meeting.title}</span>
+                    <span className="mt-1 block text-slate-600">{formatRangeLabel(meeting.startIso, meeting.endIso)}</span>
+                    {meeting.propertyTitle ? (
+                      <span className="mt-1 block truncate text-slate-500">{meeting.propertyTitle}</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">

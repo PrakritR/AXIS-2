@@ -79,8 +79,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const [feeStepUserId, setFeeStepUserId] = useState<string | null>(null);
   const [reviewReturnStep, setReviewReturnStep] = useState<number | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
-  const [postSubmit, setPostSubmit] = useState<{ axisId: string } | null>(null);
-  const [emailAccountStatus, setEmailAccountStatus] = useState<{ exists: boolean; axisId: string | null } | null>(null);
+  const [postSubmit, setPostSubmit] = useState<{ axisId: string; existingAccount: boolean } | null>(null);
+  const [emailAccountStatus, setEmailAccountStatus] = useState<{ exists: boolean } | null>(null);
   const router = useRouter();
 
   // Check if the entered email already has an Axis account.
@@ -93,9 +93,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     let cancelled = false;
     void fetch(`/api/auth/account-email-status?email=${encodeURIComponent(em)}`)
       .then(async (res) => {
-        const body = (await res.json()) as { exists?: boolean; roles?: string[]; axisId?: string | null };
+        const body = (await res.json()) as { exists?: boolean };
         if (!cancelled) {
-          setEmailAccountStatus({ exists: Boolean(body.exists), axisId: body.axisId ?? null });
+          setEmailAccountStatus({ exists: Boolean(body.exists) });
         }
       })
       .catch(() => {});
@@ -270,6 +270,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       const pid = form.propertyId.trim();
       const emailTrim = form.email.trim();
       const prop = pid ? getPropertyById(pid) : undefined;
+      const existingAccount = Boolean(emailAccountStatus?.exists);
 
       recordApplicationCharges({
         residentEmail: form.email,
@@ -298,11 +299,11 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       setForm(createInitialRentalWizardState());
       setStep(1);
       setErrors({});
-      setPostSubmit({ axisId });
+      setPostSubmit({ axisId, existingAccount });
       setChargeTick((n) => n + 1);
       showToast("Application submitted.");
     },
-    [form, showToast],
+    [emailAccountStatus?.exists, form, showToast],
   );
 
   const primaryButtonLabel = useMemo(() => {
@@ -579,21 +580,22 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>
-            <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Save your Axis ID</h2>
+            <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              {postSubmit.existingAccount ? "Sign in to track your application" : "Save your Axis ID"}
+            </h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-700">
-              {emailAccountStatus?.exists
+              {postSubmit.existingAccount
                 ? "Your application has been received. Since you already have an Axis account, sign in to track your application — no new account needed."
                 : <>Use this Axis ID when you create your resident account (open signup below with it filled in). Share it with a co-signer if they apply separately. This ID only grants resident account creation. After signup, your account stays limited to <strong>Dashboard</strong>, <strong>Profile</strong>, and <strong>Inbox</strong>{" "}until the manager marks your application fee paid and approves your application. Stripe payments are marked paid automatically after checkout.</>}
             </p>
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Axis ID</p>
-              <p className="mt-2 font-mono text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{postSubmit.axisId}</p>
-              {emailAccountStatus?.axisId ? (
-                <p className="mt-2 text-xs text-slate-500">Your Axis ID: <span className="font-mono font-semibold text-slate-800">{emailAccountStatus.axisId}</span></p>
-              ) : null}
-            </div>
+            {!postSubmit.existingAccount ? (
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Axis ID</p>
+                <p className="mt-2 font-mono text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{postSubmit.axisId}</p>
+              </div>
+            ) : null}
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-              {emailAccountStatus?.exists ? (
+              {postSubmit.existingAccount ? (
                 <Link
                   href="/auth/sign-in"
                   className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-8 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:translate-y-px"
@@ -629,16 +631,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
-              {emailAccountStatus?.exists ? (
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm">
-                  <span className="text-sky-900">
-                    This email already has an Axis account.{emailAccountStatus.axisId ? <> Axis ID: <span className="font-mono font-semibold">{emailAccountStatus.axisId}</span>.</> : null}
-                  </span>
-                  <Link href="/auth/sign-in" className="shrink-0 font-semibold text-primary hover:opacity-80">
-                    Sign in →
-                  </Link>
-                </div>
-              ) : null}
             </div>
 
             <div className="pt-8">

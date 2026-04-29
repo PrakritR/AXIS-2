@@ -223,6 +223,24 @@ function roomAccessSummary(space: ManagerSharedSpaceSubmission, rooms: ManagerRo
   return `${ids.size} of ${rooms.length} rooms have access`;
 }
 
+function roomLabelForBundle(room: ManagerRoomSubmission) {
+  return room.name.trim() || `Room (${room.id.slice(-6)})`;
+}
+
+function bundleRoomsLine(roomIds: string[], rooms: ManagerRoomSubmission[]) {
+  const names = roomIds.map((id) => rooms.find((room) => room.id === id)).filter(Boolean).map((room) => roomLabelForBundle(room!));
+  if (names.length === 0) return "";
+  return names.length === rooms.length ? `Whole house - ${names.length} rooms` : names.join(", ");
+}
+
+function bundleRentLabel(roomIds: string[], rooms: ManagerRoomSubmission[]) {
+  const total = roomIds
+    .map((id) => rooms.find((room) => room.id === id)?.monthlyRent ?? 0)
+    .filter((rent) => Number.isFinite(rent) && rent > 0)
+    .reduce((sum, rent) => sum + rent, 0);
+  return total > 0 ? `$${total}/mo` : "";
+}
+
 export function ManagerAddListingForm({
   onClose,
   onSubmitted,
@@ -339,6 +357,15 @@ export function ManagerAddListingForm({
         ...ss,
         roomAccessIds: (ss.roomAccessIds ?? []).filter((id) => id !== removedId),
       })),
+      bundles: (s.bundles ?? []).map((bundle) => {
+        const nextRooms = s.rooms.filter((_, j) => j !== i);
+        const includedRoomIds = (bundle.includedRoomIds ?? []).filter((id) => id !== removedId);
+        return {
+          ...bundle,
+          includedRoomIds,
+          roomsLine: bundle.roomsLine.trim() ? bundle.roomsLine : bundleRoomsLine(includedRoomIds, nextRooms),
+        };
+      }),
     }));
   };
 
@@ -461,7 +488,12 @@ export function ManagerAddListingForm({
       if (on) nextSet.add(roomId);
       else nextSet.delete(roomId);
       const includedRoomIds = s.rooms.map((r) => r.id).filter((id) => nextSet.has(id));
-      bundles[bundleIndex] = { ...cur, includedRoomIds };
+      bundles[bundleIndex] = {
+        ...cur,
+        includedRoomIds,
+        roomsLine: cur.roomsLine.trim() ? cur.roomsLine : bundleRoomsLine(includedRoomIds, s.rooms),
+        price: cur.price.trim() ? cur.price : bundleRentLabel(includedRoomIds, s.rooms),
+      };
       return { ...s, bundles };
     });
   };
@@ -476,6 +508,30 @@ export function ManagerAddListingForm({
 
   const addBundle = () => {
     setSub((s) => ({ ...s, bundles: [...(s.bundles ?? []), emptyBundleRow()] }));
+  };
+
+  const addGeneratedBundle = (kind: "whole_house" | "multi_room") => {
+    setSub((s) => {
+      const eligibleRooms = s.rooms.filter((room) => room.name.trim());
+      if (eligibleRooms.length === 0) return s;
+      const includedRoomIds =
+        kind === "whole_house"
+          ? eligibleRooms.map((room) => room.id)
+          : eligibleRooms.slice(0, Math.min(2, eligibleRooms.length)).map((room) => room.id);
+      const row: ManagerBundleRow = {
+        ...emptyBundleRow(),
+        label: kind === "whole_house" ? "Whole house lease" : "Multi-room lease bundle",
+        price: bundleRentLabel(includedRoomIds, s.rooms),
+        strikethrough: "",
+        promo:
+          kind === "whole_house"
+            ? "Rent the full home as one lease."
+            : "Select any rooms that can be rented together.",
+        roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
+        includedRoomIds,
+      };
+      return { ...s, bundles: [...(s.bundles ?? []), row] };
+    });
   };
 
   const removeBundle = (i: number) => {
@@ -885,6 +941,121 @@ export function ManagerAddListingForm({
                   <FieldLabel hint="Lease lengths and terms shown on your listing.">Lease terms</FieldLabel>
                   <Textarea className="min-h-[72px]" value={sub.leaseTermsBody} onChange={(e) => setSub((s) => ({ ...s, leaseTermsBody: e.target.value }))} />
                 </div>
+              </ListingSubsection>
+
+              <ListingSubsection
+                title="Lease bundles"
+                description="Create packages for applicants who want to rent the whole house or multiple rooms together."
+              >
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                  <p className="text-sm font-semibold text-blue-950">Generate bundle options from your rooms</p>
+                  <p className="mt-1 text-xs leading-5 text-blue-900/75">
+                    Add rooms first, then generate bundles. You can edit the name, price, promo, and selected rooms before submitting.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full bg-white text-xs"
+                      onClick={() => addGeneratedBundle("whole_house")}
+                      disabled={!sub.rooms.some((room) => room.name.trim())}
+                    >
+                      + Whole house lease
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full bg-white text-xs"
+                      onClick={() => addGeneratedBundle("multi_room")}
+                      disabled={sub.rooms.filter((room) => room.name.trim()).length < 2}
+                    >
+                      + Multi-room bundle
+                    </Button>
+                    <Button type="button" variant="primary" className="rounded-full text-xs" onClick={addBundle}>
+                      + Blank bundle
+                    </Button>
+                  </div>
+                </div>
+
+                {(sub.bundles ?? []).length === 0 ? (
+                  <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm text-slate-600">
+                    No lease bundles added yet. If you leave this empty, the public listing will show default per-room pricing.
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-4">
+                    {(sub.bundles ?? []).map((bundle, i) => {
+                      const selectedIds = new Set(bundle.includedRoomIds ?? []);
+                      return (
+                        <div key={bundle.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-bold text-slate-950">Bundle {i + 1}</p>
+                            <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBundle(i)}>
+                              Remove
+                            </button>
+                          </div>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <GridField>
+                              <FieldLabel>Bundle name</FieldLabel>
+                              <Input
+                                value={bundle.label}
+                                onChange={(e) => setBundle(i, { label: e.target.value })}
+                                placeholder="Whole house lease, Rooms A+B"
+                              />
+                            </GridField>
+                            <GridField>
+                              <FieldLabel hint="Auto-summed when generated; edit if offering a discount.">Bundle rent</FieldLabel>
+                              <Input
+                                value={bundle.price}
+                                onChange={(e) => setBundle(i, { price: e.target.value })}
+                                placeholder="$4500/mo"
+                              />
+                            </GridField>
+                            <GridField>
+                              <FieldLabel hint="Optional old price shown crossed out.">Original price</FieldLabel>
+                              <Input
+                                value={bundle.strikethrough}
+                                onChange={(e) => setBundle(i, { strikethrough: e.target.value })}
+                                placeholder="$4800/mo"
+                              />
+                            </GridField>
+                            <GridField>
+                              <FieldLabel>Promo line</FieldLabel>
+                              <Input
+                                value={bundle.promo}
+                                onChange={(e) => setBundle(i, { promo: e.target.value })}
+                                placeholder="Best for groups, discounted full-house lease"
+                              />
+                            </GridField>
+                            <div className="sm:col-span-2">
+                              <FieldLabel hint="Shown under the bundle name. Auto-generated when rooms are selected.">Rooms line</FieldLabel>
+                              <Input
+                                value={bundle.roomsLine}
+                                onChange={(e) => setBundle(i, { roomsLine: e.target.value })}
+                                placeholder="Whole house - 6 rooms"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <FieldLabel>Select rooms included in this bundle</FieldLabel>
+                              <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {sub.rooms.map((room) => (
+                                  <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-slate-300"
+                                      checked={selectedIds.has(room.id)}
+                                      onChange={(e) => toggleBundleRoom(i, room.id, e.target.checked)}
+                                    />
+                                    <span className="font-medium text-slate-800">{roomLabelForBundle(room)}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </ListingSubsection>
 
               <ListingSubsection title="Fees">

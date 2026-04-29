@@ -2,23 +2,23 @@ import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submissio
 
 export type ApplicationFeePayChannel = "stripe" | "zelle";
 
-/**
- * Application fee checkout is Stripe-only in the renter flow.
- * We keep the union type for backward compatibility with older stored drafts.
- */
 export function listingApplicationFeeChannels(sub: ManagerListingSubmissionV1 | undefined): {
   stripe: boolean;
   zelle: boolean;
 } {
-  void sub;
-  return { stripe: true, zelle: false };
+  const zelle = Boolean(sub?.zellePaymentsEnabled && sub.applicationFeeZelleEnabled !== false && sub.zelleContact?.trim());
+  const stripe = sub?.applicationFeeStripeEnabled !== false;
+  if (!stripe && !zelle) return { stripe: true, zelle: false };
+  return { stripe, zelle };
 }
 
 export function resolveApplicationFeePayChannel(
   sub: ManagerListingSubmissionV1 | undefined,
   preference: ApplicationFeePayChannel | undefined,
 ): ApplicationFeePayChannel {
-  void sub;
-  void preference;
-  return "stripe";
+  const channels = listingApplicationFeeChannels(sub);
+  if (preference === "zelle" && channels.zelle) return "zelle";
+  if (preference === "stripe" && channels.stripe) return "stripe";
+  if (channels.stripe) return "stripe";
+  return "zelle";
 }

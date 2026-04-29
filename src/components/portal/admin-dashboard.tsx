@@ -2,11 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
-import { pendingInquiryCount, readPlannedEvents } from "@/lib/demo-admin-scheduling";
+import {
+  getPartnerInquiryWindows,
+  pendingInquiryCount,
+  readPartnerInquiries,
+  readPlannedEvents,
+  syncScheduleRecordsFromServer,
+} from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 
@@ -35,10 +41,17 @@ function StatCard({
   );
 }
 
+function formatUpcomingMeetingTime(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "soon";
+  return d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 export function AdminDashboard() {
   const router = useRouter();
   const { showToast } = useAppUi();
   const [eventsTotal, setEventsTotal] = useState("0");
+  const [eventTick, setEventTick] = useState(0);
   const [managers, setManagers] = useState<PortalUser[]>([]);
   const [residents, setResidents] = useState<PortalUser[]>([]);
   const [counts, setCounts] = useState({ managers: 0, residents: 0, owners: 0 });
@@ -100,8 +113,10 @@ export function AdminDashboard() {
     const syncEvents = () => {
       const n = readPlannedEvents().filter((event) => event.kind !== "tour").length + pendingInquiryCount();
       setEventsTotal(String(n));
+      setEventTick((tick) => tick + 1);
     };
     syncEvents();
+    void syncScheduleRecordsFromServer().then(syncEvents);
     const on = () => syncEvents();
     window.addEventListener(ADMIN_UI_EVENT, on);
     window.addEventListener("storage", on);
@@ -110,6 +125,38 @@ export function AdminDashboard() {
       window.removeEventListener("storage", on);
     };
   }, []);
+
+  const upcomingAdminMeetings = useMemo(() => {
+    void eventTick;
+    const now = Date.now() - 30 * 60 * 1000;
+    const pending = readPartnerInquiries()
+      .filter((row) => row.status === "pending" && row.kind !== "tour")
+      .flatMap((row) =>
+        getPartnerInquiryWindows(row).map((window) => ({
+          id: `${row.id}-${window.start}`,
+          label: row.name,
+          status: "pending" as const,
+          start: window.start,
+          startMs: new Date(window.start).getTime(),
+        })),
+      );
+    const confirmed = readPlannedEvents()
+      .filter((event) => event.kind !== "tour")
+      .map((event) => ({
+        id: event.id,
+        label: event.attendeeName ?? event.title,
+        status: "confirmed" as const,
+        start: event.start,
+        startMs: new Date(event.start).getTime(),
+      }));
+    return [...pending, ...confirmed]
+      .filter((meeting) => Number.isFinite(meeting.startMs) && meeting.startMs >= now)
+      .sort((a, b) => a.startMs - b.startMs);
+  }, [eventTick]);
+
+  const nextAdminMeeting = upcomingAdminMeetings[0] ?? null;
+  const pendingMeetingCount = upcomingAdminMeetings.filter((meeting) => meeting.status === "pending").length;
+  const confirmedMeetingCount = upcomingAdminMeetings.filter((meeting) => meeting.status === "confirmed").length;
 
   useEffect(() => {
     const syncProperties = () => {
@@ -129,6 +176,16 @@ export function AdminDashboard() {
     <div className="space-y-6">
       <div className={PORTAL_SECTION_SURFACE}>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+        {nextAdminMeeting ? (
+          <Link
+            href="/admin/events"
+            className="mt-4 block rounded-2xl border border-sky-200/80 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 transition hover:border-sky-300 hover:bg-sky-50"
+          >
+            <span className="font-semibold">{upcomingAdminMeetings.length} upcoming calendar item{upcomingAdminMeetings.length === 1 ? "" : "s"}:</span>{" "}
+            {pendingMeetingCount} pending · {confirmedMeetingCount} confirmed. Next: {nextAdminMeeting.label} at{" "}
+            <span className="font-semibold">{formatUpcomingMeetingTime(nextAdminMeeting.start)}</span>.
+          </Link>
+        ) : null}
         <div className="mt-6 grid gap-8 lg:grid-cols-2">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Axis Property Portal</p>

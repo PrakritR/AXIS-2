@@ -223,6 +223,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     strikethrough: b.strikethrough ?? "",
     promo: b.promo ?? "",
     roomsLine: b.roomsLine ?? "",
+    includedRoomIds: Array.isArray(b.includedRoomIds)
+      ? rooms.map((room) => room.id).filter((id) => b.includedRoomIds?.includes(id))
+      : [],
   }));
 
   let quickFacts = sub.quickFacts;

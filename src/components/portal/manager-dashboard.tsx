@@ -8,7 +8,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { DemoApplicantRow, DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
-import { getPartnerInquiryWindows, readPartnerInquiries } from "@/lib/demo-admin-scheduling";
+import { getPartnerInquiryWindows, readPartnerInquiries, readPlannedEvents, syncScheduleRecordsFromServer } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { HOUSEHOLD_CHARGES_EVENT, readChargesForManager } from "@/lib/household-charges";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
@@ -89,28 +89,51 @@ export function ManagerDashboard() {
   const [tourTick, setTourTick] = useState(0);
   useEffect(() => {
     const on = () => setTourTick((n) => n + 1);
+    void syncScheduleRecordsFromServer().then(on);
     window.addEventListener(ADMIN_UI_EVENT, on);
+    window.addEventListener("storage", on);
     return () => {
       window.removeEventListener(ADMIN_UI_EVENT, on);
+      window.removeEventListener("storage", on);
     };
   }, []);
 
-  const upcomingTour = useMemo(() => {
+  const upcomingTours = useMemo(() => {
     void tourTick;
-    if (!userId) return null;
+    if (!userId) return [];
     const now = Date.now() - 30 * 60 * 1000;
-    return readPartnerInquiries()
+    const pending = readPartnerInquiries()
       .filter((row) => row.kind === "tour" && row.status === "pending" && row.managerUserId === userId)
       .flatMap((row) =>
         getPartnerInquiryWindows(row).map((window) => ({
-          row,
+          id: `${row.id}-${window.start}`,
+          label: row.name,
+          propertyTitle: row.propertyTitle,
+          roomLabel: row.roomLabel,
+          status: "pending" as const,
           start: window.start,
           startMs: new Date(window.start).getTime(),
         })),
-      )
+      );
+    const confirmed = readPlannedEvents()
+      .filter((event) => event.kind === "tour" && event.managerUserId === userId)
+      .map((event) => ({
+        id: event.id,
+        label: event.attendeeName ?? "Confirmed tour",
+        propertyTitle: event.propertyTitle,
+        roomLabel: event.roomLabel,
+        status: "confirmed" as const,
+        start: event.start,
+        startMs: new Date(event.start).getTime(),
+      }));
+    return [...pending, ...confirmed]
       .filter((tour) => Number.isFinite(tour.startMs) && tour.startMs >= now)
-      .sort((a, b) => a.startMs - b.startMs)[0] ?? null;
+      .sort((a, b) => a.startMs - b.startMs);
   }, [userId, tourTick]);
+
+  const upcomingTour = upcomingTours[0] ?? null;
+  const pendingTourCount = upcomingTours.filter((tour) => tour.status === "pending").length;
+  const confirmedTourCount = upcomingTours.filter((tour) => tour.status === "confirmed").length;
 
   const pipelineSummary = useMemo(() => {
     void pipelineTick;
@@ -216,10 +239,10 @@ export function ManagerDashboard() {
       <div className="space-y-4">
         {upcomingTour ? (
           <p className="rounded-2xl border border-sky-200/80 bg-sky-50/70 px-4 py-3 text-sm text-sky-950">
-            <span className="font-semibold">Scheduled tour soon:</span>{" "}
-            {upcomingTour.row.name} requested {upcomingTour.row.propertyTitle ?? "a property"}{" "}
-            {upcomingTour.row.roomLabel ? `(${upcomingTour.row.roomLabel}) ` : ""}
-            for <span className="font-semibold">{formatUpcomingTourTime(upcomingTour.start)}</span>.{" "}
+            <span className="font-semibold">{upcomingTours.length} upcoming tour{upcomingTours.length === 1 ? "" : "s"}:</span>{" "}
+            {pendingTourCount} pending · {confirmedTourCount} confirmed. Next: {upcomingTour.label} for{" "}
+            {upcomingTour.propertyTitle ?? "a property"} {upcomingTour.roomLabel ? `(${upcomingTour.roomLabel}) ` : ""}
+            at <span className="font-semibold">{formatUpcomingTourTime(upcomingTour.start)}</span>.{" "}
             <Link className="font-semibold text-primary underline-offset-2 hover:underline" href={`${portalBase}/calendar`}>
               Open calendar
             </Link>

@@ -276,12 +276,6 @@ function bundleScopeLineFromRow(b: ManagerBundleRow, rooms: ManagerRoomSubmissio
   return b.roomsLine.trim();
 }
 
-function roomNamesForBundle(b: ManagerBundleRow, rooms: ManagerRoomSubmission[]): string[] {
-  const ids = b.includedRoomIds ?? [];
-  if (ids.length === 0) return [];
-  return ids.map((id) => rooms.find((r) => r.id === id)?.name?.trim()).filter(Boolean) as string[];
-}
-
 function perRoomBundleSummaryLine(r: ManagerRoomSubmission): string {
   const u = r.utilitiesEstimate?.trim();
   const f = r.furnishing?.trim();
@@ -343,9 +337,8 @@ function buildBundleCards(sub: ManagerListingSubmissionV1, rooms: ManagerRoomSub
   if (custom.length > 0) {
     return custom.map((b) => {
       const scope = bundleScopeLineFromRow(b, rooms);
-      const customRoomNames = roomNamesForBundle(b, rooms);
-      const scopedRooms = customRoomNames.length
-        ? rooms.filter((room) => customRoomNames.includes(room.name.trim()))
+      const scopedRooms = (b.includedRoomIds?.length ?? 0) > 0
+        ? rooms.filter((room) => b.includedRoomIds?.includes(room.id))
         : rooms;
       return {
         id: b.id,

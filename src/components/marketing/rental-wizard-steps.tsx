@@ -1351,8 +1351,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <p className="text-sm font-semibold text-slate-900">Payment method</p>
             <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
               <input
-                type="checkbox"
-                name="application-fee-channel-stripe"
+                type="radio"
+                name="application-fee-channel"
                 className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
                 checked={form.applicationFeePayChannel === "stripe"}
                 onChange={() => patch({ applicationFeePayChannel: "stripe" })}
@@ -1366,8 +1366,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </label>
             <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
               <input
-                type="checkbox"
-                name="application-fee-channel-zelle"
+                type="radio"
+                name="application-fee-channel"
                 className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
                 checked={form.applicationFeePayChannel === "zelle"}
                 onChange={() => patch({ applicationFeePayChannel: "zelle" })}
