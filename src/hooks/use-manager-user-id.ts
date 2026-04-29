@@ -1,6 +1,7 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 
 /**
@@ -17,7 +18,7 @@ export function useManagerUserId(): { userId: string | null; email: string | nul
     try {
       supabase = createSupabaseBrowserClient();
     } catch {
-      setReady(true);
+      queueMicrotask(() => setReady(true));
       return;
     }
 
@@ -36,7 +37,7 @@ export function useManagerUserId(): { userId: string | null; email: string | nul
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       if (!cancelled) {
         setUserId(session?.user?.id ?? null);
         setEmail(session?.user?.email ?? null);

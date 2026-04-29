@@ -217,10 +217,10 @@ export async function renderPortalSection(
     if (section === "payments") {
       if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
       const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "stripe" || paymentsTab === "payouts") redirect(`${def.basePath}/payments/ledger?payouts=1`);
-      if (paymentsTab !== "ledger") redirect(`${def.basePath}/payments/ledger`);
+      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
+      if (paymentsTab !== "ledger" && paymentsTab !== "payouts") redirect(`${def.basePath}/payments/ledger`);
       return subscriptionGated(
-        <ManagerPayments />,
+        <ManagerPayments view={paymentsTab} />,
         kind,
         "payments",
         managerOwnerSubscriptionTier,
@@ -297,10 +297,10 @@ export async function renderPortalSection(
     if (section === "payments") {
       if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
       const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "stripe" || paymentsTab === "payouts") redirect(`${def.basePath}/payments/ledger?payouts=1`);
-      if (paymentsTab !== "ledger") redirect(`${def.basePath}/payments/ledger`);
+      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
+      if (paymentsTab !== "ledger" && paymentsTab !== "payouts") redirect(`${def.basePath}/payments/ledger`);
       return subscriptionGated(
-        <ManagerPayments />,
+        <ManagerPayments view={paymentsTab} />,
         kind,
         "payments",
         managerOwnerSubscriptionTier,
@@ -363,10 +363,10 @@ export async function renderPortalSection(
     if (section === "payments") {
       if (!tabParts?.length) redirect(`${def.basePath}/payments/ledger`);
       const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "stripe" || paymentsTab === "payouts") redirect(`${def.basePath}/payments/ledger?payouts=1`);
-      if (paymentsTab !== "ledger") redirect(`${def.basePath}/payments/ledger`);
+      if (paymentsTab === "stripe") redirect(`${def.basePath}/payments/payouts`);
+      if (paymentsTab !== "ledger" && paymentsTab !== "payouts") redirect(`${def.basePath}/payments/ledger`);
       return subscriptionGated(
-        <ManagerPayments />,
+        <ManagerPayments view={paymentsTab} />,
         kind,
         "payments",
         managerOwnerSubscriptionTier,

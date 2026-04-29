@@ -100,7 +100,8 @@ export function PortalStripeConnectPanel({
   }, []);
 
   useEffect(() => {
-    void loadStatus();
+    const id = window.setTimeout(() => void loadStatus(), 0);
+    return () => window.clearTimeout(id);
   }, [loadStatus]);
 
   useEffect(() => {
@@ -124,12 +125,12 @@ export function PortalStripeConnectPanel({
     const q = new URLSearchParams(window.location.search).get("connect");
     if (q === "done") {
       showToast("Payout status updated.");
-      void loadStatus();
-      window.history.replaceState({}, "", `${basePath}/payments`);
+      window.setTimeout(() => void loadStatus(), 0);
+      window.history.replaceState({}, "", `${basePath}/payments/payouts`);
     } else if (q === "refresh") {
       showToast("Setup link expired — try again from Payouts.");
-      void loadStatus();
-      window.history.replaceState({}, "", `${basePath}/payments`);
+      window.setTimeout(() => void loadStatus(), 0);
+      window.history.replaceState({}, "", `${basePath}/payments/payouts`);
     }
   }, [basePath, loadStatus, showToast]);
 
@@ -212,7 +213,8 @@ export function PortalStripeConnectPanel({
   useEffect(() => {
     if (variant !== "embedded") return;
     if (status == null || status.demo) return;
-    void refreshEmbeddedComponent();
+    const id = window.setTimeout(() => void refreshEmbeddedComponent(), 0);
+    return () => window.clearTimeout(id);
   }, [variant, status, refreshEmbeddedComponent]);
 
   const body = (

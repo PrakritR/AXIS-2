@@ -11,15 +11,32 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
-function roleToPath(role: string): string {
-  const r = role as AuthRole;
-  return portalDashboardPath(r);
+const LOGIN_TIMEOUT_MS = 15000;
+const PORTAL_LOAD_TIMEOUT_MS = 12000;
+
+type SignInResult = {
+  data: {
+    user: { id: string } | null;
+    session: unknown | null;
+  };
+  error: { message: string } | null;
+};
+
+type SessionResult = {
+  data: {
+    session: { user: { id: string } } | null;
+  };
+  error: Error | null;
+};
+
+function roleToPath(role: AuthRole): string {
+  return portalDashboardPath(role);
 }
 
 function friendlyAuthError(raw: string): string {
   const lower = raw.toLowerCase();
-  if (lower.includes("invalid login") || lower.includes("invalid credentials")) {
-    return "Incorrect email or password. Try again or use Forgot password.";
+  if (lower.includes("failed to fetch") || lower.includes("network") || lower.includes("fetch")) {
+    return "We could not reach Supabase. Please check your connection and try again.";
   }
   return raw;
 }
@@ -28,53 +45,43 @@ function isAuthRole(value: unknown): value is AuthRole {
   return value === "resident" || value === "manager" || value === "owner" || value === "admin";
 }
 
-function fallbackRolesFromUser(user: { user_metadata?: Record<string, unknown> | null; app_metadata?: Record<string, unknown> | null }): AuthRole[] {
-  const role = user.user_metadata?.role ?? user.app_metadata?.role;
-  return isAuthRole(role) ? [role] : [];
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: number;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([Promise.resolve(promise), timeout]).finally(() => window.clearTimeout(timeoutId));
 }
 
-async function fetchPortalRolesFast(): Promise<AuthRole[] | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 1200);
-    const res = await fetch("/api/auth/portal-roles", {
-      credentials: "include",
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    window.clearTimeout(timeout);
-    if (!res.ok) return null;
-    const body = (await res.json()) as { roles?: AuthRole[] };
-    return Array.isArray(body.roles) ? body.roles : null;
-  } catch {
-    return null;
-  }
-}
-
-async function fetchLegacyProfileRoleFast(
+async function fetchProfileAndRoles(
   supabase: ReturnType<typeof createSupabaseBrowserClient>,
   userId: string,
-): Promise<AuthRole | null> {
-  try {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-    return isAuthRole(profile?.role) ? profile.role : null;
-  } catch {
-    return null;
+): Promise<{ profile: { role?: unknown } | null; roles: AuthRole[] }> {
+  const { data: profile, error: profileError } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
+  if (profileError) throw profileError;
+  console.log("profile loaded", profile);
+
+  if (!profile) {
+    throw new Error("Account found, but no portal profile is linked yet. Please contact Axis.");
   }
-}
 
-async function resolvePortalRoles(
-  supabase: ReturnType<typeof createSupabaseBrowserClient>,
-  user: { id: string; user_metadata?: Record<string, unknown> | null; app_metadata?: Record<string, unknown> | null },
-): Promise<AuthRole[]> {
-  const fromPortalRoute = await fetchPortalRolesFast();
-  if (fromPortalRoute && fromPortalRoute.length > 0) return fromPortalRoute;
+  const { data: roleRows, error: rolesError } = await supabase.from("profile_roles").select("role").eq("user_id", userId);
+  if (rolesError) throw rolesError;
+  const rows = (roleRows ?? []) as { role: unknown }[];
 
-  const fromMetadata = fallbackRolesFromUser(user);
-  if (fromMetadata.length > 0) return fromMetadata;
+  const roles = [
+    ...new Set(
+      rows
+        .map((row) => row.role)
+        .filter((role): role is AuthRole => isAuthRole(role)),
+    ),
+  ];
+  if (roles.length > 0) return { profile, roles };
 
-  const legacyRole = await fetchLegacyProfileRoleFast(supabase, user.id);
-  return legacyRole ? [legacyRole] : ["resident"];
+  const legacyRole = profile && isAuthRole(profile.role) ? profile.role : null;
+  if (legacyRole) return { profile, roles: [legacyRole] };
+
+  throw new Error("Account found, but no portal profile is linked yet. Please contact Axis.");
 }
 
 async function tryResidentAutoConfirm(email: string): Promise<boolean> {
@@ -97,63 +104,107 @@ function SignInForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isLoadingPortal, setIsLoadingPortal] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) {
       showToast("Enter email and password.");
       return;
     }
-    setBusy(true);
+    setErrorText(null);
+    setIsLoadingPortal(false);
+    setIsSigningIn(true);
+    console.log("login started", { email: email.trim() });
+    let didRedirect = false;
     try {
       const supabase = createSupabaseBrowserClient();
-      let { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      let { data, error } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        }) as PromiseLike<SignInResult>,
+        LOGIN_TIMEOUT_MS,
+        "Login timed out. Please try again.",
+      );
+      console.log("supabase auth response", { userId: data.user?.id ?? null, hasSession: Boolean(data.session), error });
       if (error?.message.toLowerCase().includes("email not confirmed")) {
         const repaired = await tryResidentAutoConfirm(email);
         if (repaired) {
-          const retry = await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
-          });
+          const retry = await withTimeout(
+            supabase.auth.signInWithPassword({
+              email: email.trim(),
+              password,
+            }) as PromiseLike<SignInResult>,
+            LOGIN_TIMEOUT_MS,
+            "Login timed out. Please try again.",
+          );
           data = retry.data;
           error = retry.error;
+          console.log("supabase auth response", { userId: data.user?.id ?? null, hasSession: Boolean(data.session), error });
         }
       }
       if (error) {
-        showToast(friendlyAuthError(error.message));
-        setBusy(false);
-        return;
-      }
-      const user = data.user;
-      if (!user) {
-        showToast("No active session.");
-        setBusy(false);
+        console.log("auth error", error);
+        const message = friendlyAuthError(error.message);
+        setErrorText(message);
+        showToast(message);
         return;
       }
 
-      const roles = await resolvePortalRoles(supabase, user);
+      setIsSigningIn(false);
+      setIsLoadingPortal(true);
+      const sessionResult = await withTimeout(
+        supabase.auth.getSession() as PromiseLike<SessionResult>,
+        PORTAL_LOAD_TIMEOUT_MS,
+        "We could not finish loading your session. Please try again.",
+      );
+      console.log("session loaded", { hasSession: Boolean(sessionResult.data.session), error: sessionResult.error });
+      if (sessionResult.error) throw sessionResult.error;
+
+      const user = sessionResult.data.session?.user ?? data.user;
+      if (!user) {
+        throw new Error("No active session.");
+      }
+
+      const { roles } = await withTimeout(
+        fetchProfileAndRoles(supabase, user.id),
+        PORTAL_LOAD_TIMEOUT_MS,
+        "We could not load your portal profile. Please try again.",
+      );
+
+      let redirectTarget: string;
       if (roles.length > 1) {
         const q = nextPath.startsWith("/") ? `?next=${encodeURIComponent(nextPath)}` : "";
-        window.location.assign(`/auth/choose-portal${q}`);
-        return;
+        redirectTarget = `/auth/choose-portal${q}`;
+      } else {
+        const role = roles[0];
+        if (!role) {
+          throw new Error("Account found, but no portal profile is linked yet. Please contact Axis.");
+        }
+        redirectTarget = nextPath.startsWith("/") ? nextPath : roleToPath(role);
       }
-      const role = roles[0] ?? "resident";
-      const dest = nextPath.startsWith("/") ? nextPath : roleToPath(role);
-      window.location.assign(dest);
+      console.log("redirect target", redirectTarget);
+      didRedirect = true;
+      window.location.replace(redirectTarget);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign-in failed";
-      if (msg.toLowerCase().includes("failed to fetch")) {
-        showToast("Signed in, but the portal is taking too long to load. Please try again.");
-      } else {
-        showToast(msg.includes("NEXT_PUBLIC_SUPABASE") ? "Supabase is not configured. Set env vars in .env.local." : msg);
-      }
+      const message = msg.includes("NEXT_PUBLIC_SUPABASE")
+        ? "Supabase is not configured. Set env vars in .env.local."
+        : friendlyAuthError(msg);
+      console.log("auth error", e);
+      setErrorText(message);
+      showToast(message);
     } finally {
-      setBusy(false);
+      if (!didRedirect) {
+        setIsSigningIn(false);
+        setIsLoadingPortal(false);
+      }
     }
   };
+
+  const busy = isSigningIn || isLoadingPortal;
 
   return (
     <AuthCard>
@@ -170,6 +221,7 @@ function SignInForm() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={busy}
           />
         </div>
         <div>
@@ -182,6 +234,7 @@ function SignInForm() {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            disabled={busy}
           />
         </div>
       </div>
@@ -192,14 +245,17 @@ function SignInForm() {
         </Link>
       </div>
 
+      {errorText ? <p className="mt-4 text-center text-sm text-rose-600">{errorText}</p> : null}
+
       <Button
         type="button"
         className="mt-6 w-full rounded-full py-3 text-base font-semibold"
         onClick={() => void handleSignIn()}
         disabled={busy}
       >
-        {busy ? "Signing in…" : "Sign in"}
+        {isSigningIn ? "Signing in…" : "Sign in"}
       </Button>
+      {isLoadingPortal ? <p className="mt-3 text-center text-sm text-slate-500">Loading your portal...</p> : null}
 
       <p className="mt-8 text-center text-sm text-slate-600">
         New here?{" "}

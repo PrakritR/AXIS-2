@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -9,6 +10,7 @@ import { PortalPropertyFilterPill } from "@/components/portal/manager-section-sh
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { Input, Select } from "@/components/ui/input";
+import { TabNav, type TabItem } from "@/components/ui/tabs";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import {
@@ -39,23 +41,17 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "paid", label: "Paid" },
 ];
 
-export function ManagerPayments() {
+type ManagerPaymentsView = "ledger" | "payouts";
+
+export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsView }) {
   const { showToast } = useAppUi();
+  const router = useRouter();
   const { userId, ready: authReady } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
-  const initialPayoutsOpen =
-    typeof window !== "undefined" &&
-    (() => {
-      const params = new URLSearchParams(window.location.search);
-      const payouts = params.get("payouts");
-      const connect = params.get("connect");
-      return payouts === "1" || connect === "done" || connect === "refresh";
-    })();
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [hcTick, setHcTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [rentEditorOpen, setRentEditorOpen] = useState(false);
-  const [payoutsOpen, setPayoutsOpen] = useState(initialPayoutsOpen);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
   const [selectedApplicationId, setSelectedApplicationId] = useState("");
@@ -63,7 +59,8 @@ export function ManagerPayments() {
   const [rentDueDay, setRentDueDay] = useState("1");
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
-  const syncSignature = `${hcTick}:${applicationTick}:${propertyTick}`;
+  const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
+  const applicationDataVersion = `${applicationTick}:${propertyTick}`;
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -102,21 +99,12 @@ export function ManagerPayments() {
         return;
       }
     }
-    if (payouts === "1" || connect === "done" || connect === "refresh") {
-      if (connect === "done") {
-        showToast("Payout status updated.");
-        window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
-      } else if (connect === "refresh") {
-        showToast("Setup link expired — open Payouts to try again.");
-        window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
-      }
-      params.delete("payouts");
-      params.delete("connect");
-      const next = params.toString();
-      const path = `${window.location.pathname}${next ? `?${next}` : ""}`;
-      window.history.replaceState({}, "", path);
+    if (payouts === "1") {
+      window.location.replace(`${portalBase}/payments/payouts`);
+    } else if (connect === "done" || connect === "refresh") {
+      window.location.replace(`${portalBase}/payments/payouts?connect=${encodeURIComponent(connect)}`);
     }
-  }, [showToast]);
+  }, [portalBase]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -133,21 +121,26 @@ export function ManagerPayments() {
     return () => window.removeEventListener("message", onMessage);
   }, [showToast]);
 
-  void syncSignature;
-  const applications = readManagerApplicationRows();
-  const mergedRows = [...readChargesForManager(userId).map((charge) => {
-    const ledgerRow = householdChargeToLedgerRow(charge);
-    const chargeEmail = charge.residentEmail.trim().toLowerCase();
-    const application = applications.find((row) => {
-      if (charge.applicationId && row.id === charge.applicationId) return true;
-      const rowEmail = row.email?.trim().toLowerCase();
-      const rowPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-      return rowEmail === chargeEmail && rowPropertyId === charge.propertyId;
-    });
-    const roomChoice = application?.assignedRoomChoice?.trim() || application?.application?.roomChoice1?.trim() || "";
-    const roomLabel = getRoomChoiceLabel(roomChoice).split(" · ")[0]?.trim() || "";
-    return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
-  }), ...mergeManagerPaymentLedger()];
+  const mergedRows = useMemo(() => {
+    void ledgerDataVersion;
+    const applications = readManagerApplicationRows();
+    return [
+      ...readChargesForManager(userId).map((charge) => {
+        const ledgerRow = householdChargeToLedgerRow(charge);
+        const chargeEmail = charge.residentEmail.trim().toLowerCase();
+        const application = applications.find((row) => {
+          if (charge.applicationId && row.id === charge.applicationId) return true;
+          const rowEmail = row.email?.trim().toLowerCase();
+          const rowPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+          return rowEmail === chargeEmail && rowPropertyId === charge.propertyId;
+        });
+        const roomChoice = application?.assignedRoomChoice?.trim() || application?.application?.roomChoice1?.trim() || "";
+        const roomLabel = getRoomChoiceLabel(roomChoice).split(" · ")[0]?.trim() || "";
+        return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
+      }),
+      ...mergeManagerPaymentLedger(),
+    ];
+  }, [userId, ledgerDataVersion]);
 
   const propertyOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -185,6 +178,13 @@ export function ManagerPayments() {
     () => PAY_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),
     [counts],
   );
+  const paymentTabs = useMemo<TabItem[]>(
+    () => [
+      { id: "ledger", label: "Ledger", href: `${portalBase}/payments/ledger` },
+      { id: "payouts", label: "Payouts", href: `${portalBase}/payments/payouts` },
+    ],
+    [portalBase],
+  );
 
   const rowsForBucket = useMemo(() => {
     return mergedRows.filter((r) => {
@@ -196,8 +196,9 @@ export function ManagerPayments() {
   }, [mergedRows, bucket, propertyFilter, residentFilter]);
 
   const approvedResidents = useMemo(
-    () =>
-      readManagerApplicationRows()
+    () => {
+      void applicationDataVersion;
+      return readManagerApplicationRows()
         .filter((row) => row.bucket === "approved" && row.email?.trim() && applicationVisibleToPortalUser(row, userId))
         .map((row) => {
           const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
@@ -212,8 +213,9 @@ export function ManagerPayments() {
             roomLabel,
             signedMonthlyRent: row.signedMonthlyRent ?? null,
           };
-        }),
-    [userId, syncSignature],
+        });
+    },
+    [userId, applicationDataVersion],
   );
 
   const selectedApprovedResident = useMemo(
@@ -232,6 +234,37 @@ export function ManagerPayments() {
       }
     }
   }, [userId, hcTick, applicationTick]);
+
+  const filterRow = (
+    <div className="flex flex-col gap-4">
+      <TabNav items={paymentTabs} activeId={view} />
+      {view === "ledger" ? (
+        <>
+          <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-3 text-sm text-slate-800">
+            Set up <span className="font-semibold">Payouts</span> before creating a listing.{" "}
+            <button
+              type="button"
+              className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90"
+              onClick={() => router.push(`${portalBase}/payments/payouts`)}
+            >
+              Open Payouts
+            </button>
+          </div>
+          <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
+        </>
+      ) : null}
+    </div>
+  );
+
+  if (view === "payouts") {
+    return (
+      <ManagerPortalPageShell title="Payments" filterRow={filterRow}>
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
+          <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
+        </div>
+      </ManagerPortalPageShell>
+    );
+  }
 
   return (
     <ManagerPortalPageShell
@@ -266,21 +299,7 @@ export function ManagerPayments() {
           </Button>
         </>
       }
-      filterRow={
-        <div className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-3 text-sm text-slate-800">
-            Set up <span className="font-semibold">Payouts</span> before creating a listing.{" "}
-            <button
-              type="button"
-              className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90"
-              onClick={() => setPayoutsOpen(true)}
-            >
-              Open Payouts
-            </button>
-          </div>
-          <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
-        </div>
-      }
+      filterRow={filterRow}
     >
       <ManagerPaymentsLedgerPanel rows={rowsForBucket} managerUserId={userId ?? null} activeBucket={bucket} />
       <ManagerAddPaymentModal
@@ -364,16 +383,6 @@ export function ManagerPayments() {
         </div>
       </Modal>
 
-      <Modal
-        open={payoutsOpen}
-        title="Payouts"
-        onClose={() => setPayoutsOpen(false)}
-        panelClassName="relative z-[71] mx-auto my-0 w-full max-w-[760px] overflow-hidden rounded-3xl border border-border bg-card p-5 shadow-2xl sm:p-6"
-      >
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
-          <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
-        </div>
-      </Modal>
     </ManagerPortalPageShell>
   );
 }

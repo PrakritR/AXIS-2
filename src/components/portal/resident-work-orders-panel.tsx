@@ -62,9 +62,11 @@ export function ResidentWorkOrdersPanel() {
     sync();
     void syncManagerWorkOrdersFromServer().then(sync);
     void syncManagerApplicationsFromServer();
-    void createSupabaseBrowserClient().auth.getUser().then(({ data }) => {
-      setResidentEmail(data.user?.email?.trim().toLowerCase() ?? "");
-    });
+    void (createSupabaseBrowserClient().auth.getUser() as PromiseLike<{ data: { user: { email?: string | null } | null } }>).then(
+      ({ data }) => {
+        setResidentEmail(data.user?.email?.trim().toLowerCase() ?? "");
+      },
+    );
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
     window.addEventListener("storage", sync);
     return () => {
