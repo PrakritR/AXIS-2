@@ -18,6 +18,7 @@ type PropertyManagerEntry = {
 
 type PropertyRecordRow = {
   manager_user_id: string | null;
+  status: string | null;
   property_data: unknown;
 };
 
@@ -60,14 +61,17 @@ export async function GET(req: Request) {
 
     const { data: propertyRows, error: propertyError } = await db
       .from("manager_property_records")
-      .select("manager_user_id, property_data")
-      .eq("status", "live");
+      .select("manager_user_id, status, property_data");
 
     if (propertyError) return NextResponse.json({ error: propertyError.message }, { status: 500 });
 
     const propertyRecords = ((propertyRows ?? []) as PropertyRecordRow[])
-      .map((row) => ({ managerUserId: row.manager_user_id?.trim() ?? "", property: asObject(row.property_data) }))
-      .filter((row): row is { managerUserId: string; property: Record<string, unknown> } => Boolean(row.managerUserId && row.property));
+      .map((row) => ({
+        managerUserId: row.manager_user_id?.trim() ?? "",
+        status: row.status?.trim().toLowerCase() ?? "",
+        property: asObject(row.property_data),
+      }))
+      .filter((row): row is { managerUserId: string; status: string; property: Record<string, unknown> } => Boolean(row.managerUserId && row.property));
 
     const directMatches = propertyRecords.filter(({ property }) => {
       const id = textField(property, "id");
@@ -91,24 +95,23 @@ export async function GET(req: Request) {
       ),
     ];
     const propertyIdsByManager = new Map<string, Set<string>>();
+    const requestedPropertyIds = new Set([propertyId, safeId].filter(Boolean));
     for (const { managerUserId, property } of matchingPropertyRecords) {
       const ids = propertyIdsByManager.get(managerUserId) ?? new Set<string>();
       for (const value of [textField(property, "id"), textField(property, "buildingId")]) {
         if (!value) continue;
         ids.add(value);
         ids.add(safePropertyId(value));
+        requestedPropertyIds.add(value);
+        requestedPropertyIds.add(safePropertyId(value));
       }
       propertyIdsByManager.set(managerUserId, ids);
     }
 
-    const propertyAvailabilityRows =
-      managerIds.length > 0
-        ? await db
-            .from("portal_schedule_records")
-            .select("id, manager_user_id, property_id, record_type, row_data")
-            .eq("record_type", "manager_property_availability")
-            .in("manager_user_id", managerIds)
-        : { data: [], error: null };
+    const propertyAvailabilityRows = await db
+      .from("portal_schedule_records")
+      .select("id, manager_user_id, property_id, record_type, row_data")
+      .eq("record_type", "manager_property_availability");
 
     if (propertyAvailabilityRows.error) {
       return NextResponse.json({ error: propertyAvailabilityRows.error.message }, { status: 500 });
@@ -126,15 +129,25 @@ export async function GET(req: Request) {
       const managerUserId = row.manager_user_id?.trim();
       if (!managerUserId) return false;
       const propertyIds = propertyIdsByManager.get(managerUserId);
-      if (!propertyIds || propertyIds.size === 0) return false;
       const rowPropertyId = row.property_id?.trim() ?? "";
+      const safeRowPropertyId = safePropertyId(rowPropertyId);
       const rowId = row.id?.trim() ?? "";
+      const directPropertyMatch =
+        requestedPropertyIds.has(rowPropertyId) ||
+        requestedPropertyIds.has(safeRowPropertyId) ||
+        [...requestedPropertyIds].some((propertyKey) => rowId.includes(`_prop_${propertyKey}`));
+      if (directPropertyMatch) return true;
+      if (!propertyIds || propertyIds.size === 0) return false;
       return (
         propertyIds.has(rowPropertyId) ||
-        propertyIds.has(safePropertyId(rowPropertyId)) ||
+        propertyIds.has(safeRowPropertyId) ||
         [...propertyIds].some((propertyKey) => rowId.includes(`_prop_${propertyKey}`))
       );
     });
+    for (const row of propertyRowsForHouse) {
+      const managerUserId = row.manager_user_id?.trim();
+      if (managerUserId && !managerIds.includes(managerUserId)) managerIds.push(managerUserId);
+    }
     const globalRows = ((globalData ?? []) as ScheduleRecordRow[]).filter((row) => {
       const managerUserId = row.manager_user_id?.trim();
       return managerUserId && !propertyRowsForHouse.some((propertyRow) => propertyRow.manager_user_id === managerUserId);

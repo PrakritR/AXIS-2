@@ -161,6 +161,7 @@ export function PortalCalendarPanels({
   onCopyWeekToHouses,
   scheduledTourFilter,
   scheduleOwnerLabel,
+  availabilityHeading = "Availability",
 }: {
   storageKey: string | null;
   calendarRefreshSignal?: number;
@@ -173,6 +174,7 @@ export function PortalCalendarPanels({
   onCopyWeekToHouses?: (propertyIds: string[], weekDateStrs: string[]) => void;
   scheduledTourFilter?: { managerUserId: string | null; propertyId: string | null };
   scheduleOwnerLabel?: string | null;
+  availabilityHeading?: string;
 }) {
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
@@ -806,7 +808,7 @@ export function PortalCalendarPanels({
                 ←
               </Button>
               <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Availability</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{availabilityHeading}</p>
                 <p className="truncate text-sm font-semibold text-slate-900">Week of {formatWeekRangeMonSun(weekMonday)}</p>
                 {tourScopeLabel ? <p className="truncate text-xs font-medium text-primary">{tourScopeLabel}</p> : null}
               </div>

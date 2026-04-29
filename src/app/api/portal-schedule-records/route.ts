@@ -14,16 +14,20 @@ const route = createJsonRecordRoute({
       `manager_user_id.eq.${user.id},id.like.axis_mgr_avail_slots_v2_${user.id}%,id.eq.axis_admin_partner_inquiries_v1,id.eq.axis_admin_planned_events_v1`,
     );
   },
-  buildUpsert: (row) => ({
-    id: row.id,
-    manager_user_id: row.managerUserId ?? row.manager_user_id ?? null,
-    property_id: row.propertyId ?? row.property_id ?? null,
-    record_type: row.recordType ?? row.record_type ?? "event",
-    starts_at: row.startsAt ?? row.starts_at ?? row.startIso ?? null,
-    ends_at: row.endsAt ?? row.ends_at ?? row.endIso ?? null,
-    row_data: row,
-    updated_at: new Date().toISOString(),
-  }),
+  buildUpsert: (row, user) => {
+    const recordType = String(row.recordType ?? row.record_type ?? "event");
+    const managerScoped = recordType === "manager_availability" || recordType === "manager_property_availability";
+    return {
+      id: row.id,
+      manager_user_id: managerScoped && user.role !== "admin" ? user.id : row.managerUserId ?? row.manager_user_id ?? null,
+      property_id: row.propertyId ?? row.property_id ?? null,
+      record_type: recordType,
+      starts_at: row.startsAt ?? row.starts_at ?? row.startIso ?? null,
+      ends_at: row.endsAt ?? row.ends_at ?? row.endIso ?? null,
+      row_data: row,
+      updated_at: new Date().toISOString(),
+    };
+  },
 });
 
 export const GET = route.GET;

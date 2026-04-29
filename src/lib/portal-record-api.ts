@@ -8,7 +8,7 @@ type RecordConfig = {
   orderColumn?: string;
   normalize?: (row: Record<string, unknown>) => Record<string, unknown>;
   scope?: (query: unknown, user: { id: string; email?: string | null; role: string }) => unknown;
-  buildUpsert: (row: Record<string, unknown>) => Record<string, unknown>;
+  buildUpsert: (row: Record<string, unknown>, user: { id: string; email?: string | null; role: string }) => Record<string, unknown>;
 };
 
 async function sessionUser() {
@@ -71,6 +71,13 @@ export function createJsonRecordRoute(config: RecordConfig) {
         if (body.action === "delete") {
           const id = body.id?.trim();
           if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+          let visibleQuery = ctx.db.from(config.table).select("id").eq("id", id).limit(1);
+          if (config.scope) visibleQuery = config.scope(visibleQuery, ctx.user) as typeof visibleQuery;
+          const { data: visible, error: visibleError } = await visibleQuery;
+          if (visibleError) return NextResponse.json({ error: visibleError.message }, { status: 500 });
+          if (!Array.isArray(visible) || visible.length === 0) {
+            return NextResponse.json({ error: "Record not found." }, { status: 404 });
+          }
           const { error } = await ctx.db.from(config.table).delete().eq("id", id);
           if (error) return NextResponse.json({ error: error.message }, { status: 500 });
           return NextResponse.json({ ok: true });
@@ -80,8 +87,20 @@ export function createJsonRecordRoute(config: RecordConfig) {
         if (rows.length === 0) return NextResponse.json({ error: "row required" }, { status: 400 });
         for (const row of rows) {
           const normalized = config.normalize ? config.normalize(row) : row;
-          const record = config.buildUpsert(normalized);
+          const record = config.buildUpsert(normalized, ctx.user);
           if (!record.id) return NextResponse.json({ error: "row id required" }, { status: 400 });
+          const id = String(record.id);
+          const { data: existing, error: existingError } = await ctx.db.from(config.table).select("id").eq("id", id).limit(1);
+          if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
+          if (Array.isArray(existing) && existing.length > 0 && config.scope) {
+            let visibleQuery = ctx.db.from(config.table).select("id").eq("id", id).limit(1);
+            visibleQuery = config.scope(visibleQuery, ctx.user) as typeof visibleQuery;
+            const { data: visible, error: visibleError } = await visibleQuery;
+            if (visibleError) return NextResponse.json({ error: visibleError.message }, { status: 500 });
+            if (!Array.isArray(visible) || visible.length === 0) {
+              return NextResponse.json({ error: "Record not found." }, { status: 404 });
+            }
+          }
           const { error } = await ctx.db.from(config.table).upsert(record, { onConflict: "id" });
           if (error) return NextResponse.json({ error: error.message }, { status: 500 });
         }

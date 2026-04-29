@@ -203,11 +203,12 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   }, [portal, calendarPropertyId, managerProperties]);
 
   const reloadAvailability = () => setCalendarRefreshSignal((n) => n + 1);
+  const pageTitle = portal === "manager" ? "Schedule tours" : "Schedule meeting";
 
   if (portal === "manager" && !authReady) {
     return (
       <ManagerPortalPageShell
-        title="Calendar"
+        title={pageTitle}
         titleAside={
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={reloadAvailability}>
             Refresh
@@ -224,7 +225,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   if (portal === "manager" && !userId) {
     return (
       <ManagerPortalPageShell
-        title="Calendar"
+        title={pageTitle}
         titleAside={
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={reloadAvailability}>
             Refresh
@@ -348,7 +349,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   return (
     <>
       <ManagerPortalPageShell
-        title="Calendar"
+        title={pageTitle}
         titleAside={
           <div className="flex shrink-0 flex-wrap gap-2">
             {portal === "manager" && managerProperties.length > 1 ? (
@@ -386,6 +387,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
                 : "Select a house before creating tour windows."
             }
             compactAvailability
+            availabilityHeading={portal === "manager" ? "Schedule tours" : "Schedule meeting"}
             scheduledTourFilter={
               portal === "manager" ? { managerUserId: userId, propertyId: calendarPropertyId || null } : undefined
             }

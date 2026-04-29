@@ -21,7 +21,7 @@ export function AdminEventsClient() {
 
   return (
     <ManagerPortalPageShell
-      title="Calendar"
+      title="Schedule meeting"
       titleAside={
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
           Refresh
@@ -35,6 +35,7 @@ export function AdminEventsClient() {
         pinMonthSchedule
         compactAvailability
         scheduleOwnerLabel={email}
+        availabilityHeading="Schedule meeting"
       />
     </ManagerPortalPageShell>
   );
