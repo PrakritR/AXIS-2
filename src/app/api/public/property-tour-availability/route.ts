@@ -72,8 +72,35 @@ function windowsFromPayload(payload: Record<string, unknown>): TourBlock[] {
   return [{ start, end, slotKey: textField(payload, "slotKey") || undefined }];
 }
 
+function slotStartMs(slot: string): number | null {
+  const [dateStr, rawSlotIndex] = slot.split(":");
+  const slotIndex = Number.parseInt(rawSlotIndex ?? "", 10);
+  if (!dateStr || !Number.isFinite(slotIndex) || slotIndex < 0 || slotIndex >= 48) return null;
+  const [year, month, day] = dateStr.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
+  start.setMinutes(slotIndex * 30);
+  return start.getTime();
+}
+
+function overlaps(slot: string, block: TourBlock): boolean {
+  const startMs = slotStartMs(slot);
+  if (startMs === null) return false;
+  const endMs = startMs + 30 * 60 * 1000;
+  const blockStartMs = new Date(block.start).getTime();
+  const blockEndMs = new Date(block.end).getTime();
+  if (![blockStartMs, blockEndMs].every(Number.isFinite)) return false;
+  return startMs < blockEndMs && blockStartMs < endMs;
+}
+
 function slotBlocked(slot: string, blocks: TourBlock[]): boolean {
-  return blocks.some((block) => block.slotKey === slot);
+  return blocks.some((block) => block.slotKey === slot || overlaps(slot, block));
+}
+
+function slotIsBookable(slot: string): boolean {
+  const startMs = slotStartMs(slot);
+  if (startMs === null) return false;
+  return startMs >= Date.now();
 }
 
 function propertyMatchKey(row: Record<string, unknown>): string {
@@ -252,6 +279,7 @@ export async function GET(req: Request) {
         propertyId: hostPropertyId,
       };
       for (const slot of payloadSlots(row.row_data)) {
+        if (!slotIsBookable(slot)) continue;
         if (slotBlocked(slot, blockedSlotsByManager.get(managerUserId) ?? [])) continue;
         const hosts = slotHosts[slot] ?? [];
         if (!hosts.some((item) => item.userId === host.userId)) {
