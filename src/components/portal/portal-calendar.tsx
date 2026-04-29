@@ -93,7 +93,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
   useEffect(() => {
     if (portal !== "manager" || !authReady || !userId) return;
     let cancelled = false;
-    syncPropertyPipelineFromServer()
+    void syncPropertyPipelineFromServer()
       .finally(() => {
         if (cancelled) return;
         setPropertiesLoading(false);
@@ -159,7 +159,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
     void writeAvailabilityDateSetForStorageKeyToServer(dstSlots, dstKey)
       .then((ok) => {
         if (!ok) showToast("Could not save copied schedule to backend.");
-        return syncScheduleRecordsFromServer();
+        return syncScheduleRecordsFromServer({ force: true });
       })
       .finally(() => setCalendarRefreshSignal((n) => n + 1));
     const srcName = managerProperties.find((p) => p.id === copySourceId)?.name ?? copySourceId;
@@ -357,6 +357,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
           <p className="text-sm text-slate-500">Loading houses from the backend…</p>
         ) : (
           <PortalCalendarPanels
+            key={storageKey ?? "calendar-unavailable"}
             storageKey={storageKey}
             calendarRefreshSignal={calendarRefreshSignal}
             tourScopeLabel={tourScopeLabel}
@@ -393,7 +394,7 @@ export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
                     )
                       .then((results) => {
                         if (results.some((ok) => !ok)) showToast("Could not save every house schedule to backend.");
-                        return syncScheduleRecordsFromServer();
+                        return syncScheduleRecordsFromServer({ force: true });
                       })
                       .finally(() => setCalendarRefreshSignal((n) => n + 1));
                     const destNames = propertyIds

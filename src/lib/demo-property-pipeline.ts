@@ -30,6 +30,10 @@ const LEGACY_EXTRAS_KEY = "axis_public_extra_listings_v1";
 
 export const PROPERTY_PIPELINE_EVENT = "axis-property-pipeline";
 const memoryStore = new Map<string, unknown>();
+const SESSION_CACHE_PREFIX = "axis_property_pipeline_cache_v1:";
+const PROPERTY_PIPELINE_SYNC_META_KEY = `${SESSION_CACHE_PREFIX}__synced_at`;
+const PROPERTY_PIPELINE_SYNC_TTL_MS = 15_000;
+let propertyPipelineSyncPromise: Promise<boolean> | null = null;
 
 export type ManagerPendingPropertyRow = {
   id: string;
@@ -59,14 +63,65 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+function sessionCacheKey(key: string) {
+  return `${SESSION_CACHE_PREFIX}${key}`;
+}
+
+function readSessionJson<T>(key: string): T | undefined {
+  if (!isBrowser()) return undefined;
+  try {
+    const raw = window.sessionStorage.getItem(sessionCacheKey(key));
+    if (!raw) return undefined;
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeSessionJson(key: string, value: unknown) {
+  if (!isBrowser()) return;
+  try {
+    window.sessionStorage.setItem(sessionCacheKey(key), JSON.stringify(value));
+  } catch {
+    /* ignore session cache write failures */
+  }
+}
+
+function readPropertyPipelineSyncedAt(): number {
+  if (!isBrowser()) return 0;
+  try {
+    const raw = window.sessionStorage.getItem(PROPERTY_PIPELINE_SYNC_META_KEY);
+    const parsed = Number(raw ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writePropertyPipelineSyncedAt(value: number) {
+  if (!isBrowser()) return;
+  try {
+    window.sessionStorage.setItem(PROPERTY_PIPELINE_SYNC_META_KEY, String(value));
+  } catch {
+    /* ignore session cache write failures */
+  }
+}
+
 function readJson<T>(key: string, fallback: T): T {
   if (!isBrowser()) return fallback;
-  return memoryStore.has(key) ? (memoryStore.get(key) as T) : fallback;
+  if (memoryStore.has(key)) return memoryStore.get(key) as T;
+  const cached = readSessionJson<T>(key);
+  if (cached !== undefined) {
+    memoryStore.set(key, cached);
+    return cached;
+  }
+  return fallback;
 }
 
 function writeJson(key: string, value: unknown) {
   if (!isBrowser()) return;
   memoryStore.set(key, value);
+  writeSessionJson(key, value);
   window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
 }
 
@@ -164,22 +219,39 @@ export function cachePublicExtraListings(listings: MockProperty[]) {
   writeExtrasMap(map);
 }
 
-export async function syncPropertyPipelineFromServer(): Promise<boolean> {
+export async function syncPropertyPipelineFromServer(opts?: { force?: boolean }): Promise<boolean> {
   if (!isBrowser()) return false;
-  try {
-    const res = await fetch("/api/property-records", { credentials: "include", cache: "no-store" });
-    const body = (await res.json()) as { snapshot?: PropertyPipelineSnapshot };
-    if (!res.ok || !body.snapshot) return false;
-    memoryStore.set(PENDING_BY_USER_KEY, body.snapshot.pendingByUser);
-    memoryStore.set(EXTRAS_BY_USER_KEY, body.snapshot.extrasByUser);
-    memoryStore.set("axis_admin_property_buckets_v1", body.snapshot.sideGlobal);
-    for (const [userId, side] of Object.entries(body.snapshot.sideByUser)) {
-      memoryStore.set(`axis_mgr_property_side_v1_${userId}`, side);
-    }
-    window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+  const force = opts?.force === true;
+  const lastSyncedAt = readPropertyPipelineSyncedAt();
+  if (!force && propertyPipelineSyncPromise) return propertyPipelineSyncPromise;
+  if (!force && lastSyncedAt > 0 && Date.now() - lastSyncedAt < PROPERTY_PIPELINE_SYNC_TTL_MS) {
     return true;
+  }
+  try {
+    propertyPipelineSyncPromise = (async () => {
+      const res = await fetch("/api/property-records", { credentials: "include", cache: "no-store" });
+      const body = (await res.json()) as { snapshot?: PropertyPipelineSnapshot };
+      if (!res.ok || !body.snapshot) return false;
+      memoryStore.set(PENDING_BY_USER_KEY, body.snapshot.pendingByUser);
+      writeSessionJson(PENDING_BY_USER_KEY, body.snapshot.pendingByUser);
+      memoryStore.set(EXTRAS_BY_USER_KEY, body.snapshot.extrasByUser);
+      writeSessionJson(EXTRAS_BY_USER_KEY, body.snapshot.extrasByUser);
+      memoryStore.set("axis_admin_property_buckets_v1", body.snapshot.sideGlobal);
+      writeSessionJson("axis_admin_property_buckets_v1", body.snapshot.sideGlobal);
+      for (const [userId, side] of Object.entries(body.snapshot.sideByUser)) {
+        const key = `axis_mgr_property_side_v1_${userId}`;
+        memoryStore.set(key, side);
+        writeSessionJson(key, side);
+      }
+      writePropertyPipelineSyncedAt(Date.now());
+      window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+      return true;
+    })();
+    return await propertyPipelineSyncPromise;
   } catch {
     return false;
+  } finally {
+    propertyPipelineSyncPromise = null;
   }
 }
 
@@ -429,7 +501,7 @@ export async function updatePendingManagerPropertyOnServer(
   else nextList[idx] = row;
   map[managerUserId] = nextList;
   writePendingMap(map);
-  await syncPropertyPipelineFromServer();
+  await syncPropertyPipelineFromServer({ force: true });
   return true;
 }
 
@@ -503,7 +575,7 @@ export async function updateExtraListingFromSubmissionOnServer(
   else nextList[idx] = propertyData;
   map[managerUserId] = nextList;
   writeExtrasMap(map);
-  await syncPropertyPipelineFromServer();
+  await syncPropertyPipelineFromServer({ force: true });
   return true;
 }
 

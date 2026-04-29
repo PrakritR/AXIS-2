@@ -10,6 +10,10 @@ const PLANNED_KEY = "axis_admin_planned_events_v1";
 const INQUIRY_EVENT_RECORD_TYPE = "partner_inquiry_request";
 const PROP_MGR_REGISTRY_KEY = "axis_property_mgr_registry_v1";
 const memoryStore = new Map<string, unknown>();
+const SESSION_CACHE_PREFIX = "axis_sched_cache_v1:";
+const SCHEDULE_SYNC_META_KEY = `${SESSION_CACHE_PREFIX}__synced_at`;
+const SCHEDULE_SYNC_TTL_MS = 10_000;
+let scheduleSyncPromise: Promise<boolean> | null = null;
 
 /** A manager registered as available for tours at a property. */
 export type PropertyManagerEntry = { userId: string; label: string; propertyId?: string };
@@ -51,9 +55,59 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+function sessionCacheKey(key: string) {
+  return `${SESSION_CACHE_PREFIX}${key}`;
+}
+
+function readSessionJson<T>(key: string): T | undefined {
+  if (!isBrowser()) return undefined;
+  try {
+    const raw = window.sessionStorage.getItem(sessionCacheKey(key));
+    if (!raw) return undefined;
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeSessionJson(key: string, value: unknown) {
+  if (!isBrowser()) return;
+  try {
+    window.sessionStorage.setItem(sessionCacheKey(key), JSON.stringify(value));
+  } catch {
+    /* ignore session cache write failures */
+  }
+}
+
+function readScheduleSyncedAt(): number {
+  if (!isBrowser()) return 0;
+  try {
+    const raw = window.sessionStorage.getItem(SCHEDULE_SYNC_META_KEY);
+    const parsed = Number(raw ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeScheduleSyncedAt(value: number) {
+  if (!isBrowser()) return;
+  try {
+    window.sessionStorage.setItem(SCHEDULE_SYNC_META_KEY, String(value));
+  } catch {
+    /* ignore session cache write failures */
+  }
+}
+
 function readJson<T>(key: string, fallback: T): T {
   if (!isBrowser()) return fallback;
-  return memoryStore.has(key) ? (memoryStore.get(key) as T) : fallback;
+  if (memoryStore.has(key)) return memoryStore.get(key) as T;
+  const cached = readSessionJson<T>(key);
+  if (cached !== undefined) {
+    memoryStore.set(key, cached);
+    return cached;
+  }
+  return fallback;
 }
 
 function scheduleRecordScope(key: string): { managerUserId: string | null; propertyId: string | null; recordType: string } {
@@ -90,6 +144,7 @@ function scheduleRecordScope(key: string): { managerUserId: string | null; prope
 function writeJson(key: string, value: unknown) {
   if (!isBrowser()) return;
   memoryStore.set(key, value);
+  writeSessionJson(key, value);
   emitAdminUi();
   void writeJsonToServer(key, value).catch(() => undefined);
 }
@@ -145,38 +200,53 @@ async function deleteJsonRecordFromServer(id: string): Promise<boolean> {
   return res.ok;
 }
 
-export async function syncScheduleRecordsFromServer(): Promise<boolean> {
+export async function syncScheduleRecordsFromServer(opts?: { force?: boolean }): Promise<boolean> {
   if (!isBrowser()) return false;
-  try {
-    const res = await fetch("/api/portal-schedule-records", {
-      cache: "no-store",
-      credentials: "include",
-    });
-    if (!res.ok) return false;
-    const body = (await res.json()) as { rows?: unknown[] };
-    if (!Array.isArray(body.rows)) return false;
-    const standaloneInquiries: PartnerInquiry[] = [];
-    for (const raw of body.rows) {
-      if (!raw || typeof raw !== "object") continue;
-      const row = raw as { id?: unknown; payload?: unknown; recordType?: unknown };
-      if (typeof row.id !== "string") continue;
-      if (row.recordType === "partner_inquiry_request" && row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)) {
-        standaloneInquiries.push(row.payload as PartnerInquiry);
-      }
-      memoryStore.set(row.id, Array.isArray(row.payload) || row.payload !== undefined ? row.payload : []);
-    }
-    if (standaloneInquiries.length > 0) {
-      const existing = readJson<PartnerInquiry[]>(INQ_KEY, []);
-      const byId = new Map(existing.map((row) => [row.id, row]));
-      for (const row of standaloneInquiries) {
-        if (typeof row.id === "string" && !byId.has(row.id)) byId.set(row.id, row);
-      }
-      memoryStore.set(INQ_KEY, [...byId.values()]);
-    }
-    emitAdminUi();
+  const force = opts?.force === true;
+  const lastSyncedAt = readScheduleSyncedAt();
+  if (!force && scheduleSyncPromise) return scheduleSyncPromise;
+  if (!force && lastSyncedAt > 0 && Date.now() - lastSyncedAt < SCHEDULE_SYNC_TTL_MS) {
     return true;
+  }
+  try {
+    scheduleSyncPromise = (async () => {
+      const res = await fetch("/api/portal-schedule-records", {
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (!res.ok) return false;
+      const body = (await res.json()) as { rows?: unknown[] };
+      if (!Array.isArray(body.rows)) return false;
+      const standaloneInquiries: PartnerInquiry[] = [];
+      for (const raw of body.rows) {
+        if (!raw || typeof raw !== "object") continue;
+        const row = raw as { id?: unknown; payload?: unknown; recordType?: unknown };
+        if (typeof row.id !== "string") continue;
+        if (row.recordType === "partner_inquiry_request" && row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)) {
+          standaloneInquiries.push(row.payload as PartnerInquiry);
+        }
+        memoryStore.set(row.id, Array.isArray(row.payload) || row.payload !== undefined ? row.payload : []);
+        writeSessionJson(row.id, Array.isArray(row.payload) || row.payload !== undefined ? row.payload : []);
+      }
+      if (standaloneInquiries.length > 0) {
+        const existing = readJson<PartnerInquiry[]>(INQ_KEY, []);
+        const byId = new Map(existing.map((row) => [row.id, row]));
+        for (const row of standaloneInquiries) {
+          if (typeof row.id === "string" && !byId.has(row.id)) byId.set(row.id, row);
+        }
+        const merged = [...byId.values()];
+        memoryStore.set(INQ_KEY, merged);
+        writeSessionJson(INQ_KEY, merged);
+      }
+      writeScheduleSyncedAt(Date.now());
+      emitAdminUi();
+      return true;
+    })();
+    return await scheduleSyncPromise;
   } catch {
     return false;
+  } finally {
+    scheduleSyncPromise = null;
   }
 }
 
@@ -569,7 +639,7 @@ export async function acceptPartnerInquiryFromServer(
       }),
     });
     if (!res.ok) return false;
-    await syncScheduleRecordsFromServer();
+    await syncScheduleRecordsFromServer({ force: true });
     return true;
   }
   if (!row || !acceptPartnerInquiry(id, opts)) return false;

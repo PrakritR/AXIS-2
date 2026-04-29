@@ -23,7 +23,6 @@ import {
   startOfWeekMonday,
   syncScheduleRecordsFromServer,
   toLocalDateStr,
-  writeAvailabilityDateSetForStorageKey,
   writeAvailabilityDateSetForStorageKeyToServer,
 } from "@/lib/demo-admin-scheduling";
 
@@ -188,7 +187,9 @@ export function PortalCalendarPanels({
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [anchorDate, setAnchorDate] = useState(() => new Date());
-  const [activeSlots, setActiveSlots] = useState<Set<string>>(() => new Set());
+  const [activeSlots, setActiveSlots] = useState<Set<string>>(() =>
+    storageKey ? new Set(readAvailabilityDateSetForStorageKey(storageKey)) : new Set(),
+  );
   const [dragSelection, setDragSelection] = useState<DragSelection | null>(null);
   const [visibleStartSlot, setVisibleStartSlot] = useState(DEFAULT_VISIBLE_START_SLOT);
   const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE);
@@ -233,6 +234,8 @@ export function PortalCalendarPanels({
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
 
   const meetings = useMemo<DemoMeeting[]>(() => {
+    void calendarRefreshSignal;
+    void meetingRefresh;
     const showAdminMeetings =
       storageKey === ADMIN_AVAILABILITY_STORAGE_KEY || Boolean(storageKey?.startsWith("axis_admin_avail_slots_v2_admin_"));
     const showManagerTours = Boolean(scheduledTourFilter?.managerUserId && scheduledTourFilter.propertyId);
@@ -317,7 +320,7 @@ export function PortalCalendarPanels({
       .filter(Boolean) as DemoMeeting[];
 
     return [...planned, ...pending];
-  }, [storageKey, activeSlots, calendarRefreshSignal, meetingRefresh, scheduledTourFilter?.managerUserId, scheduledTourFilter?.propertyId]);
+  }, [storageKey, calendarRefreshSignal, meetingRefresh, scheduledTourFilter]);
 
   const monthYear = anchorDate.getFullYear();
   const monthIndex = anchorDate.getMonth();
@@ -343,7 +346,8 @@ export function PortalCalendarPanels({
 
   const reloadAvailability = useCallback(() => {
     if (!storageKey) return;
-    void syncScheduleRecordsFromServer().finally(() => {
+    setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+    void syncScheduleRecordsFromServer({ force: true }).finally(() => {
       setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
     });
   }, [storageKey]);
@@ -360,7 +364,7 @@ export function PortalCalendarPanels({
             reloadAvailability();
             return;
           }
-          await syncScheduleRecordsFromServer();
+          await syncScheduleRecordsFromServer({ force: true });
           setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
           setSaveStatus("saved");
         })
