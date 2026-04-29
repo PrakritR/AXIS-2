@@ -14,6 +14,7 @@ type ScheduleRecordRow = {
 type PropertyManagerEntry = {
   userId: string;
   label: string;
+  propertyId?: string;
 };
 
 type PropertyRecordRow = {
@@ -167,9 +168,11 @@ export async function GET(req: Request) {
     for (const row of rows) {
       const managerUserId = row.manager_user_id?.trim();
       if (!managerUserId) continue;
+      const hostPropertyId = row.property_id?.trim() || undefined;
       const host = {
         userId: managerUserId,
         label: labelByManagerId.get(managerUserId) ?? "Property manager",
+        propertyId: hostPropertyId,
       };
       for (const slot of payloadSlots(row.row_data)) {
         const hosts = slotHosts[slot] ?? [];

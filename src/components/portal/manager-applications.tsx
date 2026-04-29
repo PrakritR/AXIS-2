@@ -494,7 +494,9 @@ export function ManagerApplications() {
       }
     }
 
-    persist(rows.filter((r) => r.id !== id));
+    setRows(rows.filter((r) => r.id !== id));
+    const syncedRows = await syncManagerApplicationsFromServer();
+    setRows(syncedRows);
     setExpandedId(null);
     showToast(
       email && !removedResidentAccess

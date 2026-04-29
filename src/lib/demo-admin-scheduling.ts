@@ -12,7 +12,7 @@ const PROP_MGR_REGISTRY_KEY = "axis_property_mgr_registry_v1";
 const memoryStore = new Map<string, unknown>();
 
 /** A manager registered as available for tours at a property. */
-export type PropertyManagerEntry = { userId: string; label: string };
+export type PropertyManagerEntry = { userId: string; label: string; propertyId?: string };
 
 type ManagerRegistry = Record<string, PropertyManagerEntry[]>;
 

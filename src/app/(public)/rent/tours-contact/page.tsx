@@ -464,6 +464,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               const dateStr = toLocalDateStr(new Date(calYear, calMonth, selectedDay, 12, 0, 0, 0));
               const start = localDateAtSlotStart(dateStr, selectedSlotIndex);
               const end = new Date(start.getTime() + 30 * 60 * 1000);
+              const calendarPropertyId = selectedTourManager.propertyId || selectedProperty.id;
               const propertyContext = [
                 `Property: ${selectedProperty.title}`,
                 selectedRoomLabel ? `Room: ${selectedRoomLabel}` : "",
@@ -476,7 +477,7 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
                 phone: phone.trim(),
                 kind: "tour",
                 managerUserId: selectedTourManager.userId,
-                propertyId: selectedProperty.id,
+                propertyId: calendarPropertyId,
                 propertyTitle: selectedProperty.title,
                 roomLabel: selectedRoomLabel,
                 notes: [propertyContext, notes.trim()].filter(Boolean).join("\n\n"),

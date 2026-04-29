@@ -27,6 +27,12 @@ function normalizeRow(row: DemoApplicantRow): DemoApplicantRow {
   };
 }
 
+function idVariants(id: string): string[] {
+  const trimmed = id.trim();
+  const normalized = normalizeApplicationAxisId(trimmed);
+  return [...new Set([trimmed, normalized].filter(Boolean))];
+}
+
 async function persistNormalizedRow(db: ReturnType<typeof createSupabaseServiceRoleClient>, oldId: string, row: DemoApplicantRow) {
   if (oldId !== row.id) {
     await db.from("manager_application_records").delete().eq("id", oldId);
@@ -117,11 +123,35 @@ export async function POST(req: Request) {
     if (body.action === "delete") {
       const id = body.id?.trim();
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-      const normalizedId = normalizeApplicationAxisId(id);
-      const ids = [...new Set([id, normalizedId])];
-      const { error } = await db.from("manager_application_records").delete().in("id", ids);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      return NextResponse.json({ ok: true });
+      const ids = idVariants(id);
+      const { data: records, error: loadError } = await db
+        .from("manager_application_records")
+        .select("id, row_data")
+        .or(ids.map((value) => `id.eq.${value}`).join(","));
+      if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
+
+      const idsToDelete = new Set<string>();
+      for (const record of records ?? []) {
+        if (record.id) idsToDelete.add(record.id);
+      }
+
+      const { data: allRecords, error: allLoadError } = await db
+        .from("manager_application_records")
+        .select("id, row_data");
+      if (allLoadError) return NextResponse.json({ error: allLoadError.message }, { status: 500 });
+
+      for (const record of allRecords ?? []) {
+        const row = record.row_data as Partial<DemoApplicantRow> | null;
+        const rowId = typeof row?.id === "string" ? row.id : "";
+        if (rowId && ids.includes(rowId.trim())) idsToDelete.add(record.id);
+        if (rowId && ids.includes(normalizeApplicationAxisId(rowId))) idsToDelete.add(record.id);
+      }
+
+      if (idsToDelete.size > 0) {
+        const { error } = await db.from("manager_application_records").delete().in("id", [...idsToDelete]);
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true, deleted: idsToDelete.size });
     }
 
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });

@@ -409,18 +409,28 @@ export function AdminAxisUsersClient() {
     });
   }, [managers, owners, residents]);
 
-  const { activeCount, disabledCount, categoryCounts } = useMemo(() => {
-    let a = 0;
-    let d = 0;
+  const categoryCounts = useMemo(() => {
     const c = { management: 0, resident: 0 };
     for (const row of unified) {
-      if (row.active) a += 1;
-      else d += 1;
       if (row.kind === "resident") c.resident += 1;
       else c.management += 1;
     }
-    return { activeCount: a, disabledCount: d, categoryCounts: c };
+    return c;
   }, [unified]);
+
+  const { activeCount, disabledCount } = useMemo(() => {
+    let a = 0;
+    let d = 0;
+    for (const row of unified) {
+      if (category === "resident" && row.kind !== "resident") continue;
+      if (category === "management" && row.kind === "resident") continue;
+      if (row.kind === "manager" && tierFilter !== "all" && row.tier.toLowerCase() !== tierFilter) continue;
+      if (row.kind === "owner" && tierFilter !== "all") continue;
+      if (row.active) a += 1;
+      else d += 1;
+    }
+    return { activeCount: a, disabledCount: d };
+  }, [category, tierFilter, unified]);
 
   const visible = useMemo(() => {
     return unified.filter((row) => {

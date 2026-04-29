@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -25,12 +26,13 @@ export function createJsonRecordRoute(config: RecordConfig) {
     if (!user) return null;
     const db = createSupabaseServiceRoleClient();
     const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
+    const admin = await isAdminUser(user.id);
     return {
       db,
       user: {
         id: user.id,
         email: (profile?.email ?? user.email ?? "").trim().toLowerCase(),
-        role: String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase(),
+        role: admin ? "admin" : String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase(),
       },
     };
   }
