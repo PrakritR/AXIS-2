@@ -11,8 +11,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
-const LOGIN_TIMEOUT_MS = 15000;
-const PORTAL_LOAD_TIMEOUT_MS = 12000;
+const LOGIN_TIMEOUT_MS = 30000;
+const PORTAL_LOAD_TIMEOUT_MS = 20000;
+const SESSION_RECOVERY_TIMEOUT_MS = 12000;
+const SESSION_RECOVERY_POLL_MS = 800;
 
 type SignInResult = {
   data: {
@@ -28,6 +30,13 @@ type SessionResult = {
   };
   error: Error | null;
 };
+
+class AuthTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthTimeoutError";
+  }
+}
 
 function roleToPath(role: AuthRole): string {
   return portalDashboardPath(role);
@@ -45,12 +54,44 @@ function isAuthRole(value: unknown): value is AuthRole {
   return value === "resident" || value === "manager" || value === "owner" || value === "admin";
 }
 
+function isAuthTimeoutError(value: unknown): value is AuthTimeoutError {
+  return value instanceof AuthTimeoutError || (value instanceof Error && value.name === "AuthTimeoutError");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
-  let timeoutId: number;
+  let timeoutId = 0;
   const timeout = new Promise<never>((_, reject) => {
-    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    timeoutId = window.setTimeout(() => reject(new AuthTimeoutError(message)), timeoutMs);
   });
   return Promise.race([Promise.resolve(promise), timeout]).finally(() => window.clearTimeout(timeoutId));
+}
+
+async function waitForRecoveredSession(
+  supabase: ReturnType<typeof createSupabaseBrowserClient>,
+  timeoutMs: number,
+): Promise<SessionResult["data"]["session"] | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const result = await withTimeout(
+        supabase.auth.getSession() as PromiseLike<SessionResult>,
+        Math.min(3000, Math.max(1000, deadline - Date.now())),
+        "Session recovery check timed out.",
+      );
+      if (result.data.session?.user?.id) return result.data.session;
+      if (result.error) console.log("session recovery error", result.error);
+    } catch (error) {
+      if (!isAuthTimeoutError(error)) console.log("session recovery error", error);
+    }
+    await sleep(SESSION_RECOVERY_POLL_MS);
+  }
+  return null;
 }
 
 async function fetchProfileAndRoles(
@@ -120,25 +161,45 @@ function SignInForm() {
     let didRedirect = false;
     try {
       const supabase = createSupabaseBrowserClient();
-      let { data, error } = await withTimeout(
-        supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        }) as PromiseLike<SignInResult>,
-        LOGIN_TIMEOUT_MS,
-        "Login timed out. Please try again.",
-      );
+      const signInPromise = supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      }) as PromiseLike<SignInResult>;
+      let authResult: SignInResult;
+      try {
+        authResult = await withTimeout(
+          signInPromise,
+          LOGIN_TIMEOUT_MS,
+          "Login timed out. We are checking whether the session completed.",
+        );
+      } catch (timeoutError) {
+        if (!isAuthTimeoutError(timeoutError)) throw timeoutError;
+        console.log("supabase auth timed out; checking for a recovered session", timeoutError);
+        const recoveredSession = await waitForRecoveredSession(supabase, SESSION_RECOVERY_TIMEOUT_MS);
+        if (!recoveredSession) {
+          throw new Error("Login is taking longer than expected. Please check your connection and try again.");
+        }
+        authResult = {
+          data: {
+            user: recoveredSession.user,
+            session: recoveredSession,
+          },
+          error: null,
+        };
+      }
+      let { data, error } = authResult;
       console.log("supabase auth response", { userId: data.user?.id ?? null, hasSession: Boolean(data.session), error });
       if (error?.message.toLowerCase().includes("email not confirmed")) {
         const repaired = await tryResidentAutoConfirm(email);
         if (repaired) {
+          const retryPromise = supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          }) as PromiseLike<SignInResult>;
           const retry = await withTimeout(
-            supabase.auth.signInWithPassword({
-              email: email.trim(),
-              password,
-            }) as PromiseLike<SignInResult>,
+            retryPromise,
             LOGIN_TIMEOUT_MS,
-            "Login timed out. Please try again.",
+            "Login timed out. We are checking whether the session completed.",
           );
           data = retry.data;
           error = retry.error;
