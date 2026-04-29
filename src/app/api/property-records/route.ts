@@ -20,14 +20,52 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const admin = await isAdminUser(user.id);
     const db = createSupabaseServiceRoleClient();
-    let query = db
+    const baseQuery = db
       .from("manager_property_records")
       .select("id, manager_user_id, status, row_data, property_data, edit_request_note")
       .order("updated_at", { ascending: false });
-    if (!admin) query = query.eq("manager_user_id", user.id);
-    const { data, error } = await query;
+    if (admin) {
+      const { data, error } = await baseQuery;
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ snapshot: propertyRowsToSnapshot(data ?? []) });
+    }
+
+    const { data: linkRows, error: linkError } = await db
+      .from("account_link_invites")
+      .select("assigned_property_ids")
+      .eq("status", "accepted")
+      .or(`inviter_user_id.eq.${user.id},invitee_user_id.eq.${user.id}`);
+
+    if (linkError && !String(linkError.message ?? "").toLowerCase().includes("account_link_invites")) {
+      return NextResponse.json({ error: linkError.message }, { status: 500 });
+    }
+
+    const linkedPropertyIds = new Set<string>();
+    for (const row of (linkRows ?? []) as { assigned_property_ids?: unknown }[]) {
+      if (!Array.isArray(row.assigned_property_ids)) continue;
+      for (const id of row.assigned_property_ids) {
+        if (typeof id === "string" && id.trim()) linkedPropertyIds.add(id.trim());
+      }
+    }
+
+    const { data: ownedRows, error } = await baseQuery.eq("manager_user_id", user.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ snapshot: propertyRowsToSnapshot(data ?? []) });
+
+    let rows = ownedRows ?? [];
+    if (linkedPropertyIds.size > 0) {
+      const { data: linkedRows, error: linkedError } = await db
+        .from("manager_property_records")
+        .select("id, manager_user_id, status, row_data, property_data, edit_request_note")
+        .in("id", [...linkedPropertyIds])
+        .order("updated_at", { ascending: false });
+
+      if (linkedError) return NextResponse.json({ error: linkedError.message }, { status: 500 });
+
+      const seen = new Set(rows.map((row) => row.id));
+      rows = [...rows, ...((linkedRows ?? []).filter((row) => !seen.has(row.id)))];
+    }
+
+    return NextResponse.json({ snapshot: propertyRowsToSnapshot(rows) });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load property records.";
     return NextResponse.json({ error: message }, { status: 500 });
