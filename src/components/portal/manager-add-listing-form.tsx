@@ -1027,14 +1027,6 @@ export function ManagerAddListingForm({
                               />
                             </GridField>
                             <div className="sm:col-span-2">
-                              <FieldLabel hint="Shown under the bundle name. Auto-generated when rooms are selected.">Rooms line</FieldLabel>
-                              <Input
-                                value={bundle.roomsLine}
-                                onChange={(e) => setBundle(i, { roomsLine: e.target.value })}
-                                placeholder="Whole house - 6 rooms"
-                              />
-                            </div>
-                            <div className="sm:col-span-2">
                               <FieldLabel>Select rooms included in this bundle</FieldLabel>
                               <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 lg:grid-cols-3">
                                 {sub.rooms.map((room) => (
