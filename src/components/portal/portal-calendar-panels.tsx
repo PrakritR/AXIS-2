@@ -143,15 +143,6 @@ function localIsoForSlot(dateStr: string, slotIndex: number): string {
   return d.toISOString();
 }
 
-function safePropertyId(propertyId: string | null | undefined): string {
-  return String(propertyId ?? "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
-}
-
-function samePropertyId(a: string | null | undefined, b: string | null | undefined): boolean {
-  if (!a || !b) return false;
-  return a === b || safePropertyId(a) === safePropertyId(b);
-}
-
 function weekdayLabelList(days: number[]) {
   return WEEKDAY_OPTIONS.filter((option) => days.includes(option.value))
     .map((option) => option.label)
@@ -231,11 +222,7 @@ export function PortalCalendarPanels({
     const planned = (showAdminMeetings || showManagerTours) ? readPlannedEvents()
       .filter((event) => {
         if (showAdminMeetings) return event.kind !== "tour";
-        return (
-          event.kind === "tour" &&
-          event.managerUserId === scheduledTourFilter?.managerUserId &&
-          samePropertyId(event.propertyId, scheduledTourFilter?.propertyId)
-        );
+        return event.kind === "tour" && event.managerUserId === scheduledTourFilter?.managerUserId;
       })
       .map((event) => {
       const start = new Date(event.start);
@@ -269,11 +256,7 @@ export function PortalCalendarPanels({
       .filter((row) => {
         if (showAdminMeetings) return row.kind !== "tour";
         if (!showManagerTours) return false;
-        return (
-          row.kind === "tour" &&
-          row.managerUserId === scheduledTourFilter?.managerUserId &&
-          samePropertyId(row.propertyId, scheduledTourFilter?.propertyId)
-        );
+        return row.kind === "tour" && row.managerUserId === scheduledTourFilter?.managerUserId;
       })
       .flatMap((row) =>
         getPartnerInquiryWindows(row).map((window, index) => {
