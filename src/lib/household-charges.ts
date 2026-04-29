@@ -723,8 +723,12 @@ export function upsertRecurringRentProfile(input: {
   const idx = rows.findIndex(
     (profile) => profile.residentEmail.trim().toLowerCase() === email && profile.propertyId === input.propertyId,
   );
-  const profile: RecurringRentProfile = {
-    id: idx === -1 ? `rent_profile_${crypto.randomUUID()}` : rows[idx]!.id,
+  const nextId = idx === -1 ? `rent_profile_${crypto.randomUUID()}` : rows[idx]!.id;
+  const normalizedMonthlyRent = Number(input.monthlyRent.toFixed(2));
+  const normalizedDueDay = Math.min(28, Math.max(1, Math.round(input.dueDay ?? 1)));
+  const normalizedStartMonth = input.startMonth?.trim() || currentRentMonth();
+  const baseProfile: Omit<RecurringRentProfile, "updatedAt"> = {
+    id: nextId,
     residentEmail: input.residentEmail.trim(),
     residentName: input.residentName.trim() || "Resident",
     residentUserId: input.residentUserId ?? null,
@@ -732,10 +736,29 @@ export function upsertRecurringRentProfile(input: {
     propertyLabel: input.propertyLabel.trim() || "Property",
     roomLabel: input.roomLabel.trim() || "Room",
     managerUserId: input.managerUserId,
-    monthlyRent: Number(input.monthlyRent.toFixed(2)),
-    dueDay: Math.min(28, Math.max(1, Math.round(input.dueDay ?? 1))),
-    startMonth: input.startMonth?.trim() || currentRentMonth(),
+    monthlyRent: normalizedMonthlyRent,
+    dueDay: normalizedDueDay,
+    startMonth: normalizedStartMonth,
     active: true,
+  };
+  if (idx !== -1) {
+    const existing = rows[idx]!;
+    const unchanged =
+      existing.residentEmail === baseProfile.residentEmail &&
+      existing.residentName === baseProfile.residentName &&
+      existing.residentUserId === baseProfile.residentUserId &&
+      existing.propertyId === baseProfile.propertyId &&
+      existing.propertyLabel === baseProfile.propertyLabel &&
+      existing.roomLabel === baseProfile.roomLabel &&
+      existing.managerUserId === baseProfile.managerUserId &&
+      existing.monthlyRent === baseProfile.monthlyRent &&
+      existing.dueDay === baseProfile.dueDay &&
+      existing.startMonth === baseProfile.startMonth &&
+      existing.active === baseProfile.active;
+    if (unchanged) return existing;
+  }
+  const profile: RecurringRentProfile = {
+    ...baseProfile,
     updatedAt: new Date().toISOString(),
   };
   const next = [...rows];
