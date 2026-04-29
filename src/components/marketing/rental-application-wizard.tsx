@@ -568,7 +568,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>
             <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Save your application ID</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-700">
-              Use this application ID when you create your resident account (open signup below with it filled in). Share it with a co-signer if they apply separately. This ID only grants resident account creation. Until you create that resident account, your application will not show up inside the resident portal. After signup, your account stays limited to <strong>Dashboard</strong>, <strong>Payments</strong>, <strong>Profile</strong>, and <strong>Inbox</strong> until the manager confirms your application fee and approves your application. Stripe payments are marked paid automatically after checkout.
+              Use this application ID when you create your resident account (open signup below with it filled in), and
+              use the same email address from this application. Share it with a co-signer if they apply separately.
+              This ID only grants resident account creation. Until you create that resident account, your application
+              will not show up inside the resident portal. After signup, your account stays limited to <strong>Dashboard</strong>,
+              <strong>Payments</strong>, <strong>Profile</strong>, and <strong>Inbox</strong> until the manager confirms your
+              application fee and approves your application. Stripe payments are marked paid automatically after checkout.
             </p>
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Application ID</p>

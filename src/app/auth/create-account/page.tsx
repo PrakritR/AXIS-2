@@ -417,8 +417,10 @@ function CreateAccountContent() {
           </>
         ) : role === "resident" ? (
           <>
-            Use your application email and Axis ID. This Axis ID can only create resident portal access. After signup,
-            your resident portal stays limited until an Axis manager marks your application fee paid and approves your application.
+            Use the same email address from your rental application together with your Axis ID. If the email does not
+            match that application, Axis will not create the resident account. This Axis ID can only create resident
+            portal access. After signup, your resident portal stays limited until an Axis manager marks your
+            application fee paid and approves your application.
           </>
         ) : role === "manager" ? (
           <>
