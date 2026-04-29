@@ -91,7 +91,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
 
   const zipDigits = zip.replace(/\D/g, "").slice(0, 5);
   const zipValid = zipDigits.length === 5;
-  const hasInteraction = zipValid || moveIn !== "" || budgetTouched;
+  const hasInteraction = zipValid || moveIn !== "" || budgetTouched || bathroom !== "any";
   const pct = ((budget - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
   const filteredRooms = useMemo(
