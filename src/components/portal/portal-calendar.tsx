@@ -65,8 +65,19 @@ function ManagerCalendarPropertyFilter({
   );
 }
 
-export function PortalCalendar({ portal }: { portal: "manager" | "admin" }) {
-  const { userId, email, ready: authReady } = useManagerUserId();
+export function PortalCalendar({
+  portal,
+  initialUserId,
+  initialEmail,
+}: {
+  portal: "manager" | "admin";
+  initialUserId?: string | null;
+  initialEmail?: string | null;
+}) {
+  const { userId, email, ready: authReady } = useManagerUserId({
+    userId: initialUserId,
+    email: initialEmail,
+  });
   const { showToast } = useAppUi();
   const [calendarRefreshSignal, setCalendarRefreshSignal] = useState(0);
   const [calendarPropertyId, setCalendarPropertyId] = useState<string>("");

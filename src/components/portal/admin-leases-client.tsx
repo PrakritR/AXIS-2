@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { adminLeaseKpiCounts, type AdminLeaseBucketIndex } from "@/lib/demo-admin-leases";
+import type { AdminLeaseBucketIndex } from "@/lib/demo-admin-leases";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
   LEASE_PIPELINE_EVENT,
@@ -16,15 +16,11 @@ import {
   updateLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
-import type { ManagerLeaseBucket } from "@/data/demo-portal";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { rentSummaryFromApplication } from "@/lib/generated-lease";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { PORTAL_DATA_TABLE_WRAP, PORTAL_DATA_TABLE_SCROLL, PORTAL_TABLE_DETAIL_ROW, PORTAL_TABLE_TR } from "@/components/portal/portal-data-table";
-
-const KPI_LABELS = ["Manager review", "Admin review", "With resident", "Signed"] as const;
-const ADMIN_VISIBLE_LEASE_BUCKETS: AdminLeaseBucketIndex[] = [0, 1];
 
 function naturalLabelSort(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -103,14 +99,6 @@ function safeReadLeasePipeline(): LeasePipelineRow[] {
     return readLeasePipeline();
   } catch {
     return [];
-  }
-}
-
-function safeAdminLeaseKpiCounts(): [number, number, number, number] {
-  try {
-    return adminLeaseKpiCounts();
-  } catch {
-    return [0, 0, 0, 0];
   }
 }
 
@@ -233,7 +221,7 @@ function LeasePipelineAdminDetail({
             release it to residents when ready.
           </>
         ) : (
-          <>Use the tabs above to monitor each stage. Open <strong>Admin review</strong> when a manager sends a lease for your pass.</>
+          <>This lease is not awaiting admin review. Work continues in the manager or resident portal.</>
         )}
       </p>
 
@@ -277,7 +265,6 @@ function LeasePipelineAdminDetail({
 
 export function AdminLeasesClient() {
   const { showToast } = useAppUi();
-  const [activeBucket, setActiveBucket] = useState<AdminLeaseBucketIndex>(0);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [tick, setTick] = useState(0);
   const [expandedLeaseId, setExpandedLeaseId] = useState<string | null>(null);
@@ -299,39 +286,26 @@ export function AdminLeasesClient() {
     };
   }, []);
 
-  const ADMIN_INDEX_TO_PIPELINE: Record<AdminLeaseBucketIndex, ManagerLeaseBucket> = {
-    0: "manager",
-    1: "admin",
-    2: "resident",
-    3: "signed",
-  };
-
-  const allRows = useMemo(() => safeReadLeasePipeline(), [tick]);
-  const kpiValues = useMemo(() => safeAdminLeaseKpiCounts(), [tick]);
+  const allRows = useMemo(() => {
+    void tick;
+    return safeReadLeasePipeline();
+  }, [tick]);
+  const adminReviewRows = useMemo(() => allRows.filter((row) => row.bucket === "admin"), [allRows]);
   const propertyOptions = useMemo(
     () =>
-      [...new Set(allRows.map((row) => row.unit).filter((unit) => unit && unit !== "—"))]
+      [...new Set(adminReviewRows.map((row) => row.unit).filter((unit) => unit && unit !== "—"))]
         .sort(naturalLabelSort)
         .map((unit) => ({ id: unit, label: unit })),
-    [allRows],
+    [adminReviewRows],
   );
 
+  const selectedPropertyFilter = propertyOptions.some((option) => option.id === propertyFilter) ? propertyFilter : "";
+
   const rows = useMemo(() => {
-    const want = ADMIN_INDEX_TO_PIPELINE[activeBucket];
-    return allRows.filter((r) => r.bucket === want && (!propertyFilter || r.unit === propertyFilter));
-  }, [allRows, activeBucket, propertyFilter]);
+    return adminReviewRows.filter((r) => !selectedPropertyFilter || r.unit === selectedPropertyFilter);
+  }, [adminReviewRows, selectedPropertyFilter]);
 
-  useEffect(() => {
-    if (propertyFilter && !propertyOptions.some((option) => option.id === propertyFilter)) {
-      setPropertyFilter("");
-    }
-  }, [propertyFilter, propertyOptions]);
-
-  useEffect(() => {
-    if (expandedLeaseId && !rows.some((r) => r.id === expandedLeaseId)) {
-      setExpandedLeaseId(null);
-    }
-  }, [rows, expandedLeaseId]);
+  const visibleExpandedLeaseId = expandedLeaseId && rows.some((r) => r.id === expandedLeaseId) ? expandedLeaseId : null;
 
   return (
     <div className={PORTAL_SECTION_SURFACE}>
@@ -340,38 +314,13 @@ export function AdminLeasesClient() {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <PortalPropertyFilterPill
             propertyOptions={propertyOptions}
-            propertyValue={propertyFilter}
+            propertyValue={selectedPropertyFilter}
             onPropertyChange={setPropertyFilter}
           />
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
             Refresh
           </Button>
         </div>
-      </div>
-
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-          {ADMIN_VISIBLE_LEASE_BUCKETS.map((bucketIndex) => (
-            <button
-              key={KPI_LABELS[bucketIndex]}
-              type="button"
-              onClick={() => setActiveBucket(bucketIndex)}
-              className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-                activeBucket === bucketIndex ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              {KPI_LABELS[bucketIndex]}
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                  activeBucket === bucketIndex ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
-                }`}
-              >
-                {kpiValues[bucketIndex] ?? 0}
-              </span>
-            </button>
-          ))}
-        </div>
-
       </div>
 
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-5`}>
@@ -381,7 +330,7 @@ export function AdminLeasesClient() {
               <DocIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
             <p className="mt-4 text-sm font-medium text-slate-500">
-              {allRows.length === 0 ? "No leases yet" : "No leases in this stage."}
+              {adminReviewRows.length === 0 ? "No leases awaiting admin review." : "No leases match this property filter."}
             </p>
           </div>
         ) : (
@@ -419,11 +368,11 @@ export function AdminLeasesClient() {
                           className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
                           onClick={() => setExpandedLeaseId((cur) => (cur === row.id ? null : row.id))}
                         >
-                          {expandedLeaseId === row.id ? "Hide" : "Details"}
+                          {visibleExpandedLeaseId === row.id ? "Hide" : "Details"}
                         </Button>
                       </td>
                     </tr>
-                    {expandedLeaseId === row.id ? (
+                    {visibleExpandedLeaseId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
                         <td colSpan={4} className="px-5 py-4">
                           <LeasePipelineAdminDetail

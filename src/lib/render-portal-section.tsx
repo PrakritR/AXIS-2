@@ -29,7 +29,7 @@ import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-order
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
-import { ProAccountLinksPanelLoader } from "@/components/portal/pro-account-links-panel";
+import { ProAccountLinksPanel } from "@/components/portal/pro-account-links-panel";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
 import type { ReactNode } from "react";
@@ -131,19 +131,23 @@ export async function renderPortalSection(
   if (!meta) notFound();
 
   let managerOwnerSubscriptionTier: "free" | "paid" | null = null;
+  let effectiveWorkspaceUserId: string | null = null;
   if (kind === "manager") {
     const uid = await getEffectiveUserIdForPortal("manager");
     if (!uid) redirect("/admin/dashboard");
+    effectiveWorkspaceUserId = uid;
     managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
   } else if (kind === "owner") {
     const uid = await getEffectiveUserIdForPortal("owner");
     if (!uid) redirect("/auth/sign-in");
+    effectiveWorkspaceUserId = uid;
     managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
   } else if (kind === "pro") {
     const proCtx = await getPortalAccessContext();
     const portalKey: PreviewPortal = proCtx.effectiveRole === "owner" ? "owner" : "manager";
     const uid = await getEffectiveUserIdForPortal(portalKey);
     if (!uid) redirect("/auth/sign-in");
+    effectiveWorkspaceUserId = uid;
     managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
   }
 
@@ -246,7 +250,12 @@ export async function renderPortalSection(
       return subscriptionGated(<ManagerWorkOrders />, kind, "work-orders", managerOwnerSubscriptionTier);
     }
     if (section === "calendar") {
-      return subscriptionGated(<PortalCalendar portal="manager" />, kind, "calendar", managerOwnerSubscriptionTier);
+      return subscriptionGated(
+        <PortalCalendar portal="manager" initialUserId={effectiveWorkspaceUserId} />,
+        kind,
+        "calendar",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (section === "plan") {
       return subscriptionGated(<ManagerPlan />, kind, "plan", managerOwnerSubscriptionTier);
@@ -269,7 +278,7 @@ export async function renderPortalSection(
         notFound();
       }
       return subscriptionGated(
-        <ProAccountLinksPanelLoader />,
+        <ProAccountLinksPanel userId={effectiveWorkspaceUserId!} />,
         kind,
         "relationships",
         managerOwnerSubscriptionTier,
@@ -335,7 +344,12 @@ export async function renderPortalSection(
       return subscriptionGated(<ManagerWorkOrders />, kind, "work-orders", managerOwnerSubscriptionTier);
     }
     if (section === "calendar") {
-      return subscriptionGated(<PortalCalendar portal="manager" />, kind, "calendar", managerOwnerSubscriptionTier);
+      return subscriptionGated(
+        <PortalCalendar portal="manager" initialUserId={effectiveWorkspaceUserId} />,
+        kind,
+        "calendar",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (section === "plan") {
       return subscriptionGated(<ManagerPlan />, kind, "plan", managerOwnerSubscriptionTier);
@@ -389,7 +403,12 @@ export async function renderPortalSection(
       return subscriptionGated(<ManagerWorkOrders />, kind, "work-orders", managerOwnerSubscriptionTier);
     }
     if (section === "calendar") {
-      return subscriptionGated(<PortalCalendar portal="manager" />, kind, "calendar", managerOwnerSubscriptionTier);
+      return subscriptionGated(
+        <PortalCalendar portal="manager" initialUserId={effectiveWorkspaceUserId} />,
+        kind,
+        "calendar",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (section === "plan") {
       return subscriptionGated(<ManagerPlan />, kind, "plan", managerOwnerSubscriptionTier);

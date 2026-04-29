@@ -8,10 +8,13 @@ import { useEffect, useState } from "react";
  * Signed-in Supabase user id for scoping manager localStorage data.
  * Returns null while loading or when not signed in.
  */
-export function useManagerUserId(): { userId: string | null; email: string | null; ready: boolean } {
-  const [userId, setUserId] = useState<string | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+export function useManagerUserId(initial?: {
+  userId?: string | null;
+  email?: string | null;
+}): { userId: string | null; email: string | null; ready: boolean } {
+  const [userId, setUserId] = useState<string | null>(initial?.userId ?? null);
+  const [email, setEmail] = useState<string | null>(initial?.email ?? null);
+  const [ready, setReady] = useState(Boolean(initial?.userId));
 
   useEffect(() => {
     let supabase: ReturnType<typeof createSupabaseBrowserClient>;

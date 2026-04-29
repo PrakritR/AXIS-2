@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import {
   PROPERTY_PIPELINE_EVENT,
@@ -84,7 +83,8 @@ export function ProAccountLinksPanel({
   }, []);
 
   useEffect(() => {
-    void loadRemoteInvites();
+    const id = window.setTimeout(() => void loadRemoteInvites(), 0);
+    return () => window.clearTimeout(id);
   }, [loadRemoteInvites]);
 
   useEffect(() => {
@@ -107,13 +107,19 @@ export function ProAccountLinksPanel({
     };
   }, [refreshLocal]);
 
-  const localRows = useMemo(() => readProRelationships(userId), [userId, localTick]);
+  const localRows = useMemo(() => {
+    void localTick;
+    return readProRelationships(userId);
+  }, [userId, localTick]);
 
   const activeRemote = remoteInvites.filter((i) => i.status === "accepted");
   const incomingPending = remoteInvites.filter((i) => i.status === "pending" && i.direction === "incoming");
   const outgoingPending = remoteInvites.filter((i) => i.status === "pending" && i.direction === "outgoing");
 
-  const propertyOptions = useMemo(() => propertyChoices(userId), [userId, localTick]);
+  const propertyOptions = useMemo(() => {
+    void localTick;
+    return propertyChoices(userId);
+  }, [userId, localTick]);
 
   const [axisInput, setAxisInput] = useState("");
   const [selectedKind, setSelectedKind] = useState<"manager" | "owner">("manager");
@@ -766,33 +772,4 @@ export function ProAccountLinksPanel({
       </div>
     </ManagerPortalPageShell>
   );
-}
-
-/** Load session user id on client and render panel. */
-export function ProAccountLinksPanelLoader() {
-  const [userId, setUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!cancelled && user?.id) setUserId(user.id);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!userId) {
-    return (
-      <ManagerPortalPageShell title="Account links">
-        <p className="text-sm text-slate-500">Loading…</p>
-      </ManagerPortalPageShell>
-    );
-  }
-
-  return <ProAccountLinksPanel userId={userId} />;
 }
