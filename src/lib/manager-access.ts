@@ -144,17 +144,22 @@ export async function getManagerSubscriptionTierByManagerId(managerId: string): 
 export async function getManagerPurchaseSku(userId: string): Promise<{
   tier: string | null;
   billing: string | null;
+  stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
 }> {
   const supabase = createSupabaseServiceRoleClient();
   const { data } = await supabase
     .from("manager_purchases")
-    .select("tier, billing, stripe_subscription_id")
+    .select("tier, billing, stripe_customer_id, stripe_subscription_id")
     .eq("user_id", userId)
     .maybeSingle();
   return {
     tier: data?.tier != null ? String(data.tier) : null,
     billing: data?.billing != null ? String(data.billing) : null,
+    stripeCustomerId:
+      data?.stripe_customer_id != null && String(data.stripe_customer_id).trim() !== ""
+        ? String(data.stripe_customer_id).trim()
+        : null,
     stripeSubscriptionId:
       data?.stripe_subscription_id != null && String(data.stripe_subscription_id).trim() !== ""
         ? String(data.stripe_subscription_id).trim()

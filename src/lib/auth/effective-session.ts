@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { getAdminPreviewFromCookies, isAdminUser } from "@/lib/auth/admin-preview";
 import type { PreviewPortal } from "@/lib/auth/preview-types";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
@@ -7,9 +8,9 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 /**
  * Session + profile for the user whose portal is being viewed (real login or admin preview).
  */
-export async function getEffectiveSessionForPortal(
+export const getEffectiveSessionForPortal = cache(async (
   portal: PreviewPortal,
-): Promise<{ user: { id: string; email?: string | null } | null; profile: ServerProfile | null }> {
+): Promise<{ user: { id: string; email?: string | null } | null; profile: ServerProfile | null }> => {
   const ctx = await getPortalAccessContext();
   if (!ctx.user) return { user: null, profile: null };
 
@@ -36,9 +37,9 @@ export async function getEffectiveSessionForPortal(
   }
 
   return { user: ctx.user, profile: ctx.profile };
-}
+});
 
-export async function getEffectiveUserIdForPortal(portal: PreviewPortal): Promise<string | null> {
+export const getEffectiveUserIdForPortal = cache(async (portal: PreviewPortal): Promise<string | null> => {
   const ctx = await getPortalAccessContext();
   if (!ctx.user) return null;
 
@@ -60,4 +61,4 @@ export async function getEffectiveUserIdForPortal(portal: PreviewPortal): Promis
   }
 
   return ctx.user.id;
-}
+});

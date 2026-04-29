@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getManagerPurchaseSku } from "@/lib/manager-access";
+import { resolveAppOrigin } from "@/lib/app-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
 
@@ -25,19 +26,18 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => ({}))) as { returnPath?: string };
     const returnPath = allowedReturnPath(body.returnPath);
 
-    const { stripeSubscriptionId } = await getManagerPurchaseSku(user.id);
-    if (!stripeSubscriptionId) {
-      return NextResponse.json({ error: "No Stripe subscription on file." }, { status: 400 });
-    }
-
+    const { stripeCustomerId, stripeSubscriptionId } = await getManagerPurchaseSku(user.id);
     const stripe = getStripe();
-    const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-    const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
+    let customerId = stripeCustomerId;
+    if (!customerId && stripeSubscriptionId) {
+      const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+      customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
+    }
     if (!customerId) {
-      return NextResponse.json({ error: "Subscription has no customer." }, { status: 500 });
+      return NextResponse.json({ error: "No Stripe customer on file." }, { status: 400 });
     }
 
-    const origin = new URL(req.url).origin;
+    const origin = resolveAppOrigin(req);
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${origin}${returnPath}`,

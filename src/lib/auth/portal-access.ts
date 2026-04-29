@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import type { AuthRole } from "@/components/auth/portal-switcher";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getServerSessionProfile, type ServerProfile } from "@/lib/auth/server-profile";
@@ -30,7 +31,7 @@ function normalizeRoles(rows: { role: string }[] | null | undefined, fallback: A
 /**
  * Roles from profile_roles (or legacy profiles.role), plus which portal is active via cookie when multi-role.
  */
-export async function getPortalAccessContext(): Promise<PortalAccessContext> {
+export const getPortalAccessContext = cache(async (): Promise<PortalAccessContext> => {
   const base = await getServerSessionProfile();
   if (!base.user) {
     return { user: null, profile: null, roles: [], effectiveRole: null };
@@ -69,7 +70,7 @@ export async function getPortalAccessContext(): Promise<PortalAccessContext> {
     roles,
     effectiveRole,
   };
-}
+});
 
 export function hasRole(ctx: PortalAccessContext, role: AuthRole): boolean {
   return ctx.roles.includes(role);

@@ -15,6 +15,7 @@ import {
   autoSeedRecurringRentProfiles,
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
+  pruneObsoleteManagerCharges,
   recordApprovedApplicationCharges,
   recordSubmittedApplicationFeeCharge,
   readChargesForManager,
@@ -75,6 +76,11 @@ export function ManagerPayments() {
   useEffect(() => {
     if (!authReady || !userId) return;
     void syncPropertyPipelineFromServer().then(() => setPropertyTick((n) => n + 1));
+  }, [authReady, userId]);
+
+  useEffect(() => {
+    if (!authReady || !userId) return;
+    pruneObsoleteManagerCharges(userId);
   }, [authReady, userId]);
 
   useEffect(() => {

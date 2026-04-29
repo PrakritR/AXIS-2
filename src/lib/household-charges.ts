@@ -92,6 +92,10 @@ function postHouseholdPayload(body: unknown) {
   }).catch(() => undefined);
 }
 
+function deleteChargeRowFromServer(id: string) {
+  postHouseholdPayload({ action: "deleteCharge", id });
+}
+
 function mirrorChargeRows(rows: HouseholdCharge[]) {
   postHouseholdPayload({ action: "replace", charges: rows, rentProfiles: readRentProfiles() });
 }
@@ -118,6 +122,7 @@ export async function syncHouseholdChargesFromServer(): Promise<{
     const rentProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
     memoryCharges = charges;
     memoryRentProfiles = rentProfiles;
+    syncAllRecurringRentCharges();
     emit();
     return { charges, rentProfiles };
   } catch {
@@ -144,6 +149,7 @@ function writeRentProfiles(rows: RecurringRentProfile[]) {
   if (!isBrowser()) return;
   memoryRentProfiles = rows;
   mirrorRentProfiles(rows);
+  syncAllRecurringRentCharges();
   emit();
 }
 
@@ -465,58 +471,83 @@ export function recordWorkOrderResidentCharge(input: {
   return charge;
 }
 
-function ensureRecurringRentCharge(profile: RecurringRentProfile): void {
-  if (!profile.active) return;
+function syncAllRecurringRentCharges(): boolean {
+  if (!isBrowser()) return false;
+  const profiles = readRentProfiles().filter((profile) => profile.active);
+  if (profiles.length === 0) return false;
+
   const month = currentRentMonth();
-  if (month < profile.startMonth) return;
-
   const rows = readAll();
-  const chargeId = recurringRentChargeId(profile.id, month);
-  const idx = rows.findIndex((row) => row.id === chargeId);
-  const amountLabel = `$${profile.monthlyRent.toFixed(2)}`;
-  const baseCharge: HouseholdCharge = {
-    id: chargeId,
-    createdAt: new Date().toISOString(),
-    residentEmail: profile.residentEmail,
-    residentName: profile.residentName,
-    residentUserId: profile.residentUserId,
-    propertyId: profile.propertyId,
-    propertyLabel: profile.propertyLabel,
-    managerUserId: profile.managerUserId,
-    kind: "rent",
-    title: `Rent · ${month}`,
-    amountLabel,
-    balanceLabel: amountLabel,
-    status: "pending",
-    blocksLeaseUntilPaid: false,
-    recurringRentProfileId: profile.id,
-    rentMonth: month,
-    dueDay: profile.dueDay,
-  };
+  const next = [...rows];
+  let changed = false;
 
-  if (idx === -1) {
-    writeAll([...rows, baseCharge], true);
-    return;
+  for (const profile of profiles) {
+    if (month < profile.startMonth) continue;
+
+    const chargeId = recurringRentChargeId(profile.id, month);
+    const idx = next.findIndex((row) => row.id === chargeId);
+    const amountLabel = `$${profile.monthlyRent.toFixed(2)}`;
+    const baseCharge: HouseholdCharge = {
+      id: chargeId,
+      createdAt: new Date().toISOString(),
+      residentEmail: profile.residentEmail,
+      residentName: profile.residentName,
+      residentUserId: profile.residentUserId,
+      propertyId: profile.propertyId,
+      propertyLabel: profile.propertyLabel,
+      managerUserId: profile.managerUserId,
+      kind: "rent",
+      title: `Rent · ${month}`,
+      amountLabel,
+      balanceLabel: amountLabel,
+      status: "pending",
+      blocksLeaseUntilPaid: false,
+      recurringRentProfileId: profile.id,
+      rentMonth: month,
+      dueDay: profile.dueDay,
+    };
+
+    if (idx === -1) {
+      next.push(baseCharge);
+      changed = true;
+      continue;
+    }
+
+    const existing = next[idx]!;
+    const updated: HouseholdCharge = {
+      ...existing,
+      ...baseCharge,
+      createdAt: existing.createdAt,
+      status: existing.status,
+      paidAt: existing.paidAt,
+      balanceLabel: existing.status === "paid" ? "$0.00" : amountLabel,
+    };
+
+    if (
+      existing.residentEmail !== updated.residentEmail ||
+      existing.residentName !== updated.residentName ||
+      existing.residentUserId !== updated.residentUserId ||
+      existing.propertyId !== updated.propertyId ||
+      existing.propertyLabel !== updated.propertyLabel ||
+      existing.managerUserId !== updated.managerUserId ||
+      existing.title !== updated.title ||
+      existing.amountLabel !== updated.amountLabel ||
+      existing.balanceLabel !== updated.balanceLabel ||
+      existing.rentMonth !== updated.rentMonth ||
+      existing.dueDay !== updated.dueDay
+    ) {
+      next[idx] = updated;
+      changed = true;
+    }
   }
 
-  const existing = rows[idx]!;
-  const next = [...rows];
-  next[idx] = {
-    ...existing,
-    ...baseCharge,
-    createdAt: existing.createdAt,
-    status: existing.status,
-    paidAt: existing.paidAt,
-    balanceLabel: existing.status === "paid" ? "$0.00" : amountLabel,
-  };
-  writeAll(next, true);
+  if (changed) writeAll(next, true);
+  return changed;
 }
 
 export function readRecurringRentProfilesForManager(managerUserId: string | null): RecurringRentProfile[] {
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
-  const profiles = readRentProfiles().filter((profile) => profile.managerUserId === scope && profile.active);
-  profiles.forEach(ensureRecurringRentCharge);
-  return profiles;
+  return readRentProfiles().filter((profile) => profile.managerUserId === scope && profile.active);
 }
 
 export function upsertRecurringRentProfile(input: {
@@ -556,7 +587,6 @@ export function upsertRecurringRentProfile(input: {
   if (idx === -1) next.push(profile);
   else next[idx] = profile;
   writeRentProfiles(next);
-  ensureRecurringRentCharge(profile);
   return profile;
 }
 
@@ -589,9 +619,6 @@ export function linkHouseholdChargesToResidentUser(email: string, userId: string
 
 export function readChargesForResident(email: string, userId: string | null): HouseholdCharge[] {
   const e = email.trim().toLowerCase();
-  readRentProfiles()
-    .filter((profile) => profile.active && profile.residentEmail.trim().toLowerCase() === e)
-    .forEach(ensureRecurringRentCharge);
   return readAll().filter((r) => {
     if (userId && r.residentUserId === userId) return true;
     return r.residentEmail.trim().toLowerCase() === e;
@@ -599,7 +626,6 @@ export function readChargesForResident(email: string, userId: string | null): Ho
 }
 
 export function readChargesForManager(managerUserId: string | null): HouseholdCharge[] {
-  readRecurringRentProfilesForManager(managerUserId);
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
   return readAll().filter((r) => r.managerUserId === scope);
 }
@@ -610,6 +636,7 @@ export function deleteHouseholdCharge(chargeId: string, managerUserId: string | 
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
   const idx = rows.findIndex((r) => r.id === chargeId && r.managerUserId === scope);
   if (idx === -1) return false;
+  deleteChargeRowFromServer(chargeId);
   writeAll(rows.filter((_, i) => i !== idx));
   return true;
 }
@@ -1068,7 +1095,6 @@ export function autoSeedRecurringRentProfiles(
 
   if (toAdd.length === 0) return false;
   writeRentProfiles([...existing, ...toAdd]);
-  toAdd.forEach(ensureRecurringRentCharge);
   return true;
 }
 
@@ -1111,4 +1137,23 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
             ? `Zelle contact on listing: ${c.zelleContactSnapshot}`
             : "Awaiting payment.",
   };
+}
+
+/**
+ * Removes old paid application-fee lines from the manager ledger.
+ * These are historical intake records and tend to overwhelm the Payments view after applicants are processed.
+ */
+export function pruneObsoleteManagerCharges(managerUserId: string | null): boolean {
+  if (!isBrowser()) return false;
+  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  const rows = readAll();
+  const obsolete = rows.filter((charge) => charge.managerUserId === scope && charge.kind === "application_fee" && charge.status === "paid");
+  if (obsolete.length === 0) return false;
+  for (const charge of obsolete) {
+    deleteChargeRowFromServer(charge.id);
+  }
+  writeAll(
+    rows.filter((charge) => !(charge.managerUserId === scope && charge.kind === "application_fee" && charge.status === "paid")),
+  );
+  return true;
 }

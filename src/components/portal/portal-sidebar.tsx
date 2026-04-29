@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { MouseEvent } from "react";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { AdminPortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import type { PortalDefinition } from "@/lib/portal-types";
@@ -15,21 +14,30 @@ function hrefForSection(def: PortalDefinition, section: string) {
   return `${def.basePath}/${section}/${meta.tabs[0].id}`;
 }
 
-function hardNavigate(e: MouseEvent<HTMLAnchorElement>, href: string, after?: () => void) {
-  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-  e.preventDefault();
-  after?.();
-  window.location.assign(href);
-}
-
 export function PortalSidebar({ definition }: { definition: PortalDefinition }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const navItems = useMemo(
+    () =>
+      definition.sections.map((section) => ({
+        section: section.section,
+        label: section.label,
+        href: hrefForSection(definition, section.section),
+      })),
+    [definition],
+  );
 
   const activeSection = useMemo(() => {
     const parts = pathname.split("/").filter(Boolean);
     return parts[1] ?? "dashboard";
   }, [pathname]);
+
+  useEffect(() => {
+    for (const item of navItems) {
+      router.prefetch(item.href);
+    }
+  }, [navItems, router]);
 
   const hasSignOut =
     definition.kind === "resident" || definition.kind === "manager" || definition.kind === "owner" || definition.kind === "admin";
@@ -52,14 +60,14 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
       </div>
       <nav className="flex min-h-0 flex-1 flex-col px-3 py-4">
         <div className="min-h-0 flex-1 space-y-1">
-          {definition.sections.map((s) => {
-            const href = hrefForSection(definition, s.section);
+          {navItems.map((s) => {
             const active = activeSection === s.section;
             return (
-              <a
+              <Link
                 key={s.section}
-                href={href}
-                onClick={(e) => hardNavigate(e, href)}
+                href={s.href}
+                prefetch
+                onMouseEnter={() => router.prefetch(s.href)}
                 className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
                   active ? "bg-white text-slate-950 shadow-[0_10px_26px_-22px_rgba(15,23,42,0.35)]" : "text-slate-600 hover:bg-white hover:text-slate-950"
                 }`}
@@ -73,7 +81,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                 <span className={`text-xs tabular-nums ${active ? "text-slate-400" : "text-slate-400"}`} aria-hidden>
                   →
                 </span>
-              </a>
+              </Link>
             );
           })}
         </div>
@@ -113,14 +121,15 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         {open ? (
           <div className="border-b border-slate-200/80 bg-[#fbfbfd] px-3 py-3">
             <div className="space-y-1">
-              {definition.sections.map((s) => {
+              {navItems.map((s) => {
                 const active = activeSection === s.section;
-                const href = hrefForSection(definition, s.section);
                 return (
-                  <a
+                  <Link
                     key={s.section}
-                    href={href}
-                    onClick={(e) => hardNavigate(e, href, () => setOpen(false))}
+                    href={s.href}
+                    prefetch
+                    onMouseEnter={() => router.prefetch(s.href)}
+                    onClick={() => setOpen(false)}
                     className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
                       active ? "bg-white text-slate-950 shadow-[0_10px_26px_-22px_rgba(15,23,42,0.35)]" : "text-slate-600 hover:bg-white hover:text-slate-950"
                     }`}
@@ -131,7 +140,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                       </span>
                     ) : null}
                     <span className="min-w-0 flex-1">{s.label}</span>
-                  </a>
+                  </Link>
                 );
               })}
             </div>

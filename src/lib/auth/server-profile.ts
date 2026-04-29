@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type ServerProfile = {
@@ -36,29 +37,31 @@ function normalizeProfileRow(data: Record<string, unknown>, fallbackUserId: stri
   };
 }
 
-export async function getServerSessionProfile(): Promise<{ user: { id: string; email?: string | null } | null; profile: ServerProfile | null }> {
-  try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { user: null, profile: null };
-
-    let profile: ServerProfile | null = null;
+export const getServerSessionProfile = cache(
+  async (): Promise<{ user: { id: string; email?: string | null } | null; profile: ServerProfile | null }> => {
     try {
-      const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
-      if (!error && data && typeof data === "object") {
-        profile = normalizeProfileRow(data as Record<string, unknown>, user.id);
-      }
-    } catch {
-      profile = null;
-    }
+      const supabase = await createSupabaseServerClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return { user: null, profile: null };
 
-    return {
-      user: { id: user.id, email: user.email },
-      profile,
-    };
-  } catch {
-    return { user: null, profile: null };
-  }
-}
+      let profile: ServerProfile | null = null;
+      try {
+        const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+        if (!error && data && typeof data === "object") {
+          profile = normalizeProfileRow(data as Record<string, unknown>, user.id);
+        }
+      } catch {
+        profile = null;
+      }
+
+      return {
+        user: { id: user.id, email: user.email },
+        profile,
+      };
+    } catch {
+      return { user: null, profile: null };
+    }
+  },
+);

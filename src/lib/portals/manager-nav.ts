@@ -38,18 +38,17 @@ export async function buildManagerPortalDefinition(): Promise<{
 
   const sections = managerPortal.sections;
 
-  const previewCookie = await getAdminPreviewFromCookies();
-  const showPreviewBanner = hasAdminRole(ctx) && !!previewCookie?.targetUserId;
+  const showPreviewBanner = hasAdminRole(ctx) && !!preview?.targetUserId;
 
   let previewLabel: string | null = null;
-  if (showPreviewBanner && previewCookie) {
+  if (showPreviewBanner && preview) {
     const supabase = createSupabaseServiceRoleClient();
     const { data: p } = await supabase
       .from("profiles")
       .select("full_name, email")
-      .eq("id", previewCookie.targetUserId)
+      .eq("id", preview.targetUserId)
       .maybeSingle();
-    previewLabel = p?.full_name?.trim() || p?.email || previewCookie.targetUserId;
+    previewLabel = p?.full_name?.trim() || p?.email || preview.targetUserId;
   }
 
   return {
