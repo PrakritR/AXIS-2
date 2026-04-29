@@ -8,6 +8,7 @@ import { RoomListingCard } from "@/components/marketing/room-listing-card";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import { loadPublicExtraListingsFromServer, PROPERTY_PIPELINE_EVENT, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
+import { MANAGER_APPLICATIONS_EVENT, syncPublicApprovedApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { parseRadiusParam, parseUSZip } from "@/lib/listings-search";
 import { filterRoomListings } from "@/lib/room-listings-catalog";
 
@@ -35,6 +36,7 @@ export function parseListingsSearchFromParams(
 export function RentListingsView() {
   const searchParams = useSearchParams();
   const [extras, setExtras] = useState<MockProperty[]>([]);
+  const [applicationTick, setApplicationTick] = useState(0);
 
   const props = useMemo(() => {
     const sp: Record<string, string | undefined> = {};
@@ -50,13 +52,26 @@ export function RentListingsView() {
   }, []);
 
   useEffect(() => {
-    refreshExtras();
+    const id = window.setTimeout(refreshExtras, 0);
     const on = () => refreshExtras();
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     return () => {
+      window.clearTimeout(id);
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
     };
   }, [refreshExtras]);
+
+  useEffect(() => {
+    const refreshApplications = () => {
+      void syncPublicApprovedApplicationsFromServer().then(() => setApplicationTick((tick) => tick + 1));
+    };
+    const id = window.setTimeout(refreshApplications, 0);
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, refreshApplications);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener(MANAGER_APPLICATIONS_EVENT, refreshApplications);
+    };
+  }, []);
 
   const combined = useMemo(() => {
     const byPropertyKey = new Map<string, MockProperty>();
@@ -76,16 +91,18 @@ export function RentListingsView() {
     Boolean(props.moveOut);
 
   const roomResults = useMemo(
-    () =>
-      filterRoomListings(combined, {
+    () => {
+      void applicationTick;
+      return filterRoomListings(combined, {
         zipRaw: props.zipRaw,
         radiusMiles: props.radiusMiles,
         maxBudgetNum: props.maxBudgetNum,
         bathroom: props.bathroom,
         moveIn: props.moveIn,
         moveOut: props.moveOut,
-      }),
-    [combined, props.bathroom, props.maxBudgetNum, props.radiusMiles, props.zipRaw, props.moveIn, props.moveOut],
+      });
+    },
+    [combined, props.bathroom, props.maxBudgetNum, props.radiusMiles, props.zipRaw, props.moveIn, props.moveOut, applicationTick],
   );
 
   return (

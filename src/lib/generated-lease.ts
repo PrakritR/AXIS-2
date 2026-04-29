@@ -303,6 +303,86 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
 
   const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "");
 
+  if (a.rentalType === "short_term") {
+    const dailyCostRaw = subNorm?.shortTermDailyCost?.trim() || "—";
+    const shortDepositRaw = subNorm?.shortTermDeposit?.trim() || "—";
+    const dailyCost = parseAmount(dailyCostRaw);
+    const startDate = new Date(a.leaseStart ?? "");
+    const endDate = new Date(a.leaseEnd ?? "");
+    const startOk = startDate && !Number.isNaN(startDate.getTime());
+    const endOk = endDate && !Number.isNaN(endDate.getTime());
+    const durationDays = startOk && endOk
+      ? Math.max(1, Math.ceil((endDate!.getTime() - startDate!.getTime()) / (24 * 60 * 60 * 1000)) + 1)
+      : null;
+    const totalRent = dailyCost && durationDays ? fmtUsd(dailyCost * durationDays) : "—";
+    const depositAmount = parseAmount(shortDepositRaw);
+    const totalDue = dailyCost && durationDays ? fmtUsd(dailyCost * durationDays + (depositAmount ?? 0)) : "—";
+    const requirements = escapeHtml(
+      subNorm?.shortTermRequirements?.trim() ||
+        "Guest must follow all reasonable house rules provided by the Owner/Host. Guest may not receive mail, declare residency, or claim tenancy.",
+    );
+    const checkInTime = dash(a.shortTermCheckInTime || "10:00 PM");
+    const checkOutTime = dash(a.shortTermCheckOutTime || "11:00 AM");
+
+    return `<!doctype html><html><head><meta charset="utf-8"/><title>Short-Term Room Stay Agreement</title><style>${leaseCss()}</style></head><body>
+<h1>SHORT-TERM ROOM STAY AGREEMENT</h1>
+<p class="sub">${durationDays ? `${durationDays}-Day Stay` : "Temporary Room Stay"} · Generated ${generatedDate} via Axis Property Platform</p>
+
+<h2>1. Parties</h2>
+<table>
+  <tr><th width="35%">Owner / Host</th><td><strong>${landlordEntity}</strong></td></tr>
+  <tr><th>Guest</th><td><strong>${tenantName}</strong><br/>Phone: ${tenantPhone} &nbsp;·&nbsp; Email: ${tenantEmail}</td></tr>
+</table>
+
+<h2>2. Property Address</h2>
+<table>
+  <tr><th width="35%">Property</th><td>${address}<br/>${escapeHtml(cityZip)}</td></tr>
+  <tr><th>Room</th><td><strong>${roomLabel}</strong></td></tr>
+  <tr><th>Description</th><td>${fullPremises}</td></tr>
+</table>
+
+<h2>3. Length of Stay</h2>
+<table>
+  <tr><th width="35%">Check-in date &amp; time</th><td>${leaseStart} @ ${checkInTime}</td></tr>
+  <tr><th>Check-out date &amp; time</th><td>${dash(a.leaseEnd)} @ ${checkOutTime}</td></tr>
+  <tr><th>Total duration</th><td>${durationDays ? `${durationDays} day${durationDays === 1 ? "" : "s"}` : "—"}</td></tr>
+</table>
+
+<h2>4. Payment</h2>
+<table>
+  <tr><th width="35%">Daily rent</th><td>${escapeHtml(dailyCostRaw)} per day</td></tr>
+  <tr><th>Total rent for days</th><td>${totalRent}</td></tr>
+  <tr><th>Security deposit</th><td>${escapeHtml(shortDepositRaw)}</td></tr>
+  <tr class="total-row"><th>Total due</th><td><strong>${totalDue}</strong></td></tr>
+</table>
+
+<h2>5. Purpose of Stay</h2>
+<p>The Guest is staying temporarily as a short-term lodger / guest only. This agreement does not create a landlord-tenant relationship under Washington law. The stay is intended to be exempt from RCW 59.18.040 where legally applicable.</p>
+
+<h2>6. House Rules &amp; Short-Term Requirements</h2>
+<p>${requirements}</p>
+${houseRules ? `<p>${houseRules}</p>` : ""}
+
+<h2>7. No Right to Remain After Check-Out</h2>
+<p>Guest must vacate the room and property by the check-out date and time. If Guest refuses to leave, Guest may be treated as a trespasser to the fullest extent permitted by law.</p>
+
+<h2>8. Shared Residence</h2>
+<p>Owner/Host lives on or controls the property. Guest is renting a room only and receives only temporary shared-area access as approved by Owner/Host.</p>
+
+<h2>9. No Mail / No Residency</h2>
+<p>Guest may not receive mail, declare residency, or claim tenancy at the property. Guest may not use the property address for government ID, voter registration, banking, employment, delivery accounts, or similar residency purposes.</p>
+
+<h2>10. Condition of Room</h2>
+<p>Guest agrees to leave the room and shared areas in clean, undamaged condition. Owner/Host may deduct unpaid amounts, cleaning costs, missing items, or damage beyond ordinary use from the deposit.</p>
+
+<h2>11. Signatures</h2>
+<div class="sig">
+  <div class="sig-block"><div class="sig-line"></div>Owner / Host Signature<br/>Date: _______________</div>
+  <div class="sig-block"><div class="sig-line"></div>Guest Signature<br/>Date: _______________</div>
+</div>
+</body></html>`;
+  }
+
   const body = `
 <h1>RESIDENTIAL ROOM RENTAL AGREEMENT</h1>
 <p class="sub">State of Washington · King County</p>

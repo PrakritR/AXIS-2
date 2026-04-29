@@ -6,6 +6,7 @@ import { effectiveApplicationForRow, readManagerApplicationRows } from "@/lib/ma
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 
 export const LEASE_TERM_OPTIONS = ["3-Month", "9-Month", "12-Month", "Month-to-Month", "Custom"] as const;
+export const SHORT_TERM_LEASE_TERM = "Short-Term Stay";
 
 export type LeaseTermOption = (typeof LEASE_TERM_OPTIONS)[number];
 
@@ -203,6 +204,11 @@ export function getPropertyById(id: string): MockProperty | undefined {
     readExtraListings().find((p) => p.id === propertyId) ??
     readAllExtraListings().find((p) => p.id === propertyId)
   );
+}
+
+export function propertyAllowsShortTermRental(propertyId: string): boolean {
+  const property = getPropertyById(propertyId);
+  return Boolean(property?.listingSubmission?.shortTermRentalsAllowed);
 }
 
 /** Rooms for the selected listing: manager submission rooms, else legacy one-row-per-unit in the same building. */

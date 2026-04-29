@@ -301,7 +301,12 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
       }
       filterRow={filterRow}
     >
-      <ManagerPaymentsLedgerPanel rows={rowsForBucket} managerUserId={userId ?? null} activeBucket={bucket} />
+      <ManagerPaymentsLedgerPanel
+        rows={rowsForBucket}
+        managerUserId={userId ?? null}
+        activeBucket={bucket}
+        onRowsChanged={() => setHcTick((n) => n + 1)}
+      />
       <ManagerAddPaymentModal
         open={addOpen}
         onClose={() => setAddOpen(false)}

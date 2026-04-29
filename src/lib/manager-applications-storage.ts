@@ -89,6 +89,20 @@ export async function syncManagerApplicationsFromServer(): Promise<DemoApplicant
   }
 }
 
+export async function syncPublicApprovedApplicationsFromServer(): Promise<DemoApplicantRow[]> {
+  if (!canUseStorage()) return [];
+  try {
+    const res = await fetch("/api/public/approved-room-occupancy", { cache: "no-store" });
+    if (!res.ok) return readManagerApplicationRows();
+    const body = (await res.json()) as { rows?: DemoApplicantRow[] };
+    const rows = normalizeApplicationRows(Array.isArray(body.rows) ? body.rows : []);
+    memoryRows = rows;
+    return rows;
+  } catch {
+    return readManagerApplicationRows();
+  }
+}
+
 export function readManagerApplicationRows(fallback: DemoApplicantRow[] = EMPTY_FALLBACK): DemoApplicantRow[] {
   const stored = normalizeApplicationRows(memoryRows);
   if (stored.length === 0) return [...fallback];

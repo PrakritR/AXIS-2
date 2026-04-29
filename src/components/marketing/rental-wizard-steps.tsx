@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel } from "@/lib/rental-application/application-fee-channel";
-import { LEASE_TERM_OPTIONS, getPropertyById, getRoomChoiceLabel, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
+import { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, getPropertyById, getRoomChoiceLabel, propertyAllowsShortTermRental, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
 import {
   applicantFirstChoiceRentLabel,
   formatListingFeeDisplay,
@@ -258,6 +258,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
       leaseStart: form.leaseStart,
       leaseEnd: form.leaseEnd,
     };
+    const selectedProperty = getPropertyById(form.propertyId);
+    const shortTermAllowed = propertyAllowsShortTermRental(form.propertyId);
     const rooms = roomSelectOptionsWithNone(form.propertyId, roomOptionParams).filter((o) => o.value !== "");
     const roomsWithNone = roomSelectOptionsWithNone(form.propertyId, roomOptionParams);
     return (
@@ -279,7 +281,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             value={form.propertyId}
             onChange={(e) => {
               const pid = e.target.value;
-              patch({ propertyId: pid, roomChoice1: "", roomChoice2: "", roomChoice3: "" });
+              patch({ propertyId: pid, roomChoice1: "", roomChoice2: "", roomChoice3: "", rentalType: "standard" });
             }}
             className={errors.propertyId ? "border-red-400 ring-2 ring-red-100" : ""}
           >
@@ -351,13 +353,53 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         </div>
 
+        {shortTermAllowed ? (
+          <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-5">
+            <Label required>Application type</Label>
+            <div className={pillWrap}>
+              {[
+                { id: "standard" as const, label: "Standard lease" },
+                { id: "short_term" as const, label: "Short-term stay" },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={form.rentalType === opt.id ? pillActive : pillIdle}
+                  onClick={() =>
+                    patch(
+                      opt.id === "short_term"
+                        ? { rentalType: opt.id, leaseTerm: SHORT_TERM_LEASE_TERM }
+                        : { rentalType: opt.id, leaseTerm: "" },
+                    )
+                  }
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {form.rentalType === "short_term" ? (
+              <div className="rounded-xl border border-blue-100 bg-white/80 p-3 text-sm leading-6 text-blue-950">
+                <p>
+                  Daily cost: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDailyCost || "Set by host"}</span>
+                  {" · "}
+                  Deposit: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDeposit || "Set by host"}</span>
+                </p>
+                {selectedProperty?.listingSubmission?.shortTermRequirements?.trim() ? (
+                  <p className="mt-1 text-blue-900/80">{selectedProperty.listingSubmission.shortTermRequirements.trim()}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="space-y-2">
           <Label htmlFor="leaseTerm" required>
-            Lease term
+            {form.rentalType === "short_term" ? "Stay type" : "Lease term"}
           </Label>
           <Select
             id="leaseTerm"
             value={form.leaseTerm}
+            disabled={form.rentalType === "short_term"}
             onChange={(e) => {
               const v = e.target.value;
               patch(v === "Month-to-Month" ? { leaseTerm: v, leaseEnd: "" } : { leaseTerm: v });
@@ -365,11 +407,15 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             className={errors.leaseTerm ? "border-red-400 ring-2 ring-red-100" : ""}
           >
             <option value="">Select lease length</option>
-            {LEASE_TERM_OPTIONS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
+            {form.rentalType === "short_term" ? (
+              <option value={SHORT_TERM_LEASE_TERM}>{SHORT_TERM_LEASE_TERM}</option>
+            ) : (
+              LEASE_TERM_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))
+            )}
           </Select>
           <FieldError msg={errors.leaseTerm} />
           {form.leaseTerm === "Month-to-Month" ? (
@@ -382,7 +428,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div className={form.leaseTerm === "Month-to-Month" ? "space-y-2" : "grid gap-4 sm:grid-cols-2"}>
           <div className="space-y-2">
             <Label htmlFor="leaseStart" required>
-              Lease start date
+              {form.rentalType === "short_term" ? "Check-in date" : "Lease start date"}
             </Label>
             <Input
               id="leaseStart"
@@ -405,7 +451,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           {form.leaseTerm !== "Month-to-Month" ? (
             <div className="space-y-2">
               <Label htmlFor="leaseEnd" required>
-                Lease end date
+                {form.rentalType === "short_term" ? "Check-out date" : "Lease end date"}
               </Label>
               <Input
                 id="leaseEnd"
@@ -427,6 +473,32 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           ) : null}
         </div>
+        {form.rentalType === "short_term" ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="shortTermCheckInTime" optional>
+                Check-in time
+              </Label>
+              <Input
+                id="shortTermCheckInTime"
+                type="time"
+                value={form.shortTermCheckInTime}
+                onChange={(e) => patch({ shortTermCheckInTime: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="shortTermCheckOutTime" optional>
+                Check-out time
+              </Label>
+              <Input
+                id="shortTermCheckOutTime"
+                type="time"
+                value={form.shortTermCheckOutTime}
+                onChange={(e) => patch({ shortTermCheckOutTime: e.target.value })}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -1217,9 +1289,16 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Row k="1st choice room" v={displayOrDash(roomLabel(form.roomChoice1))} />
             <Row k="2nd choice room" v={displayOrDash(roomLabel(form.roomChoice2))} />
             <Row k="3rd choice room" v={displayOrDash(roomLabel(form.roomChoice3))} />
+            <Row k="Application type" v={form.rentalType === "short_term" ? "Short-term stay" : "Standard lease"} />
             <Row k="Lease term" v={displayOrDash(form.leaseTerm)} />
-            <Row k="Lease start" v={displayOrDash(form.leaseStart)} />
-            {form.leaseTerm !== "Month-to-Month" ? <Row k="Lease end" v={displayOrDash(form.leaseEnd)} /> : null}
+            <Row k={form.rentalType === "short_term" ? "Check-in date" : "Lease start"} v={displayOrDash(form.leaseStart)} />
+            {form.leaseTerm !== "Month-to-Month" ? <Row k={form.rentalType === "short_term" ? "Check-out date" : "Lease end"} v={displayOrDash(form.leaseEnd)} /> : null}
+            {form.rentalType === "short_term" ? (
+              <>
+                <Row k="Check-in time" v={displayOrDash(form.shortTermCheckInTime)} />
+                <Row k="Check-out time" v={displayOrDash(form.shortTermCheckOutTime)} />
+              </>
+            ) : null}
           </ReviewSection>
           {prop?.listingSubmission?.v === 1 ? (
             <ReviewSection title="Housing charges (this listing)" stepTarget={3}>

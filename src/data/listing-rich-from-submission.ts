@@ -11,6 +11,7 @@ import { LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS, sanitizeRoomAmenityText,
 import { parseMonthlyRent } from "@/lib/listings-search";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import {
+  formatListingFeeDisplay,
   paymentAtSigningDetailBody,
   paymentAtSigningPriceLabel,
   utilitiesListingEstimateDetail,
@@ -41,6 +42,21 @@ function filterLeaseBasicsRows(
         return true;
     }
   });
+}
+
+function shortTermStayPriceLabel(sub: ManagerListingSubmissionV1): string {
+  const daily = sub.shortTermDailyCost?.trim();
+  if (!daily) return "Allowed";
+  return `${formatListingFeeDisplay(daily)}/day`;
+}
+
+function shortTermStayDetailBody(sub: ManagerListingSubmissionV1): string {
+  const daily = sub.shortTermDailyCost?.trim() ? formatListingFeeDisplay(sub.shortTermDailyCost) : "Set by host";
+  const deposit = sub.shortTermDeposit?.trim() ? formatListingFeeDisplay(sub.shortTermDeposit) : "Set by host";
+  const requirements =
+    sub.shortTermRequirements?.trim() ||
+    "Guest must follow house rules, may not receive mail or claim residency, and must vacate by the agreed check-out time.";
+  return `This listing allows short-term room stays. Daily cost: ${daily}. Short-term deposit: ${deposit}. Requirements: ${requirements}`;
 }
 import type {
   AmenityItem,
@@ -553,32 +569,47 @@ export function listingRichFromManagerSubmission(
       status: "See details",
       body: sub.leaseTermsBody.trim() || "Lease terms will be confirmed with applicants.",
     },
+    ...(sub.shortTermRentalsAllowed
+      ? [
+          {
+            id: "lease-short-term",
+            icon: "🛏️",
+            title: "Short-term stay",
+            detail: sub.shortTermDeposit?.trim()
+              ? `Deposit ${formatListingFeeDisplay(sub.shortTermDeposit)}`
+              : "Temporary room stay",
+            price: shortTermStayPriceLabel(sub),
+            status: "Optional",
+            body: shortTermStayDetailBody(sub),
+          },
+        ]
+      : []),
     {
       id: "lease-application",
       icon: "📄",
       title: "Application",
       detail: "Processing",
-      price: sub.applicationFee.trim() || "—",
+      price: formatListingFeeDisplay(sub.applicationFee),
       status: "Due with app",
-      body: `Application fee: ${sub.applicationFee.trim() || "—"} (from submission).`,
+      body: `Application fee: ${formatListingFeeDisplay(sub.applicationFee)} (from submission).`,
     },
     {
       id: "lease-deposit",
       icon: "🔒",
       title: "Security deposit",
       detail: "As submitted",
-      price: sub.securityDeposit.trim() || "—",
+      price: formatListingFeeDisplay(sub.securityDeposit),
       status: "At signing",
-      body: `Security deposit: ${sub.securityDeposit.trim() || "—"}.`,
+      body: `Security deposit: ${formatListingFeeDisplay(sub.securityDeposit)}.`,
     },
     {
       id: "lease-movein",
       icon: "🧾",
       title: "Move-in charges",
-      detail: "At move-in",
-      price: sub.moveInFee.trim() || "—",
+      detail: "At signing",
+      price: formatListingFeeDisplay(sub.moveInFee),
       status: "At signing",
-      body: `Move-in charges: ${sub.moveInFee.trim() || "—"}.`,
+      body: `Move-in charges due at signing: ${formatListingFeeDisplay(sub.moveInFee)}.`,
     },
     {
       id: "lease-signing",

@@ -9,6 +9,7 @@ import { effectiveApplicationForRow, readManagerApplicationRows, signedRentLabel
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { clearUploadedOwnLease, readUploadedOwnLease, saveUploadedOwnLease } from "@/lib/resident-lease-upload";
+import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
 
@@ -159,20 +160,30 @@ function write(rows: LeasePipelineRow[]) {
   }).catch(() => undefined);
 }
 
-function syncApprovedApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] {
-  const apps = readManagerApplicationRows().filter((a) => a.bucket === "approved" && a.email?.trim());
+function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: string | null): LeasePipelineRow[] {
+  const apps = readManagerApplicationRows().filter(
+    (a) =>
+      a.bucket === "approved" &&
+      a.email?.trim() &&
+      (!managerUserId || applicationVisibleToPortalUser(a, managerUserId)),
+  );
   let changed = false;
   const next = [...rows];
   for (const app of apps) {
     const email = app.email!.trim().toLowerCase();
     const propertyId = app.assignedPropertyId?.trim() || app.propertyId?.trim() || app.application?.propertyId?.trim() || "";
     const roomChoice = app.assignedRoomChoice?.trim() || app.application?.roomChoice1?.trim() || "";
+    const effectiveManagerUserId = app.managerUserId ?? managerUserId ?? null;
     const unit = approvedLeasePlacementLabel({
       propertyId,
       propertyLabel: app.property,
       roomChoice,
     });
-    const idx = next.findIndex((r) => r.axisId === app.id || r.residentEmail.toLowerCase() === email);
+    const idx = next.findIndex((r) => {
+      if (r.axisId === app.id) return true;
+      if (r.axisId) return false;
+      return r.residentEmail.toLowerCase() === email && (r.propertyId ?? "") === propertyId;
+    });
     const iso = new Date().toISOString();
     const seeded = normalizeLeasePipelineRow({
       id: idx === -1 ? `lease_app_${app.id}` : next[idx]!.id,
@@ -187,7 +198,7 @@ function syncApprovedApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] 
       updatedAtIso: idx === -1 ? iso : next[idx]!.updatedAtIso,
       axisId: app.id,
       propertyId: propertyId || undefined,
-      managerUserId: app.managerUserId ?? null,
+      managerUserId: effectiveManagerUserId,
       residentUserId: null,
       roomChoice: roomChoice || null,
       signedRentLabel: signedRentLabelForRow(app),
@@ -212,7 +223,7 @@ function syncApprovedApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] 
       unit: seeded.unit,
       axisId: app.id,
       propertyId: seeded.propertyId,
-      managerUserId: seeded.managerUserId,
+      managerUserId: seeded.managerUserId ?? managerUserId ?? current.managerUserId ?? null,
       roomChoice: seeded.roomChoice,
       signedRentLabel: seeded.signedRentLabel,
       application: effectiveApplicationForRow(app),
@@ -250,12 +261,12 @@ function enrichFromApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] {
   });
 }
 
-export function readLeasePipeline(): LeasePipelineRow[] {
+export function readLeasePipeline(managerUserId?: string | null): LeasePipelineRow[] {
   try {
     let stored = readRaw() ?? [];
     stored = stored.map(normalizeLeasePipelineRow);
     const rows = enrichFromApplications(stored);
-    const merged = syncApprovedApplications(rows);
+    const merged = syncApprovedApplications(rows, managerUserId);
     if (JSON.stringify(merged) !== JSON.stringify(rows)) {
       return merged;
     }
@@ -266,13 +277,13 @@ export function readLeasePipeline(): LeasePipelineRow[] {
   }
 }
 
-export async function syncLeasePipelineFromServer(): Promise<LeasePipelineRow[]> {
+export async function syncLeasePipelineFromServer(managerUserId?: string | null): Promise<LeasePipelineRow[]> {
   if (!canUseStorage()) return [];
   const res = await fetch("/api/portal-lease-pipeline", { credentials: "include", cache: "no-store" });
-  if (!res.ok) return readLeasePipeline();
+  if (!res.ok) return readLeasePipeline(managerUserId);
   const body = (await res.json()) as { rows?: unknown[] };
   memoryRows = (body.rows ?? []).map(normalizeLeasePipelineRow);
-  const next = readLeasePipeline();
+  const next = readLeasePipeline(managerUserId);
   if (JSON.stringify(memoryRows) !== JSON.stringify(next)) {
     write(next);
     return next;
@@ -281,8 +292,8 @@ export async function syncLeasePipelineFromServer(): Promise<LeasePipelineRow[]>
   return next;
 }
 
-export function syncLeasePipelineFromApplications(): LeasePipelineRow[] {
-  const next = readLeasePipeline();
+export function syncLeasePipelineFromApplications(managerUserId?: string | null): LeasePipelineRow[] {
+  const next = readLeasePipeline(managerUserId);
   if (canUseStorage() && JSON.stringify(memoryRows) !== JSON.stringify(next)) {
     write(next);
   }

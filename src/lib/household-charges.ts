@@ -302,6 +302,7 @@ export function chargeDueLabel(charge: HouseholdCharge): string {
       return "Before lease signing";
     case "first_month_rent":
     case "prorated_rent":
+    case "utilities":
     case "prorated_utilities":
       return "Before move-in";
     default:

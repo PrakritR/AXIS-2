@@ -947,6 +947,62 @@ export function ManagerAddListingForm({
               </ListingSubsection>
 
               <ListingSubsection
+                title="Short-term stays"
+                description="Enable this only if this property may host temporary lodger / guest stays."
+              >
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300"
+                    checked={Boolean(sub.shortTermRentalsAllowed)}
+                    onChange={(e) => setSub((s) => ({ ...s, shortTermRentalsAllowed: e.target.checked }))}
+                  />
+                  <span className="text-sm font-medium text-slate-800">This property allows short-term room stays</span>
+                </label>
+                {sub.shortTermRentalsAllowed ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <GridField>
+                      <FieldLabel>Daily cost</FieldLabel>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                        <Input
+                          className="pl-8"
+                          inputMode="decimal"
+                          value={(sub.shortTermDailyCost ?? "").replace(/^\$/, "").trim()}
+                          onChange={(e) => setSub((s) => ({ ...s, shortTermDailyCost: e.target.value }))}
+                          placeholder="40"
+                        />
+                      </div>
+                    </GridField>
+                    <GridField>
+                      <FieldLabel>Short-term deposit</FieldLabel>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                        <Input
+                          className="pl-8"
+                          inputMode="decimal"
+                          value={(sub.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
+                          onChange={(e) => setSub((s) => ({ ...s, shortTermDeposit: e.target.value }))}
+                          placeholder="100"
+                        />
+                      </div>
+                    </GridField>
+                    <div className="sm:col-span-2">
+                      <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
+                        Requirements / house rules for short-term stays
+                      </FieldLabel>
+                      <Textarea
+                        className="min-h-[90px]"
+                        value={sub.shortTermRequirements ?? ""}
+                        onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
+                        placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout. Follow posted house rules."
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </ListingSubsection>
+
+              <ListingSubsection
                 title="Lease bundles"
                 description="Create packages for applicants who want to rent the whole house or multiple rooms together."
               >

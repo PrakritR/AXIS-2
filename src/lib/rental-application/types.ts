@@ -13,6 +13,9 @@ export type RentalWizardFormState = {
   roomChoice1: string;
   roomChoice2: string;
   roomChoice3: string;
+  rentalType: "standard" | "short_term";
+  shortTermCheckInTime: string;
+  shortTermCheckOutTime: string;
   leaseTerm: string;
   leaseStart: string;
   leaseEnd: string;

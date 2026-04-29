@@ -6,6 +6,7 @@ import {
   parseUSZip,
   propertyMatchesZipRadius,
 } from "@/lib/listings-search";
+import { isRoomChoiceAvailable, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 
 export type RoomListingRow = {
   key: string;
@@ -188,6 +189,14 @@ export function filterRoomListings(
       for (const room of floor.rooms) {
         // Always exclude rooms marked unavailable; when move-in is set, also filter by date.
         if (!roomAvailableForMoveIn(room.availability, hasMoveInFilter ? (moveInDate ?? new Date()) : null)) continue;
+        if (
+          !isRoomChoiceAvailable(`${p.id}${LISTING_ROOM_CHOICE_SEP}${room.id}`, room.availability, {
+            leaseStart: opts.moveIn,
+            leaseEnd: opts.moveOut,
+          })
+        ) {
+          continue;
+        }
         if (!roomMatchesBathroomFilter(room, opts.bathroom)) continue;
         const rentNumeric = parseMonthlyRent(room.price.replace("/month", "/ mo"));
         const budgetOk =

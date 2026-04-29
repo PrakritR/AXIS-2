@@ -10,7 +10,7 @@ import {
   validateStateAbbrev,
   validateZip,
 } from "@/app/(public)/rent/apply/apply-validation";
-import { getDemoRoomAvailabilityMessage, getPropertyById } from "./data";
+import { getDemoRoomAvailabilityMessage, propertyAllowsShortTermRental } from "./data";
 import type { RentalWizardErrors, RentalWizardFormState } from "./types";
 import { digitsOnly, parseMoneyInput } from "./masks";
 
@@ -83,6 +83,9 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
     if (r2 && r2 === r1) e.roomChoice2 = "Second choice must differ from your first choice.";
     if (r3 && (r3 === r1 || r3 === r2)) e.roomChoice3 = "Third choice must differ from your other choices.";
     if (!f.leaseTerm.trim()) e.leaseTerm = "Lease term is required.";
+    if (f.rentalType === "short_term" && !propertyAllowsShortTermRental(f.propertyId)) {
+      e.leaseTerm = "This listing does not allow short-term stays.";
+    }
     const start = f.leaseStart.trim();
     const end = f.leaseEnd.trim();
     const drs = validateDateRequired(start, "Lease start date");

@@ -36,15 +36,16 @@ export function ManagerLeases() {
   const [propertyFilter, setPropertyFilter] = useState("");
 
   useEffect(() => {
+    if (!authReady || !userId) return;
     const on = () => setTick((t) => t + 1);
-    void Promise.all([syncManagerApplicationsFromServer(), syncLeasePipelineFromServer()]).then(on);
+    void Promise.all([syncManagerApplicationsFromServer(), syncLeasePipelineFromServer(userId)]).then(on);
     window.addEventListener(LEASE_PIPELINE_EVENT, on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
     return () => {
       window.removeEventListener(LEASE_PIPELINE_EVENT, on);
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
     };
-  }, []);
+  }, [authReady, userId]);
 
   useEffect(() => {
     if (!authReady || !userId) return;
@@ -56,7 +57,7 @@ export function ManagerLeases() {
     void propertyTick;
     const base = buildManagerPropertyFilterOptions(userId);
     const labelById = new Map(base.map((option) => [option.id, option.label]));
-    for (const row of readLeasePipeline()) {
+    for (const row of readLeasePipeline(userId)) {
       const propertyId = row.application?.propertyId?.trim();
       if (!propertyId || labelById.has(propertyId)) continue;
       labelById.set(propertyId, getPropertyById(propertyId)?.title?.trim() || row.unit || propertyId);
@@ -68,10 +69,10 @@ export function ManagerLeases() {
 
   const rows = useMemo(() => {
     void tick;
-    const allRows = readLeasePipeline();
+    const allRows = readLeasePipeline(userId);
     if (!propertyFilter.trim()) return allRows;
     return allRows.filter((row) => row.application?.propertyId?.trim() === propertyFilter);
-  }, [tick, propertyFilter]);
+  }, [tick, propertyFilter, userId]);
 
   const counts = useMemo(() => countBuckets(rows), [rows]);
   const tabs = useMemo(

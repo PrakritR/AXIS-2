@@ -105,6 +105,10 @@ export type ManagerListingSubmissionV1 = {
   /** General house photos (common areas, exterior, kitchen) shown at the top of the public listing. */
   housePhotoDataUrls: string[];
   leaseTermsBody: string;
+  shortTermRentalsAllowed?: boolean;
+  shortTermRequirements?: string;
+  shortTermDailyCost?: string;
+  shortTermDeposit?: string;
   applicationFee: string;
   securityDeposit: string;
   moveInFee: string;
@@ -316,6 +320,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   const next = {
     ...sub,
     houseRulesText: typeof sub.houseRulesText === "string" ? sub.houseRulesText : "",
+    shortTermRentalsAllowed: Boolean(sub.shortTermRentalsAllowed),
+    shortTermRequirements: typeof sub.shortTermRequirements === "string" ? sub.shortTermRequirements : "",
+    shortTermDailyCost: typeof sub.shortTermDailyCost === "string" ? sub.shortTermDailyCost : "",
+    shortTermDeposit: typeof sub.shortTermDeposit === "string" ? sub.shortTermDeposit : "",
     paymentAtSigningIncludes,
     rooms,
     bathrooms,
@@ -420,6 +428,10 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     housePhotoDataUrls: [],
     houseRulesText: "",
     leaseTermsBody: "",
+    shortTermRentalsAllowed: false,
+    shortTermRequirements: "",
+    shortTermDailyCost: "",
+    shortTermDeposit: "",
     applicationFee: "",
     securityDeposit: "",
     moveInFee: "",

@@ -34,10 +34,12 @@ export function ManagerPaymentsLedgerPanel({
   rows,
   managerUserId,
   activeBucket,
+  onRowsChanged,
 }: {
   rows: DemoManagerPaymentLedgerRow[];
   managerUserId: string | null;
   activeBucket: ManagerPaymentBucket;
+  onRowsChanged?: () => void;
 }) {
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -53,6 +55,7 @@ export function ManagerPaymentsLedgerPanel({
       if (deleteHouseholdCharge(row.householdChargeId, managerUserId)) {
         showToast("Payment removed.");
         setExpandedId(null);
+        onRowsChanged?.();
         return;
       }
       showToast("Could not remove this line.");
@@ -61,6 +64,7 @@ export function ManagerPaymentsLedgerPanel({
     if (deleteManagerPaymentLedgerEntry(row.id)) {
       showToast("Payment removed.");
       setExpandedId(null);
+      onRowsChanged?.();
       return;
     }
     showToast("Could not remove this line.");
@@ -71,6 +75,7 @@ export function ManagerPaymentsLedgerPanel({
       if (markHouseholdChargePaid(row.householdChargeId, managerUserId)) {
         showToast(toastMessage);
         setExpandedId(null);
+        onRowsChanged?.();
         return;
       }
       showToast("Could not update this line.");
@@ -79,6 +84,7 @@ export function ManagerPaymentsLedgerPanel({
     markManagerPaymentLedgerPaid(row.id);
     showToast(toastMessage);
     setExpandedId(null);
+    onRowsChanged?.();
   };
 
   return (

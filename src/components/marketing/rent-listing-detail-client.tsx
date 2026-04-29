@@ -7,24 +7,40 @@ import { getListingRichContent } from "@/data/listing-rich-content";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import { loadPublicExtraListingsFromServer, PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
+import { MANAGER_APPLICATIONS_EVENT, syncPublicApprovedApplicationsFromServer } from "@/lib/manager-applications-storage";
 
 export function RentListingDetailClient({ id }: { id: string }) {
   const base = mockProperties.find((p) => p.id === id);
   const [extra, setExtra] = useState<MockProperty | null | undefined>(undefined);
+  const [applicationTick, setApplicationTick] = useState(0);
 
   useEffect(() => {
     if (base) return;
     const pick = () => readExtraListings().find((p) => p.id === id) ?? null;
-    setExtra(pick());
+    const timeoutId = window.setTimeout(() => setExtra(pick()), 0);
     void loadPublicExtraListingsFromServer().then((rows) => setExtra(rows.find((p) => p.id === id) ?? pick()));
     const on = () => setExtra(pick());
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     return () => {
+      window.clearTimeout(timeoutId);
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
     };
   }, [id, base]);
 
+  useEffect(() => {
+    const refreshApplications = () => {
+      void syncPublicApprovedApplicationsFromServer().then(() => setApplicationTick((tick) => tick + 1));
+    };
+    const id = window.setTimeout(refreshApplications, 0);
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, refreshApplications);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener(MANAGER_APPLICATIONS_EVENT, refreshApplications);
+    };
+  }, []);
+
   if (base) {
+    void applicationTick;
     const rich = getListingRichContent(base);
     return <ListingDetailSections property={base} rich={rich} />;
   }
@@ -49,6 +65,7 @@ export function RentListingDetailClient({ id }: { id: string }) {
     );
   }
 
+  void applicationTick;
   const rich = getListingRichContent(extra);
   return <ListingDetailSections property={extra} rich={rich} />;
 }
