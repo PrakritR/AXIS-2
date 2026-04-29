@@ -471,8 +471,14 @@ export function ManagerApplications() {
     const row = rows.find((candidate) => candidate.id === id);
     const email = row?.email?.trim().toLowerCase();
 
+    // Optimistic removal — update the UI immediately before any network calls.
+    setRows((prev) => prev.filter((r) => r.id !== id));
+    setExpandedId(null);
+
     const result = await deleteManagerApplicationFromServer(id);
     if (!result.ok) {
+      // Roll back on failure.
+      setRows(await syncManagerApplicationsFromServer());
       showToast(result.error ?? "Could not delete application.");
       return;
     }
@@ -486,18 +492,13 @@ export function ManagerApplications() {
           credentials: "include",
           body: JSON.stringify({ email }),
         });
-        if (!res.ok) {
-          removedResidentAccess = false;
-        }
+        if (!res.ok) removedResidentAccess = false;
       } catch {
         removedResidentAccess = false;
       }
     }
 
-    setRows(rows.filter((r) => r.id !== id));
-    const syncedRows = await syncManagerApplicationsFromServer();
-    setRows(syncedRows);
-    setExpandedId(null);
+    void syncManagerApplicationsFromServer().then(setRows);
     showToast(
       email && !removedResidentAccess
         ? "Application deleted, but resident access could not be removed."
