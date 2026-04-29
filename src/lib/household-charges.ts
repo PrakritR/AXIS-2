@@ -74,6 +74,8 @@ export type RecurringRentProfile = {
   updatedAt: string;
 };
 
+const FUTURE_RENT_VISIBILITY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
 function isBrowser() {
   return typeof window !== "undefined";
 }
@@ -119,11 +121,16 @@ export async function syncHouseholdChargesFromServer(): Promise<{
       charges?: HouseholdCharge[];
       rentProfiles?: RecurringRentProfile[];
     };
-    const charges = Array.isArray(body.charges) ? body.charges : [];
-    const rentProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
+    const rawCharges = Array.isArray(body.charges) ? body.charges : [];
+    const rawRentProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
+    const rentProfiles = dedupeRecurringRentProfiles(rawRentProfiles);
+    const charges = dedupeCharges(rawCharges);
     memoryCharges = charges;
     memoryRentProfiles = rentProfiles;
     syncAllRecurringRentCharges();
+    if (rawCharges.length !== charges.length || rawRentProfiles.length !== rentProfiles.length) {
+      postHouseholdPayload({ action: "replace", charges, rentProfiles });
+    }
     emit();
     return { charges, rentProfiles };
   } catch {
@@ -137,8 +144,9 @@ function readAll(): HouseholdCharge[] {
 
 function writeAll(rows: HouseholdCharge[], silent = false) {
   if (!isBrowser()) return;
-  memoryCharges = rows;
-  mirrorChargeRows(rows);
+  const normalized = dedupeCharges(rows);
+  memoryCharges = normalized;
+  mirrorChargeRows(normalized);
   if (!silent) emit();
 }
 
@@ -148,8 +156,9 @@ function readRentProfiles(): RecurringRentProfile[] {
 
 function writeRentProfiles(rows: RecurringRentProfile[]) {
   if (!isBrowser()) return;
-  memoryRentProfiles = rows;
-  mirrorRentProfiles(rows);
+  const normalized = dedupeRecurringRentProfiles(rows);
+  memoryRentProfiles = normalized;
+  mirrorRentProfiles(normalized);
   syncAllRecurringRentCharges();
   emit();
 }
@@ -181,6 +190,68 @@ function recurringRentChargeId(profileId: string, month: string) {
   return `hc_rent_${profileId}_${month}`;
 }
 
+function recurringRentProfileKey(profile: Pick<RecurringRentProfile, "residentEmail" | "propertyId">): string {
+  return `${profile.residentEmail.trim().toLowerCase()}|${profile.propertyId}`;
+}
+
+function dedupeRecurringRentProfiles(rows: RecurringRentProfile[]): RecurringRentProfile[] {
+  const byKey = new Map<string, RecurringRentProfile>();
+  for (const profile of rows) {
+    const key = recurringRentProfileKey(profile);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, profile);
+      continue;
+    }
+    const existingUpdatedAt = new Date(existing.updatedAt).getTime();
+    const nextUpdatedAt = new Date(profile.updatedAt).getTime();
+    if (!Number.isFinite(existingUpdatedAt) || nextUpdatedAt >= existingUpdatedAt) {
+      byKey.set(key, profile);
+    }
+  }
+  return [...byKey.values()];
+}
+
+function chargeBusinessKey(charge: HouseholdCharge): string {
+  if (charge.kind === "rent") {
+    return `rent|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}|${charge.rentMonth ?? ""}`;
+  }
+  if (charge.applicationId && (
+    charge.kind === "application_fee" ||
+    charge.kind === "first_month_rent" ||
+    charge.kind === "prorated_rent" ||
+    charge.kind === "utilities" ||
+    charge.kind === "prorated_utilities" ||
+    charge.kind === "security_deposit" ||
+    charge.kind === "move_in_fee"
+  )) {
+    return `${charge.kind}|${charge.applicationId}`;
+  }
+  return charge.id;
+}
+
+function dedupeCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
+  const byKey = new Map<string, HouseholdCharge>();
+  for (const charge of rows) {
+    const key = chargeBusinessKey(charge);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, charge);
+      continue;
+    }
+    if (existing.status !== "paid" && charge.status === "paid") {
+      byKey.set(key, charge);
+      continue;
+    }
+    const existingCreatedAt = new Date(existing.createdAt).getTime();
+    const nextCreatedAt = new Date(charge.createdAt).getTime();
+    if (!Number.isFinite(existingCreatedAt) || nextCreatedAt >= existingCreatedAt) {
+      byKey.set(key, charge);
+    }
+  }
+  return [...byKey.values()];
+}
+
 function formatRecurringRentDueLabel(month: string, dueDay: number) {
   const [year, monthIndex] = month.split("-").map(Number);
   const dt = new Date(year!, (monthIndex ?? 1) - 1, dueDay, 12, 0, 0, 0);
@@ -189,12 +260,33 @@ function formatRecurringRentDueLabel(month: string, dueDay: number) {
     : dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+function recurringRentDueDate(month: string | undefined, dueDay: number | undefined): Date | null {
+  if (!month) return null;
+  const [year, monthIndex] = month.split("-").map(Number);
+  const day = Math.min(28, Math.max(1, Math.round(dueDay ?? 1)));
+  const dt = new Date(year!, (monthIndex ?? 1) - 1, day, 12, 0, 0, 0);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
 function dueLabelForLeaseStart(leaseStart?: string | null): string {
   const raw = leaseStart?.trim();
   if (!raw) return "Before move-in";
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return "Before move-in";
   return `Before ${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+}
+
+function shouldDisplayChargeInPayments(charge: HouseholdCharge, now = new Date()): boolean {
+  if (charge.status === "paid") return true;
+  switch (charge.kind) {
+    case "rent": {
+      const due = recurringRentDueDate(charge.rentMonth, charge.dueDay);
+      if (!due) return true;
+      return due.getTime() - now.getTime() <= FUTURE_RENT_VISIBILITY_WINDOW_MS;
+    }
+    default:
+      return true;
+  }
 }
 
 export function chargeDueLabel(charge: HouseholdCharge): string {
@@ -498,13 +590,24 @@ export function recordWorkOrderResidentCharge(input: {
 
 function syncAllRecurringRentCharges(): boolean {
   if (!isBrowser()) return false;
-  const profiles = readRentProfiles().filter((profile) => profile.active);
-  if (profiles.length === 0) return false;
+  const profiles = dedupeRecurringRentProfiles(readRentProfiles()).filter((profile) => profile.active);
+  if (profiles.length === 0) {
+    const rows = readAll();
+    const next = rows.filter((row) => row.kind !== "rent");
+    if (next.length !== rows.length) {
+      writeAll(next, true);
+      return true;
+    }
+    return false;
+  }
 
   const month = currentRentMonth();
   const rows = readAll();
-  const next = [...rows];
+  const validProfileIds = new Set(profiles.map((profile) => profile.id));
+  const next = rows.filter((row) => row.kind !== "rent" || (row.recurringRentProfileId ? validProfileIds.has(row.recurringRentProfileId) : false));
   let changed = false;
+
+  if (next.length !== rows.length) changed = true;
 
   for (const profile of profiles) {
     if (month < profile.startMonth) continue;
@@ -566,7 +669,9 @@ function syncAllRecurringRentCharges(): boolean {
     }
   }
 
-  if (changed) writeAll(next, true);
+  const deduped = dedupeCharges(next);
+  if (deduped.length !== next.length) changed = true;
+  if (changed) writeAll(deduped, true);
   return changed;
 }
 
@@ -644,15 +749,15 @@ export function linkHouseholdChargesToResidentUser(email: string, userId: string
 
 export function readChargesForResident(email: string, userId: string | null): HouseholdCharge[] {
   const e = email.trim().toLowerCase();
-  return readAll().filter((r) => {
+  return dedupeCharges(readAll()).filter((r) => {
     if (userId && r.residentUserId === userId) return true;
     return r.residentEmail.trim().toLowerCase() === e;
-  });
+  }).filter((charge) => shouldDisplayChargeInPayments(charge));
 }
 
 export function readChargesForManager(managerUserId: string | null): HouseholdCharge[] {
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
-  return readAll().filter((r) => r.managerUserId === scope);
+  return dedupeCharges(readAll()).filter((r) => r.managerUserId === scope).filter((charge) => shouldDisplayChargeInPayments(charge));
 }
 
 export function deleteHouseholdCharge(chargeId: string, managerUserId: string | null): boolean {

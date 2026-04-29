@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 function roleToPath(role: string): string {
@@ -22,6 +22,59 @@ function friendlyAuthError(raw: string): string {
     return "Incorrect email or password. Try again or use Forgot password.";
   }
   return raw;
+}
+
+function isAuthRole(value: unknown): value is AuthRole {
+  return value === "resident" || value === "manager" || value === "owner" || value === "admin";
+}
+
+function fallbackRolesFromUser(user: { user_metadata?: Record<string, unknown> | null; app_metadata?: Record<string, unknown> | null }): AuthRole[] {
+  const role = user.user_metadata?.role ?? user.app_metadata?.role;
+  return isAuthRole(role) ? [role] : [];
+}
+
+async function fetchPortalRolesFast(): Promise<AuthRole[] | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 1200);
+    const res = await fetch("/api/auth/portal-roles", {
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    window.clearTimeout(timeout);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { roles?: AuthRole[] };
+    return Array.isArray(body.roles) ? body.roles : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchLegacyProfileRoleFast(
+  supabase: ReturnType<typeof createSupabaseBrowserClient>,
+  userId: string,
+): Promise<AuthRole | null> {
+  try {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
+    return isAuthRole(profile?.role) ? profile.role : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolvePortalRoles(
+  supabase: ReturnType<typeof createSupabaseBrowserClient>,
+  user: { id: string; user_metadata?: Record<string, unknown> | null; app_metadata?: Record<string, unknown> | null },
+): Promise<AuthRole[]> {
+  const fromPortalRoute = await fetchPortalRolesFast();
+  if (fromPortalRoute && fromPortalRoute.length > 0) return fromPortalRoute;
+
+  const fromMetadata = fallbackRolesFromUser(user);
+  if (fromMetadata.length > 0) return fromMetadata;
+
+  const legacyRole = await fetchLegacyProfileRoleFast(supabase, user.id);
+  return legacyRole ? [legacyRole] : ["resident"];
 }
 
 async function tryResidentAutoConfirm(email: string): Promise<boolean> {
@@ -39,7 +92,6 @@ async function tryResidentAutoConfirm(email: string): Promise<boolean> {
 
 function SignInForm() {
   const { showToast } = useAppUi();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "";
 
@@ -55,7 +107,7 @@ function SignInForm() {
     setBusy(true);
     try {
       const supabase = createSupabaseBrowserClient();
-      let { error } = await supabase.auth.signInWithPassword({
+      let { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
@@ -66,6 +118,7 @@ function SignInForm() {
             email: email.trim(),
             password,
           });
+          data = retry.data;
           error = retry.error;
         }
       }
@@ -74,42 +127,29 @@ function SignInForm() {
         setBusy(false);
         return;
       }
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = data.user;
       if (!user) {
         showToast("No active session.");
         setBusy(false);
         return;
       }
-      let roles: AuthRole[] = [];
-      try {
-        const rolesRes = await fetch("/api/auth/portal-roles", { credentials: "include" });
-        const rolesBody = (await rolesRes.json()) as { roles?: AuthRole[] };
-        if (rolesRes.ok && rolesBody.roles?.length) {
-          roles = rolesBody.roles;
-        }
-      } catch {
-        /* fallback below */
-      }
-      if (roles.length === 0) {
-        const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-        const role = (profile?.role as AuthRole | undefined) ?? "resident";
-        roles = [role];
-      }
+
+      const roles = await resolvePortalRoles(supabase, user);
       if (roles.length > 1) {
         const q = nextPath.startsWith("/") ? `?next=${encodeURIComponent(nextPath)}` : "";
-        router.push(`/auth/choose-portal${q}`);
-        router.refresh();
+        window.location.assign(`/auth/choose-portal${q}`);
         return;
       }
       const role = roles[0] ?? "resident";
       const dest = nextPath.startsWith("/") ? nextPath : roleToPath(role);
-      router.push(dest);
-      router.refresh();
+      window.location.assign(dest);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign-in failed";
-      showToast(msg.includes("NEXT_PUBLIC_SUPABASE") ? "Supabase is not configured. Set env vars in .env.local." : msg);
+      if (msg.toLowerCase().includes("failed to fetch")) {
+        showToast("Signed in, but the portal is taking too long to load. Please try again.");
+      } else {
+        showToast(msg.includes("NEXT_PUBLIC_SUPABASE") ? "Supabase is not configured. Set env vars in .env.local." : msg);
+      }
     } finally {
       setBusy(false);
     }

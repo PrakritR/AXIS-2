@@ -12,7 +12,6 @@ import { Input, Select } from "@/components/ui/input";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import {
-  autoSeedRecurringRentProfiles,
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
   pruneObsoleteManagerCharges,
@@ -134,24 +133,21 @@ export function ManagerPayments() {
     return () => window.removeEventListener("message", onMessage);
   }, [showToast]);
 
-  const mergedRows = useMemo(() => {
-    void syncSignature;
-    const applications = readManagerApplicationRows();
-    const fromHc = readChargesForManager(userId).map((charge) => {
-      const ledgerRow = householdChargeToLedgerRow(charge);
-      const chargeEmail = charge.residentEmail.trim().toLowerCase();
-      const application = applications.find((row) => {
-        if (charge.applicationId && row.id === charge.applicationId) return true;
-        const rowEmail = row.email?.trim().toLowerCase();
-        const rowPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-        return rowEmail === chargeEmail && rowPropertyId === charge.propertyId;
-      });
-      const roomChoice = application?.assignedRoomChoice?.trim() || application?.application?.roomChoice1?.trim() || "";
-      const roomLabel = getRoomChoiceLabel(roomChoice).split(" · ")[0]?.trim() || "";
-      return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
+  void syncSignature;
+  const applications = readManagerApplicationRows();
+  const mergedRows = [...readChargesForManager(userId).map((charge) => {
+    const ledgerRow = householdChargeToLedgerRow(charge);
+    const chargeEmail = charge.residentEmail.trim().toLowerCase();
+    const application = applications.find((row) => {
+      if (charge.applicationId && row.id === charge.applicationId) return true;
+      const rowEmail = row.email?.trim().toLowerCase();
+      const rowPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+      return rowEmail === chargeEmail && rowPropertyId === charge.propertyId;
     });
-    return [...fromHc, ...mergeManagerPaymentLedger()];
-  }, [userId, syncSignature]);
+    const roomChoice = application?.assignedRoomChoice?.trim() || application?.application?.roomChoice1?.trim() || "";
+    const roomLabel = getRoomChoiceLabel(roomChoice).split(" · ")[0]?.trim() || "";
+    return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
+  }), ...mergeManagerPaymentLedger()];
 
   const propertyOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -225,32 +221,17 @@ export function ManagerPayments() {
     [approvedResidents, selectedApplicationId],
   );
 
-  // Auto-create recurring rent profiles for approved residents with a signed rent.
-  // No-ops if all profiles already exist, so this is safe to run on every render cycle.
   useEffect(() => {
     if (!userId) return;
     const visibleApplications = readManagerApplicationRows().filter((row) => applicationVisibleToPortalUser(row, userId));
-    let createdCharges = pruneObsoleteManagerCharges(userId, visibleApplications);
+    pruneObsoleteManagerCharges(userId, visibleApplications);
     for (const row of visibleApplications) {
-      createdCharges = recordSubmittedApplicationFeeCharge(row, userId) || createdCharges;
+      recordSubmittedApplicationFeeCharge(row, userId);
       if (row.bucket === "approved") {
-        createdCharges = recordApprovedApplicationCharges(row, userId) || createdCharges;
+        recordApprovedApplicationCharges(row, userId);
       }
     }
-    const toSeed = approvedResidents
-      .filter((r) => r.propertyId && r.signedMonthlyRent && r.signedMonthlyRent > 0)
-      .map((r) => ({
-        email: r.email,
-        name: r.name,
-        propertyId: r.propertyId,
-        propertyLabel: r.propertyLabel,
-        roomLabel: r.roomLabel,
-        managerUserId: userId,
-        monthlyRent: r.signedMonthlyRent!,
-      }));
-    void createdCharges;
-    void autoSeedRecurringRentProfiles(toSeed);
-  }, [approvedResidents, userId, hcTick, applicationTick]);
+  }, [userId, hcTick, applicationTick]);
 
   return (
     <ManagerPortalPageShell
