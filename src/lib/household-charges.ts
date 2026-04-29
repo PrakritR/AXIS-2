@@ -14,6 +14,9 @@ export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
 let memoryCharges: HouseholdCharge[] = [];
 let memoryRentProfiles: RecurringRentProfile[] = [];
+const HOUSEHOLD_CHARGES_SYNC_TTL_MS = 15_000;
+let householdChargesLastSyncedAt = 0;
+let householdChargesSyncPromise: Promise<{ charges: HouseholdCharge[]; rentProfiles: RecurringRentProfile[] }> | null = null;
 
 /** When no manager Supabase session, work-order pass-through charges use this scope so Payments still lists them. */
 export const HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE = "__axis_demo_manager_scope__";
@@ -114,29 +117,39 @@ export async function syncHouseholdChargesFromServer(): Promise<{
   rentProfiles: RecurringRentProfile[];
 }> {
   if (!isBrowser()) return { charges: [], rentProfiles: [] };
+  if (householdChargesSyncPromise) return householdChargesSyncPromise;
+  if (householdChargesLastSyncedAt > 0 && Date.now() - householdChargesLastSyncedAt < HOUSEHOLD_CHARGES_SYNC_TTL_MS) {
+    return { charges: readAll(), rentProfiles: readRentProfiles() };
+  }
   try {
-    const res = await fetch("/api/portal-household-charges", { credentials: "include", cache: "no-store" });
-    if (!res.ok) {
-      return { charges: readAll(), rentProfiles: readRentProfiles() };
-    }
-    const body = (await res.json()) as {
-      charges?: HouseholdCharge[];
-      rentProfiles?: RecurringRentProfile[];
-    };
-    const rawCharges = Array.isArray(body.charges) ? body.charges : [];
-    const rawRentProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
-    const rentProfiles = dedupeRecurringRentProfiles(rawRentProfiles);
-    const charges = dedupeCharges(rawCharges);
-    memoryCharges = charges;
-    memoryRentProfiles = rentProfiles;
-    syncAllRecurringRentCharges();
-    if (rawCharges.length !== charges.length || rawRentProfiles.length !== rentProfiles.length) {
-      postHouseholdPayload({ action: "replace", charges, rentProfiles });
-    }
-    emit();
-    return { charges, rentProfiles };
+    householdChargesSyncPromise = (async () => {
+      const res = await fetch("/api/portal-household-charges", { credentials: "include", cache: "no-store" });
+      if (!res.ok) {
+        return { charges: readAll(), rentProfiles: readRentProfiles() };
+      }
+      const body = (await res.json()) as {
+        charges?: HouseholdCharge[];
+        rentProfiles?: RecurringRentProfile[];
+      };
+      const rawCharges = Array.isArray(body.charges) ? body.charges : [];
+      const rawRentProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
+      const rentProfiles = dedupeRecurringRentProfiles(rawRentProfiles);
+      const charges = dedupeCharges(rawCharges);
+      memoryCharges = charges;
+      memoryRentProfiles = rentProfiles;
+      householdChargesLastSyncedAt = Date.now();
+      syncAllRecurringRentCharges();
+      if (rawCharges.length !== charges.length || rawRentProfiles.length !== rentProfiles.length) {
+        postHouseholdPayload({ action: "replace", charges, rentProfiles });
+      }
+      emit();
+      return { charges, rentProfiles };
+    })();
+    return await householdChargesSyncPromise;
   } catch {
     return { charges: readAll(), rentProfiles: readRentProfiles() };
+  } finally {
+    householdChargesSyncPromise = null;
   }
 }
 
@@ -148,6 +161,7 @@ function writeAll(rows: HouseholdCharge[], silent = false) {
   if (!isBrowser()) return;
   const normalized = dedupeCharges(rows);
   memoryCharges = normalized;
+  householdChargesLastSyncedAt = Date.now();
   mirrorChargeRows(normalized);
   if (!silent) emit();
 }
@@ -160,6 +174,7 @@ function writeRentProfiles(rows: RecurringRentProfile[]) {
   if (!isBrowser()) return;
   const normalized = dedupeRecurringRentProfiles(rows);
   memoryRentProfiles = normalized;
+  householdChargesLastSyncedAt = Date.now();
   mirrorRentProfiles(normalized);
   syncAllRecurringRentCharges();
   emit();

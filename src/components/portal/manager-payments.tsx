@@ -233,7 +233,7 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
         recordApprovedApplicationCharges(row, userId);
       }
     }
-  }, [userId, hcTick, applicationTick]);
+  }, [userId, applicationTick]);
 
   const filterRow = (
     <div className="flex flex-col gap-4">

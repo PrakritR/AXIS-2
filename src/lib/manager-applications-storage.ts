@@ -5,6 +5,11 @@ export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
 
 const EMPTY_FALLBACK: DemoApplicantRow[] = [];
 let memoryRows: DemoApplicantRow[] = [];
+const MANAGER_APPLICATIONS_SYNC_TTL_MS = 15_000;
+let managerApplicationsLastSyncedAt = 0;
+let managerApplicationsSyncPromise: Promise<DemoApplicantRow[]> | null = null;
+let publicApprovedApplicationsLastSyncedAt = 0;
+let publicApprovedApplicationsSyncPromise: Promise<DemoApplicantRow[]> | null = null;
 
 export function normalizeApplicationAxisId(id: string): string {
   const raw = id.trim();
@@ -74,32 +79,54 @@ export async function deleteManagerApplicationFromServer(id: string): Promise<{ 
   }
 }
 
-export async function syncManagerApplicationsFromServer(): Promise<DemoApplicantRow[]> {
+export async function syncManagerApplicationsFromServer(opts?: { force?: boolean }): Promise<DemoApplicantRow[]> {
   if (!canUseStorage()) return [];
+  const force = opts?.force === true;
+  if (!force && managerApplicationsSyncPromise) return managerApplicationsSyncPromise;
+  if (!force && managerApplicationsLastSyncedAt > 0 && Date.now() - managerApplicationsLastSyncedAt < MANAGER_APPLICATIONS_SYNC_TTL_MS) {
+    return readManagerApplicationRows();
+  }
   try {
-    const res = await fetch("/api/manager-applications", { credentials: "include" });
-    if (!res.ok) return readManagerApplicationRows();
-    const body = (await res.json()) as { rows?: DemoApplicantRow[] };
-    const rows = normalizeApplicationRows(Array.isArray(body.rows) ? body.rows : []);
-    memoryRows = rows;
-    emit();
-    return rows;
+    managerApplicationsSyncPromise = (async () => {
+      const res = await fetch("/api/manager-applications", { credentials: "include" });
+      if (!res.ok) return readManagerApplicationRows();
+      const body = (await res.json()) as { rows?: DemoApplicantRow[] };
+      const rows = normalizeApplicationRows(Array.isArray(body.rows) ? body.rows : []);
+      memoryRows = rows;
+      managerApplicationsLastSyncedAt = Date.now();
+      emit();
+      return rows;
+    })();
+    return await managerApplicationsSyncPromise;
   } catch {
     return readManagerApplicationRows();
+  } finally {
+    managerApplicationsSyncPromise = null;
   }
 }
 
-export async function syncPublicApprovedApplicationsFromServer(): Promise<DemoApplicantRow[]> {
+export async function syncPublicApprovedApplicationsFromServer(opts?: { force?: boolean }): Promise<DemoApplicantRow[]> {
   if (!canUseStorage()) return [];
+  const force = opts?.force === true;
+  if (!force && publicApprovedApplicationsSyncPromise) return publicApprovedApplicationsSyncPromise;
+  if (!force && publicApprovedApplicationsLastSyncedAt > 0 && Date.now() - publicApprovedApplicationsLastSyncedAt < MANAGER_APPLICATIONS_SYNC_TTL_MS) {
+    return readManagerApplicationRows();
+  }
   try {
-    const res = await fetch("/api/public/approved-room-occupancy", { cache: "no-store" });
-    if (!res.ok) return readManagerApplicationRows();
-    const body = (await res.json()) as { rows?: DemoApplicantRow[] };
-    const rows = normalizeApplicationRows(Array.isArray(body.rows) ? body.rows : []);
-    memoryRows = rows;
-    return rows;
+    publicApprovedApplicationsSyncPromise = (async () => {
+      const res = await fetch("/api/public/approved-room-occupancy", { cache: "no-store" });
+      if (!res.ok) return readManagerApplicationRows();
+      const body = (await res.json()) as { rows?: DemoApplicantRow[] };
+      const rows = normalizeApplicationRows(Array.isArray(body.rows) ? body.rows : []);
+      memoryRows = rows;
+      publicApprovedApplicationsLastSyncedAt = Date.now();
+      return rows;
+    })();
+    return await publicApprovedApplicationsSyncPromise;
   } catch {
     return readManagerApplicationRows();
+  } finally {
+    publicApprovedApplicationsSyncPromise = null;
   }
 }
 
@@ -121,6 +148,7 @@ export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
   try {
     const normalizedRows = normalizeApplicationRows(rows);
     memoryRows = normalizedRows;
+    managerApplicationsLastSyncedAt = Date.now();
     emit();
     mirrorApplicationsToServer(normalizedRows);
     void import("@/lib/lease-pipeline-storage").then(({ syncLeasePipelineFromApplications }) => {

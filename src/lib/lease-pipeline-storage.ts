@@ -14,6 +14,9 @@ import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
 
 let memoryRows: LeasePipelineRow[] = [];
+const LEASE_PIPELINE_SYNC_TTL_MS = 15_000;
+let leasePipelineLastSyncedAt = 0;
+let leasePipelineSyncPromise: Promise<LeasePipelineRow[]> | null = null;
 
 export type LeaseThreadRole = "manager" | "admin" | "resident";
 
@@ -151,6 +154,7 @@ function readRaw(): LeasePipelineRow[] | null {
 function write(rows: LeasePipelineRow[]) {
   if (!canUseStorage()) return;
   memoryRows = rows;
+  leasePipelineLastSyncedAt = Date.now();
   emit();
   void fetch("/api/portal-lease-pipeline", {
     method: "POST",
@@ -277,19 +281,32 @@ export function readLeasePipeline(managerUserId?: string | null): LeasePipelineR
   }
 }
 
-export async function syncLeasePipelineFromServer(managerUserId?: string | null): Promise<LeasePipelineRow[]> {
+export async function syncLeasePipelineFromServer(managerUserId?: string | null, opts?: { force?: boolean }): Promise<LeasePipelineRow[]> {
   if (!canUseStorage()) return [];
-  const res = await fetch("/api/portal-lease-pipeline", { credentials: "include", cache: "no-store" });
-  if (!res.ok) return readLeasePipeline(managerUserId);
-  const body = (await res.json()) as { rows?: unknown[] };
-  memoryRows = (body.rows ?? []).map(normalizeLeasePipelineRow);
-  const next = readLeasePipeline(managerUserId);
-  if (JSON.stringify(memoryRows) !== JSON.stringify(next)) {
-    write(next);
-    return next;
+  const force = opts?.force === true;
+  if (!force && leasePipelineSyncPromise) return leasePipelineSyncPromise;
+  if (!force && leasePipelineLastSyncedAt > 0 && Date.now() - leasePipelineLastSyncedAt < LEASE_PIPELINE_SYNC_TTL_MS) {
+    return readLeasePipeline(managerUserId);
   }
-  emit();
-  return next;
+  try {
+    leasePipelineSyncPromise = (async () => {
+      const res = await fetch("/api/portal-lease-pipeline", { credentials: "include", cache: "no-store" });
+      if (!res.ok) return readLeasePipeline(managerUserId);
+      const body = (await res.json()) as { rows?: unknown[] };
+      memoryRows = (body.rows ?? []).map(normalizeLeasePipelineRow);
+      leasePipelineLastSyncedAt = Date.now();
+      const next = readLeasePipeline(managerUserId);
+      if (JSON.stringify(memoryRows) !== JSON.stringify(next)) {
+        write(next);
+        return next;
+      }
+      emit();
+      return next;
+    })();
+    return await leasePipelineSyncPromise;
+  } finally {
+    leasePipelineSyncPromise = null;
+  }
 }
 
 export function syncLeasePipelineFromApplications(managerUserId?: string | null): LeasePipelineRow[] {

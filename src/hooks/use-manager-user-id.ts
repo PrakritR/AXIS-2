@@ -37,14 +37,6 @@ export function useManagerUserId(initial?: {
         setEmail(session?.user?.email ?? null);
         setReady(true);
       }
-      // Background: server-validate the JWT and correct if stale.
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!cancelled && user?.id !== session?.user?.id) {
-        setUserId(user?.id ?? null);
-        setEmail(user?.email ?? null);
-      }
     })();
 
     const {

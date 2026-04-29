@@ -5,6 +5,9 @@ export const MANAGER_WORK_ORDERS_EVENT = "axis:manager-work-orders";
 
 const EMPTY_FALLBACK: DemoManagerWorkOrderRow[] = [];
 let memoryRows: DemoManagerWorkOrderRow[] = [];
+const MANAGER_WORK_ORDERS_SYNC_TTL_MS = 15_000;
+let managerWorkOrdersLastSyncedAt = 0;
+let managerWorkOrdersSyncPromise: Promise<DemoManagerWorkOrderRow[]> | null = null;
 
 /**
  * Stable snapshot for SSR, hydration, and empty localStorage.
@@ -40,18 +43,29 @@ function deleteWorkOrderFromServer(id: string) {
   }).catch(() => undefined);
 }
 
-export async function syncManagerWorkOrdersFromServer(): Promise<DemoManagerWorkOrderRow[]> {
+export async function syncManagerWorkOrdersFromServer(opts?: { force?: boolean }): Promise<DemoManagerWorkOrderRow[]> {
   if (!canUseStorage()) return [];
+  const force = opts?.force === true;
+  if (!force && managerWorkOrdersSyncPromise) return managerWorkOrdersSyncPromise;
+  if (!force && managerWorkOrdersLastSyncedAt > 0 && Date.now() - managerWorkOrdersLastSyncedAt < MANAGER_WORK_ORDERS_SYNC_TTL_MS) {
+    return readManagerWorkOrderRows();
+  }
   try {
-    const res = await fetch("/api/portal-work-orders", { credentials: "include" });
-    if (!res.ok) return readManagerWorkOrderRows();
-    const body = (await res.json()) as { rows?: DemoManagerWorkOrderRow[] };
-    const rows = Array.isArray(body.rows) ? body.rows : [];
-    memoryRows = rows;
-    emit();
-    return rows;
+    managerWorkOrdersSyncPromise = (async () => {
+      const res = await fetch("/api/portal-work-orders", { credentials: "include" });
+      if (!res.ok) return readManagerWorkOrderRows();
+      const body = (await res.json()) as { rows?: DemoManagerWorkOrderRow[] };
+      const rows = Array.isArray(body.rows) ? body.rows : [];
+      memoryRows = rows;
+      managerWorkOrdersLastSyncedAt = Date.now();
+      emit();
+      return rows;
+    })();
+    return await managerWorkOrdersSyncPromise;
   } catch {
     return readManagerWorkOrderRows();
+  } finally {
+    managerWorkOrdersSyncPromise = null;
   }
 }
 
@@ -70,6 +84,7 @@ export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = E
 
 export function writeManagerWorkOrderRows(rows: DemoManagerWorkOrderRow[]): void {
   memoryRows = rows;
+  managerWorkOrdersLastSyncedAt = Date.now();
   emit();
   mirrorWorkOrdersToServer(rows);
 }
