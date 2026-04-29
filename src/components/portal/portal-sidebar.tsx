@@ -45,7 +45,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
 
   /** Matches `/pro` Axis Pro Portal: gradient header, white rail, slate-900 active row + arrow affordance. */
   const desktopAside = (
-    <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-200/80 bg-[#fbfbfd] lg:flex">
+    <aside className="relative z-20 hidden w-72 shrink-0 flex-col border-r border-slate-200/80 bg-[#fbfbfd] lg:flex">
       <div className={`px-6 py-6 text-white ${accent}`}>
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72">Axis Housing</p>
         <p className="mt-2 text-lg font-semibold tracking-[-0.02em] leading-snug">{definition.title}</p>
@@ -96,7 +96,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
     <>
       {desktopAside}
 
-      <div className="lg:hidden">
+      <div className="relative z-20 lg:hidden">
           <div className="flex items-center justify-between border-b border-slate-200/80 bg-[#fbfbfd] px-4 py-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{definition.title}</p>

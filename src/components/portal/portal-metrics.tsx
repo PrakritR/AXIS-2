@@ -251,7 +251,7 @@ export function ManagerPortalPageShell({
   children: ReactNode;
 }) {
   return (
-    <div className={PORTAL_SECTION_SURFACE}>
+    <div className={`${PORTAL_SECTION_SURFACE} min-w-0 w-full`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-slate-950">{title}</h1>
         {titleAside ? <div className="flex flex-wrap items-center gap-2 sm:justify-end">{titleAside}</div> : null}

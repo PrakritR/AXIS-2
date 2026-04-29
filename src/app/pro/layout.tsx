@@ -19,8 +19,8 @@ export default async function ProPortalLayout({ children }: { children: React.Re
       />
       <div className="flex min-h-0 w-full flex-1 flex-col lg:flex-row">
         <PortalSidebar definition={nav.definition} />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <main className="flex min-h-0 flex-1 flex-col px-4 py-6 lg:px-8 lg:py-8">{children}</main>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden px-4 py-6 lg:px-8 lg:py-8">{children}</main>
         </div>
       </div>
     </div>
