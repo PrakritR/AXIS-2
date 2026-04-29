@@ -16,9 +16,6 @@ import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import {
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
-  pruneObsoleteManagerCharges,
-  recordApprovedApplicationCharges,
-  recordSubmittedApplicationFeeCharge,
   readChargesForManager,
   syncHouseholdChargesFromServer,
   upsertRecurringRentProfile,
@@ -222,18 +219,6 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
     () => approvedResidents.find((row) => row.id === selectedApplicationId) ?? null,
     [approvedResidents, selectedApplicationId],
   );
-
-  useEffect(() => {
-    if (!userId) return;
-    const visibleApplications = readManagerApplicationRows().filter((row) => applicationVisibleToPortalUser(row, userId));
-    pruneObsoleteManagerCharges(userId, visibleApplications);
-    for (const row of visibleApplications) {
-      recordSubmittedApplicationFeeCharge(row, userId);
-      if (row.bucket === "approved") {
-        recordApprovedApplicationCharges(row, userId);
-      }
-    }
-  }, [userId, applicationTick]);
 
   const filterRow = (
     <div className="flex flex-col gap-4">
