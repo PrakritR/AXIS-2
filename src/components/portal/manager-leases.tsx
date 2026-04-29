@@ -34,6 +34,7 @@ export function ManagerLeases() {
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!authReady || !userId) return;
@@ -73,6 +74,35 @@ export function ManagerLeases() {
     if (!propertyFilter.trim()) return allRows;
     return allRows.filter((row) => row.application?.propertyId?.trim() === propertyFilter);
   }, [tick, propertyFilter, userId]);
+
+  useEffect(() => {
+    const emails = [...new Set(rows.map((row) => row.residentEmail.trim().toLowerCase()).filter(Boolean))];
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      if (emails.length === 0) {
+        setResidentAccountEmails(new Set());
+        return;
+      }
+      return fetch("/api/manager/resident-account-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails }),
+      })
+        .then(async (res) => {
+          const body = (await res.json()) as { emails?: string[] };
+          if (!cancelled && res.ok) {
+            setResidentAccountEmails(new Set((body.emails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean)));
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setResidentAccountEmails(new Set());
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [rows]);
 
   const counts = useMemo(() => countBuckets(rows), [rows]);
   const tabs = useMemo(
@@ -126,7 +156,12 @@ export function ManagerLeases() {
         </div>
       }
     >
-      <ManagerLeasesPipelinePanel rows={rows} bucket={bucket} refreshKey={tick} />
+      <ManagerLeasesPipelinePanel
+        rows={rows}
+        bucket={bucket}
+        refreshKey={tick}
+        residentAccountEmails={residentAccountEmails}
+      />
     </ManagerPortalPageShell>
   );
 }

@@ -317,7 +317,7 @@ function CreateAccountContent() {
             ? "Resident portal access added. You are signed in."
             : "Resident account created. You are signed in.",
         );
-        router.push("/portal/resident");
+        router.push("/resident/dashboard");
         return;
       }
 

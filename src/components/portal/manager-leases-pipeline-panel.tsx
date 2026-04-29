@@ -62,10 +62,12 @@ export function ManagerLeasesPipelinePanel({
   rows,
   bucket,
   refreshKey,
+  residentAccountEmails,
 }: {
   rows: LeasePipelineRow[];
   bucket: ManagerLeaseBucket;
   refreshKey: number;
+  residentAccountEmails: Set<string>;
 }) {
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -98,6 +100,11 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onSendToResident = (row: LeasePipelineRow) => {
+    const residentEmail = row.residentEmail.trim().toLowerCase();
+    if (!residentEmail || !residentAccountEmails.has(residentEmail)) {
+      showToast("Resident must create their Axis resident account before you can send the lease.");
+      return;
+    }
     appendLeaseThreadMessage(row.id, "manager", "Sent lease to resident for review and signature.");
     if (
       updateLeasePipelineRow(row.id, {
@@ -291,11 +298,18 @@ export function ManagerLeasesPipelinePanel({
 
                             {bucket === "manager" ? (
                               <>
+                                {!residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ? (
+                                  <p className="max-w-xl text-xs leading-relaxed text-amber-800">
+                                    This lease cannot be sent yet. The resident must first create their Axis resident account using their
+                                    application ID and matching email.
+                                  </p>
+                                ) : null}
                                 <Button
                                   type="button"
                                   variant="outline"
                                   className={PORTAL_DETAIL_BTN}
                                   onClick={() => onSendToResident(row)}
+                                  disabled={!residentAccountEmails.has(row.residentEmail.trim().toLowerCase())}
                                 >
                                   Send to resident
                                 </Button>
