@@ -12,11 +12,16 @@ import { clearUploadedOwnLease, readUploadedOwnLease, saveUploadedOwnLease } fro
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
+const LEASE_PIPELINE_SESSION_KEY = "axis:lease-pipeline:v1";
 
 let memoryRows: LeasePipelineRow[] = [];
 const LEASE_PIPELINE_SYNC_TTL_MS = 15_000;
 let leasePipelineLastSyncedAt = 0;
 let leasePipelineSyncPromise: Promise<LeasePipelineRow[]> | null = null;
+
+function leaseRowsChanged(a: LeasePipelineRow[], b: LeasePipelineRow[]) {
+  return JSON.stringify(a) !== JSON.stringify(b);
+}
 
 export type LeaseThreadRole = "manager" | "admin" | "resident";
 
@@ -104,6 +109,28 @@ function canUseStorage() {
   return typeof window !== "undefined";
 }
 
+function hydrateLeasePipelineFromSession() {
+  if (!canUseStorage() || memoryRows.length > 0) return;
+  try {
+    const raw = window.sessionStorage.getItem(LEASE_PIPELINE_SESSION_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as unknown[];
+    if (!Array.isArray(parsed)) return;
+    memoryRows = parsed.map(normalizeLeasePipelineRow);
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistLeasePipelineToSession(rows: LeasePipelineRow[]) {
+  if (!canUseStorage()) return;
+  try {
+    window.sessionStorage.setItem(LEASE_PIPELINE_SESSION_KEY, JSON.stringify(rows));
+  } catch {
+    /* ignore */
+  }
+}
+
 function emit() {
   if (!canUseStorage()) return;
   queueMicrotask(() => {
@@ -148,12 +175,15 @@ function approvedLeasePlacementLabel(input: {
 }
 
 function readRaw(): LeasePipelineRow[] | null {
+  hydrateLeasePipelineFromSession();
   return canUseStorage() ? memoryRows : null;
 }
 
 function write(rows: LeasePipelineRow[]) {
   if (!canUseStorage()) return;
+  if (!leaseRowsChanged(memoryRows, rows)) return;
   memoryRows = rows;
+  persistLeasePipelineToSession(rows);
   leasePipelineLastSyncedAt = Date.now();
   emit();
   void fetch("/api/portal-lease-pipeline", {
@@ -283,6 +313,7 @@ export function readLeasePipeline(managerUserId?: string | null): LeasePipelineR
 
 export async function syncLeasePipelineFromServer(managerUserId?: string | null, opts?: { force?: boolean }): Promise<LeasePipelineRow[]> {
   if (!canUseStorage()) return [];
+  hydrateLeasePipelineFromSession();
   const force = opts?.force === true;
   if (!force && leasePipelineSyncPromise) return leasePipelineSyncPromise;
   if (!force && leasePipelineLastSyncedAt > 0 && Date.now() - leasePipelineLastSyncedAt < LEASE_PIPELINE_SYNC_TTL_MS) {
@@ -293,14 +324,17 @@ export async function syncLeasePipelineFromServer(managerUserId?: string | null,
       const res = await fetch("/api/portal-lease-pipeline", { credentials: "include", cache: "no-store" });
       if (!res.ok) return readLeasePipeline(managerUserId);
       const body = (await res.json()) as { rows?: unknown[] };
-      memoryRows = (body.rows ?? []).map(normalizeLeasePipelineRow);
+      const fetched = (body.rows ?? []).map(normalizeLeasePipelineRow);
+      const changed = leaseRowsChanged(memoryRows, fetched);
+      memoryRows = fetched;
+      persistLeasePipelineToSession(fetched);
       leasePipelineLastSyncedAt = Date.now();
       const next = readLeasePipeline(managerUserId);
       if (JSON.stringify(memoryRows) !== JSON.stringify(next)) {
         write(next);
         return next;
       }
-      emit();
+      if (changed) emit();
       return next;
     })();
     return await leasePipelineSyncPromise;

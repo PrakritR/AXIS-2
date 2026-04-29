@@ -12,7 +12,6 @@ import {
 } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   HOUSEHOLD_CHARGES_EVENT,
   linkHouseholdChargesToResidentUser,
@@ -43,6 +42,7 @@ import {
   saveUploadedOwnLease,
   type UploadedOwnLease,
 } from "@/lib/resident-lease-upload";
+import { usePortalSession } from "@/hooks/use-portal-session";
 
 type ChecklistRow = { id: string; label: string; done: boolean };
 
@@ -202,6 +202,7 @@ const MAX_LEASE_PDF_BYTES = 12 * 1024 * 1024;
 
 export function ResidentLeasePanel() {
   const { showToast } = useAppUi();
+  const session = usePortalSession();
   const [checklist, setChecklist] = useState<ChecklistRow[]>(() =>
     demoResidentLeaseChecklist.map((c) => ({ id: c.id, label: c.label, done: c.done })),
   );
@@ -218,20 +219,16 @@ export function ResidentLeasePanel() {
   const refreshLeaseGate = useCallback(() => {
     void (async () => {
       try {
-        const supabase = createSupabaseBrowserClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        const em = user?.email?.trim();
-        if (!em || !user?.id) {
+        const em = session.email?.trim();
+        if (!em || !session.userId) {
           setLeaseBlockers([]);
           setEmail(null);
           setOwnLease(null);
           return;
         }
-        linkHouseholdChargesToResidentUser(em, user.id);
+        linkHouseholdChargesToResidentUser(em, session.userId);
         await syncHouseholdChargesFromServer();
-        setLeaseBlockers(residentLeaseBlockedReasons(em, user.id));
+        setLeaseBlockers(residentLeaseBlockedReasons(em, session.userId));
         setEmail(em);
         setOwnLease(readUploadedOwnLease(em));
       } catch {
@@ -240,7 +237,7 @@ export function ResidentLeasePanel() {
         setOwnLease(null);
       }
     })();
-  }, []);
+  }, [session.email, session.userId]);
 
   useEffect(() => {
     refreshLeaseGate();

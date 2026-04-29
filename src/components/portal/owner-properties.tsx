@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { ManagerSectionShell, PortalPropertyFilter } from "./manager-section-shell";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { usePortalSession } from "@/hooks/use-portal-session";
 import { readProRelationships, type ProRelationshipRecord } from "@/lib/pro-relationships";
 import {
   PROPERTY_PIPELINE_EVENT,
@@ -25,22 +25,8 @@ function relationshipLabelForRow(row: ProRelationshipRecord) {
 }
 
 export function OwnerProperties() {
-  const [userId, setUserId] = useState<string | null>(null);
+  const { userId } = usePortalSession();
   const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!cancelled) setUserId(user?.id ?? null);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const bump = () => setTick((n) => n + 1);

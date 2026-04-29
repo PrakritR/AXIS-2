@@ -17,6 +17,16 @@ let memoryRentProfiles: RecurringRentProfile[] = [];
 const HOUSEHOLD_CHARGES_SYNC_TTL_MS = 15_000;
 let householdChargesLastSyncedAt = 0;
 let householdChargesSyncPromise: Promise<{ charges: HouseholdCharge[]; rentProfiles: RecurringRentProfile[] }> | null = null;
+const HOUSEHOLD_CHARGES_SESSION_KEY = "axis:household-charges:v1";
+const HOUSEHOLD_RENT_PROFILES_SESSION_KEY = "axis:household-rent-profiles:v1";
+
+function chargesChanged(a: HouseholdCharge[], b: HouseholdCharge[]) {
+  return JSON.stringify(dedupeCharges(a)) !== JSON.stringify(dedupeCharges(b));
+}
+
+function rentProfilesChanged(a: RecurringRentProfile[], b: RecurringRentProfile[]) {
+  return JSON.stringify(dedupeRecurringRentProfiles(a)) !== JSON.stringify(dedupeRecurringRentProfiles(b));
+}
 
 /** When no manager Supabase session, work-order pass-through charges use this scope so Payments still lists them. */
 export const HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE = "__axis_demo_manager_scope__";
@@ -85,6 +95,38 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+function hydrateHouseholdStateFromSession() {
+  if (!isBrowser()) return;
+  try {
+    if (memoryCharges.length === 0) {
+      const rawCharges = window.sessionStorage.getItem(HOUSEHOLD_CHARGES_SESSION_KEY);
+      if (rawCharges) {
+        const parsed = JSON.parse(rawCharges) as HouseholdCharge[];
+        if (Array.isArray(parsed)) memoryCharges = dedupeCharges(parsed);
+      }
+    }
+    if (memoryRentProfiles.length === 0) {
+      const rawProfiles = window.sessionStorage.getItem(HOUSEHOLD_RENT_PROFILES_SESSION_KEY);
+      if (rawProfiles) {
+        const parsed = JSON.parse(rawProfiles) as RecurringRentProfile[];
+        if (Array.isArray(parsed)) memoryRentProfiles = dedupeRecurringRentProfiles(parsed);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistHouseholdStateToSession() {
+  if (!isBrowser()) return;
+  try {
+    window.sessionStorage.setItem(HOUSEHOLD_CHARGES_SESSION_KEY, JSON.stringify(memoryCharges));
+    window.sessionStorage.setItem(HOUSEHOLD_RENT_PROFILES_SESSION_KEY, JSON.stringify(memoryRentProfiles));
+  } catch {
+    /* ignore */
+  }
+}
+
 function emit() {
   if (!isBrowser()) return;
   window.dispatchEvent(new Event(HOUSEHOLD_CHARGES_EVENT));
@@ -117,6 +159,7 @@ export async function syncHouseholdChargesFromServer(): Promise<{
   rentProfiles: RecurringRentProfile[];
 }> {
   if (!isBrowser()) return { charges: [], rentProfiles: [] };
+  hydrateHouseholdStateFromSession();
   if (householdChargesSyncPromise) return householdChargesSyncPromise;
   if (householdChargesLastSyncedAt > 0 && Date.now() - householdChargesLastSyncedAt < HOUSEHOLD_CHARGES_SYNC_TTL_MS) {
     return { charges: readAll(), rentProfiles: readRentProfiles() };
@@ -135,14 +178,17 @@ export async function syncHouseholdChargesFromServer(): Promise<{
       const rawRentProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
       const rentProfiles = dedupeRecurringRentProfiles(rawRentProfiles);
       const charges = dedupeCharges(rawCharges);
+      const chargesWereChanged = chargesChanged(memoryCharges, charges);
+      const rentProfilesWereChanged = rentProfilesChanged(memoryRentProfiles, rentProfiles);
       memoryCharges = charges;
       memoryRentProfiles = rentProfiles;
+      persistHouseholdStateToSession();
       householdChargesLastSyncedAt = Date.now();
       syncAllRecurringRentCharges();
       if (rawCharges.length !== charges.length || rawRentProfiles.length !== rentProfiles.length) {
         postHouseholdPayload({ action: "replace", charges, rentProfiles });
       }
-      emit();
+      if (chargesWereChanged || rentProfilesWereChanged) emit();
       return { charges, rentProfiles };
     })();
     return await householdChargesSyncPromise;
@@ -154,26 +200,32 @@ export async function syncHouseholdChargesFromServer(): Promise<{
 }
 
 function readAll(): HouseholdCharge[] {
+  hydrateHouseholdStateFromSession();
   return isBrowser() ? memoryCharges : [];
 }
 
 function writeAll(rows: HouseholdCharge[], silent = false) {
   if (!isBrowser()) return;
   const normalized = dedupeCharges(rows);
+  if (!chargesChanged(memoryCharges, normalized)) return;
   memoryCharges = normalized;
+  persistHouseholdStateToSession();
   householdChargesLastSyncedAt = Date.now();
   mirrorChargeRows(normalized);
   if (!silent) emit();
 }
 
 function readRentProfiles(): RecurringRentProfile[] {
+  hydrateHouseholdStateFromSession();
   return isBrowser() ? memoryRentProfiles : [];
 }
 
 function writeRentProfiles(rows: RecurringRentProfile[]) {
   if (!isBrowser()) return;
   const normalized = dedupeRecurringRentProfiles(rows);
+  if (!rentProfilesChanged(memoryRentProfiles, normalized)) return;
   memoryRentProfiles = normalized;
+  persistHouseholdStateToSession();
   householdChargesLastSyncedAt = Date.now();
   mirrorRentProfiles(normalized);
   syncAllRecurringRentCharges();
@@ -629,90 +681,7 @@ export function recordWorkOrderResidentCharge(input: {
 }
 
 function syncAllRecurringRentCharges(): boolean {
-  if (!isBrowser()) return false;
-  const profiles = dedupeRecurringRentProfiles(readRentProfiles()).filter((profile) => profile.active);
-  if (profiles.length === 0) {
-    const rows = readAll();
-    const next = rows.filter((row) => row.kind !== "rent");
-    if (next.length !== rows.length) {
-      writeAll(next, true);
-      return true;
-    }
-    return false;
-  }
-
-  const month = currentRentMonth();
-  const rows = readAll();
-  const validProfileIds = new Set(profiles.map((profile) => profile.id));
-  const next = rows.filter((row) => row.kind !== "rent" || (row.recurringRentProfileId ? validProfileIds.has(row.recurringRentProfileId) : false));
-  let changed = false;
-
-  if (next.length !== rows.length) changed = true;
-
-  for (const profile of profiles) {
-    if (month < profile.startMonth) continue;
-
-    const chargeId = recurringRentChargeId(profile.id, month);
-    const idx = next.findIndex((row) => row.id === chargeId);
-    const amountLabel = `$${profile.monthlyRent.toFixed(2)}`;
-    const baseCharge: HouseholdCharge = {
-      id: chargeId,
-      createdAt: new Date().toISOString(),
-      residentEmail: profile.residentEmail,
-      residentName: profile.residentName,
-      residentUserId: profile.residentUserId,
-      propertyId: profile.propertyId,
-      propertyLabel: profile.propertyLabel,
-      managerUserId: profile.managerUserId,
-      kind: "rent",
-      title: `Rent · ${month}`,
-      amountLabel,
-      balanceLabel: amountLabel,
-      status: "pending",
-      blocksLeaseUntilPaid: false,
-      recurringRentProfileId: profile.id,
-      rentMonth: month,
-      dueDay: profile.dueDay,
-    };
-
-    if (idx === -1) {
-      next.push(baseCharge);
-      changed = true;
-      continue;
-    }
-
-    const existing = next[idx]!;
-    const updated: HouseholdCharge = {
-      ...existing,
-      ...baseCharge,
-      createdAt: existing.createdAt,
-      status: existing.status,
-      paidAt: existing.paidAt,
-      balanceLabel: existing.status === "paid" ? "$0.00" : amountLabel,
-    };
-
-    if (
-      existing.residentEmail !== updated.residentEmail ||
-      existing.residentName !== updated.residentName ||
-      existing.residentUserId !== updated.residentUserId ||
-      existing.propertyId !== updated.propertyId ||
-      existing.propertyLabel !== updated.propertyLabel ||
-      existing.managerUserId !== updated.managerUserId ||
-      existing.title !== updated.title ||
-      existing.amountLabel !== updated.amountLabel ||
-      existing.balanceLabel !== updated.balanceLabel ||
-      existing.rentMonth !== updated.rentMonth ||
-      existing.dueDay !== updated.dueDay
-    ) {
-      next[idx] = updated;
-      changed = true;
-    }
-  }
-
-  const deduped = dedupeCharges(next);
-  if (deduped.length !== next.length) changed = true;
-  if (changed) writeAll(deduped, true);
-  return changed;
+  return false;
 }
 
 export function readRecurringRentProfilesForManager(managerUserId: string | null): RecurringRentProfile[] {
@@ -732,55 +701,8 @@ export function upsertRecurringRentProfile(input: {
   dueDay?: number;
   startMonth?: string;
 }): RecurringRentProfile | null {
-  const email = input.residentEmail.trim().toLowerCase();
-  if (!email || !Number.isFinite(input.monthlyRent) || input.monthlyRent <= 0) return null;
-  const rows = readRentProfiles();
-  const idx = rows.findIndex(
-    (profile) => profile.residentEmail.trim().toLowerCase() === email && profile.propertyId === input.propertyId,
-  );
-  const nextId = idx === -1 ? `rent_profile_${crypto.randomUUID()}` : rows[idx]!.id;
-  const normalizedMonthlyRent = Number(input.monthlyRent.toFixed(2));
-  const normalizedDueDay = Math.min(28, Math.max(1, Math.round(input.dueDay ?? 1)));
-  const normalizedStartMonth = input.startMonth?.trim() || currentRentMonth();
-  const baseProfile: Omit<RecurringRentProfile, "updatedAt"> = {
-    id: nextId,
-    residentEmail: input.residentEmail.trim(),
-    residentName: input.residentName.trim() || "Resident",
-    residentUserId: input.residentUserId ?? null,
-    propertyId: input.propertyId,
-    propertyLabel: input.propertyLabel.trim() || "Property",
-    roomLabel: input.roomLabel.trim() || "Room",
-    managerUserId: input.managerUserId,
-    monthlyRent: normalizedMonthlyRent,
-    dueDay: normalizedDueDay,
-    startMonth: normalizedStartMonth,
-    active: true,
-  };
-  if (idx !== -1) {
-    const existing = rows[idx]!;
-    const unchanged =
-      existing.residentEmail === baseProfile.residentEmail &&
-      existing.residentName === baseProfile.residentName &&
-      existing.residentUserId === baseProfile.residentUserId &&
-      existing.propertyId === baseProfile.propertyId &&
-      existing.propertyLabel === baseProfile.propertyLabel &&
-      existing.roomLabel === baseProfile.roomLabel &&
-      existing.managerUserId === baseProfile.managerUserId &&
-      existing.monthlyRent === baseProfile.monthlyRent &&
-      existing.dueDay === baseProfile.dueDay &&
-      existing.startMonth === baseProfile.startMonth &&
-      existing.active === baseProfile.active;
-    if (unchanged) return existing;
-  }
-  const profile: RecurringRentProfile = {
-    ...baseProfile,
-    updatedAt: new Date().toISOString(),
-  };
-  const next = [...rows];
-  if (idx === -1) next.push(profile);
-  else next[idx] = profile;
-  writeRentProfiles(next);
-  return profile;
+  void input;
+  return null;
 }
 
 /** Link charges created with email-only to the signed-in resident account. */
@@ -916,232 +838,15 @@ export function recordApplicationCharges(
 }
 
 export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, managerUserId: string | null): boolean {
-  if (!isBrowser()) return false;
-  const residentEmail = row.email?.trim();
-  if (!residentEmail || !residentEmail.includes("@")) return false;
-  const applicationId = row.id.trim();
-  if (!applicationId) return false;
-  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-  if (!propertyId) return false;
-  const appFeeChannel =
-    row.application?.applicationFeePayChannel === "zelle" || row.application?.applicationFeePayChannel === "venmo"
-      ? row.application.applicationFeePayChannel
-      : "stripe";
-  const prop = getPropertyById(propertyId);
-  const effectiveManagerUserId = managerUserId ?? row.managerUserId ?? prop?.managerUserId ?? null;
-  const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Applicant";
-  const expected = ensurePendingApplicationFeeCharge({
-    residentEmail,
-    residentName,
-    residentUserId: null,
-    propertyId,
-    applicationId,
-    managerUserId: effectiveManagerUserId,
-  });
-  if (!expected) return false;
-
-  const canonicalId = applicationFeeChargeIdForApplication(applicationId);
-  const rows = readAll();
-  const matching = rows.filter((charge) => {
-    if (charge.kind !== "application_fee") return false;
-    if (charge.applicationId === applicationId) return true;
-    return !charge.applicationId && charge.propertyId === propertyId && charge.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase();
-  });
-  const paidMatch = matching.find((charge) => charge.status === "paid");
-  const seed = matching.find((charge) => charge.id === canonicalId) ?? matching[0] ?? expected;
-  const shouldBePaid = appFeeChannel === "stripe" || Boolean(paidMatch);
-  const canonicalCharge: HouseholdCharge = {
-    ...seed,
-    id: canonicalId,
-    applicationId,
-    residentEmail,
-    residentName,
-    residentUserId: seed.residentUserId ?? null,
-    propertyId,
-    propertyLabel: prop?.title ?? seed.propertyLabel,
-    managerUserId: effectiveManagerUserId,
-    kind: "application_fee",
-    title: chargeTitle("application_fee"),
-    amountLabel: expected.amountLabel,
-    balanceLabel: shouldBePaid ? "$0.00" : expected.balanceLabel,
-    status: shouldBePaid ? "paid" : "pending",
-    paidAt: shouldBePaid ? (paidMatch?.paidAt ?? seed.paidAt ?? new Date().toISOString()) : undefined,
-    zelleContactSnapshot: expected.zelleContactSnapshot,
-    venmoContactSnapshot: expected.venmoContactSnapshot,
-    blocksLeaseUntilPaid: false,
-  };
-
-  const next = rows.filter((charge) => !matching.some((match) => match.id === charge.id));
-  next.push(canonicalCharge);
-
-  const unchanged =
-    matching.length === 1 &&
-    matching[0]!.id === canonicalCharge.id &&
-    JSON.stringify(matching[0]) === JSON.stringify(canonicalCharge);
-  if (unchanged) return false;
-
-  writeAll(next);
-  return true;
+  void row;
+  void managerUserId;
+  return false;
 }
 
 export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null): boolean {
-  if (!isBrowser()) return false;
-  const residentEmail = row.email?.trim();
-  if (!residentEmail || !residentEmail.includes("@")) return false;
-  const applicationId = row.id.trim();
-  if (!applicationId) return false;
-  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-  if (!propertyId) return false;
-  const prop = getPropertyById(propertyId);
-  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
-  const propertyLabel = prop?.title ?? row.property ?? "Listing";
-  const zelleSnap = sub?.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
-  const effectiveManagerUserId = managerUserId ?? row.managerUserId ?? prop?.managerUserId ?? null;
-  const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Resident";
-  const roomLabel = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "Room";
-  let changed = false;
-  let firstChargeMonth = row.application?.leaseStart?.trim().slice(0, 7) || currentRentMonth();
-  const leaseStart = row.application?.leaseStart?.trim();
-  const moveInDue = dueLabelForLeaseStart(leaseStart);
-
-  changed = recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId) || changed;
-
-  const residentEmailKey = residentEmail.trim().toLowerCase();
-  const managedKinds = new Set<HouseholdChargeKind>([
-    "first_month_rent",
-    "prorated_rent",
-    "utilities",
-    "prorated_utilities",
-    "security_deposit",
-    "move_in_fee",
-  ]);
-  const rows = readAll();
-  const existingManaged = rows.filter((charge) => {
-    if (!managedKinds.has(charge.kind)) return false;
-    if (charge.applicationId === applicationId) return true;
-    return !charge.applicationId && charge.propertyId === propertyId && charge.residentEmail.trim().toLowerCase() === residentEmailKey;
-  });
-  const created: HouseholdCharge[] = [];
-  const pushCharge = (
-    kind: HouseholdChargeKind,
-    raw: string,
-    blocksLeaseUntilPaid: boolean,
-    titleOverride?: string,
-    dueDateLabel?: string,
-  ) => {
-    const amount = parseMoneyAmount(raw);
-    if (amount <= 0) return;
-    const label = normalizeMoneyLabel(raw, amount);
-    const existingOfKind = existingManaged.filter((charge) => charge.kind === kind);
-    const firstRentKinds = new Set<HouseholdChargeKind>(["first_month_rent", "prorated_rent"]);
-    const equivalentExisting =
-      firstRentKinds.has(kind) ? existingManaged.filter((charge) => firstRentKinds.has(charge.kind)) : existingOfKind;
-    const paidExisting = equivalentExisting.find((charge) => charge.status === "paid");
-    const seed =
-      existingOfKind.find((charge) => charge.id === approvedChargeId(applicationId, kind)) ??
-      existingOfKind[0] ??
-      equivalentExisting[0];
-    created.push({
-      id: approvedChargeId(applicationId, kind),
-      createdAt: seed?.createdAt ?? new Date().toISOString(),
-      applicationId,
-      residentEmail,
-      residentName,
-      residentUserId: seed?.residentUserId ?? null,
-      propertyId,
-      propertyLabel,
-      managerUserId: effectiveManagerUserId,
-      kind,
-      title: titleOverride ?? chargeTitle(kind),
-      amountLabel: label,
-      balanceLabel: paidExisting ? "$0.00" : label,
-      status: paidExisting ? "paid" : "pending",
-      paidAt: paidExisting?.paidAt,
-      zelleContactSnapshot: zelleSnap ?? seed?.zelleContactSnapshot,
-      blocksLeaseUntilPaid,
-      dueDateLabel,
-    });
-  };
-
-  const recurringStartMonth = (leaseStart?: string): string => {
-    const [yearRaw, monthRaw] = leaseStart?.split("-") ?? [];
-    const year = Number(yearRaw);
-    const month = Number(monthRaw);
-    const base = Number.isFinite(year) && Number.isFinite(month) && year > 0 && month > 0
-      ? new Date(year, month - 1, 1, 12, 0, 0, 0)
-      : new Date();
-    base.setMonth(base.getMonth() + 1);
-    return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}`;
-  };
-
-  const signedRent = selectedRoomRentAmount(row);
-  if (signedRent > 0) {
-    firstChargeMonth = leaseStart?.slice(0, 7) || firstChargeMonth;
-    const firstRent = firstMonthRentChargeForLeaseStart(signedRent, leaseStart);
-    pushCharge(
-      firstRent.kind,
-      moneyAmountLabel(firstRent.amount),
-      false,
-      firstRent.title,
-      moveInDue,
-    );
-    const profile = upsertRecurringRentProfile({
-      residentEmail,
-      residentName,
-      residentUserId: null,
-      propertyId,
-      propertyLabel,
-      roomLabel,
-      managerUserId: effectiveManagerUserId,
-      monthlyRent: signedRent,
-      startMonth: recurringStartMonth(leaseStart),
-    });
-    if (profile) changed = true;
-  }
-
-  if (sub) {
-    pushCharge("security_deposit", sub.securityDeposit, true, undefined, "Before lease signing");
-    pushCharge("move_in_fee", sub.moveInFee, true, undefined, "Before lease signing");
-    const utilities = selectedRoomUtilities(row);
-    if (utilities.amount > 0) {
-      const start = leaseStartProration(leaseStart);
-      const utilityKind: HouseholdChargeKind = start.prorated ? "prorated_utilities" : "utilities";
-      const utilityAmount = start.prorated ? utilities.amount * start.factor : utilities.amount;
-      pushCharge(
-        utilityKind,
-        moneyAmountLabel(utilityAmount),
-        false,
-        start.prorated ? "Prorated utilities" : "Utilities",
-        moveInDue,
-      );
-    }
-  }
-
-  const createsExplicitFirstRent = created.some((charge) => charge.kind === "first_month_rent" || charge.kind === "prorated_rent");
-  let next = rows.filter((charge) => !existingManaged.some((managed) => managed.id === charge.id));
-  if (createsExplicitFirstRent) {
-    next = next.filter(
-      (charge) =>
-        !(
-          (charge.kind === "rent" || charge.kind === "first_month_rent" || charge.kind === "prorated_rent") &&
-          charge.status === "pending" &&
-          charge.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase() &&
-          (charge.propertyId === propertyId ||
-            charge.applicationId === applicationId ||
-            charge.dueDateLabel === moveInDue ||
-            charge.rentMonth === firstChargeMonth)
-        ),
-    );
-  }
-  next.push(...created);
-  const existingSignature = JSON.stringify([...existingManaged].sort((a, b) => a.id.localeCompare(b.id)));
-  const nextSignature = JSON.stringify([...created].sort((a, b) => a.id.localeCompare(b.id)));
-  if (existingSignature !== nextSignature || next.length !== rows.length) {
-    writeAll(next);
-    changed = true;
-  }
-
-  return changed;
+  void row;
+  void managerUserId;
+  return false;
 }
 
 /**

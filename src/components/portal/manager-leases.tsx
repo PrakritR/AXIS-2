@@ -97,8 +97,16 @@ export function ManagerLeases() {
             variant="outline"
             className="shrink-0 rounded-full"
             onClick={() => {
-              setTick((t) => t + 1);
-              showToast("Refreshed.");
+              if (!userId) return;
+              void Promise.all([
+                syncPropertyPipelineFromServer({ force: true }),
+                syncManagerApplicationsFromServer({ force: true }),
+                syncLeasePipelineFromServer(userId, { force: true }),
+              ]).then(() => {
+                setPropertyTick((t) => t + 1);
+                setTick((t) => t + 1);
+                showToast("Refreshed.");
+              });
             }}
           >
             Refresh

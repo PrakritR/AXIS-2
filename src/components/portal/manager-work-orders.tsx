@@ -110,7 +110,21 @@ export function ManagerWorkOrders() {
             propertyValue={propertyFilter}
             onPropertyChange={setPropertyFilter}
           />
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Work orders refreshed.")}>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 rounded-full"
+            onClick={() => {
+              void Promise.all([
+                syncManagerWorkOrdersFromServer({ force: true }),
+                syncPropertyPipelineFromServer({ force: true }),
+              ]).then(() => {
+                setStoreTick((t) => t + 1);
+                setPropertyTick((t) => t + 1);
+                showToast("Work orders refreshed.");
+              });
+            }}
+          >
             Refresh
           </Button>
         </>

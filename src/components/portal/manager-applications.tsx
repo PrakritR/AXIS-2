@@ -42,15 +42,6 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "@/lib/rental-application/data";
-import {
-  HOUSEHOLD_CHARGES_EVENT,
-  findApplicationFeeCharge,
-  listingApplicationFeeAmount,
-  recordApprovedApplicationCharges,
-  recordSubmittedApplicationFeeCharge,
-  syncHouseholdChargesFromServer,
-  upsertRecurringRentProfile,
-} from "@/lib/household-charges";
 
 function ApplicantIds({ axisId }: { axisId: string }) {
   return (
@@ -323,26 +314,6 @@ export function ManagerApplications() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    const repairApprovedCharges = async () => {
-      await syncHouseholdChargesFromServer();
-      if (cancelled) return;
-      let changed = false;
-      for (const row of rows) {
-        if (row.bucket === "approved" && applicationVisibleToPortalUser(row, userId)) {
-          changed = recordApprovedApplicationCharges(row, userId) || changed;
-        }
-      }
-      if (changed) window.dispatchEvent(new Event(HOUSEHOLD_CHARGES_EVENT));
-    };
-    void repairApprovedCharges();
-    return () => {
-      cancelled = true;
-    };
-  }, [rows, userId]);
-
   const persist = useCallback((next: DemoApplicantRow[]) => {
     setRows(next);
     writeManagerApplicationRows(next);
@@ -389,26 +360,8 @@ export function ManagerApplications() {
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket) => {
     const row = rows.find((r) => r.id === id);
     if (!row) return;
-    if (nextBucket === "approved") {
-      await syncHouseholdChargesFromServer();
-      recordSubmittedApplicationFeeCharge(row, userId ?? null);
-      const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-      const appFee = listingApplicationFeeAmount(propertyId);
-      const feeCharge = propertyId
-        ? findApplicationFeeCharge(row.email?.trim() ?? "", propertyId, null)
-        : undefined;
-      if (appFee.amount > 0 && feeCharge?.status !== "paid") {
-        window.dispatchEvent(new Event(HOUSEHOLD_CHARGES_EVENT));
-        showToast("Mark the application fee paid before approving this application.");
-        return;
-      }
-    }
     const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket, stage: stageLabelForRow(r, nextBucket) } : r));
     persist(next);
-    const updatedRow = next.find((r) => r.id === id);
-    if (nextBucket === "approved" && updatedRow) {
-      recordApprovedApplicationCharges(updatedRow, userId ?? null);
-    }
     if (row) {
       try {
         await syncResidentApproval(row, nextBucket);
@@ -435,7 +388,6 @@ export function ManagerApplications() {
         showToast("Select a valid house, room, and signed rent.");
         return;
       }
-      const rowToUpdate = rows.find((row) => row.id === id);
       const next = rows.map((row) =>
         row.id === id
           ? {
@@ -450,21 +402,9 @@ export function ManagerApplications() {
           : row,
       );
       persist(next);
-      if (rowToUpdate?.email?.trim()) {
-        upsertRecurringRentProfile({
-          residentEmail: rowToUpdate.email.trim(),
-          residentName: rowToUpdate.name,
-          residentUserId: null,
-          propertyId,
-          propertyLabel: property.title?.trim() || rowToUpdate.property,
-          roomLabel,
-          managerUserId: userId ?? null,
-          monthlyRent: signedMonthlyRent,
-        });
-      }
       showToast("Assigned house and room saved.");
     },
-    [rows, persist, showToast, userId],
+    [rows, persist, showToast],
   );
 
   const deleteApplication = async (id: string) => {

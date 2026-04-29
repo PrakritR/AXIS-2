@@ -1,4 +1,5 @@
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { cache } from "react";
 
 /** Property caps by plan (houses / listings in the portal). Legacy unknown tier → no numeric cap (`null`). */
 export const FREE_MAX_PROPERTIES = 1;
@@ -110,43 +111,12 @@ export function paidWorkspacePortalTitle(tierRaw: string | null | undefined, str
   return "Axis Property Portal";
 }
 
-/**
- * Returns "free" if the manager's purchase row is tier free; "paid" if any paid tier;
- * null if no purchase row (legacy / unknown — treat as full access).
- */
-export async function getManagerSubscriptionTier(userId: string): Promise<"free" | "paid" | null> {
-  try {
-    const supabase = createSupabaseServiceRoleClient();
-    const { data } = await supabase.from("manager_purchases").select("tier").eq("user_id", userId).maybeSingle();
-    if (!data?.tier) return null;
-    if (String(data.tier).toLowerCase() === "free") return "free";
-    return "paid";
-  } catch {
-    return null;
-  }
-}
-
-export async function getManagerSubscriptionTierByManagerId(managerId: string): Promise<"free" | "paid" | null> {
-  const normalized = managerId.trim();
-  if (!normalized) return null;
-  try {
-    const supabase = createSupabaseServiceRoleClient();
-    const { data } = await supabase.from("manager_purchases").select("tier").eq("manager_id", normalized).maybeSingle();
-    if (!data?.tier) return null;
-    if (String(data.tier).toLowerCase() === "free") return "free";
-    return "paid";
-  } catch {
-    return null;
-  }
-}
-
-/** Raw tier + billing from manager_purchases (service role). */
-export async function getManagerPurchaseSku(userId: string): Promise<{
+const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
   tier: string | null;
   billing: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
-}> {
+}> => {
   const supabase = createSupabaseServiceRoleClient();
   const { data } = await supabase
     .from("manager_purchases")
@@ -165,6 +135,50 @@ export async function getManagerPurchaseSku(userId: string): Promise<{
         ? String(data.stripe_subscription_id).trim()
         : null,
   };
+});
+
+const getManagerPurchaseTierByManagerId = cache(async (managerId: string): Promise<string | null> => {
+  const supabase = createSupabaseServiceRoleClient();
+  const { data } = await supabase.from("manager_purchases").select("tier").eq("manager_id", managerId).maybeSingle();
+  return data?.tier != null ? String(data.tier) : null;
+});
+
+/**
+ * Returns "free" if the manager's purchase row is tier free; "paid" if any paid tier;
+ * null if no purchase row (legacy / unknown — treat as full access).
+ */
+export async function getManagerSubscriptionTier(userId: string): Promise<"free" | "paid" | null> {
+  try {
+    const purchase = await getManagerPurchaseRowByUserId(userId);
+    if (!purchase.tier) return null;
+    if (String(purchase.tier).toLowerCase() === "free") return "free";
+    return "paid";
+  } catch {
+    return null;
+  }
+}
+
+export async function getManagerSubscriptionTierByManagerId(managerId: string): Promise<"free" | "paid" | null> {
+  const normalized = managerId.trim();
+  if (!normalized) return null;
+  try {
+    const tier = await getManagerPurchaseTierByManagerId(normalized);
+    if (!tier) return null;
+    if (String(tier).toLowerCase() === "free") return "free";
+    return "paid";
+  } catch {
+    return null;
+  }
+}
+
+/** Raw tier + billing from manager_purchases (service role). */
+export async function getManagerPurchaseSku(userId: string): Promise<{
+  tier: string | null;
+  billing: string | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+}> {
+  return getManagerPurchaseRowByUserId(userId);
 }
 
 /**

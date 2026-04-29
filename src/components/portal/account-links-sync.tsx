@@ -1,26 +1,23 @@
 "use client";
 
 import { useEffect } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import { readProRelationships, writeProRelationships, type ProRelationshipPerspective } from "@/lib/pro-relationships";
+import { usePortalSession } from "@/hooks/use-portal-session";
 
 function perspectiveForInvite(inv: AccountLinkInviteDto): ProRelationshipPerspective {
   return inv.tabKind === "owner" ? "owner_tab" : "manager_tab";
 }
 
 export function AccountLinksSync() {
+  const session = usePortalSession();
+
   useEffect(() => {
     let cancelled = false;
 
     const sync = async () => {
       try {
-        const supabase = createSupabaseBrowserClient();
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const user = session?.user ?? null;
-        if (!user || cancelled) return;
+        if (!session.userId || cancelled) return;
 
         const res = await fetch("/api/pro/account-links", { credentials: "include" });
         const body = (await res.json()) as {
@@ -30,7 +27,7 @@ export function AccountLinksSync() {
         if (!res.ok || body.migrationRequired || cancelled) return;
 
         const active = (body.invites ?? []).filter((inv) => inv.status === "accepted");
-        const existing = readProRelationships(user.id);
+        const existing = readProRelationships(session.userId);
         const existingById = new Map(existing.map((row) => [row.id, row]));
 
         let changed = false;
@@ -81,7 +78,7 @@ export function AccountLinksSync() {
         }
 
         if (changed) {
-          writeProRelationships(user.id, filtered);
+          writeProRelationships(session.userId, filtered);
         }
       } catch {
         /* ignore */
@@ -101,7 +98,7 @@ export function AccountLinksSync() {
       window.removeEventListener("focus", rerun);
       window.removeEventListener("axis-pro-relationships", rerun);
     };
-  }, []);
+  }, [session.userId]);
 
   return null;
 }

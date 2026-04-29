@@ -7,9 +7,11 @@ import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
+import { usePortalSession } from "@/hooks/use-portal-session";
 
 export function ResidentProfilePanel() {
   const { showToast } = useAppUi();
+  const session = usePortalSession();
   const [userId, setUserId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -19,19 +21,15 @@ export function ResidentProfilePanel() {
   const [emPhone, setEmPhone] = useState("");
 
   useEffect(() => {
+    if (!session.userId) return;
     let cancelled = false;
     (async () => {
       try {
         const supabase = createSupabaseBrowserClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user || cancelled) return;
-
-        const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.userId).maybeSingle();
         if (cancelled) return;
 
-        const normalizedEmail = (user.email ?? "").trim().toLowerCase();
+        const normalizedEmail = (session.email ?? "").trim().toLowerCase();
         const matchingApplication = readManagerApplicationRows()
           .slice()
           .reverse()
@@ -47,10 +45,10 @@ export function ResidentProfilePanel() {
           matchingApplication?.application?.phone?.trim() ||
           "";
 
-        setUserId(user.id);
-        setEmail(user.email ?? "");
-        setName(resolvedName);
-        setPhone(resolvedPhone);
+        setUserId(session.userId);
+        setEmail(session.email ?? "");
+        setName((current) => current || resolvedName);
+        setPhone((current) => current || resolvedPhone);
         setAxisId(profile?.id ? `AXIS-R-${profile.id.slice(0, 8).toUpperCase()}` : "");
 
         const needsProfileBackfill =
@@ -75,7 +73,7 @@ export function ResidentProfilePanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [session.email, session.userId]);
 
   const saveProfile = async () => {
     if (!userId) {

@@ -3,13 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
-import { Input, Select } from "@/components/ui/input";
 import { TabNav, type TabItem } from "@/components/ui/tabs";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
@@ -18,7 +16,6 @@ import {
   HOUSEHOLD_CHARGES_EVENT,
   readChargesForManager,
   syncHouseholdChargesFromServer,
-  upsertRecurringRentProfile,
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
@@ -28,8 +25,7 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
-import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
-import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
@@ -48,16 +44,11 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [hcTick, setHcTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
-  const [rentEditorOpen, setRentEditorOpen] = useState(false);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
-  const [selectedApplicationId, setSelectedApplicationId] = useState("");
-  const [rentAmount, setRentAmount] = useState("");
-  const [rentDueDay, setRentDueDay] = useState("1");
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
-  const applicationDataVersion = `${applicationTick}:${propertyTick}`;
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -192,34 +183,6 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
     });
   }, [mergedRows, bucket, propertyFilter, residentFilter]);
 
-  const approvedResidents = useMemo(
-    () => {
-      void applicationDataVersion;
-      return readManagerApplicationRows()
-        .filter((row) => row.bucket === "approved" && row.email?.trim() && applicationVisibleToPortalUser(row, userId))
-        .map((row) => {
-          const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-          const property = propertyId ? getPropertyById(propertyId) : null;
-          const roomLabel = getRoomChoiceLabel(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "");
-          return {
-            id: row.id,
-            email: row.email!.trim(),
-            name: row.name,
-            propertyId,
-            propertyLabel: property?.title?.trim() || row.property,
-            roomLabel,
-            signedMonthlyRent: row.signedMonthlyRent ?? null,
-          };
-        });
-    },
-    [userId, applicationDataVersion],
-  );
-
-  const selectedApprovedResident = useMemo(
-    () => approvedResidents.find((row) => row.id === selectedApplicationId) ?? null,
-    [approvedResidents, selectedApplicationId],
-  );
-
   const filterRow = (
     <div className="flex flex-col gap-4">
       <TabNav items={paymentTabs} activeId={view} />
@@ -268,16 +231,21 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
           <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setAddOpen(true)}>
             Add payment
           </Button>
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => setRentEditorOpen(true)}>
-            Edit tenant rent
-          </Button>
           <Button
             type="button"
             variant="outline"
             className="shrink-0 rounded-full"
             onClick={() => {
-              setHcTick((n) => n + 1);
-              showToast("Payments refreshed.");
+              void Promise.all([
+                syncHouseholdChargesFromServer(),
+                syncManagerApplicationsFromServer({ force: true }),
+                syncPropertyPipelineFromServer({ force: true }),
+              ]).then(() => {
+                setHcTick((n) => n + 1);
+                setApplicationTick((n) => n + 1);
+                setPropertyTick((n) => n + 1);
+                showToast("Payments refreshed.");
+              });
             }}
           >
             Refresh
@@ -300,78 +268,6 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
           setAddOpen(false);
         }}
       />
-
-      <Modal open={rentEditorOpen} title="Recurring tenant rent" onClose={() => setRentEditorOpen(false)}>
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Approved tenant</span>
-            <Select
-              value={selectedApplicationId}
-              onChange={(e) => {
-                const nextId = e.target.value;
-                setSelectedApplicationId(nextId);
-                const next = approvedResidents.find((row) => row.id === nextId);
-                setRentAmount(next?.signedMonthlyRent ? String(next.signedMonthlyRent) : "");
-              }}
-            >
-              <option value="">Select tenant</option>
-              {approvedResidents.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name} · {row.propertyLabel} {row.roomLabel ? `· ${row.roomLabel}` : ""}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Monthly rent</span>
-            <Input type="number" min={0} step={0.01} value={rentAmount} onChange={(e) => setRentAmount(e.target.value)} placeholder="800" />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Due day each month</span>
-            <Input type="number" min={1} max={28} step={1} value={rentDueDay} onChange={(e) => setRentDueDay(e.target.value)} />
-          </label>
-          <p className="text-sm text-slate-500">
-            This locks the tenant’s recurring rent independently from the live house price. Future listing price changes will not alter this tenant’s rent.
-          </p>
-          <div className="mt-2 flex justify-end gap-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setRentEditorOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              onClick={() => {
-                if (!selectedApprovedResident || !selectedApprovedResident.propertyId) {
-                  showToast("Choose an approved tenant with an assigned property.");
-                  return;
-                }
-                const monthlyRent = Number.parseFloat(rentAmount);
-                const dueDay = Number.parseInt(rentDueDay, 10);
-                if (!Number.isFinite(monthlyRent) || monthlyRent <= 0) {
-                  showToast("Enter a valid monthly rent.");
-                  return;
-                }
-                upsertRecurringRentProfile({
-                  residentEmail: selectedApprovedResident.email,
-                  residentName: selectedApprovedResident.name,
-                  propertyId: selectedApprovedResident.propertyId,
-                  propertyLabel: selectedApprovedResident.propertyLabel,
-                  roomLabel: selectedApprovedResident.roomLabel,
-                  managerUserId: userId ?? null,
-                  monthlyRent,
-                  dueDay,
-                });
-                setHcTick((n) => n + 1);
-                showToast("Recurring rent updated.");
-                setRentEditorOpen(false);
-              }}
-            >
-              Save recurring rent
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
     </ManagerPortalPageShell>
   );

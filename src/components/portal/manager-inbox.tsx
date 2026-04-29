@@ -60,15 +60,13 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
   const portalBase = usePaidPortalBasePath();
-  const [local, setLocal] = useState<InboxThread[]>([]);
-  const [persistReady, setPersistReady] = useState(false);
+  const [local, setLocal] = useState<InboxThread[]>(() => loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
+  const [persistReady] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
 
   useEffect(() => {
-    setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
     void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY).then((rows) => setLocal(rows as InboxThread[]));
-    setPersistReady(true);
   }, []);
 
   useEffect(() => {
@@ -178,8 +176,10 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   );
 
   const refreshInbox = () => {
-    setLocal(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
-    showToast("Inbox refreshed.");
+    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+      setLocal(rows as InboxThread[]);
+      showToast("Inbox refreshed.");
+    });
   };
 
   const emptyCopy =

@@ -39,6 +39,7 @@ import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib
 import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId, managerSectionAllowedForTier } from "@/lib/manager-access";
 import { loadResidentPortalAccessState, residentHasFullPortalAccess, residentHasPaymentsPortalAccess } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
+import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
@@ -132,6 +133,7 @@ export async function renderPortalSection(
 
   let managerOwnerSubscriptionTier: "free" | "paid" | null = null;
   let effectiveWorkspaceUserId: string | null = null;
+  let proEffectiveRole: "manager" | "owner" | null = null;
   if (kind === "manager") {
     const uid = await getEffectiveUserIdForPortal("manager");
     if (!uid) redirect("/admin/dashboard");
@@ -143,12 +145,10 @@ export async function renderPortalSection(
     effectiveWorkspaceUserId = uid;
     managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
   } else if (kind === "pro") {
-    const proCtx = await getPortalAccessContext();
-    const portalKey: PreviewPortal = proCtx.effectiveRole === "owner" ? "owner" : "manager";
-    const uid = await getEffectiveUserIdForPortal(portalKey);
-    if (!uid) redirect("/auth/sign-in");
-    effectiveWorkspaceUserId = uid;
-    managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
+    const proRender = await getProPortalRenderContext();
+    effectiveWorkspaceUserId = proRender.effectiveUserId;
+    managerOwnerSubscriptionTier = proRender.subscriptionTier;
+    proEffectiveRole = proRender.ctx.effectiveRole === "owner" ? "owner" : "manager";
   }
 
   if (kind === "admin" && section === "dashboard") {
@@ -266,8 +266,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "pro") {
-    const proCtx = await getPortalAccessContext();
-    const useOwnerUi = proCtx.effectiveRole === "owner";
+    const useOwnerUi = proEffectiveRole === "owner";
 
     if (section === "relationships") {
       if (tabParts?.length) {

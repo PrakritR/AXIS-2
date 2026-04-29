@@ -18,7 +18,7 @@ import {
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { usePortalSession } from "@/hooks/use-portal-session";
 import {
   chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
@@ -43,11 +43,12 @@ function centsFromLabel(label: string): number {
 
 export function ResidentPaymentsPanel() {
   const { showToast } = useAppUi();
+  const session = usePortalSession();
   const [tab, setTab] = useState<PayTab>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const email = session.email?.trim() ?? null;
+  const userId = session.userId;
 
   const refresh = useCallback(() => {
     setTick((n) => n + 1);
@@ -60,28 +61,10 @@ export function ResidentPaymentsPanel() {
   }, [refresh]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user?.id || cancelled) return;
-        const em = user.email?.trim() ?? null;
-        setUserId(user.id);
-        setEmail(em);
-        if (em) linkHouseholdChargesToResidentUser(em, user.id);
-        await syncHouseholdChargesFromServer();
-        if (!cancelled) refresh();
-      } catch {
-        if (!cancelled) refresh();
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
+    if (!session.ready) return;
+    if (session.userId && email) linkHouseholdChargesToResidentUser(email, session.userId);
+    void syncHouseholdChargesFromServer().finally(refresh);
+  }, [email, refresh, session.ready, session.userId]);
 
   const charges = useMemo(() => {
     void tick;

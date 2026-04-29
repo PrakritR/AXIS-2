@@ -7,7 +7,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
 import { HOUSEHOLD_CHARGES_EVENT, linkHouseholdChargesToResidentUser, readChargesForResident } from "@/lib/household-charges";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { usePortalSession } from "@/hooks/use-portal-session";
 
 function centsFromLabel(label: string): number {
   const n = Number(label.replace(/[^\d.]/g, ""));
@@ -51,8 +51,9 @@ export function ResidentDashboard({
 }) {
   const { showToast } = useAppUi();
   const initialEmail = residentEmail.trim().toLowerCase();
-  const [email, setEmail] = useState(initialEmail);
-  const [resolvedUserId, setResolvedUserId] = useState<string | null>(residentUserId);
+  const session = usePortalSession({ userId: residentUserId, email: initialEmail || null });
+  const email = session.email?.trim().toLowerCase() || initialEmail;
+  const resolvedUserId = session.userId ?? residentUserId;
   const [applicationStatus, setApplicationStatus] = useState<ResidentApplicationStatus>(applicationApproved ? "approved" : "pending");
   const [applicationStage, setApplicationStage] = useState(applicationApproved ? "Approved" : "Submitted");
   const [applicationProperty, setApplicationProperty] = useState<string | null>(null);
@@ -64,28 +65,8 @@ export function ResidentDashboard({
   const managerIsFree = managerSubscriptionTier === "free";
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (cancelled) return;
-        const nextEmail = user?.email?.trim().toLowerCase();
-        if (nextEmail) setEmail(nextEmail);
-        if (user?.id) {
-          setResolvedUserId(user.id);
-          if (nextEmail) linkHouseholdChargesToResidentUser(nextEmail, user.id);
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (session.userId && email) linkHouseholdChargesToResidentUser(email, session.userId);
+  }, [email, session.userId]);
 
   useEffect(() => {
     const sync = () => {

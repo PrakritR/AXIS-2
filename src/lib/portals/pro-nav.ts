@@ -8,13 +8,9 @@ import type { PreviewPortal } from "@/lib/auth/preview-types";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { proPortal } from "./pro";
+import { cache } from "react";
 
-export async function buildProPortalDefinition(): Promise<{
-  definition: PortalDefinition;
-  showPlanBanner: boolean;
-  showPreviewBanner: boolean;
-  previewLabel: string | null;
-}> {
+export const getProPortalRenderContext = cache(async () => {
   const ctx = await getPortalAccessContext();
   if (!ctx.user) redirect("/auth/sign-in");
 
@@ -29,11 +25,7 @@ export async function buildProPortalDefinition(): Promise<{
     redirect("/auth/sign-in");
   } else if (ctx.roles.length > 1 && ctx.effectiveRole === null) {
     redirect(`/auth/choose-portal?next=${encodeURIComponent("/pro/dashboard")}`);
-  } else if (
-    ctx.effectiveRole !== null &&
-    ctx.effectiveRole !== "manager" &&
-    ctx.effectiveRole !== "owner"
-  ) {
+  } else if (ctx.effectiveRole !== null && ctx.effectiveRole !== "manager" && ctx.effectiveRole !== "owner") {
     redirect(portalDashboardPath(ctx.effectiveRole));
   }
 
@@ -46,6 +38,31 @@ export async function buildProPortalDefinition(): Promise<{
   const missingTier = purchase.tier == null || String(purchase.tier).trim() === "";
   const stripeManaged = Boolean(purchase.stripeSubscriptionId);
   const isFree = normalizeManagerSkuTier(purchase.tier) === "free" || (missingTier && !stripeManaged);
+  const subscriptionTier: "free" | "paid" | null =
+    purchase.tier == null || String(purchase.tier).trim() === ""
+      ? null
+      : String(purchase.tier).toLowerCase() === "free"
+        ? "free"
+        : "paid";
+
+  return {
+    ctx,
+    preview,
+    effectiveUserId,
+    purchase,
+    portalTitle,
+    isFree,
+    subscriptionTier,
+  };
+});
+
+export async function buildProPortalDefinition(): Promise<{
+  definition: PortalDefinition;
+  showPlanBanner: boolean;
+  showPreviewBanner: boolean;
+  previewLabel: string | null;
+}> {
+  const { ctx, preview, portalTitle, isFree } = await getProPortalRenderContext();
 
   const showPreviewBanner = hasAdminRole(ctx) && !!preview?.targetUserId;
 

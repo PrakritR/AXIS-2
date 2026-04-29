@@ -24,7 +24,7 @@ import {
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { usePortalSession } from "@/hooks/use-portal-session";
 import {
   MANAGER_WORK_ORDERS_EVENT,
   deleteManagerWorkOrderRow,
@@ -49,24 +49,20 @@ function priorityClass(p: string) {
 
 export function ResidentWorkOrdersPanel() {
   const { showToast } = useAppUi();
+  const session = usePortalSession();
   const [bucket, setBucket] = useState<ResidentWorkBucket>("open");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Plumbing");
   const [priority, setPriority] = useState("Medium");
   const [allWorkOrders, setAllWorkOrders] = useState<DemoManagerWorkOrderRow[]>([]);
-  const [residentEmail, setResidentEmail] = useState("");
+  const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
   useEffect(() => {
     const sync = () => setAllWorkOrders(readManagerWorkOrderRows());
     sync();
     void syncManagerWorkOrdersFromServer().then(sync);
     void syncManagerApplicationsFromServer();
-    void (createSupabaseBrowserClient().auth.getUser() as PromiseLike<{ data: { user: { email?: string | null } | null } }>).then(
-      ({ data }) => {
-        setResidentEmail(data.user?.email?.trim().toLowerCase() ?? "");
-      },
-    );
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
     window.addEventListener("storage", sync);
     return () => {

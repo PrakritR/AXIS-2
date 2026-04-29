@@ -2,12 +2,17 @@ import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { removePendingWorkOrderChargesForWorkOrder } from "@/lib/household-charges";
 
 export const MANAGER_WORK_ORDERS_EVENT = "axis:manager-work-orders";
+const MANAGER_WORK_ORDERS_SESSION_KEY = "axis:manager-work-orders:v1";
 
 const EMPTY_FALLBACK: DemoManagerWorkOrderRow[] = [];
 let memoryRows: DemoManagerWorkOrderRow[] = [];
 const MANAGER_WORK_ORDERS_SYNC_TTL_MS = 15_000;
 let managerWorkOrdersLastSyncedAt = 0;
 let managerWorkOrdersSyncPromise: Promise<DemoManagerWorkOrderRow[]> | null = null;
+
+function workOrderRowsChanged(a: DemoManagerWorkOrderRow[], b: DemoManagerWorkOrderRow[]) {
+  return JSON.stringify(a) !== JSON.stringify(b);
+}
 
 /**
  * Stable snapshot for SSR, hydration, and empty localStorage.
@@ -16,6 +21,28 @@ export const MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT: DemoManagerWorkOrderRow[] = E
 
 function canUseStorage() {
   return typeof window !== "undefined";
+}
+
+function hydrateWorkOrdersFromSession() {
+  if (!canUseStorage() || memoryRows.length > 0) return;
+  try {
+    const raw = window.sessionStorage.getItem(MANAGER_WORK_ORDERS_SESSION_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as DemoManagerWorkOrderRow[];
+    if (!Array.isArray(parsed)) return;
+    memoryRows = parsed;
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistWorkOrdersToSession(rows: DemoManagerWorkOrderRow[]) {
+  if (!canUseStorage()) return;
+  try {
+    window.sessionStorage.setItem(MANAGER_WORK_ORDERS_SESSION_KEY, JSON.stringify(rows));
+  } catch {
+    /* ignore */
+  }
 }
 
 function emit() {
@@ -45,6 +72,7 @@ function deleteWorkOrderFromServer(id: string) {
 
 export async function syncManagerWorkOrdersFromServer(opts?: { force?: boolean }): Promise<DemoManagerWorkOrderRow[]> {
   if (!canUseStorage()) return [];
+  hydrateWorkOrdersFromSession();
   const force = opts?.force === true;
   if (!force && managerWorkOrdersSyncPromise) return managerWorkOrdersSyncPromise;
   if (!force && managerWorkOrdersLastSyncedAt > 0 && Date.now() - managerWorkOrdersLastSyncedAt < MANAGER_WORK_ORDERS_SYNC_TTL_MS) {
@@ -56,9 +84,11 @@ export async function syncManagerWorkOrdersFromServer(opts?: { force?: boolean }
       if (!res.ok) return readManagerWorkOrderRows();
       const body = (await res.json()) as { rows?: DemoManagerWorkOrderRow[] };
       const rows = Array.isArray(body.rows) ? body.rows : [];
+      const changed = workOrderRowsChanged(memoryRows, rows);
       memoryRows = rows;
+      persistWorkOrdersToSession(rows);
       managerWorkOrdersLastSyncedAt = Date.now();
-      emit();
+      if (changed) emit();
       return rows;
     })();
     return await managerWorkOrdersSyncPromise;
@@ -70,6 +100,7 @@ export async function syncManagerWorkOrdersFromServer(opts?: { force?: boolean }
 }
 
 export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = EMPTY_FALLBACK): DemoManagerWorkOrderRow[] {
+  hydrateWorkOrdersFromSession();
   const stored = memoryRows;
   if (stored.length === 0) return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
   const byId = new Map(stored.map((r) => [r.id, r]));
@@ -83,7 +114,9 @@ export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = E
 }
 
 export function writeManagerWorkOrderRows(rows: DemoManagerWorkOrderRow[]): void {
+  if (workOrderRowsChanged(memoryRows, rows) === false) return;
   memoryRows = rows;
+  persistWorkOrdersToSession(rows);
   managerWorkOrdersLastSyncedAt = Date.now();
   emit();
   mirrorWorkOrdersToServer(rows);
@@ -113,6 +146,7 @@ export function deleteManagerWorkOrderRow(id: string): boolean {
 
 export function resetManagerWorkOrderRows(): void {
   memoryRows = [];
+  if (canUseStorage()) window.sessionStorage.removeItem(MANAGER_WORK_ORDERS_SESSION_KEY);
   emit();
 }
 
