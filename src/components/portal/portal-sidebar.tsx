@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import type { MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { AdminPortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
@@ -51,6 +52,13 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
 
   const adminNavIcons = definition.kind === "admin";
 
+  const navigateTo = (event: MouseEvent<HTMLAnchorElement>, href: string, closeMobile = false) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    if (closeMobile) setOpen(false);
+    router.push(href);
+  };
+
   /** Matches `/pro` Axis Pro Portal: gradient header, white rail, slate-900 active row + arrow affordance. */
   const desktopAside = (
     <aside className="sticky top-0 z-40 hidden h-screen w-72 shrink-0 flex-col self-start border-r border-slate-200/80 bg-[#fbfbfd] lg:flex">
@@ -68,6 +76,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                 href={s.href}
                 prefetch
                 onMouseEnter={() => router.prefetch(s.href)}
+                onClick={(event) => navigateTo(event, s.href)}
                 className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
                   active ? "bg-white text-slate-950 shadow-[0_10px_26px_-22px_rgba(15,23,42,0.35)]" : "text-slate-600 hover:bg-white hover:text-slate-950"
                 }`}
@@ -129,7 +138,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     href={s.href}
                     prefetch
                     onMouseEnter={() => router.prefetch(s.href)}
-                    onClick={() => setOpen(false)}
+                    onClick={(event) => navigateTo(event, s.href, true)}
                     className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
                       active ? "bg-white text-slate-950 shadow-[0_10px_26px_-22px_rgba(15,23,42,0.35)]" : "text-slate-600 hover:bg-white hover:text-slate-950"
                     }`}

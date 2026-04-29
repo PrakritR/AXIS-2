@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import type { MockProperty } from "@/data/types";
@@ -100,6 +101,10 @@ const BANNER_COPY: Record<ManagerStageKey, string> = {
   rejected: "Rejected submissions stay here until you restore them to pending or delete them permanently.",
 };
 
+function managerStageFromParam(raw: string | null): ManagerStageKey {
+  return MANAGER_STAGES.some((stage) => stage.key === raw) ? (raw as ManagerStageKey) : "pending";
+}
+
 function HouseIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -184,8 +189,8 @@ function ManagerPropertyInlineDetails({
 
   useEffect(() => {
     if (!row) {
-      setListingEditorOpen(false);
-      return;
+      const timer = window.setTimeout(() => setListingEditorOpen(false), 0);
+      return () => window.clearTimeout(timer);
     }
     let cancelled = false;
     void (async () => {
@@ -477,10 +482,21 @@ function ManagerPropertyInlineDetails({
 }
 
 export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: string) => void }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
-  const [activeStage, setActiveStage] = useState<ManagerStageKey>("pending");
+  const activeStage = managerStageFromParam(searchParams.get("status"));
+
+  const setActiveStage = useCallback((stage: ManagerStageKey) => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (stage === "pending") next.delete("status");
+    else next.set("status", stage);
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
 
   useEffect(() => {
     void syncPropertyPipelineFromServer().then(() => {
@@ -494,7 +510,10 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
     };
   }, []);
 
-  const kpiValues = useMemo(() => adminKpiCounts(managerUserId), [tick, managerUserId]);
+  const kpiValues = useMemo(() => {
+    void tick;
+    return adminKpiCounts(managerUserId);
+  }, [tick, managerUserId]);
 
   const stageCounts = useMemo(
     () => ({
@@ -507,6 +526,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
   );
 
   const rows = useMemo(() => {
+    void tick;
     if (!managerUserId) return [] as Array<{ sourceBucket: AdminPropertyBucketIndex; row: AdminPropertyRow }>;
     const stage = MANAGER_STAGES.find((item) => item.key === activeStage);
     if (!stage) return [];
@@ -516,7 +536,8 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
   }, [tick, managerUserId, activeStage]);
 
   useEffect(() => {
-    setExpandedRowKey(null);
+    const timer = window.setTimeout(() => setExpandedRowKey(null), 0);
+    return () => window.clearTimeout(timer);
   }, [activeStage]);
 
   useEffect(() => {
@@ -524,7 +545,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
     if ((stageCounts.pending ?? 0) === 0 && (stageCounts.listed ?? 0) > 0) {
       setActiveStage("listed");
     }
-  }, [activeStage, stageCounts]);
+  }, [activeStage, stageCounts, setActiveStage]);
 
   if (!authReady) {
     return <p className="text-sm text-slate-500">Loading your properties…</p>;

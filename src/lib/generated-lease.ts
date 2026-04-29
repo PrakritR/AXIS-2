@@ -296,9 +296,17 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   const petPolicy = (room?.petFriendly ?? list?.petFriendly)
     ? "Pets may be permitted subject to prior written approval from Landlord, a separate pet deposit (amount specified in writing), and compliance with all house rules."
     : "No pets or animals of any kind are permitted on the Premises without prior written consent of Landlord.";
-  const paymentMethod =
+  const manualPaymentMethods = [
     sub?.zellePaymentsEnabled && sub.zelleContact?.trim()
-      ? `Payment may be made via Stripe (portal), Zelle to <strong>${escapeHtml(sub.zelleContact.trim())}</strong>, or another method agreed in writing.`
+      ? `Zelle to <strong>${escapeHtml(sub.zelleContact.trim())}</strong>`
+      : "",
+    sub?.venmoPaymentsEnabled && sub.venmoContact?.trim()
+      ? `Venmo to <strong>${escapeHtml(sub.venmoContact.trim())}</strong>`
+      : "",
+  ].filter(Boolean);
+  const paymentMethod =
+    manualPaymentMethods.length > 0
+      ? `Payment may be made via Stripe (portal), ${manualPaymentMethods.join(", ")}, or another method agreed in writing.`
       : "Payment shall be made via the Axis portal or by a method agreed in writing with Landlord.";
 
   const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "");

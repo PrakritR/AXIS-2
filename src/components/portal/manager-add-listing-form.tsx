@@ -1225,6 +1225,22 @@ export function ManagerAddListingForm({
                     />
                     <span className="text-sm font-medium text-slate-800">Zelle</span>
                   </label>
+                  <label className="flex cursor-pointer items-center gap-3">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300"
+                      checked={Boolean(sub.venmoPaymentsEnabled)}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setSub((s) => ({
+                          ...s,
+                          venmoPaymentsEnabled: on,
+                          applicationFeeVenmoEnabled: on,
+                        }));
+                      }}
+                    />
+                    <span className="text-sm font-medium text-slate-800">Venmo</span>
+                  </label>
                 </div>
                 {sub.zellePaymentsEnabled ? (
                   <div className="mt-3">
@@ -1233,6 +1249,16 @@ export function ManagerAddListingForm({
                       value={sub.zelleContact ?? ""}
                       onChange={(e) => setSub((s) => ({ ...s, zelleContact: e.target.value }))}
                       placeholder="+1 555 010 8899 or name@email.com"
+                    />
+                  </div>
+                ) : null}
+                {sub.venmoPaymentsEnabled ? (
+                  <div className="mt-3">
+                    <FieldLabel hint="Shown to applicants when they select Venmo.">Venmo username, phone, or email</FieldLabel>
+                    <Input
+                      value={sub.venmoContact ?? ""}
+                      onChange={(e) => setSub((s) => ({ ...s, venmoContact: e.target.value }))}
+                      placeholder="@username, +1 555 010 8899, or name@email.com"
                     />
                   </div>
                 ) : null}

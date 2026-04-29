@@ -125,8 +125,12 @@ export type ManagerListingSubmissionV1 = {
   zellePaymentsEnabled?: boolean;
   /** Phone or email for Zelle (shown to applicants; manager marks payments paid manually). */
   zelleContact?: string;
+  /** When true, applicants/residents see Venmo instructions using `venmoContact`. */
+  venmoPaymentsEnabled?: boolean;
+  /** Venmo username, phone, or email (shown to applicants; manager marks payments paid manually). */
+  venmoContact?: string;
   /**
-   * When Zelle is enabled for the listing, applicants can still use the default “portal / online” path
+   * When manual payment methods are enabled for the listing, applicants can still use the default “portal / online” path
    * for the application fee (manager marks received). Default true.
    */
   applicationFeeStripeEnabled?: boolean;
@@ -135,6 +139,11 @@ export type ManagerListingSubmissionV1 = {
    * Default true when Zelle is on; ignored when Zelle is off.
    */
   applicationFeeZelleEnabled?: boolean;
+  /**
+   * When Venmo is enabled, offer Venmo as an application-fee payment path in the apply flow.
+   * Default true when Venmo is on; ignored when Venmo is off.
+   */
+  applicationFeeVenmoEnabled?: boolean;
   rooms: ManagerRoomSubmission[];
   bathrooms: ManagerBathroomSubmission[];
   /** Optional bundle rows for the listing; if empty, copy is derived from rooms. */
@@ -302,15 +311,28 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   }
 
   const zelleEnabled = Boolean(sub.zellePaymentsEnabled && sub.zelleContact?.trim());
+  const venmoEnabled = Boolean(sub.venmoPaymentsEnabled && sub.venmoContact?.trim());
   let applicationFeeStripeEnabled =
     typeof sub.applicationFeeStripeEnabled === "boolean" ? sub.applicationFeeStripeEnabled : true;
   let applicationFeeZelleEnabled =
     typeof sub.applicationFeeZelleEnabled === "boolean" ? sub.applicationFeeZelleEnabled : zelleEnabled;
+  let applicationFeeVenmoEnabled =
+    typeof sub.applicationFeeVenmoEnabled === "boolean" ? sub.applicationFeeVenmoEnabled : venmoEnabled;
   if (!sub.zellePaymentsEnabled) {
     applicationFeeZelleEnabled = false;
-  } else if (zelleEnabled && !applicationFeeStripeEnabled && !applicationFeeZelleEnabled) {
+  }
+  if (!sub.venmoPaymentsEnabled) {
+    applicationFeeVenmoEnabled = false;
+  }
+  if (
+    (zelleEnabled || venmoEnabled) &&
+    !applicationFeeStripeEnabled &&
+    !applicationFeeZelleEnabled &&
+    !applicationFeeVenmoEnabled
+  ) {
     applicationFeeStripeEnabled = true;
-    applicationFeeZelleEnabled = true;
+    applicationFeeZelleEnabled = zelleEnabled;
+    applicationFeeVenmoEnabled = venmoEnabled;
   }
 
   const housePhotoDataUrls = Array.isArray(sub.housePhotoDataUrls)
@@ -332,6 +354,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     quickFacts,
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,
+    applicationFeeVenmoEnabled,
     housePhotoDataUrls,
   };
   delete (next as Record<string, unknown>).sharedSpacesDescription;
@@ -444,8 +467,11 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     amenitiesText: "",
     zellePaymentsEnabled: false,
     zelleContact: "",
+    venmoPaymentsEnabled: false,
+    venmoContact: "",
     applicationFeeStripeEnabled: true,
     applicationFeeZelleEnabled: false,
+    applicationFeeVenmoEnabled: false,
     rooms: [{ ...emptyRoom(0), name: "", availability: "" }],
     bathrooms: [],
     bundles: [],

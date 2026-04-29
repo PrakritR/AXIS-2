@@ -485,7 +485,7 @@ export function ResidentLeasePanel() {
         <div className="mb-5 rounded-2xl border border-amber-200/90 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
           <p className="font-semibold">Lease signing is blocked until required payments are confirmed</p>
           <p className="mt-1">
-            Your listing set these amounts on the application. Pay via Zelle if your manager enabled it, then they mark each line paid. Until then, lease upload, edit requests, and electronic signing stay locked.
+            Your listing set these amounts on the application. Pay via Zelle or Venmo if your manager enabled it, then they mark each line paid. Until then, lease upload, edit requests, and electronic signing stay locked.
           </p>
           <ul className="mt-2 list-inside list-disc">
             {leaseBlockers.map((b) => (

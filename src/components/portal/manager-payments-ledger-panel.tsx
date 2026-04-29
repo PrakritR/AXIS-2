@@ -146,6 +146,9 @@ export function ManagerPaymentsLedgerPanel({
                             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Zelle.")}>
                               Paid with Zelle
                             </Button>
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Venmo.")}>
+                              Paid with Venmo
+                            </Button>
                           </>
                         ) : null}
                         {activeBucket !== "pending" ? (

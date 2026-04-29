@@ -298,7 +298,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     if (payChannel === "stripe") {
       return checkoutBusy ? "Opening Stripe…" : applicationFeeGate.paid ? "Submit application" : "Pay with Stripe";
     }
-    if (payChannel === "zelle") {
+    if (payChannel === "zelle" || payChannel === "venmo") {
       return "Submit application";
     }
     return "Submit application";
@@ -453,15 +453,22 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           return;
         }
 
-        if (needsFee && payChannel === "zelle") {
+        if (needsFee && (payChannel === "zelle" || payChannel === "venmo")) {
           ensurePendingApplicationFeeCharge({
             residentEmail: form.email,
             residentName: form.fullLegalName,
             residentUserId,
             propertyId: pid,
           });
-          const zelleContact = sub?.zelleContact?.trim() ?? "the manager's Zelle contact";
-          const confirmed = typeof window === "undefined" ? true : window.confirm(`Confirm you already sent the application fee by Zelle to ${zelleContact}.`);
+          const paymentLabel = payChannel === "venmo" ? "Venmo" : "Zelle";
+          const paymentContact =
+            payChannel === "venmo"
+              ? sub?.venmoContact?.trim() ?? "the manager's Venmo contact"
+              : sub?.zelleContact?.trim() ?? "the manager's Zelle contact";
+          const confirmed =
+            typeof window === "undefined"
+              ? true
+              : window.confirm(`Confirm you already sent the application fee by ${paymentLabel} to ${paymentContact}.`);
           if (!confirmed) {
             return;
           }

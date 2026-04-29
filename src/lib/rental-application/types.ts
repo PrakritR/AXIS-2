@@ -75,11 +75,11 @@ export type RentalWizardFormState = {
   /** Step 12 — non-refundable application processing fee acknowledgement */
   applicationFeeAcknowledged: boolean;
   /**
-   * Step 12 — how the applicant will satisfy the listing application fee when the listing offers both portal tracking and Zelle.
+   * Step 12 — how the applicant will satisfy the listing application fee when the listing offers multiple payment paths.
    * “stripe” uses a Stripe Checkout Session for the application fee.
    */
-  applicationFeePayChannel: "stripe" | "zelle";
-  /** Step 12 — applicant attests they sent the fee via Zelle (manager must still mark the charge paid). */
+  applicationFeePayChannel: "stripe" | "zelle" | "venmo";
+  /** Step 12 — applicant attests they sent a manual fee payment (manager must still mark the charge paid). */
   applicationFeeZelleSentConfirmed: boolean;
 };
 

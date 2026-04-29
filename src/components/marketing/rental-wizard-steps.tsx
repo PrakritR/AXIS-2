@@ -1406,8 +1406,22 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const appFeeLabel = sub?.applicationFee?.trim() || (applicationFeeGate.needsFee ? applicationFeeGate.displayLabel : "—");
     const channels = listingApplicationFeeChannels(sub);
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
-    const showChannelPick = applicationFeeGate.needsFee && channels.stripe && channels.zelle;
+    const enabledChannels = [
+      channels.stripe ? ("stripe" as const) : null,
+      channels.zelle ? ("zelle" as const) : null,
+      channels.venmo ? ("venmo" as const) : null,
+    ].filter((channel): channel is "stripe" | "zelle" | "venmo" => Boolean(channel));
+    const showChannelPick = applicationFeeGate.needsFee && enabledChannels.length > 1;
     const showZelleInstructions = applicationFeeGate.needsFee && payChannel === "zelle" && sub?.zelleContact?.trim();
+    const showVenmoInstructions = applicationFeeGate.needsFee && payChannel === "venmo" && sub?.venmoContact?.trim();
+    const singleChannelLabel =
+      enabledChannels.length === 1
+        ? enabledChannels[0] === "stripe"
+          ? "Stripe"
+          : enabledChannels[0] === "zelle"
+            ? "Zelle"
+            : "Venmo"
+        : null;
     return (
       <div className="space-y-6">
         <div>
@@ -1432,46 +1446,62 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         {showChannelPick ? (
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
             <p className="text-sm font-semibold text-slate-900">Payment method</p>
-            <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-              <input
-                type="radio"
-                name="application-fee-channel"
-                className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
-                checked={form.applicationFeePayChannel === "stripe"}
-                onChange={() => patch({ applicationFeePayChannel: "stripe" })}
-              />
-              <span>
-                <span className="text-sm font-semibold text-slate-900">Stripe</span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
-                  Pay now with card.
+            {channels.stripe ? (
+              <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                <input
+                  type="radio"
+                  name="application-fee-channel"
+                  className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
+                  checked={form.applicationFeePayChannel === "stripe"}
+                  onChange={() => patch({ applicationFeePayChannel: "stripe" })}
+                />
+                <span>
+                  <span className="text-sm font-semibold text-slate-900">Stripe</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                    Pay now with card.
+                  </span>
                 </span>
-              </span>
-            </label>
-            <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-              <input
-                type="radio"
-                name="application-fee-channel"
-                className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
-                checked={form.applicationFeePayChannel === "zelle"}
-                onChange={() => patch({ applicationFeePayChannel: "zelle" })}
-              />
-              <span>
-                <span className="text-sm font-semibold text-slate-900">Zelle</span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
-                  Submit now and manager sees the fee as pending.
+              </label>
+            ) : null}
+            {channels.zelle ? (
+              <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                <input
+                  type="radio"
+                  name="application-fee-channel"
+                  className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
+                  checked={form.applicationFeePayChannel === "zelle"}
+                  onChange={() => patch({ applicationFeePayChannel: "zelle" })}
+                />
+                <span>
+                  <span className="text-sm font-semibold text-slate-900">Zelle</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                    Submit now and manager sees the fee as pending.
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
+            ) : null}
+            {channels.venmo ? (
+              <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                <input
+                  type="radio"
+                  name="application-fee-channel"
+                  className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
+                  checked={form.applicationFeePayChannel === "venmo"}
+                  onChange={() => patch({ applicationFeePayChannel: "venmo" })}
+                />
+                <span>
+                  <span className="text-sm font-semibold text-slate-900">Venmo</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                    Submit now and manager sees the fee as pending.
+                  </span>
+                </span>
+              </label>
+            ) : null}
           </div>
         ) : null}
-        {applicationFeeGate.needsFee && channels.stripe && !channels.zelle ? (
+        {applicationFeeGate.needsFee && singleChannelLabel ? (
           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700">
-            <span className="font-semibold text-slate-900">Payment method:</span> Stripe
-          </div>
-        ) : null}
-        {applicationFeeGate.needsFee && channels.zelle && !channels.stripe ? (
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700">
-            <span className="font-semibold text-slate-900">Payment method:</span> Zelle
+            <span className="font-semibold text-slate-900">Payment method:</span> {singleChannelLabel}
           </div>
         ) : null}
         {applicationFeeGate.needsFee && payChannel === "stripe" ? (
@@ -1487,6 +1517,17 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </p>
             <p className="mt-2 leading-relaxed">
               When you submit, we&apos;ll ask you to confirm that you already sent the Zelle payment.
+            </p>
+          </div>
+        ) : null}
+        {showVenmoInstructions ? (
+          <div className="rounded-2xl border border-sky-200/80 bg-sky-50/70 px-4 py-4 text-sm text-sky-950">
+            <p className="font-semibold">Send by Venmo</p>
+            <p className="mt-2 rounded-lg border border-sky-300/80 bg-white px-3 py-2 font-mono text-base font-bold tracking-tight">
+              {sub!.venmoContact!.trim()}
+            </p>
+            <p className="mt-2 leading-relaxed">
+              When you submit, we&apos;ll ask you to confirm that you already sent the Venmo payment.
             </p>
           </div>
         ) : null}

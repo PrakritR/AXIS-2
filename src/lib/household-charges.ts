@@ -48,6 +48,8 @@ export type HouseholdCharge = {
   paidAt?: string;
   /** Snapshot of Zelle / SMS contact from listing when charge was created */
   zelleContactSnapshot?: string;
+  /** Snapshot of Venmo contact from listing when charge was created */
+  venmoContactSnapshot?: string;
   /** When true, lease signing stays disabled until this line is paid */
   blocksLeaseUntilPaid: boolean;
   /** When this charge was created from a manager work order pass-through */
@@ -387,6 +389,25 @@ function leaseStartProration(leaseStart: string | undefined): { prorated: boolea
   };
 }
 
+function firstMonthRentChargeForLeaseStart(
+  monthlyRent: number,
+  leaseStart: string | undefined,
+): {
+  kind: HouseholdChargeKind;
+  amount: number;
+  title: string;
+  proration: ReturnType<typeof leaseStartProration>;
+} {
+  const proration = leaseStartProration(leaseStart);
+  const amount = proration.prorated ? monthlyRent * proration.factor : monthlyRent;
+  return {
+    kind: proration.prorated ? "prorated_rent" : "first_month_rent",
+    amount,
+    title: proration.prorated ? "Prorated first month's rent" : "First month's rent",
+    proration,
+  };
+}
+
 function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId">): {
   raw: string;
   amount: number;
@@ -488,7 +509,7 @@ export function listingApplicationFeeAmount(propertyId: string): { amount: numbe
 
 /**
  * Ensures a pending application-fee line exists when the listing requires a fee, so the applicant can pay
- * (e.g. Zelle) and the manager can mark it paid before the wizard finalizes and shows an Axis ID.
+ * (e.g. Zelle or Venmo) and the manager can mark it paid before the wizard finalizes and shows an Axis ID.
  */
 export function ensurePendingApplicationFeeCharge(input: {
   residentEmail: string;
@@ -515,6 +536,8 @@ export function ensurePendingApplicationFeeCharge(input: {
 
   const zelleSnap =
     sub && sub.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
+  const venmoSnap =
+    sub && sub.venmoPaymentsEnabled && sub.venmoContact?.trim() ? sub.venmoContact.trim() : undefined;
 
   const label = raw.trim() || `$${amt.toFixed(2)}`;
   const charge: HouseholdCharge = {
@@ -535,6 +558,7 @@ export function ensurePendingApplicationFeeCharge(input: {
     balanceLabel: label.includes("$") ? label : `$${amt.toFixed(2)}`,
     status: "pending",
     zelleContactSnapshot: zelleSnap,
+    venmoContactSnapshot: venmoSnap,
     blocksLeaseUntilPaid: false,
   };
   writeAll([...readAll(), charge]);
@@ -861,7 +885,10 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   if (!applicationId) return false;
   const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   if (!propertyId) return false;
-  const appFeeChannel = row.application?.applicationFeePayChannel === "zelle" ? "zelle" : "stripe";
+  const appFeeChannel =
+    row.application?.applicationFeePayChannel === "zelle" || row.application?.applicationFeePayChannel === "venmo"
+      ? row.application.applicationFeePayChannel
+      : "stripe";
   const prop = getPropertyById(propertyId);
   const effectiveManagerUserId = managerUserId ?? row.managerUserId ?? prop?.managerUserId ?? null;
   const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Applicant";
@@ -884,7 +911,7 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   });
   const paidMatch = matching.find((charge) => charge.status === "paid");
   const seed = matching.find((charge) => charge.id === canonicalId) ?? matching[0] ?? expected;
-  const shouldBePaid = appFeeChannel !== "zelle" || Boolean(paidMatch);
+  const shouldBePaid = appFeeChannel === "stripe" || Boolean(paidMatch);
   const canonicalCharge: HouseholdCharge = {
     ...seed,
     id: canonicalId,
@@ -902,6 +929,7 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
     status: shouldBePaid ? "paid" : "pending",
     paidAt: shouldBePaid ? (paidMatch?.paidAt ?? seed.paidAt ?? new Date().toISOString()) : undefined,
     zelleContactSnapshot: expected.zelleContactSnapshot,
+    venmoContactSnapshot: expected.venmoContactSnapshot,
     blocksLeaseUntilPaid: false,
   };
 
@@ -967,8 +995,14 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     if (amount <= 0) return;
     const label = normalizeMoneyLabel(raw, amount);
     const existingOfKind = existingManaged.filter((charge) => charge.kind === kind);
-    const paidExisting = existingOfKind.find((charge) => charge.status === "paid");
-    const seed = existingOfKind.find((charge) => charge.id === approvedChargeId(applicationId, kind)) ?? existingOfKind[0];
+    const firstRentKinds = new Set<HouseholdChargeKind>(["first_month_rent", "prorated_rent"]);
+    const equivalentExisting =
+      firstRentKinds.has(kind) ? existingManaged.filter((charge) => firstRentKinds.has(charge.kind)) : existingOfKind;
+    const paidExisting = equivalentExisting.find((charge) => charge.status === "paid");
+    const seed =
+      existingOfKind.find((charge) => charge.id === approvedChargeId(applicationId, kind)) ??
+      existingOfKind[0] ??
+      equivalentExisting[0];
     created.push({
       id: approvedChargeId(applicationId, kind),
       createdAt: seed?.createdAt ?? new Date().toISOString(),
@@ -1005,14 +1039,12 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const signedRent = selectedRoomRentAmount(row);
   if (signedRent > 0) {
     firstChargeMonth = leaseStart?.slice(0, 7) || firstChargeMonth;
-    const start = leaseStartProration(leaseStart);
-    const firstRentKind: HouseholdChargeKind = start.prorated ? "prorated_rent" : "first_month_rent";
-    const firstRentAmount = start.prorated ? signedRent * start.factor : signedRent;
+    const firstRent = firstMonthRentChargeForLeaseStart(signedRent, leaseStart);
     pushCharge(
-      firstRentKind,
-      moneyAmountLabel(firstRentAmount),
+      firstRent.kind,
+      moneyAmountLabel(firstRent.amount),
       false,
-      start.prorated ? "Prorated first month's rent" : "First month's rent",
+      firstRent.title,
       moveInDue,
     );
     const profile = upsertRecurringRentProfile({
@@ -1053,11 +1085,13 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     next = next.filter(
       (charge) =>
         !(
-          charge.kind === "rent" &&
+          (charge.kind === "rent" || charge.kind === "first_month_rent" || charge.kind === "prorated_rent") &&
           charge.status === "pending" &&
-          charge.propertyId === propertyId &&
           charge.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase() &&
-          charge.rentMonth === firstChargeMonth
+          (charge.propertyId === propertyId ||
+            charge.applicationId === applicationId ||
+            charge.dueDateLabel === moveInDue ||
+            charge.rentMonth === firstChargeMonth)
         ),
     );
   }
@@ -1259,11 +1293,13 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
         : c.kind === "application_fee"
         ? c.status === "paid"
           ? "Application fee recorded as paid."
-          : "Application fee pending — mark as paid after you receive the Zelle payment."
+          : "Application fee pending — mark as paid after you receive the manual payment."
         : c.kind === "work_order_charge"
-          ? "Work order pass-through — resident is billed this amount; mark as paid when you receive Zelle or other payment."
+          ? "Work order pass-through — resident is billed this amount; mark as paid when you receive payment."
           : c.zelleContactSnapshot
             ? `Zelle contact on listing: ${c.zelleContactSnapshot}`
+            : c.venmoContactSnapshot
+              ? `Venmo contact on listing: ${c.venmoContactSnapshot}`
             : "Awaiting payment.",
   };
 }

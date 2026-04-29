@@ -68,7 +68,7 @@ export async function POST(req: Request) {
         {
           code: "MANAGER_NO_CONNECT_ACCOUNT",
           error:
-            "This property manager has not connected Stripe payouts yet. Use Zelle for the application fee if the listing offers it, or contact the manager.",
+            "This property manager has not connected Stripe payouts yet. Use Zelle or Venmo for the application fee if the listing offers it, or contact the manager.",
         },
         { status: 422 },
       );
