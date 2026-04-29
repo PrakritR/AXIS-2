@@ -13,6 +13,19 @@ async function sessionUser() {
   return user;
 }
 
+async function sessionScope() {
+  const user = await sessionUser();
+  if (!user) return null;
+  const db = createSupabaseServiceRoleClient();
+  const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
+  return {
+    user,
+    db,
+    role: String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase(),
+    email: (profile?.email ?? user.email ?? "").trim().toLowerCase(),
+  };
+}
+
 function normalizeCharge(row: HouseholdCharge): HouseholdCharge {
   return {
     ...row,
@@ -69,13 +82,9 @@ async function upsertProfile(db: ReturnType<typeof createSupabaseServiceRoleClie
 
 export async function GET() {
   try {
-    const user = await sessionUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-
-    const db = createSupabaseServiceRoleClient();
-    const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
-    const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
-    const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
+    const scope = await sessionScope();
+    if (!scope) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const { user, db, role, email } = scope;
 
     let chargesQuery = db.from("portal_household_charge_records").select("row_data, updated_at").order("updated_at", { ascending: false });
     let profilesQuery = db.from("portal_recurring_rent_profile_records").select("row_data, updated_at").order("updated_at", { ascending: false });
@@ -114,7 +123,9 @@ export async function POST(req: Request) {
       rentProfile?: RecurringRentProfile;
       id?: string;
     };
-    const db = createSupabaseServiceRoleClient();
+    const scope = await sessionScope();
+    if (!scope) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const { user, db, role, email } = scope;
 
     if (body.action === "deleteCharge") {
       const id = body.id?.trim();
@@ -150,6 +161,33 @@ export async function POST(req: Request) {
       ...charges.map((charge) => upsertCharge(db, charge)),
       ...rentProfiles.map((profile) => upsertProfile(db, profile)),
     ]);
+    if (role === "admin") {
+      return NextResponse.json({ ok: true });
+    }
+    const chargeIds = charges.map((charge) => charge.id).filter(Boolean);
+    const profileIds = rentProfiles.map((profile) => profile.id).filter(Boolean);
+
+    let chargeDeleteQuery = db.from("portal_household_charge_records").delete();
+    let profileDeleteQuery = db.from("portal_recurring_rent_profile_records").delete();
+    if (role === "resident") {
+      chargeDeleteQuery = chargeDeleteQuery.or(`resident_user_id.eq.${user.id},resident_email.eq.${email}`);
+      profileDeleteQuery = profileDeleteQuery.or(`resident_user_id.eq.${user.id},resident_email.eq.${email}`);
+    } else if (role !== "admin") {
+      chargeDeleteQuery = chargeDeleteQuery.eq("manager_user_id", user.id);
+      profileDeleteQuery = profileDeleteQuery.eq("manager_user_id", user.id);
+    }
+    if (chargeIds.length > 0) {
+      chargeDeleteQuery = chargeDeleteQuery.not("id", "in", `(${chargeIds.map((id) => JSON.stringify(id)).join(",")})`);
+    }
+    if (profileIds.length > 0) {
+      profileDeleteQuery = profileDeleteQuery.not("id", "in", `(${profileIds.map((id) => JSON.stringify(id)).join(",")})`);
+    }
+    const [{ error: chargeDeleteError }, { error: profileDeleteError }] = await Promise.all([
+      chargeDeleteQuery,
+      profileDeleteQuery,
+    ]);
+    if (chargeDeleteError) return NextResponse.json({ error: chargeDeleteError.message }, { status: 500 });
+    if (profileDeleteError) return NextResponse.json({ error: profileDeleteError.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save charges.";

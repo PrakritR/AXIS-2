@@ -44,11 +44,19 @@ export function ManagerPayments() {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
+  const initialPayoutsOpen =
+    typeof window !== "undefined" &&
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      const payouts = params.get("payouts");
+      const connect = params.get("connect");
+      return payouts === "1" || connect === "done" || connect === "refresh";
+    })();
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [hcTick, setHcTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [rentEditorOpen, setRentEditorOpen] = useState(false);
-  const [payoutsOpen, setPayoutsOpen] = useState(false);
+  const [payoutsOpen, setPayoutsOpen] = useState(initialPayoutsOpen);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
   const [selectedApplicationId, setSelectedApplicationId] = useState("");
@@ -56,6 +64,7 @@ export function ManagerPayments() {
   const [rentDueDay, setRentDueDay] = useState("1");
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
+  const syncSignature = `${hcTick}:${applicationTick}:${propertyTick}`;
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -79,11 +88,6 @@ export function ManagerPayments() {
   }, [authReady, userId]);
 
   useEffect(() => {
-    if (!authReady || !userId) return;
-    pruneObsoleteManagerCharges(userId);
-  }, [authReady, userId]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const payouts = params.get("payouts");
@@ -100,7 +104,6 @@ export function ManagerPayments() {
       }
     }
     if (payouts === "1" || connect === "done" || connect === "refresh") {
-      setPayoutsOpen(true);
       if (connect === "done") {
         showToast("Payout status updated.");
         window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
@@ -132,14 +135,13 @@ export function ManagerPayments() {
   }, [showToast]);
 
   const mergedRows = useMemo(() => {
-    void hcTick;
-    void applicationTick;
-    void propertyTick;
+    void syncSignature;
     const applications = readManagerApplicationRows();
     const fromHc = readChargesForManager(userId).map((charge) => {
       const ledgerRow = householdChargeToLedgerRow(charge);
       const chargeEmail = charge.residentEmail.trim().toLowerCase();
       const application = applications.find((row) => {
+        if (charge.applicationId && row.id === charge.applicationId) return true;
         const rowEmail = row.email?.trim().toLowerCase();
         const rowPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
         return rowEmail === chargeEmail && rowPropertyId === charge.propertyId;
@@ -149,7 +151,7 @@ export function ManagerPayments() {
       return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
     });
     return [...fromHc, ...mergeManagerPaymentLedger()];
-  }, [userId, hcTick, applicationTick, propertyTick]);
+  }, [userId, syncSignature]);
 
   const propertyOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -215,7 +217,7 @@ export function ManagerPayments() {
             signedMonthlyRent: row.signedMonthlyRent ?? null,
           };
         }),
-    [userId, hcTick, applicationTick, propertyTick],
+    [userId, syncSignature],
   );
 
   const selectedApprovedResident = useMemo(
@@ -227,9 +229,9 @@ export function ManagerPayments() {
   // No-ops if all profiles already exist, so this is safe to run on every render cycle.
   useEffect(() => {
     if (!userId) return;
-    let createdCharges = false;
-    for (const row of readManagerApplicationRows()) {
-      if (!applicationVisibleToPortalUser(row, userId)) continue;
+    const visibleApplications = readManagerApplicationRows().filter((row) => applicationVisibleToPortalUser(row, userId));
+    let createdCharges = pruneObsoleteManagerCharges(userId, visibleApplications);
+    for (const row of visibleApplications) {
       createdCharges = recordSubmittedApplicationFeeCharge(row, userId) || createdCharges;
       if (row.bucket === "approved") {
         createdCharges = recordApprovedApplicationCharges(row, userId) || createdCharges;
@@ -246,9 +248,9 @@ export function ManagerPayments() {
         managerUserId: userId,
         monthlyRent: r.signedMonthlyRent!,
       }));
-    const seededRent = autoSeedRecurringRentProfiles(toSeed);
-    if (createdCharges || seededRent) setHcTick((n) => n + 1);
-  }, [approvedResidents, userId]);
+    void createdCharges;
+    void autoSeedRecurringRentProfiles(toSeed);
+  }, [approvedResidents, userId, hcTick, applicationTick]);
 
   return (
     <ManagerPortalPageShell

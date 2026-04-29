@@ -33,6 +33,7 @@ export type HouseholdChargeKind =
 export type HouseholdCharge = {
   id: string;
   createdAt: string;
+  applicationId?: string;
   residentEmail: string;
   residentName: string;
   residentUserId: string | null;
@@ -157,6 +158,23 @@ export { parseMoneyAmount } from "@/lib/parse-money";
 
 function currentRentMonth() {
   return new Date().toISOString().slice(0, 7);
+}
+
+function chargeKeyPart(raw: string): string {
+  const cleaned = raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return cleaned || "unknown";
+}
+
+function applicationFeeChargeIdForApplication(applicationId: string): string {
+  return `hc_app_fee_${chargeKeyPart(applicationId)}`;
+}
+
+function applicationFeeFallbackChargeId(residentEmail: string, propertyId: string): string {
+  return `hc_app_fee_${chargeKeyPart(residentEmail)}_${chargeKeyPart(propertyId)}`;
+}
+
+function approvedChargeId(applicationId: string, kind: HouseholdChargeKind): string {
+  return `hc_app_${chargeKeyPart(applicationId)}_${kind}`;
 }
 
 function recurringRentChargeId(profileId: string, month: string) {
@@ -326,11 +344,14 @@ export function removePendingWorkOrderChargesForWorkOrder(workOrderId: string): 
 export function findApplicationFeeCharge(
   residentEmail: string,
   propertyId: string,
-  residentUserId?: string | null
+  residentUserId?: string | null,
+  applicationId?: string | null,
 ): HouseholdCharge | undefined {
   const e = residentEmail.trim().toLowerCase();
   return readAll().find((r) => {
-    if (r.kind !== "application_fee" || r.propertyId !== propertyId) return false;
+    if (r.kind !== "application_fee") return false;
+    if (applicationId?.trim() && r.applicationId === applicationId.trim()) return true;
+    if (r.propertyId !== propertyId) return false;
     if (r.residentEmail.trim().toLowerCase() === e) return true;
     if (residentUserId && r.residentUserId === residentUserId) return true;
     return false;
@@ -381,6 +402,8 @@ export function ensurePendingApplicationFeeCharge(input: {
   residentName: string;
   residentUserId: string | null;
   propertyId: string;
+  applicationId?: string | null;
+  managerUserId?: string | null;
 }): HouseholdCharge | null {
   const email = input.residentEmail.trim();
   if (!email || !email.includes("@")) return null;
@@ -394,23 +417,25 @@ export function ensurePendingApplicationFeeCharge(input: {
   }
   if (amt <= 0) return null;
 
-  const existing = findApplicationFeeCharge(email, input.propertyId, input.residentUserId);
+  const existing = findApplicationFeeCharge(email, input.propertyId, input.residentUserId, input.applicationId);
   if (existing) return existing;
 
   const zelleSnap =
     sub && sub.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
 
-  const idBase = `hc_${Date.now()}`;
   const label = raw.trim() || `$${amt.toFixed(2)}`;
   const charge: HouseholdCharge = {
-    id: `${idBase}_application_fee`,
+    id: input.applicationId?.trim()
+      ? applicationFeeChargeIdForApplication(input.applicationId.trim())
+      : applicationFeeFallbackChargeId(email, input.propertyId),
     createdAt: new Date().toISOString(),
+    applicationId: input.applicationId?.trim() || undefined,
     residentEmail: email,
     residentName: input.residentName.trim() || "Applicant",
     residentUserId: input.residentUserId,
     propertyId: input.propertyId,
     propertyLabel: prop?.title ?? (sub ? sub.buildingName : "Listing"),
-    managerUserId: prop?.managerUserId ?? null,
+    managerUserId: input.managerUserId ?? prop?.managerUserId ?? null,
     kind: "application_fee",
     title: chargeTitle("application_fee"),
     amountLabel: label,
@@ -672,17 +697,6 @@ export function markApplicationFeePaidAfterStripe(residentEmail: string, propert
   return true;
 }
 
-function markChargePaidById(chargeId: string): boolean {
-  const rows = readAll();
-  const i = rows.findIndex((r) => r.id === chargeId);
-  if (i === -1) return false;
-  if (rows[i]!.status === "paid") return true;
-  const next = [...rows];
-  next[i] = { ...next[i]!, status: "paid", paidAt: new Date().toISOString(), balanceLabel: "$0.00" };
-  writeAll(next);
-  return true;
-}
-
 /**
  * Called when an applicant completes the rental wizard (step 12).
  * Creates/tracks the application fee only. Lease/payment lines are created once the application is approved.
@@ -699,7 +713,7 @@ export function recordApplicationCharges(
   const existingAppFee = findApplicationFeeCharge(
     input.residentEmail,
     input.propertyId,
-    input.residentUserId
+    input.residentUserId,
   );
 
   const prop = getPropertyById(input.propertyId);
@@ -707,9 +721,10 @@ export function recordApplicationCharges(
   if (!sub) {
     if (opts?.skipApplicationFee || existingAppFee) return;
     /* still record a generic application fee line using defaults */
-    const idBase = `hc_${Date.now()}`;
     const fallback: HouseholdCharge = {
-      id: `${idBase}_app`,
+      id: input.residentEmail.trim() && input.propertyId.trim()
+        ? applicationFeeFallbackChargeId(input.residentEmail.trim(), input.propertyId.trim())
+        : `hc_app_${Date.now()}`,
       createdAt: new Date().toISOString(),
       residentEmail: input.residentEmail.trim(),
       residentName: input.residentName.trim(),
@@ -736,69 +751,73 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   if (!isBrowser()) return false;
   const residentEmail = row.email?.trim();
   if (!residentEmail || !residentEmail.includes("@")) return false;
+  const applicationId = row.id.trim();
+  if (!applicationId) return false;
   const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   if (!propertyId) return false;
-
-  const existingApplicationFee = findApplicationFeeCharge(residentEmail, propertyId, null);
   const appFeeChannel = row.application?.applicationFeePayChannel === "zelle" ? "zelle" : "stripe";
   const prop = getPropertyById(propertyId);
   const effectiveManagerUserId = managerUserId ?? row.managerUserId ?? prop?.managerUserId ?? null;
-  let changed = false;
-
-  if (existingApplicationFee) {
-    const rows = readAll();
-    const idx = rows.findIndex((charge) => charge.id === existingApplicationFee.id);
-    if (idx !== -1) {
-      const nextCharge = {
-        ...rows[idx]!,
-        managerUserId: effectiveManagerUserId,
-        propertyLabel: prop?.title ?? rows[idx]!.propertyLabel,
-      };
-      if (
-        nextCharge.managerUserId !== rows[idx]!.managerUserId ||
-        nextCharge.propertyLabel !== rows[idx]!.propertyLabel
-      ) {
-        const next = [...rows];
-        next[idx] = nextCharge;
-        writeAll(next);
-        changed = true;
-      }
-    }
-    if (appFeeChannel !== "zelle" && existingApplicationFee.status !== "paid") {
-      changed = markChargePaidById(existingApplicationFee.id) || changed;
-    }
-    return changed;
-  }
-
-  const fee = ensurePendingApplicationFeeCharge({
+  const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Applicant";
+  const expected = ensurePendingApplicationFeeCharge({
     residentEmail,
-    residentName: row.name?.trim() || row.application?.fullLegalName?.trim() || "Applicant",
+    residentName,
     residentUserId: null,
     propertyId,
+    applicationId,
+    managerUserId: effectiveManagerUserId,
   });
-  if (!fee) return false;
+  if (!expected) return false;
 
-  if (effectiveManagerUserId && fee.managerUserId !== effectiveManagerUserId) {
-    const rows = readAll();
-    const idx = rows.findIndex((charge) => charge.id === fee.id);
-    if (idx !== -1) {
-      const next = [...rows];
-      next[idx] = { ...next[idx]!, managerUserId: effectiveManagerUserId };
-      writeAll(next);
-    }
-  }
+  const canonicalId = applicationFeeChargeIdForApplication(applicationId);
+  const rows = readAll();
+  const matching = rows.filter((charge) => {
+    if (charge.kind !== "application_fee") return false;
+    if (charge.applicationId === applicationId) return true;
+    return !charge.applicationId && charge.propertyId === propertyId && charge.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase();
+  });
+  const paidMatch = matching.find((charge) => charge.status === "paid");
+  const seed = matching.find((charge) => charge.id === canonicalId) ?? matching[0] ?? expected;
+  const shouldBePaid = appFeeChannel !== "zelle" || Boolean(paidMatch);
+  const canonicalCharge: HouseholdCharge = {
+    ...seed,
+    id: canonicalId,
+    applicationId,
+    residentEmail,
+    residentName,
+    residentUserId: seed.residentUserId ?? null,
+    propertyId,
+    propertyLabel: prop?.title ?? seed.propertyLabel,
+    managerUserId: effectiveManagerUserId,
+    kind: "application_fee",
+    title: chargeTitle("application_fee"),
+    amountLabel: expected.amountLabel,
+    balanceLabel: shouldBePaid ? "$0.00" : expected.balanceLabel,
+    status: shouldBePaid ? "paid" : "pending",
+    paidAt: shouldBePaid ? (paidMatch?.paidAt ?? seed.paidAt ?? new Date().toISOString()) : undefined,
+    zelleContactSnapshot: expected.zelleContactSnapshot,
+    blocksLeaseUntilPaid: false,
+  };
 
-  changed = true;
-  if (appFeeChannel !== "zelle") {
-    changed = markChargePaidById(fee.id) || changed;
-  }
-  return changed;
+  const next = rows.filter((charge) => !matching.some((match) => match.id === charge.id));
+  next.push(canonicalCharge);
+
+  const unchanged =
+    matching.length === 1 &&
+    matching[0]!.id === canonicalCharge.id &&
+    JSON.stringify(matching[0]) === JSON.stringify(canonicalCharge);
+  if (unchanged) return false;
+
+  writeAll(next);
+  return true;
 }
 
 export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null): boolean {
   if (!isBrowser()) return false;
   const residentEmail = row.email?.trim();
   if (!residentEmail || !residentEmail.includes("@")) return false;
+  const applicationId = row.id.trim();
+  if (!applicationId) return false;
   const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   if (!propertyId) return false;
   const prop = getPropertyById(propertyId);
@@ -809,7 +828,6 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Resident";
   const roomLabel = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "Room";
   let changed = false;
-  const now = Date.now();
   let firstChargeMonth = row.application?.leaseStart?.trim().slice(0, 7) || currentRentMonth();
   const leaseStart = row.application?.leaseStart?.trim();
   const moveInDue = dueLabelForLeaseStart(leaseStart);
@@ -817,7 +835,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   changed = recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId) || changed;
 
   const residentEmailKey = residentEmail.trim().toLowerCase();
-  const staleKinds = new Set<HouseholdChargeKind>([
+  const managedKinds = new Set<HouseholdChargeKind>([
     "first_month_rent",
     "prorated_rent",
     "utilities",
@@ -825,14 +843,12 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     "security_deposit",
     "move_in_fee",
   ]);
-  let baseRows = readAll().filter((charge) => {
-    if (charge.propertyId !== propertyId) return true;
-    if (charge.residentEmail.trim().toLowerCase() !== residentEmailKey) return true;
-    if (!staleKinds.has(charge.kind)) return true;
-    return charge.status === "paid";
+  const rows = readAll();
+  const existingManaged = rows.filter((charge) => {
+    if (!managedKinds.has(charge.kind)) return false;
+    if (charge.applicationId === applicationId) return true;
+    return !charge.applicationId && charge.propertyId === propertyId && charge.residentEmail.trim().toLowerCase() === residentEmailKey;
   });
-  if (baseRows.length !== readAll().length) changed = true;
-
   const created: HouseholdCharge[] = [];
   const pushCharge = (
     kind: HouseholdChargeKind,
@@ -844,21 +860,26 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     const amount = parseMoneyAmount(raw);
     if (amount <= 0) return;
     const label = normalizeMoneyLabel(raw, amount);
+    const existingOfKind = existingManaged.filter((charge) => charge.kind === kind);
+    const paidExisting = existingOfKind.find((charge) => charge.status === "paid");
+    const seed = existingOfKind.find((charge) => charge.id === approvedChargeId(applicationId, kind)) ?? existingOfKind[0];
     created.push({
-      id: `hc_${row.id}_${kind}_${now}`,
-      createdAt: new Date().toISOString(),
+      id: approvedChargeId(applicationId, kind),
+      createdAt: seed?.createdAt ?? new Date().toISOString(),
+      applicationId,
       residentEmail,
       residentName,
-      residentUserId: null,
+      residentUserId: seed?.residentUserId ?? null,
       propertyId,
       propertyLabel,
       managerUserId: effectiveManagerUserId,
       kind,
       title: titleOverride ?? chargeTitle(kind),
       amountLabel: label,
-      balanceLabel: label,
-      status: "pending",
-      zelleContactSnapshot: zelleSnap,
+      balanceLabel: paidExisting ? "$0.00" : label,
+      status: paidExisting ? "paid" : "pending",
+      paidAt: paidExisting?.paidAt,
+      zelleContactSnapshot: zelleSnap ?? seed?.zelleContactSnapshot,
       blocksLeaseUntilPaid,
       dueDateLabel,
     });
@@ -920,24 +941,26 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     }
   }
 
-  if (created.length > 0) {
-    const createsExplicitFirstRent = created.some((charge) => charge.kind === "first_month_rent" || charge.kind === "prorated_rent");
-    baseRows = createsExplicitFirstRent
-      ? baseRows.filter(
-          (charge) =>
-            !(
-              charge.kind === "rent" &&
-              charge.status === "pending" &&
-              charge.propertyId === propertyId &&
-              charge.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase() &&
-              charge.rentMonth === firstChargeMonth
-            ),
-        )
-      : baseRows;
-    writeAll([...baseRows, ...created]);
+  const createsExplicitFirstRent = created.some((charge) => charge.kind === "first_month_rent" || charge.kind === "prorated_rent");
+  let next = rows.filter((charge) => !existingManaged.some((managed) => managed.id === charge.id));
+  if (createsExplicitFirstRent) {
+    next = next.filter(
+      (charge) =>
+        !(
+          charge.kind === "rent" &&
+          charge.status === "pending" &&
+          charge.propertyId === propertyId &&
+          charge.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase() &&
+          charge.rentMonth === firstChargeMonth
+        ),
+    );
+  }
+  next.push(...created);
+  const existingSignature = JSON.stringify([...existingManaged].sort((a, b) => a.id.localeCompare(b.id)));
+  const nextSignature = JSON.stringify([...created].sort((a, b) => a.id.localeCompare(b.id)));
+  if (existingSignature !== nextSignature || next.length !== rows.length) {
+    writeAll(next);
     changed = true;
-  } else if (changed) {
-    writeAll(baseRows);
   }
 
   return changed;
@@ -1129,7 +1152,7 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
         ? `Recurring tenant rent. Current cycle: ${c.rentMonth ?? currentRentMonth()}. Due ${formatRecurringRentDueLabel(c.rentMonth ?? currentRentMonth(), c.dueDay ?? 1)}.`
         : c.kind === "application_fee"
         ? c.status === "paid"
-          ? "Application fee paid by Stripe."
+          ? "Application fee recorded as paid."
           : "Application fee pending — mark as paid after you receive the Zelle payment."
         : c.kind === "work_order_charge"
           ? "Work order pass-through — resident is billed this amount; mark as paid when you receive Zelle or other payment."
@@ -1140,14 +1163,30 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
 }
 
 /**
- * Removes old paid application-fee lines from the manager ledger.
- * These are historical intake records and tend to overwhelm the Payments view after applicants are processed.
+ * Removes stale legacy application-fee rows that no longer map to a current application.
+ * Current application fees are rebuilt as one canonical row per application by the Payments page.
  */
-export function pruneObsoleteManagerCharges(managerUserId: string | null): boolean {
+export function pruneObsoleteManagerCharges(
+  managerUserId: string | null,
+  applicationRows: DemoApplicantRow[],
+): boolean {
   if (!isBrowser()) return false;
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
   const rows = readAll();
-  const obsolete = rows.filter((charge) => charge.managerUserId === scope && charge.kind === "application_fee" && charge.status === "paid");
+  const activeApplicationIds = new Set(applicationRows.map((row) => row.id.trim()).filter(Boolean));
+  const activeFallbackKeys = new Set(
+    applicationRows.map((row) => {
+      const email = row.email?.trim().toLowerCase() || "";
+      const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+      return email && propertyId ? `${email}|${propertyId}` : "";
+    }).filter(Boolean),
+  );
+  const obsolete = rows.filter((charge) => {
+    if (charge.managerUserId !== scope || charge.kind !== "application_fee") return false;
+    if (charge.applicationId?.trim()) return !activeApplicationIds.has(charge.applicationId.trim());
+    const fallbackKey = `${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}`;
+    return !activeFallbackKeys.has(fallbackKey);
+  });
   if (obsolete.length === 0) return false;
   for (const charge of obsolete) {
     deleteChargeRowFromServer(charge.id);
