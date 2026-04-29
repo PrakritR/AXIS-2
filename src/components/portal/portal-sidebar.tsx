@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type { MouseEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AdminPortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import type { PortalDefinition } from "@/lib/portal-types";
@@ -17,7 +17,6 @@ function hrefForSection(def: PortalDefinition, section: string) {
 
 export function PortalSidebar({ definition }: { definition: PortalDefinition }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const navItems = useMemo(
     () =>
@@ -34,12 +33,6 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
     return parts[1] ?? "dashboard";
   }, [pathname]);
 
-  useEffect(() => {
-    for (const item of navItems) {
-      router.prefetch(item.href);
-    }
-  }, [navItems, router]);
-
   const hasSignOut =
     definition.kind === "resident" || definition.kind === "manager" || definition.kind === "owner" || definition.kind === "admin";
 
@@ -52,11 +45,11 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
 
   const adminNavIcons = definition.kind === "admin";
 
-  const navigateTo = (event: MouseEvent<HTMLAnchorElement>, href: string, closeMobile = false) => {
+  const leavePaymentsSection = (event: MouseEvent<HTMLAnchorElement>, targetSection: string, href: string) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    if (activeSection !== "payments" || targetSection === "payments") return;
     event.preventDefault();
-    if (closeMobile) setOpen(false);
-    router.push(href);
+    window.location.assign(href);
   };
 
   /** Matches `/pro` Axis Pro Portal: gradient header, white rail, slate-900 active row + arrow affordance. */
@@ -75,8 +68,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                 key={s.section}
                 href={s.href}
                 prefetch
-                onMouseEnter={() => router.prefetch(s.href)}
-                onClick={(event) => navigateTo(event, s.href)}
+                onClick={(event) => leavePaymentsSection(event, s.section, s.href)}
                 className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
                   active ? "bg-white text-slate-950 shadow-[0_10px_26px_-22px_rgba(15,23,42,0.35)]" : "text-slate-600 hover:bg-white hover:text-slate-950"
                 }`}
@@ -137,8 +129,10 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     key={s.section}
                     href={s.href}
                     prefetch
-                    onMouseEnter={() => router.prefetch(s.href)}
-                    onClick={(event) => navigateTo(event, s.href, true)}
+                    onClick={(event) => {
+                      setOpen(false);
+                      leavePaymentsSection(event, s.section, s.href);
+                    }}
                     className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
                       active ? "bg-white text-slate-950 shadow-[0_10px_26px_-22px_rgba(15,23,42,0.35)]" : "text-slate-600 hover:bg-white hover:text-slate-950"
                     }`}
