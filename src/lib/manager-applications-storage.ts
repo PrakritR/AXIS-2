@@ -57,14 +57,21 @@ function mirrorApplicationRowToServer(row: DemoApplicantRow) {
   }).catch(() => undefined);
 }
 
-export function deleteManagerApplicationFromServer(id: string) {
-  if (typeof window === "undefined" || !id.trim()) return;
-  void fetch("/api/manager-applications", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ action: "delete", id }),
-  }).catch(() => undefined);
+export async function deleteManagerApplicationFromServer(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (typeof window === "undefined" || !id.trim()) return { ok: false, error: "Application ID is required." };
+  try {
+    const res = await fetch("/api/manager-applications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "delete", id }),
+    });
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    if (!res.ok) return { ok: false, error: body?.error ?? "Could not delete application." };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not delete application." };
+  }
 }
 
 export async function syncManagerApplicationsFromServer(): Promise<DemoApplicantRow[]> {

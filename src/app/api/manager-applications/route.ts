@@ -117,7 +117,9 @@ export async function POST(req: Request) {
     if (body.action === "delete") {
       const id = body.id?.trim();
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-      const { error } = await db.from("manager_application_records").delete().eq("id", id);
+      const normalizedId = normalizeApplicationAxisId(id);
+      const ids = [...new Set([id, normalizedId])];
+      const { error } = await db.from("manager_application_records").delete().in("id", ids);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ ok: true });
     }

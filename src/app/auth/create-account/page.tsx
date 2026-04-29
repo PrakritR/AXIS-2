@@ -298,12 +298,26 @@ function CreateAccountContent() {
           showToast(body.error ?? "Could not create resident account.");
           return;
         }
+        const supabase = createSupabaseBrowserClient();
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (signInError) {
+          showToast(
+            body.reusedExistingAuthUser
+              ? "Resident portal access added. Sign in with the same email and password."
+              : "Resident account created. Sign in with your email.",
+          );
+          router.push("/auth/sign-in");
+          return;
+        }
         showToast(
           body.reusedExistingAuthUser
-            ? "Resident portal access added to your existing Axis login. Sign in with the same email and password."
-            : "Resident account created. Sign in with your email.",
+            ? "Resident portal access added. You are signed in."
+            : "Resident account created. You are signed in.",
         );
-        router.push("/auth/sign-in");
+        router.push("/portal/resident");
         return;
       }
 

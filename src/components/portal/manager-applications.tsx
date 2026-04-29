@@ -471,6 +471,13 @@ export function ManagerApplications() {
     const row = rows.find((candidate) => candidate.id === id);
     const email = row?.email?.trim().toLowerCase();
 
+    const result = await deleteManagerApplicationFromServer(id);
+    if (!result.ok) {
+      showToast(result.error ?? "Could not delete application.");
+      return;
+    }
+
+    let removedResidentAccess = true;
     if (email) {
       try {
         const res = await fetch("/api/portal/delete-resident-access", {
@@ -479,21 +486,23 @@ export function ManagerApplications() {
           credentials: "include",
           body: JSON.stringify({ email }),
         });
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
         if (!res.ok) {
-          showToast(body?.error ?? "Could not remove the linked resident account.");
-          return;
+          removedResidentAccess = false;
         }
       } catch {
-        showToast("Could not remove the linked resident account.");
-        return;
+        removedResidentAccess = false;
       }
     }
 
     persist(rows.filter((r) => r.id !== id));
-    deleteManagerApplicationFromServer(id);
     setExpandedId(null);
-    showToast(email ? "Application and resident access deleted." : "Application deleted.");
+    showToast(
+      email && !removedResidentAccess
+        ? "Application deleted, but resident access could not be removed."
+        : email
+          ? "Application and resident access deleted."
+          : "Application deleted.",
+    );
   };
 
   return (
