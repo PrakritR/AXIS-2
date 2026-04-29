@@ -385,6 +385,7 @@ export type PartnerInquiry = {
   notes: string;
   kind?: "partner" | "tour";
   managerUserId?: string;
+  tourGroupId?: string;
   propertyId?: string;
   propertyTitle?: string;
   roomLabel?: string;
@@ -405,6 +406,7 @@ export type PlannedEvent = {
   sourceInquiryId?: string;
   kind?: "partner" | "tour";
   managerUserId?: string;
+  tourGroupId?: string;
   propertyId?: string;
   propertyTitle?: string;
   roomLabel?: string;
@@ -517,6 +519,7 @@ export function acceptPartnerInquiry(id: string, opts?: { instructions?: string;
     sourceInquiryId: id,
     kind: row.kind,
     managerUserId: row.managerUserId,
+    tourGroupId: row.tourGroupId,
     propertyId: row.propertyId,
     propertyTitle: row.propertyTitle,
     roomLabel: row.roomLabel,
@@ -553,6 +556,22 @@ export async function acceptPartnerInquiryFromServer(
   opts?: { instructions?: string; start?: string; end?: string },
 ): Promise<boolean> {
   const row = readPartnerInquiries().find((r) => r.id === id);
+  if (row?.kind === "tour") {
+    const res = await fetch("/api/portal-tour-inquiries/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        id,
+        start: opts?.start ?? row.proposedStart,
+        end: opts?.end ?? row.proposedEnd,
+        instructions: opts?.instructions,
+      }),
+    });
+    if (!res.ok) return false;
+    await syncScheduleRecordsFromServer();
+    return true;
+  }
   if (!row || !acceptPartnerInquiry(id, opts)) return false;
   const [inquiriesOk, plannedOk, eventRecordsOk] = await Promise.all([
     writeJsonToServer(INQ_KEY, readPartnerInquiries()),
@@ -574,9 +593,50 @@ export function deletePartnerInquiry(id: string): boolean {
   return true;
 }
 
+function tourInquiryMatchesSlot(row: PartnerInquiry, target: PartnerInquiry): boolean {
+  if (row.kind !== "tour" || target.kind !== "tour") return false;
+  const targetWindows = getPartnerInquiryWindows(target);
+  if (targetWindows.length === 0) return row.id === target.id;
+  return getPartnerInquiryWindows(row).some((window) =>
+    targetWindows.some(
+      (targetWindow) =>
+        (row.managerUserId || window.adminUserId) === (target.managerUserId || targetWindow.adminUserId) &&
+        window.start === targetWindow.start &&
+        window.end === targetWindow.end,
+    ),
+  );
+}
+
+function deletePartnerInquiryLocally(row: PartnerInquiry): boolean {
+  const rows = readPartnerInquiries();
+  const next = rows.filter((candidate) => candidate.id !== row.id && !tourInquiryMatchesSlot(candidate, row));
+  if (next.length === rows.length) return false;
+  writeJson(INQ_KEY, next);
+  return true;
+}
+
+async function deleteTourInquiryFromServer(row: PartnerInquiry): Promise<boolean> {
+  const selectedWindow = getPartnerInquiryWindows(row)[0];
+  const res = await fetch("/api/portal-tour-inquiries/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      id: row.id,
+      managerUserId: row.managerUserId ?? selectedWindow?.adminUserId,
+      start: selectedWindow?.start ?? row.proposedStart,
+      end: selectedWindow?.end ?? row.proposedEnd,
+    }),
+  });
+  return res.ok;
+}
+
 export async function deletePartnerInquiryFromServer(id: string): Promise<boolean> {
   const row = readPartnerInquiries().find((r) => r.id === id);
-  if (!row || !deletePartnerInquiry(id)) return false;
+  if (!row) return false;
+  if (row.kind === "tour" && !(await deleteTourInquiryFromServer(row))) return false;
+  if (!deletePartnerInquiryLocally(row)) return false;
+  if (row.kind === "tour") return true;
   const [inquiriesOk, eventRecordsOk] = await Promise.all([
     writeJsonToServer(INQ_KEY, readPartnerInquiries()),
     deletePartnerInquiryEventRecords(row),

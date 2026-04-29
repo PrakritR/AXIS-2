@@ -165,18 +165,6 @@ export default function ToursContactPage() {
 /* ────────────────────────────────────────────────────────────
    TOUR FLOW
 ──────────────────────────────────────────────────────────── */
-function formatManagerLabel(entry: PropertyManagerEntry): string {
-  const raw = entry.label;
-  if (raw.includes("@")) {
-    const name = raw.split("@")[0] ?? raw;
-    return name
-      .replace(/[._-]+/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-      .trim();
-  }
-  return raw;
-}
-
 function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuccess: () => void }) {
   const { showToast } = useAppUi();
   const [step, setStep] = useState<TourStep>(1);
@@ -194,7 +182,6 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
 
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
-  const [selectedManagerUserId, setSelectedManagerUserId] = useState<string | null>(null);
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [slotHosts, setSlotHosts] = useState<Record<string, PropertyManagerEntry[]>>({});
@@ -255,17 +242,11 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
     return slotManagerMap.get(`${dateStr}:${selectedSlotIndex}`) ?? [];
   }, [selectedDay, selectedSlotIndex, calYear, calMonth, slotManagerMap]);
 
-  const selectedTourManager = useMemo(() => {
-    if (managersAtSelectedSlot.length === 1) return managersAtSelectedSlot[0] ?? null;
-    if (!selectedManagerUserId) return null;
-    return managersAtSelectedSlot.find((manager) => manager.userId === selectedManagerUserId) ?? null;
-  }, [managersAtSelectedSlot, selectedManagerUserId]);
-
   const canContinue1 = selectedProperty !== null && selectedRoomKey !== null;
   const canContinue2 =
     selectedDay !== null &&
     selectedSlotIndex !== null &&
-    selectedTourManager !== null;
+    managersAtSelectedSlot.length > 0;
 
   const steps = [
     { n: 1, label: "Property & room" },
@@ -378,7 +359,6 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               setSlotHosts({});
               setSelectedDay(null);
               setSelectedSlotIndex(null);
-              setSelectedManagerUserId(null);
               setStep1Phase("room");
             }}
             onBackToProperties={() => {
@@ -388,7 +368,6 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               setSlotHosts({});
               setSelectedDay(null);
               setSelectedSlotIndex(null);
-              setSelectedManagerUserId(null);
               setStep1Phase("property");
             }}
             onSelectRoom={(p, roomKey) => {
@@ -399,7 +378,6 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               setAvailabilityLoading(true);
               setSelectedDay(null);
               setSelectedSlotIndex(null);
-              setSelectedManagerUserId(null);
             }}
             selectedRoomKey={selectedRoomKey}
           />
@@ -428,13 +406,8 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               setSelectedSlotIndex(null);
             }}
             selectedSlotIndex={selectedSlotIndex}
-            onSelectSlotIndex={(slotIndex) => {
-              setSelectedSlotIndex(slotIndex);
-              setSelectedManagerUserId(null);
-            }}
+            onSelectSlotIndex={setSelectedSlotIndex}
             managersAtSelectedSlot={managersAtSelectedSlot}
-            selectedManagerUserId={selectedManagerUserId}
-            onSelectManager={setSelectedManagerUserId}
             availabilityLoading={availabilityLoading}
           />
         )}
@@ -454,15 +427,14 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
                 return;
               }
               if (!selectedProperty || selectedDay == null || selectedSlotIndex == null) return;
-              if (!selectedTourManager) {
-                showToast("Please choose the manager for this tour time.");
+              if (managersAtSelectedSlot.length === 0) {
+                showToast("That tour time is no longer available.");
                 return;
               }
               const dateStr = toLocalDateStr(new Date(calYear, calMonth, selectedDay, 12, 0, 0, 0));
               const start = localDateAtSlotStart(dateStr, selectedSlotIndex);
               const end = new Date(start.getTime() + 30 * 60 * 1000);
               const selectedSlotKey = dateSlotKey(dateStr, selectedSlotIndex);
-              const calendarPropertyId = selectedTourManager.propertyId || selectedProperty.id;
               const propertyContext = [
                 `Property: ${selectedProperty.title}`,
                 selectedRoomLabel ? `Room: ${selectedRoomLabel}` : "",
@@ -470,31 +442,38 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
                 .filter(Boolean)
                 .join("\n");
               setBookingTour(true);
-              const result = await appendPartnerInquiryToServer({
-                name: name.trim(),
-                email: email.trim(),
-                phone: phone.trim(),
-                kind: "tour",
-                managerUserId: selectedTourManager.userId,
-                propertyId: calendarPropertyId,
-                propertyTitle: selectedProperty.title,
-                roomLabel: selectedRoomLabel,
-                notes: [propertyContext, notes.trim()].filter(Boolean).join("\n\n"),
-                adminUserId: selectedTourManager.userId,
-                adminLabel: selectedTourManager.label,
-                requestedWindows: [{
-                  start: start.toISOString(),
-                  end: end.toISOString(),
-                  adminUserId: selectedTourManager.userId,
-                  adminLabel: selectedTourManager.label,
-                  slotKey: selectedSlotKey,
-                }],
-                proposedStart: start.toISOString(),
-                proposedEnd: end.toISOString(),
-              });
+              const tourGroupId = crypto.randomUUID();
+              const results = await Promise.all(
+                managersAtSelectedSlot.map((manager) =>
+                  appendPartnerInquiryToServer({
+                    name: name.trim(),
+                    email: email.trim(),
+                    phone: phone.trim(),
+                    kind: "tour",
+                    managerUserId: manager.userId,
+                    tourGroupId,
+                    propertyId: manager.propertyId || selectedProperty.id,
+                    propertyTitle: selectedProperty.title,
+                    roomLabel: selectedRoomLabel,
+                    notes: [propertyContext, notes.trim()].filter(Boolean).join("\n\n"),
+                    adminUserId: manager.userId,
+                    adminLabel: manager.label,
+                    requestedWindows: [{
+                      start: start.toISOString(),
+                      end: end.toISOString(),
+                      adminUserId: manager.userId,
+                      adminLabel: manager.label,
+                      slotKey: selectedSlotKey,
+                    }],
+                    proposedStart: start.toISOString(),
+                    proposedEnd: end.toISOString(),
+                  }),
+                ),
+              );
               setBookingTour(false);
-              if (!result.ok) {
-                showToast(result.error ?? "That tour time is no longer available.");
+              const failedResult = results.find((item) => !item.ok);
+              if (failedResult) {
+                showToast(failedResult.error ?? "That tour time is no longer available.");
                 setStep(2);
                 setSelectedSlotIndex(null);
                 const params = new URLSearchParams({
@@ -684,7 +663,7 @@ function Step2({
   availability,
   calMonth, calYear, onPrevMonth, onNextMonth,
   selectedDay, onSelectDay, selectedSlotIndex, onSelectSlotIndex,
-  managersAtSelectedSlot, selectedManagerUserId, onSelectManager,
+  managersAtSelectedSlot,
   availabilityLoading,
 }: {
   property: MockProperty | null;
@@ -694,8 +673,6 @@ function Step2({
   selectedDay: number | null; onSelectDay: (d: number) => void;
   selectedSlotIndex: number | null; onSelectSlotIndex: (slotIndex: number) => void;
   managersAtSelectedSlot: PropertyManagerEntry[];
-  selectedManagerUserId: string | null;
-  onSelectManager: (userId: string) => void;
   availabilityLoading: boolean;
 }) {
   const daysInMonth = getDaysInMonth(calYear, calMonth);
@@ -799,39 +776,12 @@ function Step2({
         </div>
       )}
 
-      {/* Host picker — only shown when 2+ managers share the selected slot */}
       {selectedSlotIndex != null && managersAtSelectedSlot.length > 1 && (
         <div>
-          <p className="mb-3 text-sm font-semibold text-slate-700">Choose your host</p>
+          <p className="mb-3 text-sm font-semibold text-slate-700">Multiple managers are available</p>
           <p className="mb-3 text-xs text-slate-500">
-            Multiple hosts are available at this time. Pick who you&apos;d like to meet with.
+            We&apos;ll send this request to every available manager for this house. The first manager to approve gets the tour.
           </p>
-          <div className="space-y-2">
-            {managersAtSelectedSlot.map((mgr) => {
-              const isSelected = selectedManagerUserId === mgr.userId;
-              return (
-                <button
-                  key={mgr.userId}
-                  type="button"
-                  onClick={() => onSelectManager(mgr.userId)}
-                  className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                    isSelected
-                      ? "border-primary bg-primary/[0.08] ring-2 ring-primary/20"
-                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                  }`}
-                >
-                  <div
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                      isSelected ? "border-primary bg-primary" : "border-slate-300 bg-white"
-                    }`}
-                  >
-                    {isSelected && <span className="text-white"><CheckSmIcon /></span>}
-                  </div>
-                  <span className="font-medium text-slate-900">{formatManagerLabel(mgr)}</span>
-                </button>
-              );
-            })}
-          </div>
         </div>
       )}
     </div>
