@@ -41,10 +41,12 @@ import {
   HOUSE_WIDE_AMENITY_PRESETS,
   ROOM_AMENITY_PRESETS,
   ROOM_AVAILABILITY_OPTIONS,
+  ROOM_FURNITURE_PRESETS,
   ROOM_FURNISHING_OPTIONS,
   SHARED_SPACE_AMENITY_PRESETS,
-  furnishingSelectState,
+  mergeFurnitureToggle,
   mergeToggleLine,
+  parseFurnitureSet,
   sanitizeRoomAmenityText,
   splitLineList,
 } from "@/data/manager-listing-presets";
@@ -58,6 +60,7 @@ const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
   sharedSpace: [...SHARED_SPACE_AMENITY_PRESETS],
   bathroom: [...BATHROOM_EXTRA_AMENITY_PRESETS],
   room: [...ROOM_AMENITY_PRESETS],
+  furniture: [...ROOM_FURNITURE_PRESETS],
   availability: ROOM_AVAILABILITY_OPTIONS,
   furnishing: ROOM_FURNISHING_OPTIONS,
 };
@@ -1169,7 +1172,8 @@ export function ManagerAddListingForm({
             </div>
             <div className="space-y-6">
               {sub.rooms.map((room, i) => {
-                const furnishState = furnishingSelectState(room.furnishing);
+                const isUnfurnished = room.furnishing.trim().toLowerCase() === "unfurnished";
+                const checkedFurniture = parseFurnitureSet(room.furnishing);
                 return (
                   <div key={room.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1195,21 +1199,31 @@ export function ManagerAddListingForm({
                         <Input value={room.floor} onChange={(e) => setRoom(i, { floor: e.target.value })} placeholder="First floor" />
                       </GridField>
                       <GridField>
-                        <FieldLabel>Monthly rent ($) *</FieldLabel>
-                        <Input
-                          inputMode="decimal"
-                          value={room.monthlyRent || ""}
-                          onChange={(e) => setRoom(i, { monthlyRent: Number(e.target.value) || 0 })}
-                          placeholder="775"
-                        />
+                        <FieldLabel>Monthly rent *</FieldLabel>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                          <Input
+                            inputMode="decimal"
+                            className="pl-8"
+                            value={room.monthlyRent || ""}
+                            onChange={(e) => setRoom(i, { monthlyRent: Number(e.target.value) || 0 })}
+                            placeholder="800"
+                          />
+                        </div>
                       </GridField>
                       <GridField>
                         <FieldLabel hint="Monthly estimate used in signing totals.">Utilities estimate</FieldLabel>
-                        <Input
-                          value={room.utilitiesEstimate}
-                          onChange={(e) => setRoom(i, { utilitiesEstimate: e.target.value })}
-                          placeholder="$175/mo"
-                        />
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                          <Input
+                            inputMode="decimal"
+                            className="pl-8 pr-12"
+                            value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                            onChange={(e) => setRoom(i, { utilitiesEstimate: e.target.value })}
+                            placeholder="175"
+                          />
+                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-400">/mo</span>
+                        </div>
                       </GridField>
                       <GridField>
                         <FieldLabel>Availability</FieldLabel>
@@ -1227,22 +1241,39 @@ export function ManagerAddListingForm({
                           </datalist>
                         </div>
                       </GridField>
-                      <GridField>
-                        <FieldLabel>Furnishing</FieldLabel>
-                        <select
-                          className={selectInputCls}
-                          value={furnishState.select}
-                          onChange={(e) => setRoom(i, { furnishing: e.target.value })}
-                        >
-                          {listingPresets.furnishing.map((o) => (
-                            <option key={o.value || "blank"} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                      </GridField>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Room features only. Furniture and bathroom setup are selected above / next step.">Room amenities</FieldLabel>
+                        <FieldLabel hint="Select all items included in this room.">Furnishing</FieldLabel>
+                        <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+                          <label className="mb-2 flex cursor-pointer items-center gap-2 border-b border-slate-100 pb-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-slate-300"
+                              checked={isUnfurnished}
+                              onChange={(e) => setRoom(i, { furnishing: e.target.checked ? "Unfurnished" : "" })}
+                            />
+                            <span className="font-semibold text-slate-700">Unfurnished</span>
+                          </label>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            {listingPresets.furniture.map((p) => {
+                              const on = checkedFurniture.has(p.label);
+                              return (
+                                <label key={p.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${on ? "border-primary/30 bg-primary/[0.05]" : "border-slate-200 bg-white"} ${isUnfurnished ? "pointer-events-none opacity-40" : ""}`}>
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-slate-300"
+                                    checked={on}
+                                    disabled={isUnfurnished}
+                                    onChange={(e) => setRoom(i, { furnishing: mergeFurnitureToggle(room.furnishing, p.label, e.target.checked) })}
+                                  />
+                                  <span className="font-medium text-slate-800">{p.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="Room features only. Furniture is selected above; bathroom is configured in the next step.">Room amenities</FieldLabel>
                         <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
                           {listingPresets.room.map((p) => {
                             const on = splitLineList(room.roomAmenitiesText).includes(p.label);

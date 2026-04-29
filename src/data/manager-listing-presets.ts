@@ -75,6 +75,17 @@ export const ROOM_AMENITY_PRESETS = [
   { id: "keypad", label: "Keypad lock" },
 ] as const;
 
+export const ROOM_FURNITURE_PRESETS = [
+  { id: "bed", label: "Bed" },
+  { id: "desk", label: "Desk" },
+  { id: "chair", label: "Chair" },
+  { id: "dresser", label: "Dresser" },
+  { id: "wardrobe", label: "Wardrobe" },
+  { id: "nightstand", label: "Nightstand" },
+  { id: "bookshelf", label: "Bookshelf" },
+  { id: "mirror", label: "Mirror" },
+] as const;
+
 export const DISALLOWED_ROOM_AMENITY_LABELS = new Set(["Bed", "Desk", "Private bathroom"]);
 
 export function sanitizeRoomAmenityText(text: string): string {
@@ -117,6 +128,25 @@ export function mergeToggleLine(existing: string, label: string, on: boolean): s
   if (on) set.add(label);
   else set.delete(label);
   return [...set].join("\n");
+}
+
+/** Toggle an individual furniture item; clears the "Unfurnished" sentinel. */
+export function mergeFurnitureToggle(existing: string, label: string, on: boolean): string {
+  const items = splitLineList(existing).filter((l) => l !== "Unfurnished");
+  const set = new Set(items);
+  if (on) set.add(label);
+  else set.delete(label);
+  return [...set].join(", ");
+}
+
+/** Case-insensitive: which furniture preset labels are present in the stored string. */
+export function parseFurnitureSet(furnishing: string): Set<string> {
+  const lower = new Set(splitLineList(furnishing).map((l) => l.toLowerCase()));
+  const out = new Set<string>();
+  for (const p of ROOM_FURNITURE_PRESETS) {
+    if (lower.has(p.label.toLowerCase())) out.add(p.label);
+  }
+  return out;
 }
 
 type FurnishingSelectValue = (typeof ROOM_FURNISHING_OPTIONS)[number]["value"];

@@ -6,6 +6,7 @@ import {
   HOUSE_WIDE_AMENITY_PRESETS,
   ROOM_AMENITY_PRESETS,
   ROOM_AVAILABILITY_OPTIONS,
+  ROOM_FURNITURE_PRESETS,
   ROOM_FURNISHING_OPTIONS,
   SHARED_SPACE_AMENITY_PRESETS,
 } from "@/data/manager-listing-presets";
@@ -24,6 +25,7 @@ export type ListingPresetConfig = {
   sharedSpace: { id: string; label: string }[];
   bathroom: { id: string; label: string }[];
   room: { id: string; label: string }[];
+  furniture: { id: string; label: string }[];
   availability: readonly string[];
   furnishing: readonly { value: string; label: string }[];
 };
@@ -112,6 +114,7 @@ export async function loadListingPresetConfig(): Promise<ListingPresetConfig> {
     sharedSpace: optionRows(groups?.sharedSpace) ?? [...SHARED_SPACE_AMENITY_PRESETS],
     bathroom: bathroomRows ?? [...BATHROOM_EXTRA_AMENITY_PRESETS],
     room: roomRows ?? [...ROOM_AMENITY_PRESETS],
+    furniture: optionRows((groups as { furniture?: unknown } | null)?.furniture) ?? [...ROOM_FURNITURE_PRESETS],
     availability: Array.isArray((raw as { roomAvailability?: unknown } | null)?.roomAvailability)
       ? ((raw as { roomAvailability: string[] }).roomAvailability.filter((v) => typeof v === "string") as string[])
       : ROOM_AVAILABILITY_OPTIONS,

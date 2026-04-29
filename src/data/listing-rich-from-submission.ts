@@ -203,9 +203,9 @@ function buildListingFloorCard(
   const from = rents.length ? Math.min(...rents) : parseMonthlyRent(property.rentLabel) ?? 800;
   const roomRows: ListingRoomRow[] = rs.map((r) => {
     const setup = roomSetupLine(r, sub);
-    const furnish = r.furnishing?.trim();
+    const furnish = formatFurnishing(r.furnishing);
     const amenityLabels = splitRoomAmenityLines(r.roomAmenitiesText ?? "");
-    const utilRaw = r.utilitiesEstimate?.trim();
+    const utilRaw = formatUtilitiesEstimate(r.utilitiesEstimate);
     const baseTags = roomModalIncludedTags(r, sub, amenityLabels);
     return {
       id: r.id,
@@ -222,7 +222,7 @@ function buildListingFloorCard(
           ? "Video submitted with property application."
           : "Add a video in the manager form to replace this placeholder.",
         includedTags: baseTags,
-        furnishingDetail: furnish || undefined,
+        furnishingDetail: furnish,
         roomAmenityLabels: amenityLabels.length ? amenityLabels : undefined,
         photoUrls: r.photoDataUrls.length ? r.photoDataUrls : undefined,
         videoSrc: r.videoDataUrl,
@@ -276,11 +276,30 @@ function bundleScopeLineFromRow(b: ManagerBundleRow, rooms: ManagerRoomSubmissio
   return b.roomsLine.trim();
 }
 
+/** Normalise utilities to "$X/mo" — handles bare numbers ("175") and legacy formats ("$175/month"). */
+function formatUtilitiesEstimate(raw: string | undefined): string | undefined {
+  const t = raw?.trim();
+  if (!t) return undefined;
+  const num = parseFloat(t.replace(/[^0-9.]/g, ""));
+  if (Number.isFinite(num) && num > 0 && /^\$?[\d.,]+/.test(t)) return `$${num}/mo`;
+  return t;
+}
+
+/** Normalise furnishing: comma-stored items → human sentence. */
+function formatFurnishing(raw: string | undefined): string | undefined {
+  const t = raw?.trim();
+  if (!t) return undefined;
+  const items = t.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean);
+  if (items.length === 0) return undefined;
+  if (items.length === 1) return items[0];
+  return items.slice(0, -1).join(", ") + " & " + items[items.length - 1];
+}
+
 function perRoomBundleSummaryLine(r: ManagerRoomSubmission): string {
-  const u = r.utilitiesEstimate?.trim();
+  const u = formatUtilitiesEstimate(r.utilitiesEstimate);
   const f = r.furnishing?.trim();
   let s = `${r.name.trim()}: $${r.monthlyRent}/mo`;
-  if (u) s += ` · utilities ~ ${u}`;
+  if (u) s += ` · utilities ~${u}`;
   if (f) s += ` · ${f}`;
   return s;
 }
