@@ -139,7 +139,12 @@ function emit() {
 }
 
 function postHouseholdPayload(body: unknown) {
-  void body;
+  if (!isBrowser()) return;
+  void fetch("/api/portal-household-charges", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).catch(() => { /* fire-and-forget */ });
 }
 
 function deleteChargeRowFromServer(id: string) {
@@ -163,11 +168,24 @@ export async function syncHouseholdChargesFromServer(): Promise<{
   if (householdChargesLastSyncedAt > 0 && Date.now() - householdChargesLastSyncedAt < HOUSEHOLD_CHARGES_SYNC_TTL_MS) {
     return { charges: readAll(), rentProfiles: readRentProfiles() };
   }
-  householdChargesSyncPromise = Promise.resolve().then(() => {
-    hydrateHouseholdStateFromSession();
-    syncAllRecurringRentCharges();
-    return { charges: readAll(), rentProfiles: readRentProfiles() };
-  });
+  householdChargesSyncPromise = fetch("/api/portal-household-charges")
+    .then(async (res) => {
+      const body = res.ok ? (await res.json() as { charges?: HouseholdCharge[]; rentProfiles?: RecurringRentProfile[] }) : {};
+      const serverCharges = Array.isArray(body.charges) ? body.charges : [];
+      const serverProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
+      hydrateHouseholdStateFromSession();
+      // Server is source of truth for status; merge local-only items (not yet synced) on top
+      memoryCharges = dedupeCharges([...serverCharges, ...memoryCharges]);
+      memoryRentProfiles = dedupeRecurringRentProfiles([...serverProfiles, ...memoryRentProfiles]);
+      persistHouseholdStateToSession();
+      syncAllRecurringRentCharges();
+      return { charges: readAll(), rentProfiles: readRentProfiles() };
+    })
+    .catch(() => {
+      hydrateHouseholdStateFromSession();
+      syncAllRecurringRentCharges();
+      return { charges: readAll(), rentProfiles: readRentProfiles() };
+    });
   const result = await householdChargesSyncPromise;
   householdChargesLastSyncedAt = Date.now();
   householdChargesSyncPromise = null;
