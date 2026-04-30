@@ -809,6 +809,35 @@ export function ManagerResidents() {
                                     row={residentLease}
                                     emptyHint="No lease document yet. Generate or upload one from Manager Review first."
                                   />
+                                  {residentLease.thread.length ? (
+                                    <div className="mt-3 rounded-2xl border border-slate-200/80 bg-white p-4">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Lease messages</p>
+                                          <p className="mt-1 text-sm text-slate-500">
+                                            Resident edit requests and lease-specific updates appear here.
+                                          </p>
+                                        </div>
+                                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+                                          {residentLease.stageLabel}
+                                        </span>
+                                      </div>
+                                      <div className="mt-3 space-y-2">
+                                        {residentLease.thread.map((message) => (
+                                          <div key={message.id} className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                              {message.role}
+                                              <span className="normal-case tracking-normal text-slate-400">
+                                                {" "}
+                                                · {new Date(message.at).toLocaleString()}
+                                              </span>
+                                            </p>
+                                            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{message.body}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : null}
                                 </div>
                               ) : (
                                 <p className="mt-3 text-sm text-slate-500">Approve the application and create or generate a lease here for this resident.</p>

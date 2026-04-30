@@ -666,6 +666,26 @@ export function findLeaseForResidentEmail(email: string): LeasePipelineRow | nul
   return matches[0] ?? null;
 }
 
+function findActiveResidentLeaseRawIndex(email: string): number {
+  const activeRow = findLeaseForResidentEmail(email);
+  if (activeRow) {
+    const rawIdx = findRawLeaseRowIndex(activeRow.id);
+    if (rawIdx !== -1) return rawIdx;
+  }
+  const key = email.trim().toLowerCase();
+  const raw = readRaw() ?? [];
+  const matches = raw
+    .map((row, idx) => ({ row, idx }))
+    .filter(({ row }) => row.residentEmail.trim().toLowerCase() === key);
+  if (matches.length === 0) return -1;
+  matches.sort((a, b) => {
+    const aTs = Date.parse(a.row.updatedAtIso || "");
+    const bTs = Date.parse(b.row.updatedAtIso || "");
+    return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+  });
+  return matches[0]!.idx;
+}
+
 function makeMsg(role: LeaseThreadRole, body: string): LeaseThreadMessage {
   return {
     id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
@@ -913,7 +933,7 @@ export function residentUploadLeasePdf(email: string, file: File): Promise<{ ok:
     }
     const key = email.trim().toLowerCase();
     const rows = [...(readRaw() ?? readLeasePipeline())];
-    const idx = rows.findIndex((r) => r.residentEmail.trim().toLowerCase() === key);
+    const idx = findActiveResidentLeaseRawIndex(key);
     const row = idx === -1 ? null : rows[idx]!;
     if (!row) {
       resolve({ ok: false, error: "Lease not found." });
@@ -952,8 +972,8 @@ export function residentUploadLeasePdf(email: string, file: File): Promise<{ ok:
 
 /** Resident electronically signs; row always moves to **signed** (awaiting manager countersign unless already fully executed). */
 export function residentSignLease(email: string, signatureName?: string): boolean {
-  const rows = readLeasePipeline();
-  const idx = rows.findIndex((r) => r.residentEmail.toLowerCase() === email.trim().toLowerCase());
+  const rows = [...(readRaw() ?? readLeasePipeline())];
+  const idx = findActiveResidentLeaseRawIndex(email);
   if (idx === -1) return false;
   const row = rows[idx]!;
   if (row.status !== "Resident Signature Pending" || row.bucket !== "resident" || row.residentSignature) return false;
@@ -1045,8 +1065,8 @@ export function printLeaseAsPdf(row: LeasePipelineRow): void {
 }
 
 export function residentRequestEdits(email: string, message: string): boolean {
-  const rows = readLeasePipeline();
-  const idx = rows.findIndex((r) => r.residentEmail.toLowerCase() === email.trim().toLowerCase());
+  const rows = [...(readRaw() ?? readLeasePipeline())];
+  const idx = findActiveResidentLeaseRawIndex(email);
   if (idx === -1) return false;
   const row = rows[idx]!;
   if (row.bucket !== "resident") return false;
@@ -1069,7 +1089,7 @@ export function residentRequestEdits(email: string, message: string): boolean {
 export function residentSendLeaseToManager(email: string): boolean {
   const key = email.trim().toLowerCase();
   const rows = [...(readRaw() ?? readLeasePipeline())];
-  const idx = rows.findIndex((r) => r.residentEmail.trim().toLowerCase() === key);
+  const idx = findActiveResidentLeaseRawIndex(key);
   if (idx === -1) return false;
   const row = rows[idx]!;
   if (row.status !== "Resident Signature Pending") return false;
