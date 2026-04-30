@@ -8,11 +8,12 @@ import { PortalPropertyFilterPill } from "@/components/portal/manager-section-sh
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { LEASE_PIPELINE_EVENT, readLeasePipeline, regenerateAllLeaseHtml, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
-import { MANAGER_APPLICATIONS_EVENT, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
+import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { recordApprovedApplicationCharges } from "@/lib/household-charges";
 
 const LEASE_LABELS: { id: ManagerLeaseBucket; label: string }[] = [
   { id: "manager", label: "Manager review" },
@@ -128,6 +129,11 @@ export function ManagerLeases() {
             className="shrink-0 rounded-full"
             onClick={() => {
               const result = regenerateAllLeaseHtml();
+              // Re-sync charges for all approved applications so payment tabs reflect current lease values
+              const approvedRows = readManagerApplicationRows().filter((r) => r.bucket === "approved");
+              for (const appRow of approvedRows) {
+                recordApprovedApplicationCharges(appRow, userId ?? null);
+              }
               setTick((t) => t + 1);
               showToast(
                 result.updated > 0
