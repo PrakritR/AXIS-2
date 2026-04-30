@@ -455,6 +455,37 @@ export function generateLeaseHtmlForRow(rowId: string): { ok: true; version: num
   return ok ? { ok: true, version } : { ok: false, error: "Could not save generated lease." };
 }
 
+/**
+ * Regenerates lease HTML for every row that has application data.
+ * Returns a summary of how many rows were updated vs skipped.
+ */
+export function regenerateAllLeaseHtml(): { updated: number; skipped: number } {
+  const rows = readLeasePipeline();
+  let updated = 0;
+  let skipped = 0;
+  for (const row of rows) {
+    const app = row.application;
+    if (!app || !Object.keys(app).length) {
+      skipped++;
+      continue;
+    }
+    try {
+      const ctx = leaseContextFromApplication(app as RentalWizardFormState);
+      const html = buildAiGeneratedLeaseHtml(ctx);
+      const version = row.pdfVersion + 1;
+      updateLeasePipelineRow(row.id, {
+        generatedHtml: html,
+        generatedAtIso: new Date().toISOString(),
+        pdfVersion: version,
+      });
+      updated++;
+    } catch {
+      skipped++;
+    }
+  }
+  return { updated, skipped };
+}
+
 export function downloadLeaseFromRow(row: LeasePipelineRow): void {
   if (typeof window === "undefined") return;
   if (row.managerUploadedPdf?.dataUrl) {

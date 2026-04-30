@@ -6,7 +6,7 @@ import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal
 import { getManagerSubscriptionTier } from "@/lib/manager-access";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { managerPortal } from "./manager";
+import { proPortal } from "./pro";
 
 export async function buildManagerPortalDefinition(): Promise<{
   definition: PortalDefinition;
@@ -36,7 +36,7 @@ export async function buildManagerPortalDefinition(): Promise<{
   const tier = await getManagerSubscriptionTier(effectiveUserId);
   const isFree = tier === "free";
 
-  const sections = managerPortal.sections;
+  const sections = proPortal.sections;
 
   const showPreviewBanner = hasAdminRole(ctx) && !!preview?.targetUserId;
 
@@ -52,7 +52,7 @@ export async function buildManagerPortalDefinition(): Promise<{
   }
 
   return {
-    definition: { ...managerPortal, sections },
+    definition: { ...proPortal, sections },
     showPlanBanner: isFree,
     showPreviewBanner,
     previewLabel,

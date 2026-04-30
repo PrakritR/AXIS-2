@@ -7,7 +7,7 @@ import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib
 import { getPortalAccessContext, hasAdminRole } from "@/lib/auth/portal-access";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
 import { getManagerSubscriptionTier } from "@/lib/manager-access";
-import { ownerPortal } from "@/lib/portals/owner";
+import { proPortal } from "@/lib/portals/pro";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 
 export default async function OwnerLayout({ children }: { children: ReactNode }) {
@@ -37,7 +37,7 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
         showPlanBanner={showPlanBanner}
       />
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-x-hidden lg:flex-row">
-        <PortalSidebar definition={ownerPortal} />
+        <PortalSidebar definition={proPortal} />
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip">
           <main className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip px-4 py-6 lg:px-8 lg:py-8">{children}</main>
         </div>

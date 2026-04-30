@@ -10,6 +10,7 @@ const residentPortalLimited: PortalDefinition = {
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
+    { section: "payments", label: "Payments", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",
@@ -31,6 +32,7 @@ const residentPortalApproved: PortalDefinition = {
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
+    { section: "payments", label: "Payments", tabs: [] },
     { section: "lease", label: "Lease", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },
     {

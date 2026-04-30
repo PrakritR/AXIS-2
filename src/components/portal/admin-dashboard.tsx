@@ -272,7 +272,7 @@ export function AdminDashboard() {
           <div className="grid gap-4 xl:grid-cols-3">
             <PreviewPortalCard
               title="Property team"
-              description="Managers see properties, applications, residents, payments, leases, work orders, calendar, account links, inbox, plan, and profile."
+              description="Managers see properties, applications, residents, leases, work orders, calendar, account links, inbox, plan, and profile."
               portal="manager"
               users={managers}
               selectedId={managerId}
@@ -282,7 +282,6 @@ export function AdminDashboard() {
               shortcuts={[
                 { label: "Open dashboard", path: "/portal/dashboard" },
                 { label: "Applications", path: "/portal/applications" },
-                { label: "Payments", path: "/portal/payments/ledger" },
                 { label: "Leases", path: "/portal/leases" },
               ]}
             />
@@ -298,7 +297,6 @@ export function AdminDashboard() {
               shortcuts={[
                 { label: "Open dashboard", path: "/portal/dashboard" },
                 { label: "Properties", path: "/portal/properties" },
-                { label: "Payments", path: "/portal/payments/ledger" },
                 { label: "Inbox", path: "/portal/inbox/unopened" },
               ]}
             />

@@ -22,6 +22,7 @@ import { OwnerProperties } from "@/components/portal/owner-properties";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
+import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-orders-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
@@ -87,10 +88,6 @@ export async function renderPortalSection(
   if (kind === "manager" || kind === "owner" || kind === "pro") {
     if (section === "payments" || section === "stripe") redirect(`${def.basePath}/dashboard`);
   }
-  if (kind === "resident" && section === "payments") {
-    redirect(`${def.basePath}/dashboard`);
-  }
-
   const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
   const residentManagerTier =
     kind === "resident" && residentCtx?.profile?.manager_id?.trim()
@@ -392,6 +389,11 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "profile") {
     if (tabParts?.length) notFound();
     return <ResidentProfilePanel />;
+  }
+
+  if (kind === "resident" && section === "payments") {
+    if (tabParts?.length) notFound();
+    return <ResidentPaymentsPanel />;
   }
 
   if (kind === "resident" && section === "inbox") {

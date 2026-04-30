@@ -7,7 +7,7 @@ import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/p
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
-import { LEASE_PIPELINE_EVENT, readLeasePipeline, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
+import { LEASE_PIPELINE_EVENT, readLeasePipeline, regenerateAllLeaseHtml, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 import { MANAGER_APPLICATIONS_EVENT, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
@@ -122,6 +122,22 @@ export function ManagerLeases() {
               onPropertyChange={setPropertyFilter}
             />
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 rounded-full"
+            onClick={() => {
+              const result = regenerateAllLeaseHtml();
+              setTick((t) => t + 1);
+              showToast(
+                result.updated > 0
+                  ? `Regenerated ${result.updated} lease${result.updated === 1 ? "" : "s"}.`
+                  : "No leases with application data to regenerate.",
+              );
+            }}
+          >
+            Regenerate all
+          </Button>
           <Button
             type="button"
             variant="outline"

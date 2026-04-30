@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export function Modal({
   open,
@@ -17,6 +18,12 @@ export function Modal({
   /** Override default panel width (e.g. wide onboarding / payouts). */
   panelClassName?: string;
 }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -26,9 +33,9 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[70] overflow-y-auto">
       <button
         type="button"
@@ -36,7 +43,7 @@ export function Modal({
         className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative z-[71] flex min-h-dvh items-center justify-center px-2 py-4 sm:px-4 sm:py-6">
+      <div className="relative z-[71] flex min-h-screen items-center justify-center px-2 py-4 sm:px-4 sm:py-6">
         <div
           className={
             panelClassName ??
@@ -53,9 +60,10 @@ export function Modal({
               Close
             </button>
           </div>
-          <div className="max-h-[calc(100dvh-8rem)] overflow-y-auto pt-4 sm:max-h-[calc(100dvh-9rem)]">{children}</div>
+          <div className="max-h-[calc(100vh-8rem)] overflow-y-auto pt-4 sm:max-h-[calc(100vh-9rem)]">{children}</div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

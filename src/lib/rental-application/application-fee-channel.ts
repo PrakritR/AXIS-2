@@ -9,9 +9,9 @@ export function listingApplicationFeeChannels(sub: ManagerListingSubmissionV1 | 
 } {
   const zelle = Boolean(sub?.zellePaymentsEnabled && sub.applicationFeeZelleEnabled !== false && sub.zelleContact?.trim());
   const venmo = Boolean(sub?.venmoPaymentsEnabled && sub.applicationFeeVenmoEnabled !== false && sub.venmoContact?.trim());
-  const stripe = sub?.applicationFeeStripeEnabled !== false;
-  if (!stripe && !zelle && !venmo) return { stripe: true, zelle: false, venmo: false };
-  return { stripe, zelle, venmo };
+  // Stripe is disabled for application fee payments; use Zelle or Venmo instead.
+  if (!zelle && !venmo) return { stripe: false, zelle: false, venmo: false };
+  return { stripe: false, zelle, venmo };
 }
 
 export function resolveApplicationFeePayChannel(

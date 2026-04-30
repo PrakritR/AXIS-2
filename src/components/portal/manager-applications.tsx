@@ -517,7 +517,6 @@ export function ManagerApplications() {
     const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket, stage: stageLabelForRow(r, nextBucket) } : r));
     persist(next);
     const updatedRow = next.find((r) => r.id === id) ?? row;
-    await syncHouseholdChargesFromServer();
     if (nextBucket === "approved") {
       recordApprovedApplicationCharges(updatedRow, userId ?? null);
     } else if (nextBucket === "pending") {
@@ -599,9 +598,7 @@ export function ManagerApplications() {
       persist(next);
       const updatedRow = next.find((candidate) => candidate.id === id);
       if (updatedRow?.bucket === "approved") {
-        void syncHouseholdChargesFromServer().then(() => {
-          recordApprovedApplicationCharges(updatedRow, userId ?? null);
-        });
+        recordApprovedApplicationCharges(updatedRow, userId ?? null);
       }
       showToast("Assigned house, room, stay type, and lease charges saved.");
     },

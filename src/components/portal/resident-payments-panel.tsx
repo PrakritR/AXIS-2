@@ -91,7 +91,7 @@ export function ResidentPaymentsPanel() {
   const tabs = useMemo(
     () =>
       [
-        { id: "pending" as const, label: "Pending", count: counts.pending },
+        { id: "pending" as const, label: "Unpaid", count: counts.pending },
         { id: "paid" as const, label: "Paid", count: counts.paid },
       ] as const,
     [counts],
@@ -123,7 +123,7 @@ export function ResidentPaymentsPanel() {
             onChange={(id) => setTab(id as PayTab)}
           />
           <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            Pending balance: <span className="tabular-nums text-slate-950">${(pendingTotal / 100).toFixed(2)}</span>
+            Unpaid balance: <span className="tabular-nums text-slate-950">${(pendingTotal / 100).toFixed(2)}</span>
           </div>
         </div>
       }
@@ -136,7 +136,7 @@ export function ResidentPaymentsPanel() {
             charges.length === 0
               ? "No charges yet. Submit a rental application to see your listing’s application fee and deposit lines here."
               : tab === "pending"
-                ? "Nothing pending — you’re all caught up in this tab."
+                ? "Nothing unpaid — you’re all caught up in this tab."
                 : "No paid items yet."
           }
         />
@@ -166,9 +166,9 @@ export function ResidentPaymentsPanel() {
                       <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-slate-900`}>{row.balanceLabel}</td>
                       <td className={PORTAL_TABLE_TD}>
                         <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusClass(row.status === "paid" ? "Paid" : "Pending")}`}
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusClass(row.status === "paid" ? "Paid" : "Unpaid")}`}
                         >
-                          {row.status === "paid" ? "Paid" : "Pending"}
+                          {row.status === "paid" ? "Paid" : "Unpaid"}
                         </span>
                       </td>
                       <td className={`${PORTAL_TABLE_TD} text-right`}>
@@ -196,10 +196,17 @@ export function ResidentPaymentsPanel() {
                                 the memo. Your manager marks this paid when they receive it.
                               </p>
                             </div>
+                          ) : row.venmoContactSnapshot ? (
+                            <div className="rounded-lg border border-blue-200/70 bg-blue-50/50 px-3 py-2.5 text-blue-950">
+                              <p className="text-xs font-semibold">Pay with Venmo</p>
+                              <p className="mt-1 text-sm leading-relaxed">
+                                Send to <span className="font-mono font-medium">{row.venmoContactSnapshot}</span>. Include your name and unit in
+                                the note. Your manager marks this paid when they receive it.
+                              </p>
+                            </div>
                           ) : (
                             <p className="leading-relaxed">
-                              Stripe application-fee payments are marked paid automatically. Other charges are updated by your manager when they
-                              receive payment.
+                              All charges are updated by your manager when they receive payment via Zelle, Venmo, ACH, or cash.
                             </p>
                           )}
                           {row.status === "paid" && row.paidAt ? (
