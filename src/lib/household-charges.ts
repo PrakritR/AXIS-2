@@ -88,6 +88,8 @@ export type RecurringRentProfile = {
   startMonth: string;
   active: boolean;
   updatedAt: string;
+  zelleContact?: string;
+  venmoContact?: string;
 };
 
 const FUTURE_RENT_VISIBILITY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -160,6 +162,7 @@ export async function syncHouseholdChargesFromServer(): Promise<{
   }
   householdChargesSyncPromise = Promise.resolve().then(() => {
     hydrateHouseholdStateFromSession();
+    syncAllRecurringRentCharges();
     return { charges: readAll(), rentProfiles: readRentProfiles() };
   });
   const result = await householdChargesSyncPromise;
@@ -652,6 +655,72 @@ export function recordWorkOrderResidentCharge(input: {
 }
 
 function syncAllRecurringRentCharges(): boolean {
+  if (!isBrowser()) return false;
+  const profiles = readRentProfiles().filter((p) => p.active && p.monthlyRent > 0);
+  if (profiles.length === 0) return false;
+
+  const now = new Date();
+  const existing = readAll();
+  const newCharges: HouseholdCharge[] = [];
+
+  for (const profile of profiles) {
+    const dueDay = Math.min(28, Math.max(1, Math.round(profile.dueDay ?? 1)));
+    const [startYearRaw, startMonthRaw] = (profile.startMonth ?? "").split("-").map(Number);
+    const startYear = startYearRaw && Number.isFinite(startYearRaw) ? startYearRaw : now.getFullYear();
+    const startMonthNum = startMonthRaw && Number.isFinite(startMonthRaw) ? startMonthRaw : now.getMonth() + 1;
+
+    // Check current month and next 2 months for due dates within the 7-day window
+    for (let offset = 0; offset <= 2; offset++) {
+      const candidateDate = new Date(now.getFullYear(), now.getMonth() + offset, dueDay, 12, 0, 0, 0);
+      const candidateYear = candidateDate.getFullYear();
+      const candidateMonthNum = candidateDate.getMonth() + 1;
+
+      // Skip months before the profile's start month
+      if (candidateYear < startYear || (candidateYear === startYear && candidateMonthNum < startMonthNum)) continue;
+
+      // Only emit if the due date is within the 7-day visibility window from now
+      const msTillDue = candidateDate.getTime() - now.getTime();
+      if (msTillDue > FUTURE_RENT_VISIBILITY_WINDOW_MS) break;
+
+      const rentMonth = `${candidateYear}-${String(candidateMonthNum).padStart(2, "0")}`;
+      const chargeKey = `rent|${profile.residentEmail.trim().toLowerCase()}|${profile.propertyId}|${rentMonth}`;
+      const alreadyExists =
+        existing.some((c) => chargeBusinessKey(c) === chargeKey) ||
+        newCharges.some((c) => chargeBusinessKey(c) === chargeKey);
+      if (alreadyExists) continue;
+
+      const dueLabel = formatRecurringRentDueLabel(rentMonth, dueDay);
+      const monthLabel = candidateDate.toLocaleString("default", { month: "long", year: "numeric" });
+      newCharges.push({
+        id: `hc_rent_${chargeKeyPart(profile.residentEmail)}_${chargeKeyPart(profile.propertyId)}_${rentMonth}`,
+        createdAt: new Date().toISOString(),
+        residentEmail: profile.residentEmail,
+        residentName: profile.residentName,
+        residentUserId: profile.residentUserId,
+        propertyId: profile.propertyId,
+        propertyLabel: profile.propertyLabel,
+        managerUserId: profile.managerUserId,
+        kind: "rent",
+        title: `Rent — ${monthLabel}`,
+        amountLabel: moneyAmountLabel(profile.monthlyRent),
+        balanceLabel: moneyAmountLabel(profile.monthlyRent),
+        status: "pending",
+        recurringRentProfileId: profile.id,
+        rentMonth,
+        dueDay,
+        dueDateLabel: dueLabel,
+        blocksLeaseUntilPaid: false,
+        zelleContactSnapshot: profile.zelleContact,
+        venmoContactSnapshot: profile.venmoContact,
+      });
+    }
+  }
+
+  if (newCharges.length > 0) {
+    writeAll([...existing, ...newCharges], true);
+    emit();
+    return true;
+  }
   return false;
 }
 
@@ -671,9 +740,34 @@ export function upsertRecurringRentProfile(input: {
   monthlyRent: number;
   dueDay?: number;
   startMonth?: string;
+  zelleContact?: string;
+  venmoContact?: string;
 }): RecurringRentProfile | null {
-  void input;
-  return null;
+  if (!isBrowser()) return null;
+  const profile: RecurringRentProfile = {
+    id: `rrp_${chargeKeyPart(input.residentEmail)}_${chargeKeyPart(input.propertyId)}`,
+    residentEmail: input.residentEmail,
+    residentName: input.residentName,
+    residentUserId: input.residentUserId ?? null,
+    propertyId: input.propertyId,
+    propertyLabel: input.propertyLabel,
+    roomLabel: input.roomLabel,
+    managerUserId: input.managerUserId,
+    monthlyRent: input.monthlyRent,
+    dueDay: Math.min(28, Math.max(1, input.dueDay ?? 1)),
+    startMonth: input.startMonth ?? currentRentMonth(),
+    active: true,
+    updatedAt: new Date().toISOString(),
+    zelleContact: input.zelleContact,
+    venmoContact: input.venmoContact,
+  };
+  const profiles = readRentProfiles();
+  const key = recurringRentProfileKey(profile);
+  const next = profiles.some((p) => recurringRentProfileKey(p) === key)
+    ? profiles.map((p) => (recurringRentProfileKey(p) === key ? profile : p))
+    : [...profiles, profile];
+  writeRentProfiles(next);
+  return profile;
 }
 
 /** Link charges created with email-only to the signed-in resident account. */
@@ -933,6 +1027,31 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     next.length !== before.length ||
     JSON.stringify(next.map((charge) => charge.id).sort()) !== JSON.stringify(before.map((charge) => charge.id).sort());
   if (changed) writeAll(next);
+
+  // Set up recurring monthly rent profile starting from the first full month after move-in
+  if (rentAmount > 0 && leaseStart) {
+    const [leaseYearRaw, leaseMonthRaw] = leaseStart.split("-").map(Number);
+    if (leaseYearRaw && leaseMonthRaw) {
+      // First full month is the calendar month after the lease start month
+      const firstFullMonthDate = new Date(leaseYearRaw, leaseMonthRaw, 1); // leaseMonthRaw is 1-indexed, JS months are 0-indexed
+      const startMonth = `${firstFullMonthDate.getFullYear()}-${String(firstFullMonthDate.getMonth() + 1).padStart(2, "0")}`;
+      const roomLabel = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "Room";
+      upsertRecurringRentProfile({
+        residentEmail,
+        residentName,
+        propertyId,
+        propertyLabel,
+        roomLabel,
+        managerUserId: effectiveManagerUserId,
+        monthlyRent: rentAmount,
+        dueDay: 1,
+        startMonth,
+        zelleContact: zelleSnap,
+        venmoContact: venmoSnap,
+      });
+    }
+  }
+
   return changed;
 }
 
