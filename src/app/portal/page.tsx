@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function ManagerIndexPage() {
+export default function PropertyPortalIndexPage() {
   redirect("/portal/dashboard");
 }

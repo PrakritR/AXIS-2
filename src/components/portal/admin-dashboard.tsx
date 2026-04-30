@@ -75,7 +75,7 @@ export function AdminDashboard() {
           showToast(body.error ?? "Could not start preview.");
           return;
         }
-        const path = portal === "resident" ? "/resident/dashboard" : "/pro/dashboard";
+        const path = portal === "resident" ? "/resident/dashboard" : "/portal/dashboard";
         router.push(path);
         router.refresh();
       } catch {
@@ -106,14 +106,17 @@ export function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    void loadPortalUsers();
+    const id = window.setTimeout(() => void loadPortalUsers(), 0);
+    return () => window.clearTimeout(id);
   }, [loadPortalUsers]);
 
+  const [adminMeetingCutoffMs, setAdminMeetingCutoffMs] = useState(() => Date.now() - 30 * 60 * 1000);
   useEffect(() => {
     const syncEvents = () => {
       const n = readPlannedEvents().filter((event) => event.kind !== "tour").length + pendingInquiryCount();
       setEventsTotal(String(n));
       setEventTick((tick) => tick + 1);
+      setAdminMeetingCutoffMs(Date.now() - 30 * 60 * 1000);
     };
     syncEvents();
     void syncScheduleRecordsFromServer().then(syncEvents);
@@ -128,7 +131,6 @@ export function AdminDashboard() {
 
   const upcomingAdminMeetings = useMemo(() => {
     void eventTick;
-    const now = Date.now() - 30 * 60 * 1000;
     const pending = readPartnerInquiries()
       .filter((row) => row.status === "pending" && row.kind !== "tour")
       .flatMap((row) =>
@@ -150,9 +152,9 @@ export function AdminDashboard() {
         startMs: new Date(event.start).getTime(),
       }));
     return [...pending, ...confirmed]
-      .filter((meeting) => Number.isFinite(meeting.startMs) && meeting.startMs >= now)
+      .filter((meeting) => Number.isFinite(meeting.startMs) && meeting.startMs >= adminMeetingCutoffMs)
       .sort((a, b) => a.startMs - b.startMs);
-  }, [eventTick]);
+  }, [eventTick, adminMeetingCutoffMs]);
 
   const nextAdminMeeting = upcomingAdminMeetings[0] ?? null;
   const pendingMeetingCount = upcomingAdminMeetings.filter((meeting) => meeting.status === "pending").length;

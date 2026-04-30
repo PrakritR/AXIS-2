@@ -56,11 +56,7 @@ function CheckIcon() {
 export function ManagerPlan() {
   const router = useRouter();
   const pathname = usePathname();
-  const planBasePath = pathname.startsWith("/owner")
-    ? "/owner"
-    : pathname.startsWith("/pro")
-      ? "/pro"
-      : "/manager";
+  const planBasePath = "/portal";
   const { showToast } = useAppUi();
   const [sub, setSub] = useState<SubPayload | null>(null);
   const [pendingTier, setPendingTier] = useState<ManagerSkuTier>("free");
@@ -88,7 +84,8 @@ export function ManagerPlan() {
   }, [showToast]);
 
   useEffect(() => {
-    void load();
+    const id = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(id);
   }, [load]);
 
   useEffect(() => {
@@ -103,13 +100,6 @@ export function ManagerPlan() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!sub?.billing) return;
-    const b = sub.billing.toLowerCase();
-    if (b !== "monthly" && b !== "annual") return;
-    setPendingBilling(b);
-  }, [sub?.billing]);
-
   const committedTier = useMemo(() => pickerValue(sub), [sub]);
   const committedBilling = useMemo<"monthly" | "annual">(() => {
     const b = sub?.billing?.toLowerCase();
@@ -118,11 +108,13 @@ export function ManagerPlan() {
   const annualLocked = committedBilling === "annual";
 
   useEffect(() => {
-    setPendingTier(committedTier);
+    const id = window.setTimeout(() => setPendingTier(committedTier), 0);
+    return () => window.clearTimeout(id);
   }, [committedTier]);
 
   useEffect(() => {
-    setPendingBilling(committedBilling);
+    const id = window.setTimeout(() => setPendingBilling(committedBilling), 0);
+    return () => window.clearTimeout(id);
   }, [committedBilling]);
 
   const checkoutHandledRef = useRef(false);

@@ -43,7 +43,7 @@ function rowFromForm(input: {
       dueDate,
       bucket: "paid",
       statusLabel: "Paid",
-      notes: "Added manually from Axis Pro Portal.",
+      notes: "Added manually from Axis Property Portal.",
     };
   }
 
@@ -60,7 +60,7 @@ function rowFromForm(input: {
       dueDate,
       bucket: "overdue",
       statusLabel: "Overdue",
-      notes: "Added manually from Axis Pro Portal.",
+      notes: "Added manually from Axis Property Portal.",
     };
   }
 
@@ -76,7 +76,7 @@ function rowFromForm(input: {
     dueDate,
     bucket: "pending",
     statusLabel: "Pending",
-    notes: "Added manually from Axis Pro Portal.",
+    notes: "Added manually from Axis Property Portal.",
   };
 }
 

@@ -25,7 +25,7 @@ export async function buildManagerPortalDefinition(): Promise<{
   } else if (!hasRole(ctx, "manager")) {
     redirect("/auth/sign-in");
   } else if (ctx.roles.length > 1 && ctx.effectiveRole === null) {
-    redirect(`/auth/choose-portal?next=${encodeURIComponent("/manager/dashboard")}`);
+    redirect(`/auth/choose-portal?next=${encodeURIComponent("/portal/dashboard")}`);
   } else if (ctx.effectiveRole !== "manager") {
     redirect(portalDashboardPath(ctx.effectiveRole ?? "resident"));
   }

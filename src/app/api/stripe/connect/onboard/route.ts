@@ -11,7 +11,7 @@ export const runtime = "nodejs";
  * - Existing: Account Link (onboarding / update) or Express Login Link if fully enabled.
  * Without STRIPE_SECRET_KEY, returns a demo payload instead of throwing.
  */
-export async function POST(req: Request) {
+export async function POST() {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -21,10 +21,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as { basePath?: string };
-    const raw = body.basePath?.trim();
-    const basePath =
-      raw === "/owner" ? "/owner" : raw === "/pro" ? "/pro" : "/manager";
+    const basePath = "/portal";
 
     const h = await headers();
     const host = h.get("x-forwarded-host") ?? h.get("host");
@@ -61,7 +58,7 @@ export async function POST(req: Request) {
           },
           metadata: {
             axis_user_id: user.id,
-            axis_portal: basePath === "/owner" ? "owner" : basePath === "/pro" ? "pro" : "manager",
+            axis_portal: "portal",
           },
         });
         accountId = account.id;

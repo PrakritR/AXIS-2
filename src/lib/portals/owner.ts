@@ -1,15 +1,23 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 
-/** Owner portal: same primary navigation as the manager portal where it applies. */
+/** Legacy owner role uses the shared property portal navigation. */
 export const ownerPortal: PortalDefinition = {
   kind: "owner",
-  basePath: "/owner",
+  basePath: "/portal",
   title: "Axis Property Portal",
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
+    {
+      section: "payments",
+      label: "Payments",
+      tabs: [
+        { id: "ledger", label: "Ledger" },
+        { id: "payouts", label: "Payouts" },
+      ],
+    },
     { section: "leases", label: "Leases", tabs: [] },
     { section: "work-orders", label: "Work orders", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },

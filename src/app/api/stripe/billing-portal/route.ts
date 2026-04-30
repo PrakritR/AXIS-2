@@ -6,11 +6,9 @@ import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 
-function allowedReturnPath(path: string | undefined): "/manager/plan" | "/owner/plan" | "/pro/plan" {
-  const p = typeof path === "string" ? path.trim() : "";
-  if (p.startsWith("/pro")) return "/pro/plan";
-  if (p.startsWith("/owner")) return "/owner/plan";
-  return "/manager/plan";
+function allowedReturnPath(path: string | undefined): "/portal/plan" {
+  void path;
+  return "/portal/plan";
 }
 
 export async function POST(req: Request) {

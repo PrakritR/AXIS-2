@@ -213,7 +213,7 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
   });
 }
 
-/** When `forManagerUserId` is set, counts only that manager’s pipeline + side buckets (manager portal). */
+/** When `forManagerUserId` is set, counts only that manager’s pipeline + side buckets (property portal). */
 export function adminKpiCounts(forManagerUserId?: string | null): [number, number, number, number, number] {
   try {
     if (forManagerUserId) {

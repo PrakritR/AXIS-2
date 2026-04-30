@@ -52,7 +52,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
     window.location.assign(href);
   };
 
-  /** Matches `/pro` Axis Pro Portal: gradient header, white rail, slate-900 active row + arrow affordance. */
+  /** Shared property portal chrome: gradient header, white rail, slate-900 active row + arrow affordance. */
   const desktopAside = (
     <aside className="sticky top-0 z-40 hidden h-screen w-72 shrink-0 flex-col self-start border-r border-slate-200/80 bg-[#fbfbfd] lg:flex">
       <div className={`px-6 py-6 text-white ${accent}`}>

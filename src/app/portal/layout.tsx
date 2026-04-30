@@ -1,10 +1,10 @@
 import { PublicNavbar } from "@/components/layout/public-navbar";
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
-import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
+import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
 
-export default async function ProPortalLayout({ children }: { children: React.ReactNode }) {
+export default async function PropertyPortalLayout({ children }: { children: React.ReactNode }) {
   const nav = await buildProPortalDefinition();
 
   return (

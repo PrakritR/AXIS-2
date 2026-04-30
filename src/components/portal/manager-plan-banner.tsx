@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-/** Shown for Free-tier managers/owners — links to Plan where they can choose Pro or Business. */
-export function ManagerPlanBanner({ planHref = "/pro/plan" }: { planHref?: string }) {
+/** Shown for Free-tier property portal users — links to Plan where they can choose Pro or Business. */
+export function ManagerPlanBanner({ planHref = "/portal/plan" }: { planHref?: string }) {
   return (
     <div className="shrink-0 border-b border-amber-300 bg-[#fffbeb] px-4 py-2.5 text-center text-sm text-amber-950 lg:px-8">
       <p className="font-medium">

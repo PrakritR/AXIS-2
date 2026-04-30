@@ -24,7 +24,7 @@ export type MockProperty = {
   listingSubmission?: ManagerListingSubmissionV1;
   /** Supabase user id of the owning manager (demo localStorage scoping). */
   managerUserId?: string;
-  /** When true, listing is admin-approved for live rent display; manager portal inventory only shows extras with this set. */
+  /** When true, listing is admin-approved for live rent display; property portal inventory only shows extras with this set. */
   adminPublishLive?: boolean;
 };
 

@@ -19,6 +19,8 @@ type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
   __signedRentLabel?: string;
 };
 
+const MONTH_TO_MONTH_RENT_SURCHARGE = 25;
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -191,12 +193,48 @@ function fmtUsd(n: number): string {
   return "$" + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+function parseLocalDateOnly(raw: string | undefined | null): Date | null {
+  const value = String(raw ?? "").trim();
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const dt = new Date(year, month - 1, day, 12, 0, 0, 0);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const dt = new Date(value);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function isMonthToMonthLease(application: Partial<RentalWizardFormState> | undefined | null): boolean {
+  return application?.rentalType !== "short_term" && application?.leaseTerm?.trim() === "Month-to-Month";
+}
+
+function rentLabelWithMonthlySurcharge(baseLabel: string, surcharge: number): string {
+  const baseAmount = parseAmount(baseLabel);
+  if (baseAmount == null) return baseLabel;
+  const suffixMatch = baseLabel.match(/(\/\s*month|\/\s*mo\b|monthly\b.*)$/i);
+  const suffix = suffixMatch ? ` ${suffixMatch[1]!.trim()}` : "";
+  return `${fmtUsd(baseAmount + surcharge)}${suffix}`;
+}
+
+function overrideFeeLabel(overrideRaw: string | undefined | null, fallbackLabel: string): string {
+  const override = String(overrideRaw ?? "").trim();
+  if (override) {
+    const amount = parseAmount(override);
+    return amount != null ? fmtUsd(amount) : override;
+  }
+  return fallbackLabel;
+}
+
 function proratedBlock(monthlyRentStr: string, utilitiesStr: string, leaseStartStr: string): string {
   const rent = parseAmount(monthlyRentStr);
   if (!rent || !leaseStartStr || leaseStartStr === "—") return "";
   try {
-    const start = new Date(leaseStartStr);
-    if (isNaN(start.getTime())) return "";
+    const start = parseLocalDateOnly(leaseStartStr);
+    if (!start || isNaN(start.getTime())) return "";
     const day = start.getDate();
     if (day === 1) return "";
     const year = start.getFullYear();
@@ -263,23 +301,33 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   );
 
   // ── Rent & financials ─────────────────────────────────────────────────────
-  const monthlyRentStr =
+  const monthlyRentBaseStr =
+    overrideFeeLabel(a.managerRentOverride, "") ||
     signedRentLabel ||
     submissionRoomRentFromChoice(sub, a.roomChoice1) ||
     (room && findSubmissionRoomRent(sub, room.unitLabel)) ||
     room?.rentLabel ||
     list?.rentLabel ||
     "As set forth in the Rent Schedule";
+  const monthToMonthSurcharge = isMonthToMonthLease(a) ? MONTH_TO_MONTH_RENT_SURCHARGE : 0;
+  const monthlyRentStr =
+    monthToMonthSurcharge > 0 ? rentLabelWithMonthlySurcharge(monthlyRentBaseStr, monthToMonthSurcharge) : monthlyRentBaseStr;
 
   const rentNum = parseAmount(monthlyRentStr);
-  const utilitiesStr = escapeHtml(specificRoom?.utilitiesEstimate?.trim() || (sub ? utilitiesListingEstimateLabel(sub) : "") || "—");
+  const utilitiesBase = specificRoom?.utilitiesEstimate?.trim() || (sub ? utilitiesListingEstimateLabel(sub) : "") || "—";
+  const utilitiesStr = escapeHtml(overrideFeeLabel(a.managerUtilitiesOverride, utilitiesBase));
   const utilitiesNum = parseAmount(utilitiesStr);
   const totalMonthly = rentNum != null && utilitiesNum != null ? fmtUsd(rentNum + utilitiesNum) : null;
 
   const appFee = escapeHtml(sub?.applicationFee ?? "—");
-  const secDep = escapeHtml(sub?.securityDeposit ?? "—");
-  const moveInFee = escapeHtml(sub?.moveInFee ?? "—");
-  const paySigning = escapeHtml(sub ? paymentAtSigningPriceLabel(sub) : "—");
+  const secDep = escapeHtml(overrideFeeLabel(a.managerSecurityDepositOverride, sub?.securityDeposit ?? "—"));
+  const moveInFee = escapeHtml(overrideFeeLabel(a.managerMoveInFeeOverride, sub?.moveInFee ?? "—"));
+  const otherCostLabel = escapeHtml(a.managerOtherCostLabel?.trim() || "Other costs");
+  const otherCostAmount = escapeHtml(overrideFeeLabel(a.managerOtherCostAmount, "—"));
+  const otherCostNum = parseAmount(a.managerOtherCostAmount);
+  const paySigningBase = sub ? paymentAtSigningPriceLabel(sub) : "—";
+  const paySigningNum = (parseAmount(secDep) ?? 0) + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0);
+  const paySigning = escapeHtml(paySigningNum > 0 ? fmtUsd(paySigningNum) : paySigningBase);
 
   // ── Dates ─────────────────────────────────────────────────────────────────
   const leaseTerm = dash(a.leaseTerm);
@@ -308,6 +356,10 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
     manualPaymentMethods.length > 0
       ? `Payment may be made via Stripe (portal), ${manualPaymentMethods.join(", ")}, or another method agreed in writing.`
       : "Payment shall be made via the Axis portal or by a method agreed in writing with Landlord.";
+  const monthToMonthSurchargeNote =
+    monthToMonthSurcharge > 0
+      ? `<p><strong>Month-to-month surcharge:</strong> This lease includes an additional ${fmtUsd(monthToMonthSurcharge)} added to the monthly base rent for month-to-month billing.</p>`
+      : "";
 
   const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "");
 
@@ -423,6 +475,7 @@ ${houseRules ? `<p>${houseRules}</p>` : ""}
   <tr><th>Utilities / services (monthly estimate)</th><td><strong>${utilitiesStr}</strong></td></tr>
   ${totalMonthly ? `<tr class="total-row"><th>Total monthly payment</th><td><strong>${totalMonthly}</strong></td></tr>` : ""}
 </table>
+${monthToMonthSurchargeNote}
 <p>Rent is due on the <strong>1st calendar day</strong> of each month. ${paymentMethod}</p>
 <p><strong>Late fee:</strong> If rent is not received by the <strong>5th of the month</strong>, a late fee of $50.00 shall be assessed and is immediately due. Additional late fees of $10.00 per day may accrue after the 10th of the month, not to exceed amounts permitted under RCW 59.18.283.</p>
 
@@ -433,9 +486,20 @@ ${proratedSection || ""}
   <tr><th width="50%">Application fee</th><td>${appFee}</td></tr>
   <tr><th>Security deposit</th><td><strong>${secDep}</strong></td></tr>
   <tr><th>Move-in fee (non-refundable)</th><td>${moveInFee}</td></tr>
+  ${otherCostNum && otherCostNum > 0 ? `<tr><th>${otherCostLabel}</th><td>${otherCostAmount}</td></tr>` : ""}
   <tr><th>Total due at signing</th><td><strong>${paySigning}</strong></td></tr>
 </table>
-<p><strong>Security deposit — Washington law (RCW 59.18.260–59.18.285):</strong> The security deposit shall be held in a trust account or shall be bonded. Within <strong>30 days</strong> after Resident vacates and returns keys, Landlord shall return the deposit or provide a written itemized statement of deductions. Permissible deductions include: unpaid rent, unpaid utilities, damage beyond normal wear and tear, cleaning required to restore the unit to move-in condition, and costs of lease-break re-renting. Normal wear and tear shall not be charged against the deposit. Failure to return the deposit or provide an itemized statement within 30 days may entitle Resident to double the withheld amount under RCW 59.18.280.</p>
+<p>Resident shall pay a security deposit of <strong>${secDep}</strong> at lease signing. The deposit shall be held in accordance with RCW 59.18.260–.280 and secures Resident&apos;s full performance under this Agreement. Resident&apos;s liability is not limited to the deposit amount, and the deposit may not be applied toward rent or other charges during the tenancy.</p>
+<p>Within 30 days after termination of the tenancy and vacancy of the Premises, Landlord shall return any refundable portion of the deposit or provide a written itemized statement of deductions, as required by law. Resident shall provide a forwarding address for delivery of the deposit accounting and any refund. Any refund may be issued as a single check payable to all Residents.</p>
+<p>Deductions from the deposit may include, to the extent permitted by law:</p>
+<ul>
+  <li>Unpaid rent, utilities, or other charges.</li>
+  <li>Cleaning and restoration beyond ordinary wear and tear.</li>
+  <li>Repair or replacement of missing or damaged property, fixtures, or keys.</li>
+  <li>Fees or charges due under this Agreement (including early termination).</li>
+  <li>Reasonable labor costs (Landlord at $60/hour or third-party actual cost).</li>
+</ul>
+<p>Landlord shall be deemed in compliance if the statement and any refund are mailed with First Class postage within the required timeframe. A $50 stop-payment/reissuance fee may be deducted if a refund must be reissued due to an incorrect or missing address, where permitted by law.</p>
 
 <h2>${proratedSection ? "7" : "6"}. Returned Payments</h2>
 <p>If any payment is returned for insufficient funds or any other reason, Resident shall pay a returned-payment fee of $35.00 in addition to any applicable bank charges. After two returned payments, Landlord may require all future payments to be made by cashier's check, money order, or Zelle.</p>
@@ -446,7 +510,7 @@ ${proratedSection || ""}
 <h2>${proratedSection ? "9" : "8"}. Use, Occupancy &amp; Guest Policy</h2>
 <p>The Premises shall be used exclusively as a private residence. The only authorized occupant(s) are: <strong>${tenantName}</strong> and <strong>${occupancy}</strong> additional authorized occupant(s) listed in writing at signing.</p>
 <ul>
-  <li><strong>Guests:</strong> Guests may stay no more than <strong>7 consecutive nights</strong> or <strong>14 nights total in any 30-day period</strong> without prior written approval from Landlord.</li>
+  <li><strong>Guests:</strong> No guest is permitted on the property or in the room unless Landlord gives prior written approval in advance.</li>
   <li><strong>No short-term rentals:</strong> Listing the room on Airbnb, VRBO, or any similar platform is strictly prohibited and constitutes grounds for immediate termination.</li>
   <li><strong>Business use:</strong> No commercial, business, or professional activity that generates client visits or deliveries is permitted.</li>
   <li><strong>Illegal activity:</strong> No illegal activity of any kind on or near the Premises.</li>
@@ -557,6 +621,7 @@ ${houseRules
   <tr><td>Application fee</td><td>${appFee}</td><td>One-time</td></tr>
   <tr><td>Security deposit</td><td>${secDep}</td><td>One-time (refundable)</td></tr>
   <tr><td>Move-in fee</td><td>${moveInFee}</td><td>One-time (non-refundable)</td></tr>
+  ${otherCostNum && otherCostNum > 0 ? `<tr><td>${otherCostLabel}</td><td>${otherCostAmount}</td><td>One-time</td></tr>` : ""}
   <tr><td>Total due at signing</td><td>${paySigning}</td><td>At signing</td></tr>
 </table>
 

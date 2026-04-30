@@ -1,9 +1,9 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 
-/** Unified premium workspace — managers and owners share the same navigation and tools. */
+/** Unified property workspace — managers, owners, and paid workspace users share one portal. */
 export const proPortal: PortalDefinition = {
   kind: "pro",
-  basePath: "/pro",
+  basePath: "/portal",
   title: "Axis Property Portal",
   accent: "blue",
   sections: [
@@ -11,8 +11,14 @@ export const proPortal: PortalDefinition = {
     { section: "properties", label: "Properties", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
     { section: "residents", label: "Residents", tabs: [] },
-    { section: "leases", label: "Leases", tabs: [] },
-    { section: "work-orders", label: "Work orders", tabs: [] },
+    {
+      section: "payments",
+      label: "Payments",
+      tabs: [
+        { id: "ledger", label: "Ledger" },
+        { id: "payouts", label: "Payouts" },
+      ],
+    },
     { section: "calendar", label: "Calendar", tabs: [] },
     {
       section: "relationships",

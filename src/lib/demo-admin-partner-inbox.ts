@@ -105,7 +105,7 @@ export function appendPartnerInboxMessage(payload: { name: string; email: string
   });
 }
 
-/** Manager, resident, or owner portal → admin inbox */
+/** Property or resident portal → admin inbox */
 export function appendPortalMessageToAdminInbox(payload: {
   role: "manager" | "resident" | "owner";
   name: string;

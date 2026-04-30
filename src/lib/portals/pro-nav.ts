@@ -24,7 +24,7 @@ export const getProPortalRenderContext = cache(async () => {
   } else if (!hasRole(ctx, "manager") && !hasRole(ctx, "owner")) {
     redirect("/auth/sign-in");
   } else if (ctx.roles.length > 1 && ctx.effectiveRole === null) {
-    redirect(`/auth/choose-portal?next=${encodeURIComponent("/pro/dashboard")}`);
+    redirect(`/auth/choose-portal?next=${encodeURIComponent("/portal/dashboard")}`);
   } else if (ctx.effectiveRole !== null && ctx.effectiveRole !== "manager" && ctx.effectiveRole !== "owner") {
     redirect(portalDashboardPath(ctx.effectiveRole));
   }

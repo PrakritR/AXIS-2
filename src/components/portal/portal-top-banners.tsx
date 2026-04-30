@@ -14,7 +14,7 @@ export function PortalTopBanners({
   previewLabel,
   showPlanBanner,
 }: {
-  planHref: "/manager/plan" | "/owner/plan" | "/pro/plan";
+  planHref: "/manager/plan" | "/owner/plan" | "/pro/plan" | "/portal/plan";
   showPreviewBanner: boolean;
   previewLabel: string | null;
   showPlanBanner: boolean;

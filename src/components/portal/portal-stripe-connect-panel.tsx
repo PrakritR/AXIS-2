@@ -74,7 +74,7 @@ export function PortalStripeConnectPanel({
   basePath,
   variant = "page",
 }: {
-  basePath: "/manager" | "/owner" | "/pro";
+  basePath: "/portal";
   /** `embedded` skips the outer page shell for use inside a modal. */
   variant?: "page" | "embedded";
 }) {

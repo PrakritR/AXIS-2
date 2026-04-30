@@ -19,7 +19,7 @@ export default function ManagerPortalError({
         <Button type="button" variant="primary" className="rounded-full" onClick={() => reset()}>
           Try again
         </Button>
-        <Button type="button" variant="outline" className="rounded-full" onClick={() => (window.location.href = "/pro/dashboard")}>
+        <Button type="button" variant="outline" className="rounded-full" onClick={() => (window.location.href = "/portal/dashboard")}>
           Dashboard
         </Button>
       </div>

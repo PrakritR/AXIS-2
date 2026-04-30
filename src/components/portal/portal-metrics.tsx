@@ -53,7 +53,7 @@ export function PortalSegmentedControl<T extends string>({
   );
 }
 
-/** Primary page title in portal workspaces (aligned with Axis Pro Portal dashboard). */
+/** Primary page title in portal workspaces (aligned with Axis Property Portal dashboard). */
 export const PORTAL_PAGE_TITLE = "text-[2rem] font-semibold tracking-[-0.03em] text-slate-950";
 
 /** Matches admin Managers / Properties filter row (status + tier pill groups). */

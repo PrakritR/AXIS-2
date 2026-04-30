@@ -39,7 +39,7 @@ export default async function CreateOwnerPage({
       </div>
 
       <p className="mt-8 text-center text-xs text-slate-500">
-        After signup you use <span className="font-semibold text-slate-700">Manager / Owner login</span> and open the owner portal for the houses your manager linked.
+        After signup you use <span className="font-semibold text-slate-700">property portal login</span> for the houses your property team linked.
       </p>
     </AuthCard>
   );

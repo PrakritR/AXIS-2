@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -16,7 +15,6 @@ import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows, syncManagerAppl
 import {
   countUnopenedPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
-  OWNER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
   type PersistedInboxThread,
   syncPersistedInboxFromServer,
@@ -62,8 +60,7 @@ function StatLink({ label, value, href }: { label: string; value: string; href: 
 
 export function ManagerDashboard() {
   const { showToast } = useAppUi();
-  const pathname = usePathname();
-  const portalBase = pathname.startsWith("/owner") ? "/owner" : "/manager";
+  const portalBase = "/portal";
   const { userId } = useManagerUserId();
 
   const [pipelineTick, setPipelineTick] = useState(0);
@@ -179,22 +176,22 @@ export function ManagerDashboard() {
   useEffect(() => {
     const onInboxEvent = (e: Event) => {
       const key = (e as CustomEvent<{ key?: string }>).detail?.key;
-      const want = pathname.startsWith("/owner") ? OWNER_INBOX_STORAGE_KEY : MANAGER_INBOX_STORAGE_KEY;
+      const want = MANAGER_INBOX_STORAGE_KEY;
       if (!key || key === want) setInboxTick((n) => n + 1);
     };
-    const want = pathname.startsWith("/owner") ? OWNER_INBOX_STORAGE_KEY : MANAGER_INBOX_STORAGE_KEY;
+    const want = MANAGER_INBOX_STORAGE_KEY;
     void syncPersistedInboxFromServer(want).then(() => setInboxTick((n) => n + 1));
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, onInboxEvent as EventListener);
     return () => {
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, onInboxEvent as EventListener);
     };
-  }, [pathname]);
+  }, []);
 
   const inboxUnopenedCount = useMemo(() => {
     void inboxTick;
-    const key = pathname.startsWith("/owner") ? OWNER_INBOX_STORAGE_KEY : MANAGER_INBOX_STORAGE_KEY;
+    const key = MANAGER_INBOX_STORAGE_KEY;
     return safeInboxUnopened(key, []);
-  }, [pathname, inboxTick]);
+  }, [inboxTick]);
 
   const [workOrderRows, setWorkOrderRows] = useState<DemoManagerWorkOrderRow[]>([]);
   useEffect(() => {

@@ -48,9 +48,7 @@ function subscriptionGated(
 ): ReactNode {
   if (kind !== "manager" && kind !== "owner" && kind !== "pro") return node;
   if (managerSectionAllowedForTier(section, tier)) return node;
-  const basePath: "/manager" | "/owner" | "/pro" =
-    kind === "owner" ? "/owner" : kind === "pro" ? "/pro" : "/manager";
-  return <PortalTierPaywall basePath={basePath} />;
+  return <PortalTierPaywall basePath="/portal" />;
 }
 
 function ResidentFreeTierFeatureNotice({ title }: { title: string }) {
@@ -192,6 +190,9 @@ export async function renderPortalSection(
   }
 
   if (kind === "manager") {
+    if (section === "leases" || section === "work-orders") {
+      redirect(`${def.basePath}/residents`);
+    }
     if (section === "inbox") {
       if (!meta.tabs.length) notFound();
       if (!tabParts?.length) {
@@ -243,6 +244,9 @@ export async function renderPortalSection(
 
   if (kind === "pro") {
     const useOwnerUi = proEffectiveRole === "owner";
+    if ((section === "leases" || section === "work-orders") && !useOwnerUi) {
+      redirect(`${def.basePath}/residents`);
+    }
 
     if (section === "relationships") {
       if (tabParts?.length) {

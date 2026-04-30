@@ -95,19 +95,11 @@ export function formatManagerMonthlyLabel(tier: string | null | undefined): stri
 }
 
 /**
- * Sidebar branding for `/pro` (and shared paid workspace nav): reflects actual plan, not a generic “Pro” label.
+ * Sidebar branding for the shared property portal.
  */
 export function paidWorkspacePortalTitle(tierRaw: string | null | undefined, stripeSubscriptionId: string | null | undefined): string {
-  const stripeManaged = Boolean(stripeSubscriptionId?.trim());
-  const normalized = normalizeManagerSkuTier(tierRaw);
-  if (normalized === "free") return "Free Portal";
-  if (normalized === "pro") return "Pro Portal";
-  if (normalized === "business") return "Business Portal";
-
-  const missingTier = tierRaw == null || String(tierRaw).trim() === "";
-  if (missingTier && !stripeManaged) return "Free Portal";
-  if (missingTier && stripeManaged) return "Pro Portal";
-
+  void tierRaw;
+  void stripeSubscriptionId;
   return "Axis Property Portal";
 }
 
@@ -240,7 +232,7 @@ export async function setManagerPurchaseTier(
 
 /**
  * Sets this account to Business in `manager_purchases` (service role).
- * Used for self-serve upgrade from the manager portal; billing is marked `portal` until live checkout is wired.
+ * Used for self-serve upgrade from the property portal; billing is marked `portal` until live checkout is wired.
  */
 export async function upgradeManagerAccountToBusiness(
   userId: string,

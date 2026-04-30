@@ -133,7 +133,19 @@ function ManagerApplicationPlacementEditor({
 }: {
   row: DemoApplicantRow;
   propertyOptions: ManagerPropertyFilterOption[];
-  onSave: (propertyId: string, roomChoice: string, signedMonthlyRent: number, leaseTerm: string, leaseStart: string, leaseEnd: string) => void;
+  onSave: (
+    propertyId: string,
+    roomChoice: string,
+    signedMonthlyRent: number,
+    leaseTerm: string,
+    leaseStart: string,
+    leaseEnd: string,
+    utilitiesOverride: string,
+    securityDepositOverride: string,
+    moveInFeeOverride: string,
+    otherCostLabel: string,
+    otherCostAmount: string,
+  ) => void;
 }) {
   const initialPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const initialRoomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
@@ -145,6 +157,11 @@ function ManagerApplicationPlacementEditor({
   const [leaseTerm, setLeaseTerm] = useState(initialLeaseTerm);
   const [leaseStart, setLeaseStart] = useState(row.application?.leaseStart?.trim() || "");
   const [leaseEnd, setLeaseEnd] = useState(row.application?.leaseEnd?.trim() || "");
+  const [utilitiesOverride, setUtilitiesOverride] = useState(row.application?.managerUtilitiesOverride?.trim() || "");
+  const [securityDepositOverride, setSecurityDepositOverride] = useState(row.application?.managerSecurityDepositOverride?.trim() || "");
+  const [moveInFeeOverride, setMoveInFeeOverride] = useState(row.application?.managerMoveInFeeOverride?.trim() || "");
+  const [otherCostLabel, setOtherCostLabel] = useState(row.application?.managerOtherCostLabel?.trim() || "");
+  const [otherCostAmount, setOtherCostAmount] = useState(row.application?.managerOtherCostAmount?.trim() || "");
   const userEditedRentRef = useRef(false);
 
   const roomOptions = useMemo(
@@ -279,6 +296,64 @@ function ManagerApplicationPlacementEditor({
               className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-400 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
           </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Utilities</span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={utilitiesOverride}
+              onChange={(e) => setUtilitiesOverride(e.target.value)}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              placeholder="175"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Security deposit</span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={securityDepositOverride}
+              onChange={(e) => setSecurityDepositOverride(e.target.value)}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              placeholder="400"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move-in cost</span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={moveInFeeOverride}
+              onChange={(e) => setMoveInFeeOverride(e.target.value)}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              placeholder="200"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Other cost label</span>
+            <input
+              type="text"
+              value={otherCostLabel}
+              onChange={(e) => setOtherCostLabel(e.target.value)}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              placeholder="Month-to-month fee"
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Other cost amount</span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={otherCostAmount}
+              onChange={(e) => setOtherCostAmount(e.target.value)}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              placeholder="25"
+            />
+          </label>
         </div>
       </div>
 
@@ -307,6 +382,15 @@ function ManagerApplicationPlacementEditor({
           <span className="font-medium text-slate-800">Tenant rent snapshot:</span>{" "}
           {Number.parseFloat(signedRent) > 0 ? `$${Number.parseFloat(signedRent).toFixed(2)} / month` : "Set the rent this tenant signed for."}
         </p>
+        <p>
+          <span className="font-medium text-slate-800">Approved charges:</span>{" "}
+          {[
+            utilitiesOverride ? `utilities $${Number.parseFloat(utilitiesOverride || "0").toFixed(2)}` : null,
+            securityDepositOverride ? `deposit $${Number.parseFloat(securityDepositOverride || "0").toFixed(2)}` : null,
+            moveInFeeOverride ? `move-in $${Number.parseFloat(moveInFeeOverride || "0").toFixed(2)}` : null,
+            otherCostLabel.trim() && otherCostAmount ? `${otherCostLabel.trim()} $${Number.parseFloat(otherCostAmount || "0").toFixed(2)}` : null,
+          ].filter(Boolean).join(" · ") || "Using the listing defaults."}
+        </p>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -315,7 +399,21 @@ function ManagerApplicationPlacementEditor({
           variant="outline"
           className={PORTAL_DETAIL_BTN_PRIMARY}
           disabled={!propertyId || !roomChoice || !(Number.parseFloat(signedRent) > 0) || !leaseTerm || !leaseStart || (leaseTerm !== "Month-to-Month" && !leaseEnd)}
-          onClick={() => onSave(propertyId, roomChoice, Number.parseFloat(signedRent), leaseTerm, leaseStart, leaseEnd)}
+          onClick={() =>
+            onSave(
+              propertyId,
+              roomChoice,
+              Number.parseFloat(signedRent),
+              leaseTerm,
+              leaseStart,
+              leaseEnd,
+              utilitiesOverride,
+              securityDepositOverride,
+              moveInFeeOverride,
+              otherCostLabel,
+              otherCostAmount,
+            )
+          }
         >
           Save placement
         </Button>
@@ -447,7 +545,20 @@ export function ManagerApplications() {
   };
 
   const savePlacement = useCallback(
-    (id: string, propertyId: string, roomChoice: string, signedMonthlyRent: number, leaseTerm: string, leaseStart: string, leaseEnd: string) => {
+    (
+      id: string,
+      propertyId: string,
+      roomChoice: string,
+      signedMonthlyRent: number,
+      leaseTerm: string,
+      leaseStart: string,
+      leaseEnd: string,
+      utilitiesOverride: string,
+      securityDepositOverride: string,
+      moveInFeeOverride: string,
+      otherCostLabel: string,
+      otherCostAmount: string,
+    ) => {
       const property = getPropertyById(propertyId);
       const roomLabel = getRoomChoiceLabel(roomChoice);
       if (!property || !roomLabel || !(signedMonthlyRent > 0) || !leaseTerm || !leaseStart || (leaseTerm !== "Month-to-Month" && !leaseEnd)) {
@@ -474,13 +585,19 @@ export function ManagerApplications() {
                     leaseTerm,
                     leaseStart,
                     leaseEnd: leaseTerm === "Month-to-Month" ? "" : leaseEnd,
+                    managerRentOverride: signedMonthlyRent > 0 ? String(Number(signedMonthlyRent.toFixed(2))) : "",
+                    managerUtilitiesOverride: utilitiesOverride.trim(),
+                    managerSecurityDepositOverride: securityDepositOverride.trim(),
+                    managerMoveInFeeOverride: moveInFeeOverride.trim(),
+                    managerOtherCostLabel: otherCostLabel.trim(),
+                    managerOtherCostAmount: otherCostAmount.trim(),
                   }
                 : row.application,
             }
           : row,
       );
       persist(next);
-      showToast("Assigned house, room, and stay type saved.");
+      showToast("Assigned house, room, stay type, and lease charges saved.");
     },
     [rows, persist, showToast],
   );
@@ -652,8 +769,33 @@ export function ManagerApplications() {
                                 ].join("|")}
                                 row={row}
                                 propertyOptions={placementPropertyOptions}
-                                onSave={(propertyId, roomChoice, signedMonthlyRent, leaseTerm, leaseStart, leaseEnd) =>
-                                  savePlacement(row.id, propertyId, roomChoice, signedMonthlyRent, leaseTerm, leaseStart, leaseEnd)
+                                onSave={(
+                                  propertyId,
+                                  roomChoice,
+                                  signedMonthlyRent,
+                                  leaseTerm,
+                                  leaseStart,
+                                  leaseEnd,
+                                  utilitiesOverride,
+                                  securityDepositOverride,
+                                  moveInFeeOverride,
+                                  otherCostLabel,
+                                  otherCostAmount,
+                                ) =>
+                                  savePlacement(
+                                    row.id,
+                                    propertyId,
+                                    roomChoice,
+                                    signedMonthlyRent,
+                                    leaseTerm,
+                                    leaseStart,
+                                    leaseEnd,
+                                    utilitiesOverride,
+                                    securityDepositOverride,
+                                    moveInFeeOverride,
+                                    otherCostLabel,
+                                    otherCostAmount,
+                                  )
                                 }
                               />
                               <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Application on file</p>

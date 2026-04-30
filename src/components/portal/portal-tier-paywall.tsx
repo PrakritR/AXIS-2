@@ -4,8 +4,8 @@ import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 const primaryCta =
   "inline-flex min-h-[44px] items-center justify-center rounded-full bg-primary px-8 text-sm font-semibold text-primary-foreground shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:brightness-[1.04]";
 
-/** Shown when a manager/owner on the Free plan opens a section that requires Pro or Business. */
-export function PortalTierPaywall({ basePath }: { basePath: "/manager" | "/owner" | "/pro" }) {
+/** Shown when a property portal user on the Free plan opens a paid section. */
+export function PortalTierPaywall({ basePath }: { basePath: "/portal" }) {
   return (
     <ManagerPortalPageShell title="Upgrade to Pro">
       <div className="mx-auto max-w-lg space-y-4 text-center">

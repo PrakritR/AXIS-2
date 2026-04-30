@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 type Body = {
   tier?: string;
   billing?: string;
-  /** `/manager` or `/owner` — success/cancel URLs under this base. */
+  /** Legacy callers may send a portal base; checkout now returns to the unified property portal. */
   returnBasePath?: string;
 };
 
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as Body | null;
     const tierRaw = typeof body?.tier === "string" ? body.tier.toLowerCase().trim() : "";
     const billingRaw = typeof body?.billing === "string" ? body.billing.toLowerCase().trim() : "";
-    const baseRaw = typeof body?.returnBasePath === "string" ? body.returnBasePath.trim() : "/manager";
+    const baseRaw = typeof body?.returnBasePath === "string" ? body.returnBasePath.trim() : "/portal";
 
     if (!isPaidTier(tierRaw) || !isBilling(billingRaw)) {
       return NextResponse.json({ error: "tier must be pro or business; billing must be monthly or annual." }, { status: 400 });
@@ -59,8 +59,8 @@ export async function POST(req: Request) {
 
     const appUrl = resolveAppOrigin(req);
 
-    const basePath =
-      baseRaw === "/owner" ? "/owner" : baseRaw === "/pro" ? "/pro" : "/manager";
+    void baseRaw;
+    const basePath = "/portal";
 
     const { data: profile, error: profileErr } = await supabaseAuth
       .from("profiles")

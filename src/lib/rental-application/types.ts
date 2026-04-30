@@ -19,6 +19,12 @@ export type RentalWizardFormState = {
   leaseTerm: string;
   leaseStart: string;
   leaseEnd: string;
+  managerRentOverride: string;
+  managerUtilitiesOverride: string;
+  managerSecurityDepositOverride: string;
+  managerMoveInFeeOverride: string;
+  managerOtherCostLabel: string;
+  managerOtherCostAmount: string;
   fullLegalName: string;
   dateOfBirth: string;
   ssn: string;

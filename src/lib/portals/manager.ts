@@ -2,7 +2,7 @@ import type { PortalDefinition } from "@/lib/portal-types";
 
 export const managerPortal: PortalDefinition = {
   kind: "manager",
-  basePath: "/manager",
+  basePath: "/portal",
   title: "Axis Property Portal",
   accent: "blue",
   sections: [
@@ -10,8 +10,14 @@ export const managerPortal: PortalDefinition = {
     { section: "properties", label: "Properties", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
     { section: "residents", label: "Residents", tabs: [] },
-    { section: "leases", label: "Leases", tabs: [] },
-    { section: "work-orders", label: "Work orders", tabs: [] },
+    {
+      section: "payments",
+      label: "Payments",
+      tabs: [
+        { id: "ledger", label: "Ledger" },
+        { id: "payouts", label: "Payouts" },
+      ],
+    },
     { section: "calendar", label: "Calendar", tabs: [] },
     {
       section: "inbox",

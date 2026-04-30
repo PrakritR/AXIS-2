@@ -189,7 +189,7 @@ export default function PartnerPricingPage() {
         <h1 className="text-5xl font-black tracking-tight text-[#0d1f4e] sm:text-6xl">Start with Axis.</h1>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-500">
           Choose a tier, fill out the form below, and complete checkout (or free-tier setup). Your plan and contact
-          details are confirmed here before you create your manager portal account.
+          details are confirmed here before you create your property portal account.
         </p>
 
         <div className="mt-8 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-sm">

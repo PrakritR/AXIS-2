@@ -217,11 +217,11 @@ function LeasePipelineAdminDetail({
       <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">
         {adminWorkflowEnabled ? (
           <>
-            Residents receive the lease from the manager portal. Post notes below if needed, then send the draft back to the manager — they
+            Residents receive the lease from the property portal. Post notes below if needed, then send the draft back to the property team to
             release it to residents when ready.
           </>
         ) : (
-          <>This lease is not awaiting admin review. Work continues in the manager or resident portal.</>
+          <>This lease is not awaiting admin review. Work continues in the property or resident portal.</>
         )}
       </p>
 

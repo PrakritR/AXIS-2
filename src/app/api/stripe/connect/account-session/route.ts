@@ -4,16 +4,7 @@ import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 
-type Body = {
-  basePath?: string;
-};
-
-function normalizeBasePath(raw: unknown): "/manager" | "/owner" | "/pro" {
-  const s = typeof raw === "string" ? raw.trim() : "";
-  return s === "/owner" ? "/owner" : s === "/pro" ? "/pro" : "/manager";
-}
-
-export async function POST(req: Request) {
+export async function POST() {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -22,9 +13,6 @@ export async function POST(req: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
-
-    const body = (await req.json().catch(() => ({}))) as Body;
-    const basePath = normalizeBasePath(body.basePath);
 
     try {
       const stripe = getStripe();
@@ -52,7 +40,7 @@ export async function POST(req: Request) {
           },
           metadata: {
             axis_user_id: user.id,
-            axis_portal: basePath === "/owner" ? "owner" : basePath === "/pro" ? "pro" : "manager",
+            axis_portal: "portal",
           },
         });
         accountId = account.id;
