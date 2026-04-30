@@ -571,10 +571,49 @@ export function leasePipelineBucketCounts(): [number, number, number, number] {
   ];
 }
 
+export function residentCanViewLeaseRow(row: LeasePipelineRow | null | undefined): boolean {
+  if (!row) return false;
+  const hasDocument = Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
+  if (!hasDocument) return false;
+  return (
+    row.status === "Resident Signature Pending" ||
+    row.status === "Manager Signature Pending" ||
+    row.status === "Fully Signed"
+  );
+}
+
+function residentLeasePriority(row: LeasePipelineRow): number {
+  switch (row.status) {
+    case "Fully Signed":
+      return 5;
+    case "Manager Signature Pending":
+      return 4;
+    case "Resident Signature Pending":
+      return 3;
+    case "Manager Review":
+      return 2;
+    case "Admin Review":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 export function findLeaseForResidentEmail(email: string): LeasePipelineRow | null {
   const e = email.trim().toLowerCase();
   if (!e) return null;
-  return readLeasePipeline().find((r) => r.residentEmail.toLowerCase() === e) ?? null;
+  const matches = readLeasePipeline().filter((r) => r.residentEmail.toLowerCase() === e);
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => {
+    const visibleDelta = Number(residentCanViewLeaseRow(b)) - Number(residentCanViewLeaseRow(a));
+    if (visibleDelta !== 0) return visibleDelta;
+    const priorityDelta = residentLeasePriority(b) - residentLeasePriority(a);
+    if (priorityDelta !== 0) return priorityDelta;
+    const aTs = Date.parse(a.updatedAtIso || "");
+    const bTs = Date.parse(b.updatedAtIso || "");
+    return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+  });
+  return matches[0] ?? null;
 }
 
 function makeMsg(role: LeaseThreadRole, body: string): LeaseThreadMessage {

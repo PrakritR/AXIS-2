@@ -22,6 +22,7 @@ import {
   findLeaseForResidentEmail,
   hasBothLeaseSignatures,
   printLeaseAsPdf,
+  residentCanViewLeaseRow,
   residentRequestEdits,
   residentSignLease,
   syncLeasePipelineFromServer,
@@ -247,7 +248,7 @@ export function ResidentLeasePanel() {
   })();
 
   const leaseLocked = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
-  const leaseVisibleToResident = Boolean(pipelineRow && (pipelineRow.bucket === "resident" || pipelineRow.bucket === "signed"));
+  const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow);
 
   const upgradeBreakdown = useMemo(() => {
     const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? leaseCtx.application?.propertyId;

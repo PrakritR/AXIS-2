@@ -47,6 +47,7 @@ import {
   LEASE_PIPELINE_EVENT,
   managerUploadLeasePdf,
   readLeasePipeline,
+  residentCanViewLeaseRow,
   sendLeaseBackToManager,
   sendLeaseToResident,
   syncLeasePipelineFromServer,
@@ -316,7 +317,33 @@ export function ManagerResidents() {
     void leaseTick;
     if (!selected?.email) return null;
     const email = selected.email.trim().toLowerCase();
-    return readLeasePipeline(userId).find((row) => row.residentEmail.trim().toLowerCase() === email) ?? null;
+    const rows = readLeasePipeline(userId).filter((row) => row.residentEmail.trim().toLowerCase() === email);
+    rows.sort((a, b) => {
+      const visibleDelta = Number(residentCanViewLeaseRow(b)) - Number(residentCanViewLeaseRow(a));
+      if (visibleDelta !== 0) return visibleDelta;
+      const rank = (row: LeasePipelineRow) => {
+        switch (row.status) {
+          case "Fully Signed":
+            return 5;
+          case "Manager Signature Pending":
+            return 4;
+          case "Resident Signature Pending":
+            return 3;
+          case "Manager Review":
+            return 2;
+          case "Admin Review":
+            return 1;
+          default:
+            return 0;
+        }
+      };
+      const rankDelta = rank(b) - rank(a);
+      if (rankDelta !== 0) return rankDelta;
+      const aTs = Date.parse(a.updatedAtIso || "");
+      const bTs = Date.parse(b.updatedAtIso || "");
+      return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+    });
+    return rows[0] ?? null;
   }, [leaseTick, selected, userId]);
 
   const residentWorkOrders = useMemo(() => {
@@ -640,7 +667,7 @@ export function ManagerResidents() {
                                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Lease</p>
                                   <p className="mt-1 text-sm text-slate-600">
                                     {residentLease
-                                      ? `${residentLease.stageLabel} · ${residentLease.application?.leaseStart || "No move-in"}${residentLease.application?.leaseEnd ? ` to ${residentLease.application.leaseEnd}` : ""}`
+                                      ? `${residentLease.status ?? residentLease.stageLabel} · ${residentLease.application?.leaseStart || "No move-in"}${residentLease.application?.leaseEnd ? ` to ${residentLease.application.leaseEnd}` : ""}`
                                       : "No lease created yet for this resident."}
                                   </p>
                                 </div>
@@ -684,7 +711,7 @@ export function ManagerResidents() {
                                     >
                                       Download lease
                                     </Button>
-                                    {residentLease.bucket === "manager" ? (
+                                    {residentLease.status === "Manager Review" || residentLease.status === "Draft" ? (
                                       <Button
                                         type="button"
                                         variant="outline"
@@ -695,23 +722,29 @@ export function ManagerResidents() {
                                             return;
                                           }
                                           appendLeaseThreadMessage(residentLease.id, "manager", "Sent lease to resident for review and signature.");
-                                          sendLeaseToResident(residentLease.id);
-                                          setLeaseTick((n) => n + 1);
-                                          showToast("Lease moved to Resident Signature Pending.");
+                                          if (sendLeaseToResident(residentLease.id)) {
+                                            setLeaseTick((n) => n + 1);
+                                            showToast("Lease moved to Resident Signature Pending.");
+                                          } else {
+                                            showToast("Could not send this lease yet. Generate or upload the active lease document first.");
+                                          }
                                         }}
                                       >
                                         Send to resident
                                       </Button>
-                                    ) : residentLease.bucket === "resident" ? (
+                                    ) : residentLease.status === "Resident Signature Pending" ? (
                                       <Button
                                         type="button"
                                         variant="outline"
                                         className="rounded-full px-3 py-1 text-xs"
                                         onClick={() => {
                                           appendLeaseThreadMessage(residentLease.id, "manager", "Moved lease back to manager review.");
-                                          sendLeaseBackToManager(residentLease.id);
-                                          setLeaseTick((n) => n + 1);
-                                          showToast("Lease moved to Manager Review.");
+                                          if (sendLeaseBackToManager(residentLease.id)) {
+                                            setLeaseTick((n) => n + 1);
+                                            showToast("Lease moved to Manager Review.");
+                                          } else {
+                                            showToast("Could not move this lease back right now.");
+                                          }
                                         }}
                                       >
                                         Move to manager review
