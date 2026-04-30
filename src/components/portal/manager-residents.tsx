@@ -537,6 +537,10 @@ export function ManagerResidents() {
   }
 
   function signLeaseAsManager(row: LeasePipelineRow) {
+    if (row.managerUploadedPdf?.dataUrl) {
+      showToast("Uploaded PDF leases should be signed offline and re-uploaded, not electronically signed here.");
+      return;
+    }
     if (!residentHasSignedLease(row)) {
       showToast("The resident must sign the lease before you can countersign.");
       return;
@@ -683,12 +687,12 @@ export function ManagerResidents() {
                                     >
                                       {generatingLeaseRowId === residentLease.id ? "Generating..." : "Generate lease"}
                                     </Button>
-                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) ? (
+                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) && !residentLease.managerUploadedPdf?.dataUrl ? (
                                       <Button
                                         type="button"
                                         variant="outline"
                                         className="rounded-full px-3 py-1 text-xs"
-                                        disabled={!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl}
+                                        disabled={!residentLease.generatedHtml}
                                         onClick={() => signLeaseAsManager(residentLease)}
                                       >
                                         Sign as manager

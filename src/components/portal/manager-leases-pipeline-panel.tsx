@@ -158,6 +158,10 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onManagerSign = (row: LeasePipelineRow) => {
+    if (row.managerUploadedPdf?.dataUrl) {
+      showToast("Uploaded PDF leases should be signed offline and re-uploaded, not electronically signed here.");
+      return;
+    }
     if (!residentHasSignedLease(row)) {
       showToast("The resident must sign first before the manager can countersign.");
       return;
@@ -361,13 +365,13 @@ export function ManagerLeasesPipelinePanel({
                             >
                               Download lease
                             </Button>
-                            {!row.managerSignature && residentHasSignedLease(row) ? (
+                            {!row.managerSignature && residentHasSignedLease(row) && !row.managerUploadedPdf?.dataUrl ? (
                               <Button
                                 type="button"
                                 variant="outline"
                                 className={PORTAL_DETAIL_BTN}
                                 onClick={() => onManagerSign(row)}
-                                disabled={!row.generatedHtml && !row.managerUploadedPdf?.dataUrl}
+                                disabled={!row.generatedHtml}
                               >
                                 Sign as manager
                               </Button>
@@ -380,7 +384,7 @@ export function ManagerLeasesPipelinePanel({
                                 setPendingRowId(row.id);
                                 uploadRef.current?.click();
                               }}
-                              disabled={pendingRowId === row.id || row.status === "Fully Signed"}
+                              disabled={pendingRowId === row.id}
                             >
                               Upload replacement
                             </Button>
@@ -412,7 +416,7 @@ export function ManagerLeasesPipelinePanel({
                                 </Button>
                               </>
                             ) : null}
-                            {row.status === "Manager Signature Pending" ? (
+                            {row.status === "Manager Signature Pending" && !row.managerUploadedPdf?.dataUrl ? (
                               <Button
                                 type="button"
                                 variant="outline"

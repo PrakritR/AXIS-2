@@ -854,14 +854,11 @@ export function managerUploadLeasePdf(rowId: string, file: File): Promise<{ ok: 
       resolve({ ok: false, error: "PDF too large (max 3.5 MB)." });
       return;
     }
-    const rows = readLeasePipeline();
-    const row = rows.find((r) => r.id === rowId);
+    const rows = [...(readRaw() ?? readLeasePipeline())];
+    const idx = findRawLeaseRowIndex(rowId);
+    const row = idx === -1 ? null : rows[idx]!;
     if (!row || !String(row.residentEmail ?? "").trim()) {
       resolve({ ok: false, error: "Missing resident email on lease row." });
-      return;
-    }
-    if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
-      resolve({ ok: false, error: "This lease can no longer be replaced after signatures. Void/restart it first." });
       return;
     }
     const reader = new FileReader();
@@ -873,16 +870,79 @@ export function managerUploadLeasePdf(rowId: string, file: File): Promise<{ ok: 
         uploadedAt: new Date().toISOString(),
       };
       const iso = new Date().toISOString();
-      updateLeasePipelineRow(rowId, {
+      const nextVersion = (row.versionNumber ?? row.pdfVersion) + 1;
+      rows[idx] = normalizeLeasePipelineRow({
+        ...row,
+        bucket: "manager",
         managerUploadedPdf: payload,
         generatedHtml: null,
-        pdfVersion: (row.versionNumber ?? row.pdfVersion) + 1,
-        versionNumber: (row.versionNumber ?? row.pdfVersion) + 1,
+        generatedAtIso: null,
+        pdfVersion: nextVersion,
+        versionNumber: nextVersion,
         status: "Manager Review",
         currentActorRole: "manager",
         updatedAtIso: iso,
         updated: formatUpdatedLabel(iso),
+        managerSignature: null,
+        residentSignature: null,
+        signatureName: null,
+        signedAtIso: null,
+        residentSignedAt: null,
+        managerSignedAt: null,
+        sentToResidentAt: null,
+        fullySignedAt: null,
+        voidedAt: null,
       });
+      write(rows);
+      resolve({ ok: true });
+    };
+    reader.onerror = () => resolve({ ok: false, error: "Could not read file." });
+    reader.readAsDataURL(file);
+  });
+}
+
+export function residentUploadLeasePdf(email: string, file: File): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    if (file.type !== "application/pdf") {
+      resolve({ ok: false, error: "Please choose a PDF file." });
+      return;
+    }
+    if (file.size > 3.5 * 1024 * 1024) {
+      resolve({ ok: false, error: "PDF too large (max 3.5 MB)." });
+      return;
+    }
+    const key = email.trim().toLowerCase();
+    const rows = [...(readRaw() ?? readLeasePipeline())];
+    const idx = rows.findIndex((r) => r.residentEmail.trim().toLowerCase() === key);
+    const row = idx === -1 ? null : rows[idx]!;
+    if (!row) {
+      resolve({ ok: false, error: "Lease not found." });
+      return;
+    }
+    if (row.status !== "Resident Signature Pending") {
+      resolve({ ok: false, error: "This lease is not currently with the resident." });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const iso = new Date().toISOString();
+      const nextVersion = (row.versionNumber ?? row.pdfVersion) + 1;
+      rows[idx] = normalizeLeasePipelineRow({
+        ...row,
+        managerUploadedPdf: {
+          dataUrl,
+          fileName: file.name,
+          uploadedAt: iso,
+        },
+        generatedHtml: null,
+        generatedAtIso: null,
+        pdfVersion: nextVersion,
+        versionNumber: nextVersion,
+        updatedAtIso: iso,
+        updated: formatUpdatedLabel(iso),
+      });
+      write(rows);
       resolve({ ok: true });
     };
     reader.onerror = () => resolve({ ok: false, error: "Could not read file." });
@@ -932,6 +992,7 @@ export function managerSignLease(rowId: string, signatureName: string): boolean 
   const idx = rows.findIndex((r) => r.id === rowId);
   if (idx === -1) return false;
   const row = rows[idx]!;
+  if (row.managerUploadedPdf?.dataUrl) return false;
   if (row.status !== "Manager Signature Pending" || row.bucket !== "signed" || !residentHasSignedLease(row) || row.managerSignature) return false;
   const trimmedSignature = signatureName.trim();
   if (!trimmedSignature) return false;
@@ -1001,6 +1062,27 @@ export function residentRequestEdits(email: string, message: string): boolean {
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
   };
+  write(rows);
+  return true;
+}
+
+export function residentSendLeaseToManager(email: string): boolean {
+  const key = email.trim().toLowerCase();
+  const rows = [...(readRaw() ?? readLeasePipeline())];
+  const idx = rows.findIndex((r) => r.residentEmail.trim().toLowerCase() === key);
+  if (idx === -1) return false;
+  const row = rows[idx]!;
+  if (row.status !== "Resident Signature Pending") return false;
+  if (!row.managerUploadedPdf?.dataUrl) return false;
+  const iso = new Date().toISOString();
+  rows[idx] = normalizeLeasePipelineRow({
+    ...row,
+    bucket: "manager",
+    status: "Manager Review",
+    currentActorRole: "manager",
+    updatedAtIso: iso,
+    updated: formatUpdatedLabel(iso),
+  });
   write(rows);
   return true;
 }
