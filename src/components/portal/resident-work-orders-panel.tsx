@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
@@ -52,9 +53,11 @@ export function ResidentWorkOrdersPanel() {
   const session = usePortalSession();
   const [bucket, setBucket] = useState<ResidentWorkBucket>("open");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Plumbing");
   const [priority, setPriority] = useState("Medium");
+  const [preferredArrival, setPreferredArrival] = useState("");
   const [allWorkOrders, setAllWorkOrders] = useState<DemoManagerWorkOrderRow[]>([]);
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
@@ -89,6 +92,13 @@ export function ResidentWorkOrdersPanel() {
     [counts],
   );
 
+  const resetCreateForm = () => {
+    setTitle("");
+    setCategory("Plumbing");
+    setPriority("Medium");
+    setPreferredArrival("");
+  };
+
   const submitNew = () => {
     if (!title.trim()) {
       showToast("Add a short title first.");
@@ -99,6 +109,7 @@ export function ResidentWorkOrdersPanel() {
       return;
     }
     const application = readManagerApplicationRows().find((row) => row.email?.trim().toLowerCase() === residentEmail);
+    const prefLabel = preferredArrival.trim() || "Anytime";
     const row: DemoManagerWorkOrderRow = {
       id: `WO-${Date.now()}`,
       propertyName: application?.property || "Assigned house",
@@ -115,6 +126,7 @@ export function ResidentWorkOrdersPanel() {
         `${category}: Your request is logged. Maintenance will review and update this thread — open Details anytime for notes.`,
       scheduled: "—",
       cost: "—",
+      preferredArrival: prefLabel,
       residentName: application?.name,
       residentEmail,
     };
@@ -122,15 +134,16 @@ export function ResidentWorkOrdersPanel() {
     setAllWorkOrders(readManagerWorkOrderRows());
     setExpandedId(row.id);
     showToast("Work order added to your open requests.");
-    setTitle("");
+    resetCreateForm();
+    setCreateOpen(false);
   };
 
   return (
     <ManagerPortalPageShell
       title="Work orders"
       titleAside={
-        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Work orders refreshed.")}>
-          Refresh
+        <Button type="button" className="shrink-0 rounded-full" onClick={() => setCreateOpen(true)}>
+          Create work order
         </Button>
       }
       filterRow={
@@ -140,11 +153,15 @@ export function ResidentWorkOrdersPanel() {
       <div className={PORTAL_DATA_TABLE_WRAP}>
         {rows.length === 0 ? (
           <PortalDataTableEmpty
-            message={allRows.length === 0 ? "No work orders yet. Create one below." : "No work orders in this status."}
+            message={
+              allRows.length === 0
+                ? "No work orders yet. Use Create work order to submit a request."
+                : "No work orders in this status."
+            }
           />
         ) : (
           <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+            <table className="min-w-[720px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
@@ -152,6 +169,7 @@ export function ResidentWorkOrdersPanel() {
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Category</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
                   <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
               </thead>
@@ -168,6 +186,7 @@ export function ResidentWorkOrdersPanel() {
                         </span>
                       </td>
                       <td className={PORTAL_TABLE_TD}>{row.status}</td>
+                      <td className={PORTAL_TABLE_TD}>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</td>
                       <td className={`${PORTAL_TABLE_TD} text-right`}>
                         <Button
                           type="button"
@@ -181,8 +200,12 @@ export function ResidentWorkOrdersPanel() {
                     </tr>
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={6} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Description</p>
+                        <td colSpan={7} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Preferred arrival</p>
+                          <p className="mt-1 font-medium text-slate-800">{row.preferredArrival ?? "Anytime"}</p>
+                          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Estimated cost</p>
+                          <p className="mt-1">{row.cost !== "—" && row.cost.trim() ? row.cost : "Not set yet"}</p>
+                          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Description</p>
                           <p className="mt-1.5 leading-relaxed">{row.description}</p>
                           {bucket === "open" ? (
                             <PortalTableDetailActions>
@@ -212,32 +235,56 @@ export function ResidentWorkOrdersPanel() {
         )}
       </div>
 
-      <div className="mt-6 rounded-xl border border-slate-200/60 bg-slate-50/30 p-4">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Create work order</p>
-        <p className="mt-1 text-xs text-slate-500">New requests appear above; open Details for notes below the row.</p>
-        <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="bg-white" />
-          <Select value={category} onChange={(e) => setCategory(e.target.value)} className="bg-white">
-            <option>Plumbing</option>
-            <option>Electrical</option>
-            <option>HVAC</option>
-            <option>General</option>
-            <option>Access</option>
-          </Select>
-          <Select value={priority} onChange={(e) => setPriority(e.target.value)} className="bg-white">
-            <option>Low</option>
-            <option>Medium</option>
-            <option>High</option>
-          </Select>
+      <Modal open={createOpen} title="Create work order" onClose={() => setCreateOpen(false)} panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+        <p className="text-xs text-slate-500">New requests appear in Open; open Details on a row for notes and updates.</p>
+        <div className="mt-4 grid gap-3">
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-slate-600">Title</p>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short summary of the issue" className="bg-white" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-slate-600">Category</p>
+              <Select value={category} onChange={(e) => setCategory(e.target.value)} className="bg-white">
+                <option>Plumbing</option>
+                <option>Electrical</option>
+                <option>HVAC</option>
+                <option>General</option>
+                <option>Access</option>
+              </Select>
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-slate-600">Priority</p>
+              <Select value={priority} onChange={(e) => setPriority(e.target.value)} className="bg-white">
+                <option>Low</option>
+                <option>Medium</option>
+                <option>High</option>
+              </Select>
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-slate-600">Preferred arrival time</p>
+            <Input
+              value={preferredArrival}
+              onChange={(e) => setPreferredArrival(e.target.value)}
+              placeholder='e.g. Weekdays after 5pm — or write "anytime"'
+              className="bg-white"
+            />
+          </div>
+          <p className="text-xs text-slate-500">Photos attach in production; the button below confirms intent.</p>
+          <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => showToast("Photos attach when media upload is enabled.")}>
+            Add photos
+          </Button>
+        </div>
+        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button type="button" variant="outline" className="rounded-full" onClick={() => setCreateOpen(false)}>
+            Cancel
+          </Button>
           <Button type="button" className="rounded-full" onClick={submitNew}>
             Submit
           </Button>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Photos attach in production; here the button confirms intent.</p>
-        <Button type="button" variant="outline" className="mt-3 rounded-full text-xs" onClick={() => showToast("Photos attach when media upload is enabled.")}>
-          Add photos
-        </Button>
-      </div>
+      </Modal>
     </ManagerPortalPageShell>
   );
 }

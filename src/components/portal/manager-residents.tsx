@@ -26,7 +26,9 @@ import {
   chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
   HOUSEHOLD_CHARGES_SESSION_KEY,
+  findPendingWorkOrderCharge,
   markHouseholdChargePaid,
+  parseMoneyAmount,
   readChargesForManagerResident,
   syncHouseholdChargesFromServer,
   updateHouseholdChargeAmount,
@@ -66,6 +68,7 @@ import {
   updateManagerWorkOrder,
   deleteManagerWorkOrderRow,
 } from "@/lib/manager-work-orders-storage";
+import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import {
   loadPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
@@ -101,6 +104,69 @@ function previewLine(body: string, max = 120) {
   const normalized = body.trim().replace(/\s+/g, " ");
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max)}…`;
+}
+
+function ResidentWorkOrderCostEditor({
+  row,
+  onSaved,
+}: {
+  row: DemoManagerWorkOrderRow;
+  onSaved: () => void;
+}) {
+  const { showToast } = useAppUi();
+  const [hcTick, setHcTick] = useState(0);
+  const initialVal = row.cost !== "—" && row.cost.trim() ? row.cost.replace(/^\$/, "") : "";
+  const [val, setVal] = useState(initialVal);
+  useEffect(() => {
+    const on = () => setHcTick((n) => n + 1);
+    window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+    return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+  }, []);
+
+  const pendingCharge = findPendingWorkOrderCharge(row.id);
+  void hcTick;
+
+  if (row.bucket === "completed") {
+    return <span className="text-slate-700">{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>;
+  }
+
+  if (pendingCharge) {
+    return <span className="text-xs text-slate-600">Pending payment · {pendingCharge.balanceLabel}</span>;
+  }
+
+  const apply = () => {
+    const trimmed = val.trim();
+    if (!trimmed) {
+      updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: "—" }));
+      onSaved();
+      showToast("Cost cleared.");
+      return;
+    }
+    const amt = parseMoneyAmount(trimmed);
+    if (amt <= 0) {
+      showToast("Enter a valid dollar amount or clear the field.");
+      return;
+    }
+    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
+    onSaved();
+    showToast("Cost saved — visible to the resident.");
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center">
+      <Input
+        type="text"
+        inputMode="decimal"
+        placeholder="e.g. 75"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        className="h-8 w-[5.5rem] rounded-md text-xs"
+      />
+      <Button type="button" variant="outline" className="h-8 rounded-full px-2 py-0 text-[10px]" onClick={apply}>
+        Save
+      </Button>
+    </div>
+  );
 }
 
 function chargeEditAmountValue(charge: HouseholdCharge): string {
@@ -987,6 +1053,8 @@ export function ManagerResidents() {
                                     <thead>
                                       <tr className="border-b border-slate-200">
                                         <th className="pb-2 text-left text-xs font-semibold text-slate-500">Title</th>
+                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Preferred arrival</th>
+                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Cost</th>
                                         <th className="pb-2 text-left text-xs font-semibold text-slate-500">Status</th>
                                         <th className="pb-2 text-left text-xs font-semibold text-slate-500">Priority</th>
                                         <th className="pb-2 text-left text-xs font-semibold text-slate-500">Visit</th>
@@ -999,6 +1067,16 @@ export function ManagerResidents() {
                                           <td className="py-2 pr-4">
                                             <p className="font-medium text-slate-900">{workOrder.title}</p>
                                             <p className="whitespace-pre-wrap text-xs text-slate-500">{workOrder.description}</p>
+                                          </td>
+                                          <td className="max-w-[140px] py-2 pr-4 text-xs text-slate-700">
+                                            {workOrder.preferredArrival ?? "Anytime"}
+                                          </td>
+                                          <td className="py-2 pr-4">
+                                            <ResidentWorkOrderCostEditor
+                                              key={`${workOrder.id}-${workOrder.cost}`}
+                                              row={workOrder}
+                                              onSaved={() => setWorkOrderTick((n) => n + 1)}
+                                            />
                                           </td>
                                           <td className="py-2 pr-4 text-slate-700">{workOrder.status}</td>
                                           <td className="py-2 pr-4">

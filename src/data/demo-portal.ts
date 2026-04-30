@@ -123,6 +123,8 @@ export type DemoManagerWorkOrderRow = {
   description: string;
   scheduled: string;
   cost: string;
+  /** Resident preference for when maintenance may arrive (e.g. "after 5pm" or "anytime"). */
+  preferredArrival?: string;
   scheduledAtIso?: string;
   residentName?: string;
   residentEmail?: string;

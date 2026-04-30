@@ -224,6 +224,29 @@ export function ManagerWorkOrdersPanel({
     setExpandedId(null);
   };
 
+  /** Persist an estimated or pass-through cost without changing bucket (visible to the resident). */
+  const saveLoggedCost = (row: DemoManagerWorkOrderRow, pendingCharge: ReturnType<typeof findPendingWorkOrderCharge>) => {
+    if (pendingCharge) {
+      showToast("Cost is locked while a pending payment exists.");
+      return;
+    }
+    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
+    const trimmed = draft.cost.trim();
+    if (!trimmed) {
+      updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: "—" }));
+      showToast("Cost cleared.");
+      return;
+    }
+    const amt = parseMoneyAmount(trimmed);
+    if (amt <= 0) {
+      showToast("Enter a valid dollar amount or clear the field.");
+      return;
+    }
+    const costLabel = `$${amt.toFixed(2)}`;
+    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: costLabel }));
+    showToast("Cost saved — the resident will see it on their work order.");
+  };
+
   const onDeleteWorkOrder = (row: DemoManagerWorkOrderRow) => {
     if (!window.confirm(`Delete work order ${row.id} (${row.title})? This cannot be undone.`)) return;
     if (deleteManagerWorkOrderRow(row.id)) {
@@ -244,7 +267,7 @@ export function ManagerWorkOrdersPanel({
   return (
     <div className={PORTAL_DATA_TABLE_WRAP}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+        <table className="min-w-[780px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
@@ -253,6 +276,7 @@ export function ManagerWorkOrdersPanel({
               <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
               <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
             </tr>
           </thead>
@@ -277,6 +301,7 @@ export function ManagerWorkOrdersPanel({
                       </span>
                     </td>
                     <td className={PORTAL_TABLE_TD}>{row.status}</td>
+                    <td className={PORTAL_TABLE_TD}>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</td>
                     <td className={`${PORTAL_TABLE_TD} text-right`}>
                       <div className="flex justify-end gap-2">
                         <Button
@@ -300,9 +325,13 @@ export function ManagerWorkOrdersPanel({
                   </tr>
                   {expandedId === row.id ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
+                      <td colSpan={8} className={PORTAL_TABLE_DETAIL_CELL}>
                         <p className="text-sm leading-relaxed text-slate-600">{row.description}</p>
                         <p className="mt-1.5 text-xs text-slate-500">
+                          Resident preferred arrival:{" "}
+                          <span className="font-medium text-slate-700">{row.preferredArrival?.trim() || "Anytime"}</span>
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
                           {row.bucket === "open" ? (
                             <span>
                               Visit: <span className="text-slate-700">not scheduled</span>
@@ -426,6 +455,26 @@ export function ManagerWorkOrdersPanel({
                         ) : null}
 
                         <PortalTableDetailActions>
+                          {row.bucket === "open" ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              onClick={() => saveLoggedCost(row, pendingCharge)}
+                            >
+                              Save cost
+                            </Button>
+                          ) : null}
+                          {row.bucket === "scheduled" && !pendingCharge ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              onClick={() => saveLoggedCost(row, pendingCharge)}
+                            >
+                              Save cost
+                            </Button>
+                          ) : null}
                           {row.bucket === "open" ? (
                             <Button
                               type="button"
