@@ -42,6 +42,7 @@ import {
 } from "@/lib/demo-property-pipeline";
 import {
   appendLeaseThreadMessage,
+  deleteLeasePipelineRow,
   generateLeaseHtmlForRow,
   managerSignLease,
   LEASE_PIPELINE_EVENT,
@@ -772,6 +773,22 @@ export function ManagerResidents() {
                                         }}
                                       />
                                     </label>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-rose-50"
+                                      onClick={() => {
+                                        if (!window.confirm(`Delete the lease for ${selected.name}? This cannot be undone.`)) return;
+                                        if (deleteLeasePipelineRow(residentLease.id)) {
+                                          setLeaseTick((n) => n + 1);
+                                          showToast("Lease deleted.");
+                                        } else {
+                                          showToast("Could not delete lease.");
+                                        }
+                                      }}
+                                    >
+                                      Delete lease
+                                    </Button>
                                   </div>
                                 ) : null}
                               </div>

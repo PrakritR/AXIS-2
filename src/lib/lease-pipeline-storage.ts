@@ -413,6 +413,16 @@ function findRawLeaseRowIndex(rowId: string): number {
   return matches[0]!.idx;
 }
 
+function persistLeaseRowToServer(row: LeasePipelineRow) {
+  if (!canUseStorage()) return;
+  void fetch("/api/portal-lease-pipeline", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "upsert", row }),
+  }).catch(() => undefined);
+}
+
 function write(rows: LeasePipelineRow[]) {
   if (!canUseStorage()) return;
   if (!leaseRowsChanged(memoryRows, rows)) return;
@@ -420,12 +430,26 @@ function write(rows: LeasePipelineRow[]) {
   persistLeasePipelineToSession(rows);
   leasePipelineLastSyncedAt = Date.now();
   emit();
+  const payload = JSON.stringify({ action: "replace", rows });
+  const byteLength = new TextEncoder().encode(payload).length;
+  const shouldUseRowUpserts = byteLength > 3_500_000 || rows.some((row) => Boolean(row.managerUploadedPdf?.dataUrl));
+  if (shouldUseRowUpserts) {
+    for (const row of rows) persistLeaseRowToServer(row);
+    return;
+  }
   void fetch("/api/portal-lease-pipeline", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ action: "replace", rows }),
-  }).catch(() => undefined);
+    body: payload,
+  })
+    .then(async (res) => {
+      if (res.ok) return;
+      for (const row of rows) persistLeaseRowToServer(row);
+    })
+    .catch(() => {
+      for (const row of rows) persistLeaseRowToServer(row);
+    });
 }
 
 function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: string | null): LeasePipelineRow[] {
@@ -826,8 +850,8 @@ export function managerUploadLeasePdf(rowId: string, file: File): Promise<{ ok: 
       resolve({ ok: false, error: "Please choose a PDF file." });
       return;
     }
-    if (file.size > 14 * 1024 * 1024) {
-      resolve({ ok: false, error: "PDF too large (max 14 MB)." });
+    if (file.size > 3.5 * 1024 * 1024) {
+      resolve({ ok: false, error: "PDF too large (max 3.5 MB)." });
       return;
     }
     const rows = readLeasePipeline();

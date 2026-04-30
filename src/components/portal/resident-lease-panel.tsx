@@ -1,11 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { demoResidentLeaseChecklist, demoResidentLeaseHub, demoResidentLeaseVersions } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import {
@@ -28,10 +26,7 @@ import {
   syncLeasePipelineFromServer,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
-import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import { usePortalSession } from "@/hooks/use-portal-session";
-
-type ChecklistRow = { id: string; label: string; done: boolean };
 
 function LeaseSigningModal({
   row,
@@ -188,9 +183,6 @@ function LeaseSigningModal({
 export function ResidentLeasePanel() {
   const { showToast } = useAppUi();
   const session = usePortalSession();
-  const [checklist, setChecklist] = useState<ChecklistRow[]>(() =>
-    demoResidentLeaseChecklist.map((c) => ({ id: c.id, label: c.label, done: c.done })),
-  );
   const [pipelineTick, setPipelineTick] = useState(0);
   const [editRequestDraft, setEditRequestDraft] = useState("");
   const [showSigningModal, setShowSigningModal] = useState(false);
@@ -220,35 +212,9 @@ export function ResidentLeasePanel() {
     return gatherLeaseGenerationContext();
   }, [pipelineRow]);
 
-  const summaryFromApp = (() => {
-    const a = leaseCtx.application;
-    const sub = leaseCtx.submission;
-    const room = leaseCtx.leasedRoom ?? leaseCtx.listingProperty;
-    const hasAny = Boolean(a.propertyId || a.roomChoice1 || a.fullLegalName);
-    if (!hasAny && !room) {
-      return {
-        moveIn: demoResidentLeaseHub.moveIn,
-        termLabel: demoResidentLeaseHub.termLabel,
-        deposit: demoResidentLeaseHub.deposit,
-        paymentAtSigning: demoResidentLeaseHub.paymentAtSigning,
-        pdfName: demoResidentLeaseHub.pdfName,
-        subtitle: "Save a rental application draft (Apply flow) to fill these from your data.",
-      };
-    }
-    return {
-      moveIn: a.leaseStart?.trim() || "—",
-      termLabel: [a.leaseTerm, a.leaseEnd && a.leaseTerm !== "Month-to-Month" ? `through ${a.leaseEnd}` : ""]
-        .filter(Boolean)
-        .join(" · ") || "—",
-      deposit: sub?.securityDeposit?.trim() || "—",
-      paymentAtSigning: sub ? paymentAtSigningPriceLabel(sub) : "—",
-      pdfName: room ? `${room.buildingName} · ${room.unitLabel}` : "Your selected listing",
-      subtitle: "Pulled from your saved application and published listing fees where available.",
-    };
-  })();
-
   const leaseLocked = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
   const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow);
+  const usesElectronicSigning = Boolean(pipelineRow?.generatedHtml && !pipelineRow?.managerUploadedPdf?.dataUrl);
 
   const upgradeBreakdown = useMemo(() => {
     const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? leaseCtx.application?.propertyId;
@@ -268,7 +234,9 @@ export function ResidentLeasePanel() {
     return shortToLongTermUpgradeBreakdown(propertyId, true);
   }, [pipelineRow, leaseCtx.application]);
 
-  const canSignElectronically = Boolean(pipelineRow?.status === "Resident Signature Pending" && !pipelineRow.residentSignature && !leaseLocked);
+  const canSignElectronically = Boolean(
+    usesElectronicSigning && pipelineRow?.status === "Resident Signature Pending" && !pipelineRow.residentSignature && !leaseLocked,
+  );
   const residentLeaseActions = Boolean(pipelineRow?.status === "Resident Signature Pending" && !leaseLocked);
   const canRequestExtension = Boolean(pipelineRow?.status === "Fully Signed");
 
@@ -367,15 +335,17 @@ export function ResidentLeasePanel() {
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
             Download PDF
           </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="shrink-0 rounded-full"
-            disabled={!canSignElectronically}
-            onClick={() => onSignLease()}
-          >
-            {pipelineRow?.residentSignature ? "Resident signed" : "Sign lease"}
-          </Button>
+          {usesElectronicSigning ? (
+            <Button
+              type="button"
+              variant="primary"
+              className="shrink-0 rounded-full"
+              disabled={!canSignElectronically}
+              onClick={() => onSignLease()}
+            >
+              {pipelineRow?.residentSignature ? "Resident signed" : "Sign lease"}
+            </Button>
+          ) : null}
         </>
       }
     >
@@ -407,6 +377,11 @@ export function ResidentLeasePanel() {
                   </p>
                 </div>
               </div>
+            </Card>
+          ) : null}
+          {pipelineRow.managerUploadedPdf?.dataUrl && pipelineRow.status === "Resident Signature Pending" ? (
+            <Card className="mt-4 border-sky-200/80 bg-sky-50/70 p-4 text-sm text-sky-950">
+              This lease was uploaded as a manual PDF. Review it here, sign it offline, and return the signed lease to your manager.
             </Card>
           ) : null}
         </div>
@@ -462,60 +437,6 @@ export function ResidentLeasePanel() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="border-slate-200/80 p-5">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Lease summary</p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            {summaryFromApp.subtitle}{" "}
-            <Link href="/rent/apply" className="font-medium text-primary underline underline-offset-2">
-              Rental application
-            </Link>
-          </p>
-          <dl className="mt-4 space-y-3 text-sm">
-            <div className="flex justify-between gap-3">
-              <dt className="text-slate-500">Move-in</dt>
-              <dd className="font-semibold text-slate-900">{summaryFromApp.moveIn}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-slate-500">Lease term</dt>
-              <dd className="text-right font-semibold text-slate-900">{summaryFromApp.termLabel}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-slate-500">Security deposit</dt>
-              <dd className="font-semibold text-slate-900">{summaryFromApp.deposit}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-slate-500">Payment at signing</dt>
-              <dd className="text-right font-semibold text-slate-900">{summaryFromApp.paymentAtSigning}</dd>
-            </div>
-          </dl>
-        </Card>
-
-        <Card className="flex min-h-[260px] flex-col border-dashed border-slate-200/90 bg-slate-50/50 p-5">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Lease document</p>
-          <p className="mt-2 text-sm font-semibold text-slate-900">{pipelineRow?.status ?? "Lease"}</p>
-          <p className="mt-1 text-sm text-slate-600">
-            You are viewing the single active lease document for this agreement. Only the allowed next action is shown based on its current status.
-          </p>
-          {leaseVisibleToResident ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onDownloadLeasePackage}>
-                Download lease
-              </Button>
-            </div>
-          ) : (
-            <p className="mt-3 text-xs text-slate-600">
-              Preview and package downloads for your official lease unlock when your manager sends it to you for <strong>Resident Signature Pending</strong>
-              ).
-            </p>
-          )}
-
-          <p className="mt-6 text-sm font-semibold text-slate-900">Signing flow</p>
-          <p className="mt-1 text-sm text-slate-600">
-            You cannot replace or regenerate this lease. If something is wrong, request edits and your manager will revise the same lease record.
-          </p>
-        </Card>
-      </div>
       {upgradeBreakdown ? (
         <Card className="mt-6 border-blue-200/80 bg-blue-50/40 p-5">
           <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Upgrade to long-term rental</p>
@@ -570,49 +491,6 @@ export function ResidentLeasePanel() {
         </Card>
       ) : null}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <Card className="border-slate-200/80 p-5">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Version history</p>
-          <ul className="mt-3 space-y-2 text-sm">
-            {demoResidentLeaseVersions.length === 0 ? (
-              <li className="text-sm text-slate-500">No prior versions on file — use AI download / upload above.</li>
-            ) : (
-              demoResidentLeaseVersions.map((v) => (
-                <li key={v.id} className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
-                  <p className="font-medium text-slate-900">{v.label}</p>
-                  <p className="mt-0.5 text-xs text-slate-600">{v.note}</p>
-                </li>
-              ))
-            )}
-          </ul>
-        </Card>
-
-        <Card className="border-slate-200/80 p-5">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Prerequisite checklist</p>
-          <ul className="mt-3 space-y-2">
-            {checklist.map((item) => (
-              <li key={item.id}>
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
-                    checked={item.done}
-                    onChange={() => setChecklist((rows) => rows.map((r) => (r.id === item.id ? { ...r, done: !r.done } : r)))}
-                  />
-                  <span>{item.label}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-          {residentLeaseActions ? (
-            <Button type="button" className="mt-4 rounded-full" variant="outline" onClick={() => showToast("Comment sent to manager.")}>
-              Add comment for manager
-            </Button>
-          ) : (
-            <p className="mt-4 text-xs text-slate-500">Comments to your manager are available once the lease is with you and the required signing charges are paid.</p>
-          )}
-        </Card>
-      </div>
     </ManagerPortalPageShell>
     </>
   );
