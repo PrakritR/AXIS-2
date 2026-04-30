@@ -52,9 +52,18 @@ import {
 
 function ApplicantIds({ axisId }: { axisId: string }) {
   return (
-    <div className="mt-4 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4">
+    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4">
       <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Axis ID</p>
       <p className="mt-2 font-mono text-sm font-medium text-slate-900">{axisId}</p>
+    </div>
+  );
+}
+
+function ApplicationInfoCard({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+      <div className="mt-1.5 text-sm font-semibold text-slate-900">{value}</div>
     </div>
   );
 }
@@ -192,14 +201,50 @@ function ManagerApplicationPlacementEditor({
     row.application?.roomChoice3?.trim(),
   ].filter(Boolean) as string[];
 
+  const assignmentLabel =
+    propertyId && roomChoice
+      ? `${getPropertyById(propertyId)?.title ?? propertyId} · ${getRoomChoiceLabel(roomChoice)}`
+      : "Not assigned yet";
+  const tenancyLabel = [
+    leaseTerm || "Not set yet",
+    leaseStart ? `move-in ${leaseStart}` : "",
+    leaseEnd ? `${leaseTerm === SHORT_TERM_LEASE_TERM ? "move-out" : "end"} ${leaseEnd}` : "",
+  ].filter(Boolean).join(" · ");
+  const chargeSummary = [
+    utilitiesOverride ? `Utilities $${Number.parseFloat(utilitiesOverride || "0").toFixed(2)}` : null,
+    securityDepositOverride ? `Deposit $${Number.parseFloat(securityDepositOverride || "0").toFixed(2)}` : null,
+    moveInFeeOverride ? `Move-in $${Number.parseFloat(moveInFeeOverride || "0").toFixed(2)}` : null,
+    otherCostLabel.trim() && otherCostAmount ? `${otherCostLabel.trim()} $${Number.parseFloat(otherCostAmount || "0").toFixed(2)}` : null,
+  ].filter(Boolean).join(" · ");
+
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
-        <div className="min-w-0 flex-1">
+    <div className="rounded-3xl border border-slate-200/90 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Final placement</p>
-          <p className="mt-1 text-sm text-slate-600">Only the assigned house and room can be changed here. The rest of the application stays locked.</p>
+          <h3 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-slate-950">House, room, lease dates, and charges</h3>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+            Update the final resident setup here. These saved values drive lease details and resident payment charges.
+          </p>
         </div>
-        <div className="grid flex-1 gap-3 sm:grid-cols-2">
+        <span className="inline-flex w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800 ring-1 ring-blue-200/80">
+          {row.bucket === "approved" ? "Approved application" : "Editable placement"}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <ApplicationInfoCard label="Current assignment" value={assignmentLabel} />
+        <ApplicationInfoCard
+          label="Tenant rent"
+          value={Number.parseFloat(signedRent) > 0 ? `$${Number.parseFloat(signedRent).toFixed(2)} / month` : "Not set"}
+        />
+        <ApplicationInfoCard label="Tenancy" value={tenancyLabel} />
+      </div>
+
+      <div className="mt-5 space-y-5">
+        <section>
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Placement</p>
+          <div className="grid gap-3 lg:grid-cols-4">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">House</span>
             <Select
@@ -242,7 +287,7 @@ function ManagerApplicationPlacementEditor({
               ))}
             </Select>
           </label>
-          <label className="block sm:col-span-2">
+          <label className="block lg:col-span-2">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Signed monthly rent</span>
             <input
               type="number"
@@ -254,6 +299,12 @@ function ManagerApplicationPlacementEditor({
               placeholder="800"
             />
           </label>
+          </div>
+        </section>
+
+        <section>
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Dates</p>
+          <div className="grid gap-3 md:grid-cols-3">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Stay type</span>
             <Select
@@ -284,7 +335,7 @@ function ManagerApplicationPlacementEditor({
               className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
           </label>
-          <label className="block sm:col-span-2">
+          <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
               {leaseTerm === SHORT_TERM_LEASE_TERM ? "Move-out date" : leaseTerm === "Month-to-Month" ? "Move-out date" : "Lease end"}
             </span>
@@ -296,6 +347,12 @@ function ManagerApplicationPlacementEditor({
               className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-400 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
           </label>
+          </div>
+        </section>
+
+        <section>
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Charges</p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Utilities</span>
             <input
@@ -354,43 +411,29 @@ function ManagerApplicationPlacementEditor({
               placeholder="25"
             />
           </label>
+          </div>
+        </section>
         </div>
-      </div>
 
-      <div className="mt-3 flex flex-col gap-2 text-sm text-slate-600">
-        <p>
-          <span className="font-medium text-slate-800">Applicant choices:</span>{" "}
-          {applicantChoices.length ? applicantChoices.map((choice) => getRoomChoiceLabel(choice)).filter(Boolean).join(" · ") : "No room choices saved."}
-        </p>
-        <p>
-          <span className="font-medium text-slate-800">Current assignment:</span>{" "}
-          {propertyId && roomChoice ? `${getPropertyById(propertyId)?.title ?? propertyId} · ${getRoomChoiceLabel(roomChoice)}` : "Not assigned yet"}
-        </p>
-        <p>
-          <span className="font-medium text-slate-800">Tenancy:</span>{" "}
-          {leaseTerm || "Not set yet"}
-          {leaseStart ? ` · move-in ${leaseStart}` : ""}
-          {leaseEnd ? ` · ${leaseTerm === SHORT_TERM_LEASE_TERM ? "move-out" : "end"} ${leaseEnd}` : ""}
-        </p>
-        <p>
-          <span className="font-medium text-slate-800">Lease timing:</span>{" "}
-          {row.application?.leaseStart?.trim()
-            ? `${row.application.leaseStart}${row.application?.leaseEnd?.trim() ? ` to ${row.application.leaseEnd}` : ""}`
-            : "No lease dates submitted."}
-        </p>
-        <p>
-          <span className="font-medium text-slate-800">Tenant rent snapshot:</span>{" "}
-          {Number.parseFloat(signedRent) > 0 ? `$${Number.parseFloat(signedRent).toFixed(2)} / month` : "Set the rent this tenant signed for."}
-        </p>
-        <p>
-          <span className="font-medium text-slate-800">Approved charges:</span>{" "}
-          {[
-            utilitiesOverride ? `utilities $${Number.parseFloat(utilitiesOverride || "0").toFixed(2)}` : null,
-            securityDepositOverride ? `deposit $${Number.parseFloat(securityDepositOverride || "0").toFixed(2)}` : null,
-            moveInFeeOverride ? `move-in $${Number.parseFloat(moveInFeeOverride || "0").toFixed(2)}` : null,
-            otherCostLabel.trim() && otherCostAmount ? `${otherCostLabel.trim()} $${Number.parseFloat(otherCostAmount || "0").toFixed(2)}` : null,
-          ].filter(Boolean).join(" · ") || "Using the listing defaults."}
-        </p>
+      <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50/80 p-4 text-sm text-slate-600 lg:grid-cols-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Applicant choices</p>
+          <p className="mt-1.5 text-slate-800">
+            {applicantChoices.length ? applicantChoices.map((choice) => getRoomChoiceLabel(choice)).filter(Boolean).join(" · ") : "No room choices saved."}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Submitted lease timing</p>
+          <p className="mt-1.5 text-slate-800">
+            {row.application?.leaseStart?.trim()
+              ? `${row.application.leaseStart}${row.application?.leaseEnd?.trim() ? ` to ${row.application.leaseEnd}` : ""}`
+              : "No lease dates submitted."}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Approved charges</p>
+          <p className="mt-1.5 text-slate-800">{chargeSummary || "Using the listing defaults."}</p>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
