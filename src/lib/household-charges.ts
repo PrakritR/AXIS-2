@@ -89,6 +89,8 @@ export type RecurringRentProfile = {
   monthlyUtilities?: number;
   dueDay: number;
   startMonth: string;
+  /** ISO date YYYY-MM-DD — last day of the lease; used to prorate the final partial month. */
+  leaseEnd?: string;
   active: boolean;
   updatedAt: string;
   zelleContact?: string;
@@ -747,6 +749,12 @@ function syncAllRecurringRentCharges(): boolean {
     const startYear = startYearRaw && Number.isFinite(startYearRaw) ? startYearRaw : now.getFullYear();
     const startMonthNum = startMonthRaw && Number.isFinite(startMonthRaw) ? startMonthRaw : now.getMonth() + 1;
 
+    // Parse lease end for last-month proration
+    const leaseEndParts = profile.leaseEnd?.trim().split("-").map(Number) ?? [];
+    const leaseEndYear = leaseEndParts[0] && Number.isFinite(leaseEndParts[0]) ? leaseEndParts[0] : null;
+    const leaseEndMonthNum = leaseEndParts[1] && Number.isFinite(leaseEndParts[1]) ? leaseEndParts[1] : null;
+    const leaseEndDay = leaseEndParts[2] && Number.isFinite(leaseEndParts[2]) ? leaseEndParts[2] : null;
+
     // Check current month and next 2 months for due dates within the 7-day window
     for (let offset = 0; offset <= 2; offset++) {
       const candidateDate = new Date(now.getFullYear(), now.getMonth() + offset, dueDay, 12, 0, 0, 0);
@@ -756,6 +764,11 @@ function syncAllRecurringRentCharges(): boolean {
       // Skip months before the profile's start month
       if (candidateYear < startYear || (candidateYear === startYear && candidateMonthNum < startMonthNum)) continue;
 
+      // Skip months after lease end
+      if (leaseEndYear && leaseEndMonthNum) {
+        if (candidateYear > leaseEndYear || (candidateYear === leaseEndYear && candidateMonthNum > leaseEndMonthNum)) continue;
+      }
+
       // Only emit if the due date is within the 7-day visibility window from now
       const msTillDue = candidateDate.getTime() - now.getTime();
       if (msTillDue > FUTURE_RENT_VISIBILITY_WINDOW_MS) break;
@@ -764,12 +777,21 @@ function syncAllRecurringRentCharges(): boolean {
       const dueLabel = formatRecurringRentDueLabel(rentMonth, dueDay);
       const monthLabel = candidateDate.toLocaleString("default", { month: "long", year: "numeric" });
 
+      // Determine if this is a partial last month
+      const isLastMonth = leaseEndYear !== null && leaseEndMonthNum !== null && leaseEndDay !== null
+        && candidateYear === leaseEndYear && candidateMonthNum === leaseEndMonthNum;
+      const daysInCandidateMonth = new Date(candidateYear, candidateMonthNum, 0).getDate();
+      const isPartialLastMonth = isLastMonth && leaseEndDay! < daysInCandidateMonth;
+      const proratedFactor = isPartialLastMonth ? leaseEndDay! / daysInCandidateMonth : 1;
+
       if (profile.monthlyRent > 0) {
         const chargeKey = `rent|${profile.residentEmail.trim().toLowerCase()}|${profile.propertyId}|${rentMonth}`;
         const alreadyExists =
           existing.some((c) => chargeBusinessKey(c) === chargeKey) ||
           newCharges.some((c) => chargeBusinessKey(c) === chargeKey);
         if (!alreadyExists) {
+          const amount = Number((profile.monthlyRent * proratedFactor).toFixed(2));
+          const titlePrefix = isPartialLastMonth ? "Prorated rent" : "Rent";
           newCharges.push({
             id: `hc_rent_${chargeKeyPart(profile.residentEmail)}_${chargeKeyPart(profile.propertyId)}_${rentMonth}`,
             createdAt: new Date().toISOString(),
@@ -780,14 +802,16 @@ function syncAllRecurringRentCharges(): boolean {
             propertyLabel: profile.propertyLabel,
             managerUserId: profile.managerUserId,
             kind: "rent",
-            title: `Rent — ${monthLabel}`,
-            amountLabel: moneyAmountLabel(profile.monthlyRent),
-            balanceLabel: moneyAmountLabel(profile.monthlyRent),
+            title: `${titlePrefix} — ${monthLabel}`,
+            amountLabel: moneyAmountLabel(amount),
+            balanceLabel: moneyAmountLabel(amount),
             status: "pending",
             recurringRentProfileId: profile.id,
             rentMonth,
             dueDay,
-            dueDateLabel: dueLabel,
+            dueDateLabel: isPartialLastMonth
+              ? `By ${new Date(leaseEndYear!, leaseEndMonthNum! - 1, leaseEndDay!).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
+              : dueLabel,
             blocksLeaseUntilPaid: false,
             zelleContactSnapshot: profile.zelleContact,
             venmoContactSnapshot: profile.venmoContact,
@@ -802,6 +826,8 @@ function syncAllRecurringRentCharges(): boolean {
           existing.some((c) => chargeBusinessKey(c) === utilKey) ||
           newCharges.some((c) => chargeBusinessKey(c) === utilKey);
         if (!alreadyUtil) {
+          const amount = Number((utilAmt * proratedFactor).toFixed(2));
+          const titlePrefix = isPartialLastMonth ? "Prorated utilities" : "Utilities";
           newCharges.push({
             id: `hc_util_${chargeKeyPart(profile.residentEmail)}_${chargeKeyPart(profile.propertyId)}_${rentMonth}`,
             createdAt: new Date().toISOString(),
@@ -812,14 +838,16 @@ function syncAllRecurringRentCharges(): boolean {
             propertyLabel: profile.propertyLabel,
             managerUserId: profile.managerUserId,
             kind: "utilities",
-            title: `Utilities — ${monthLabel}`,
-            amountLabel: moneyAmountLabel(utilAmt),
-            balanceLabel: moneyAmountLabel(utilAmt),
+            title: `${titlePrefix} — ${monthLabel}`,
+            amountLabel: moneyAmountLabel(amount),
+            balanceLabel: moneyAmountLabel(amount),
             status: "pending",
             recurringRentProfileId: profile.id,
             rentMonth,
             dueDay,
-            dueDateLabel: dueLabel,
+            dueDateLabel: isPartialLastMonth
+              ? `By ${new Date(leaseEndYear!, leaseEndMonthNum! - 1, leaseEndDay!).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
+              : dueLabel,
             blocksLeaseUntilPaid: false,
             zelleContactSnapshot: profile.zelleContact,
             venmoContactSnapshot: profile.venmoContact,
@@ -854,6 +882,7 @@ export function upsertRecurringRentProfile(input: {
   monthlyUtilities?: number;
   dueDay?: number;
   startMonth?: string;
+  leaseEnd?: string;
   zelleContact?: string;
   venmoContact?: string;
 }): RecurringRentProfile | null {
@@ -878,6 +907,7 @@ export function upsertRecurringRentProfile(input: {
     monthlyUtilities,
     dueDay: Math.min(28, Math.max(1, input.dueDay ?? 1)),
     startMonth: input.startMonth ?? currentRentMonth(),
+    leaseEnd: input.leaseEnd?.trim() || undefined,
     active: true,
     updatedAt: new Date().toISOString(),
     zelleContact: input.zelleContact,
@@ -1187,6 +1217,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         monthlyUtilities: utilities.amount > 0 ? Number(utilities.amount.toFixed(2)) : 0,
         dueDay: 1,
         startMonth,
+        leaseEnd: row.application?.leaseEnd?.trim() || undefined,
         zelleContact: zelleSnap,
         venmoContact: venmoSnap,
       });
