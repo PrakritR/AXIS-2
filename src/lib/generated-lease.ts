@@ -229,6 +229,14 @@ function overrideFeeLabel(overrideRaw: string | undefined | null, fallbackLabel:
   return fallbackLabel;
 }
 
+function isMonthToMonthOtherCost(label: string | undefined | null): boolean {
+  const normalized = String(label ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ");
+  return normalized.includes("month to month");
+}
+
 function proratedBlock(monthlyRentStr: string, utilitiesStr: string, leaseStartStr: string): string {
   const rent = parseAmount(monthlyRentStr);
   if (!rent || !leaseStartStr || leaseStartStr === "—") return "";
@@ -322,9 +330,12 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   const appFee = escapeHtml(sub?.applicationFee ?? "—");
   const secDep = escapeHtml(overrideFeeLabel(a.managerSecurityDepositOverride, sub?.securityDeposit ?? "—"));
   const moveInFee = escapeHtml(overrideFeeLabel(a.managerMoveInFeeOverride, sub?.moveInFee ?? "—"));
-  const otherCostLabel = escapeHtml(a.managerOtherCostLabel?.trim() || "Other costs");
+  const rawOtherCostLabel = a.managerOtherCostLabel?.trim() || "Other costs";
+  const otherCostIsMonthToMonth = isMonthToMonthOtherCost(rawOtherCostLabel);
+  const otherCostLabel = escapeHtml(rawOtherCostLabel);
   const otherCostAmount = escapeHtml(overrideFeeLabel(a.managerOtherCostAmount, "—"));
-  const otherCostNum = parseAmount(a.managerOtherCostAmount);
+  const otherCostNum = otherCostIsMonthToMonth ? 0 : parseAmount(a.managerOtherCostAmount);
+  const showOtherSigningCost = !otherCostIsMonthToMonth && Boolean(otherCostNum && otherCostNum > 0);
   const paySigningBase = sub ? paymentAtSigningPriceLabel(sub) : "—";
   const paySigningNum = (parseAmount(secDep) ?? 0) + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0);
   const paySigning = escapeHtml(paySigningNum > 0 ? fmtUsd(paySigningNum) : paySigningBase);
@@ -356,10 +367,6 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
     manualPaymentMethods.length > 0
       ? `Payment may be made via Stripe (portal), ${manualPaymentMethods.join(", ")}, or another method agreed in writing.`
       : "Payment shall be made via the Axis portal or by a method agreed in writing with Landlord.";
-  const monthToMonthSurchargeNote =
-    monthToMonthSurcharge > 0
-      ? `<p><strong>Month-to-month surcharge:</strong> This lease includes an additional ${fmtUsd(monthToMonthSurcharge)} added to the monthly base rent for month-to-month billing.</p>`
-      : "";
 
   const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "");
 
@@ -486,7 +493,7 @@ ${proratedSection || ""}
   <tr><th width="50%">Application fee</th><td>${appFee}</td></tr>
   <tr><th>Security deposit</th><td><strong>${secDep}</strong></td></tr>
   <tr><th>Move-in fee (non-refundable)</th><td>${moveInFee}</td></tr>
-  ${otherCostNum && otherCostNum > 0 ? `<tr><th>${otherCostLabel}</th><td>${otherCostAmount}</td></tr>` : ""}
+  ${showOtherSigningCost ? `<tr><th>${otherCostLabel}</th><td>${otherCostAmount}</td></tr>` : ""}
   <tr><th>Total due at signing</th><td><strong>${paySigning}</strong></td></tr>
 </table>
 <p>Resident shall pay a security deposit of <strong>${secDep}</strong> at lease signing. The deposit shall be held in accordance with RCW 59.18.260–.280 and secures Resident&apos;s full performance under this Agreement. Resident&apos;s liability is not limited to the deposit amount, and the deposit may not be applied toward rent or other charges during the tenancy.</p>
@@ -621,7 +628,7 @@ ${houseRules
   <tr><td>Application fee</td><td>${appFee}</td><td>One-time</td></tr>
   <tr><td>Security deposit</td><td>${secDep}</td><td>One-time (refundable)</td></tr>
   <tr><td>Move-in fee</td><td>${moveInFee}</td><td>One-time (non-refundable)</td></tr>
-  ${otherCostNum && otherCostNum > 0 ? `<tr><td>${otherCostLabel}</td><td>${otherCostAmount}</td><td>One-time</td></tr>` : ""}
+  ${showOtherSigningCost ? `<tr><td>${otherCostLabel}</td><td>${otherCostAmount}</td><td>One-time</td></tr>` : ""}
   <tr><td>Total due at signing</td><td>${paySigning}</td><td>At signing</td></tr>
 </table>
 

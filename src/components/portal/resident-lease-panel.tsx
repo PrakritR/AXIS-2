@@ -33,9 +33,10 @@ import {
 } from "@/lib/lease-pipeline-storage";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import {
+  addUploadedOwnLease,
   clearUploadedOwnLease,
-  readUploadedOwnLease,
-  saveUploadedOwnLease,
+  readUploadedOwnLeases,
+  removeUploadedOwnLease,
   type UploadedOwnLease,
 } from "@/lib/resident-lease-upload";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -210,9 +211,9 @@ export function ResidentLeasePanel() {
   const [showSigningModal, setShowSigningModal] = useState(false);
   const [uploadTick, setUploadTick] = useState(0);
   const email = session.email?.trim() || null;
-  const ownLease = useMemo(() => {
+  const ownLeases = useMemo(() => {
     void uploadTick;
-    return email ? readUploadedOwnLease(email) : null;
+    return email ? readUploadedOwnLeases(email) : [];
   }, [email, uploadTick]);
 
   useEffect(() => {
@@ -317,7 +318,7 @@ export function ResidentLeasePanel() {
         showToast("Print dialog opened — choose 'Save as PDF' to download.");
         return;
       }
-      if (ownLease) {
+      if (ownLeases[0]) {
         downloadLeaseFromRow(pipelineRow);
         showToast("PDF download started.");
         return;
@@ -326,7 +327,7 @@ export function ResidentLeasePanel() {
       return;
     }
     onDownloadAiLease();
-  }, [pipelineRow, ownLease, onDownloadAiLease, showToast]);
+  }, [pipelineRow, ownLeases, onDownloadAiLease, showToast]);
 
   const onSignLease = () => {
     if (!email || leaseLocked) return;
@@ -369,43 +370,65 @@ export function ResidentLeasePanel() {
   }, [leaseCtx]);
 
   const onPickOwnLeasePdf = async (files: FileList | null) => {
-    const f = files?.[0];
-    if (!f) return;
-    if (f.type !== "application/pdf") {
-      showToast("Please choose a PDF file.");
-      return;
-    }
-    if (f.size > MAX_LEASE_PDF_BYTES) {
-      showToast(`PDF too large (max ${Math.round(MAX_LEASE_PDF_BYTES / 1024 / 1024)} MB).`);
-      return;
-    }
     if (!email) {
       showToast("Sign in to upload your lease.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const payload: UploadedOwnLease = {
-        dataUrl,
-        fileName: f.name,
-        uploadedAt: new Date().toISOString(),
-      };
-      saveUploadedOwnLease(email, payload);
+    const selected = Array.from(files ?? []);
+    if (!selected.length) return;
+    const validFiles = selected.filter((file) => file.type === "application/pdf" && file.size <= MAX_LEASE_PDF_BYTES);
+    if (!validFiles.length) {
+      showToast("Please choose PDF files under the size limit.");
+      return;
+    }
+    const hadInvalid = validFiles.length !== selected.length;
+    let savedCount = 0;
+    await Promise.all(
+      validFiles.map(
+        (file) =>
+          new Promise<void>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const dataUrl = reader.result as string;
+              addUploadedOwnLease(email, {
+                dataUrl,
+                fileName: file.name,
+                uploadedAt: new Date().toISOString(),
+              });
+              savedCount += 1;
+              resolve();
+            };
+            reader.onerror = () => resolve();
+            reader.readAsDataURL(file);
+          }),
+      ),
+    );
+    if (savedCount > 0) {
       setUploadTick((tick) => tick + 1);
       window.dispatchEvent(new Event(LEASE_PIPELINE_EVENT));
-      showToast("Your lease PDF is saved in this browser.");
-    };
-    reader.onerror = () => showToast("Could not read that file.");
-    reader.readAsDataURL(f);
+      showToast(
+        hadInvalid
+          ? `${savedCount} PDF${savedCount === 1 ? "" : "s"} uploaded. Some files were skipped.`
+          : `${savedCount} PDF${savedCount === 1 ? "" : "s"} uploaded.`,
+      );
+    } else {
+      showToast("Could not read those files.");
+    }
     if (uploadInputRef.current) uploadInputRef.current.value = "";
   };
 
-  const onRemoveOwnLease = () => {
+  const onRemoveOwnLease = (upload: UploadedOwnLease) => {
+    if (!email) return;
+    removeUploadedOwnLease(email, upload.id);
+    setUploadTick((tick) => tick + 1);
+    showToast(`Removed ${upload.fileName}.`);
+  };
+
+  const onRemoveAllOwnLeases = () => {
     if (!email) return;
     clearUploadedOwnLease(email);
     setUploadTick((tick) => tick + 1);
-    showToast("Removed uploaded lease.");
+    showToast("Removed all uploaded PDFs.");
   };
 
   if ((!pipelineRow || !leaseVisibleToResident) && email) {
@@ -569,6 +592,7 @@ export function ResidentLeasePanel() {
                 ref={uploadInputRef}
                 type="file"
                 accept="application/pdf"
+                multiple
                 className="sr-only"
                 id="resident-upload-own-lease"
                 onChange={(e) => void onPickOwnLeasePdf(e.target.files)}
@@ -580,13 +604,27 @@ export function ResidentLeasePanel() {
                 >
                   Upload PDF
                 </label>
-                {ownLease ? (
-                  <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onRemoveOwnLease}>
-                    Remove upload
+                {ownLeases.length > 0 ? (
+                  <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onRemoveAllOwnLeases}>
+                    Remove all uploads
                   </Button>
                 ) : null}
               </div>
-              {ownLease ? <p className="mt-2 text-xs text-slate-500">{ownLease.fileName}</p> : null}
+              {ownLeases.length ? (
+                <ul className="mt-3 space-y-2">
+                  {ownLeases.map((upload) => (
+                    <li key={upload.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-800">{upload.fileName}</p>
+                        <p className="text-slate-500">{new Date(upload.uploadedAt).toLocaleString()}</p>
+                      </div>
+                      <Button type="button" variant="outline" className="rounded-full text-[11px]" onClick={() => onRemoveOwnLease(upload)}>
+                        Remove
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </>
           ) : (
             <p className="mt-3 text-xs text-slate-600">Upload opens when your manager has sent the lease to you for review and signature.</p>
@@ -594,7 +632,7 @@ export function ResidentLeasePanel() {
         </Card>
       </div>
 
-      {residentLeaseActions && ((aiPreviewUrl && !pipelineRow?.generatedHtml) || ownLease) ? (
+      {residentLeaseActions && ((aiPreviewUrl && !pipelineRow?.generatedHtml) || ownLeases.length > 0) ? (
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           {aiPreviewUrl && !pipelineRow?.generatedHtml ? (
             <Card className="overflow-hidden border-slate-200/80 p-0">
@@ -604,12 +642,14 @@ export function ResidentLeasePanel() {
               <iframe title="AI-generated lease preview" src={aiPreviewUrl} className="h-[min(520px,55vh)] w-full bg-white" />
             </Card>
           ) : null}
-          {ownLease ? (
-            <Card className="overflow-hidden border-slate-200/80 p-0">
-              <p className="border-b border-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Your uploaded PDF</p>
-              <iframe title="Uploaded lease PDF" src={ownLease.dataUrl} className="h-[min(520px,55vh)] w-full bg-slate-100" />
+          {ownLeases.map((upload) => (
+            <Card key={upload.id} className="overflow-hidden border-slate-200/80 p-0">
+              <p className="border-b border-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Uploaded PDF · {upload.fileName}
+              </p>
+              <iframe title={`Uploaded lease PDF ${upload.fileName}`} src={upload.dataUrl} className="h-[min(520px,55vh)] w-full bg-slate-100" />
             </Card>
-          ) : null}
+          ))}
         </div>
       ) : null}
 
