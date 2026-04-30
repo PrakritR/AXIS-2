@@ -19,6 +19,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   createManagerCharge,
@@ -129,6 +130,7 @@ export function ManagerResidents() {
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageSubject, setMessageSubject] = useState("");
   const [messageBody, setMessageBody] = useState("");
+  const [signingLease, setSigningLease] = useState<LeasePipelineRow | null>(null);
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -545,34 +547,51 @@ export function ManagerResidents() {
       showToast("The resident must sign the lease before you can countersign.");
       return;
     }
-    const name = window.prompt("Type the manager / authorized agent name to sign this lease.");
-    if (!name?.trim()) return;
-    if (managerSignLease(row.id, name.trim())) {
+    setSigningLease(row);
+  }
+
+  function handleManagerModalSign(signatureName: string) {
+    if (!signingLease) return false;
+    if (managerSignLease(signingLease.id, signatureName.trim())) {
       setLeaseTick((n) => n + 1);
       showToast(
         hasBothLeaseSignatures({
-          ...row,
-          managerSignature: { role: "manager", name: name.trim(), signedAtIso: new Date().toISOString() },
+          ...signingLease,
+          managerSignature: { role: "manager", name: signatureName.trim(), signedAtIso: new Date().toISOString() },
         })
           ? "Lease fully signed."
           : "Manager signature saved.",
       );
+      setSigningLease(null);
+      return true;
     } else {
       showToast("Could not sign lease.");
+      return false;
     }
   }
 
   return (
-    <ManagerPortalPageShell
-      title="Residents"
-      titleAside={
-        <PortalPropertyFilterPill
-          propertyOptions={propertyOptions}
-          propertyValue={propertyFilter}
-          onPropertyChange={setPropertyFilter}
+    <>
+      {signingLease ? (
+        <LeaseSigningModal
+          row={signingLease}
+          signerName=""
+          signerRoleLabel="Manager / authorized agent name"
+          agreementLabel="Residential Room Rental Agreement"
+          onSign={handleManagerModalSign}
+          onClose={() => setSigningLease(null)}
         />
-      }
-    >
+      ) : null}
+      <ManagerPortalPageShell
+        title="Residents"
+        titleAside={
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
+        }
+      >
       {filtered.length === 0 ? (
         <PortalDataTableEmpty
           message={
@@ -1148,6 +1167,7 @@ export function ManagerResidents() {
           </div>
         </div>
       </Modal>
-    </ManagerPortalPageShell>
+      </ManagerPortalPageShell>
+    </>
   );
 }

@@ -20,6 +20,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
@@ -81,6 +82,7 @@ export function ManagerLeasesPipelinePanel({
   const uploadRef = useRef<HTMLInputElement>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
   const [generatingRowId, setGeneratingRowId] = useState<string | null>(null);
+  const [signingRow, setSigningRow] = useState<LeasePipelineRow | null>(null);
 
   void refreshKey;
   const bucketRows = useMemo(() => rows.filter((r) => r.bucket === bucket), [rows, bucket]);
@@ -166,13 +168,26 @@ export function ManagerLeasesPipelinePanel({
       showToast("The resident must sign first before the manager can countersign.");
       return;
     }
-    const name = window.prompt("Type the manager / authorized agent name to sign this lease.");
-    if (!name?.trim()) return;
-    if (managerSignLease(row.id, name.trim())) {
-      showToast(hasBothLeaseSignatures({ ...row, managerSignature: { role: "manager", name: name.trim(), signedAtIso: new Date().toISOString() } }) ? "Lease fully signed." : "Manager signature saved.");
+    setSigningRow(row);
+  };
+
+  const handleManagerModalSign = (signatureName: string) => {
+    if (!signingRow) return false;
+    if (managerSignLease(signingRow.id, signatureName.trim())) {
+      showToast(
+        hasBothLeaseSignatures({
+          ...signingRow,
+          managerSignature: { role: "manager", name: signatureName.trim(), signedAtIso: new Date().toISOString() },
+        })
+          ? "Lease fully signed."
+          : "Manager signature saved.",
+      );
       setExpandedId(null);
+      setSigningRow(null);
+      return true;
     } else {
       showToast("Could not sign lease.");
+      return false;
     }
   };
 
@@ -200,6 +215,16 @@ export function ManagerLeasesPipelinePanel({
 
   return (
     <div className={PORTAL_DATA_TABLE_WRAP}>
+      {signingRow ? (
+        <LeaseSigningModal
+          row={signingRow}
+          signerName=""
+          signerRoleLabel="Manager / authorized agent name"
+          agreementLabel="Residential Room Rental Agreement"
+          onSign={handleManagerModalSign}
+          onClose={() => setSigningRow(null)}
+        />
+      ) : null}
       <input
         ref={uploadRef}
         type="file"
