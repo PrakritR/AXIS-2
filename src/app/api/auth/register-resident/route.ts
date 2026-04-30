@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
+import { AUTO_RESIDENT_PASSWORD } from "@/lib/auth/provision-approved-resident";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { generateAxisId } from "@/lib/manager-id";
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
     const supabase = createSupabaseServiceRoleClient();
     const { data: applicationRows, error: applicationError } = await supabase
       .from("manager_application_records")
-      .select("id, resident_email")
+      .select("id, resident_email, row_data")
       .in("id", axisIdVariants(normalAxisId));
 
     if (applicationError) {
@@ -48,6 +49,11 @@ export async function POST(req: Request) {
       const rowEmail = row.resident_email?.trim().toLowerCase() ?? "";
       return rowEmail === normalEmail;
     });
+    const matchingRowData =
+      matchingApplication?.row_data && typeof matchingApplication.row_data === "object" && !Array.isArray(matchingApplication.row_data)
+        ? (matchingApplication.row_data as Record<string, unknown>)
+        : null;
+    const applicationApproved = String(matchingRowData?.bucket ?? "").toLowerCase() === "approved";
 
     if (!matchingApplication) {
       const hasDifferentEmailMatch = (applicationRows ?? []).length > 0;
@@ -85,10 +91,35 @@ export async function POST(req: Request) {
       if (!existingId) {
         return NextResponse.json({ error: "Could not locate existing account for this email." }, { status: 400 });
       }
-      await supabase.auth.admin.updateUserById(existingId, { email_confirm: true });
-      const pwCheck = await assertPasswordMatchesExistingAuthUser(normalEmail, password);
-      if (!pwCheck.ok) {
-        return NextResponse.json({ error: pwCheck.message }, { status: 401 });
+      const { data: existingAuth } = await supabase.auth.admin.getUserById(existingId);
+      const metadata = existingAuth.user?.user_metadata as Record<string, unknown> | undefined;
+      const metadataAxisId = typeof metadata?.axis_id === "string" ? metadata.axis_id.trim() : "";
+      const autoProvisioned =
+        metadata?.auto_provisioned_resident === true &&
+        axisIdVariants(metadataAxisId).includes(matchingApplication.id);
+
+      if (autoProvisioned) {
+        await supabase.auth.admin.updateUserById(existingId, {
+          password,
+          email_confirm: true,
+          user_metadata: {
+            ...(metadata ?? {}),
+            role: "resident",
+            axis_id: matchingApplication.id,
+            auto_provisioned_resident: false,
+            resident_password_claimed_at: new Date().toISOString(),
+          },
+        });
+      } else {
+        await supabase.auth.admin.updateUserById(existingId, { email_confirm: true });
+        const pwCheck = await assertPasswordMatchesExistingAuthUser(normalEmail, password);
+        if (!pwCheck.ok) {
+          const tempPwCheck = applicationApproved
+            ? await assertPasswordMatchesExistingAuthUser(normalEmail, AUTO_RESIDENT_PASSWORD)
+            : { ok: false as const, message: pwCheck.message };
+          if (!tempPwCheck.ok) return NextResponse.json({ error: pwCheck.message }, { status: 401 });
+          await supabase.auth.admin.updateUserById(existingId, { password });
+        }
       }
       userId = existingId;
       reusedExistingAuthUser = true;
@@ -100,16 +131,16 @@ export async function POST(req: Request) {
     }
 
     const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
-    const profileAxisId = existingProfile?.manager_id?.trim() || normalAxisId || generateAxisId();
+    const profileAxisId = existingProfile?.manager_id?.trim() || matchingApplication.id || normalAxisId || generateAxisId();
 
     const { error: upErr } = await supabase.from("profiles").upsert(
       {
         id: userId,
         email: normalEmail,
         role: primaryRoleWhenAddingResident(existingProfile?.role as string | undefined),
-        full_name: existingProfile?.full_name ?? null,
+        full_name: existingProfile?.full_name ?? (typeof matchingRowData?.name === "string" ? matchingRowData.name : null),
         manager_id: profileAxisId,
-        application_approved: existingProfile?.application_approved ?? false,
+        application_approved: applicationApproved || existingProfile?.application_approved || false,
       },
       { onConflict: "id" },
     );

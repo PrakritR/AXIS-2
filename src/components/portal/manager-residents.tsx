@@ -54,7 +54,6 @@ import {
   readManagerWorkOrderRows,
   syncManagerWorkOrdersFromServer,
   updateManagerWorkOrder,
-  writeManagerWorkOrderRows,
   deleteManagerWorkOrderRow,
 } from "@/lib/manager-work-orders-storage";
 import {
@@ -76,24 +75,6 @@ type ActiveResident = {
   signedMonthlyRent: number | null;
   axisId: string;
 };
-
-type WorkOrderDraft = {
-  title: string;
-  category: string;
-  priority: string;
-  description: string;
-  photos: File[];
-};
-
-function emptyWorkOrderDraft(): WorkOrderDraft {
-  return {
-    title: "",
-    category: "General",
-    priority: "Medium",
-    description: "",
-    photos: [],
-  };
-}
 
 function statusPill(status: "pending" | "paid") {
   return status === "paid"
@@ -134,8 +115,6 @@ export function ManagerResidents() {
   const [chargeBlocksLease, setChargeBlocksLease] = useState(false);
   const [chargeTab, setChargeTab] = useState<"pending" | "paid">("pending");
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
-  const [workOrderOpen, setWorkOrderOpen] = useState(false);
-  const [workOrderDraft, setWorkOrderDraft] = useState<WorkOrderDraft>(emptyWorkOrderDraft);
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageSubject, setMessageSubject] = useState("");
@@ -431,47 +410,6 @@ export function ManagerResidents() {
     } else {
       showToast("Could not add charge.");
     }
-  }
-
-  function openWorkOrderModal() {
-    setWorkOrderDraft(emptyWorkOrderDraft());
-    setWorkOrderOpen(true);
-  }
-
-  function submitWorkOrder() {
-    if (!selected) return;
-    if (!workOrderDraft.title.trim()) {
-      showToast("Add a work order title.");
-      return;
-    }
-    const details = [
-      `${workOrderDraft.category}: ${workOrderDraft.description.trim() || "Manager-created resident work order."}`,
-      workOrderDraft.photos.length
-        ? `Photos: ${workOrderDraft.photos.map((file) => file.name).join(", ")}`
-        : "",
-    ].filter(Boolean).join("\n\n");
-    const row = {
-      id: `WO-${Date.now()}`,
-      propertyName: selected.propertyLabel || "Assigned property",
-      propertyId: selected.propertyId,
-      assignedPropertyId: selected.propertyId,
-      assignedRoomChoice: selected.roomLabel,
-      managerUserId: userId ?? null,
-      unit: selected.roomLabel || "—",
-      title: workOrderDraft.title.trim(),
-      priority: workOrderDraft.priority,
-      status: "Submitted",
-      bucket: "open" as const,
-      description: details,
-      scheduled: "—",
-      cost: "—",
-      residentName: selected.name,
-      residentEmail: selected.email,
-    };
-    writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
-    setWorkOrderOpen(false);
-    setWorkOrderTick((n) => n + 1);
-    showToast("Work order added for this resident.");
   }
 
   function sendResidentMessage() {
@@ -830,11 +768,8 @@ export function ManagerResidents() {
                               <div className="flex items-center justify-between gap-3">
                                 <div>
                                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Work orders</p>
-                                  <p className="mt-1 text-sm text-slate-500">Create and manage work orders for this resident here.</p>
+                                  <p className="mt-1 text-sm text-slate-500">Review and manage work orders submitted by this resident here.</p>
                                 </div>
-                                <Button type="button" variant="primary" className="rounded-full px-3 py-1 text-xs" onClick={openWorkOrderModal}>
-                                  Add work order
-                                </Button>
                               </div>
                               {residentWorkOrders.length === 0 ? (
                                 <p className="mt-3 text-sm text-slate-500">No work orders for this resident yet.</p>
@@ -988,70 +923,6 @@ export function ManagerResidents() {
             </Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={submitCharge}>
               {editChargeId ? "Save changes" : "Add charge"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal open={workOrderOpen} title="Add work order" onClose={() => setWorkOrderOpen(false)}>
-        <div className="space-y-3">
-          <label className="block text-sm">
-            <span className="font-medium text-slate-700">Title</span>
-            <Input
-              className="mt-1.5"
-              value={workOrderDraft.title}
-              onChange={(e) => setWorkOrderDraft((current) => ({ ...current, title: e.target.value }))}
-              placeholder="Leaky faucet, key issue, thermostat"
-            />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm">
-              <span className="font-medium text-slate-700">Category</span>
-              <Input
-                className="mt-1.5"
-                value={workOrderDraft.category}
-                onChange={(e) => setWorkOrderDraft((current) => ({ ...current, category: e.target.value }))}
-                placeholder="General"
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="font-medium text-slate-700">Priority</span>
-              <Input
-                className="mt-1.5"
-                value={workOrderDraft.priority}
-                onChange={(e) => setWorkOrderDraft((current) => ({ ...current, priority: e.target.value }))}
-                placeholder="Medium"
-              />
-            </label>
-          </div>
-          <label className="block text-sm">
-            <span className="font-medium text-slate-700">Description</span>
-            <Textarea
-              className="mt-1.5 min-h-[140px]"
-              value={workOrderDraft.description}
-              onChange={(e) => setWorkOrderDraft((current) => ({ ...current, description: e.target.value }))}
-              placeholder="Add work order details for this resident..."
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium text-slate-700">Photos</span>
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              className="mt-1.5 block w-full text-sm text-slate-600 file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold"
-              onChange={(e) => setWorkOrderDraft((current) => ({ ...current, photos: Array.from(e.target.files ?? []) }))}
-            />
-            {workOrderDraft.photos.length ? (
-              <p className="mt-2 text-xs text-slate-500">{workOrderDraft.photos.map((file) => file.name).join(", ")}</p>
-            ) : null}
-          </label>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setWorkOrderOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={submitWorkOrder}>
-              Create work order
             </Button>
           </div>
         </div>

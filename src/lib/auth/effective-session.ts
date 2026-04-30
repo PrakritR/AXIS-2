@@ -27,7 +27,13 @@ export const getEffectiveSessionForPortal = cache(async (
 
     const supabase = createSupabaseServiceRoleClient();
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", preview.targetUserId).maybeSingle();
-    if (!profile || profile.role !== portal) {
+    const { data: roleRow } = await supabase
+      .from("profile_roles")
+      .select("role")
+      .eq("user_id", preview.targetUserId)
+      .eq("role", portal)
+      .maybeSingle();
+    if (!profile || (profile.role !== portal && !roleRow)) {
       return { user: ctx.user, profile: ctx.profile };
     }
     return {

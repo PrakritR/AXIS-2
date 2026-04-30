@@ -29,7 +29,12 @@ export const getProPortalRenderContext = cache(async () => {
     redirect(portalDashboardPath(ctx.effectiveRole));
   }
 
-  const previewPortal: PreviewPortal = ctx.effectiveRole === "owner" ? "owner" : "manager";
+  const previewPortal: PreviewPortal =
+    hasAdminRole(ctx) && (preview?.portal === "manager" || preview?.portal === "owner")
+      ? preview.portal
+      : ctx.effectiveRole === "owner"
+        ? "owner"
+        : "manager";
   const effectiveUserId = await getEffectiveUserIdForPortal(previewPortal);
   if (!effectiveUserId) redirect("/admin/dashboard");
 

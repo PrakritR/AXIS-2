@@ -29,30 +29,32 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] overflow-y-auto px-2 pb-3 pt-4 sm:px-4 sm:pb-6 sm:pt-8">
+    <div className="fixed inset-0 z-[70] overflow-y-auto">
       <button
         type="button"
         aria-label="Close"
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div
-        className={
-          panelClassName ??
-          "relative z-[71] mx-auto my-0 w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
-        }
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-          <h3 className="min-w-0 text-lg font-semibold text-slate-950">{title}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            Close
-          </button>
+      <div className="relative z-[71] flex min-h-dvh items-center justify-center px-2 py-4 sm:px-4 sm:py-6">
+        <div
+          className={
+            panelClassName ??
+            "relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+          }
+        >
+          <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+            <h3 className="min-w-0 text-lg font-semibold text-slate-950">{title}</h3>
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
+          <div className="max-h-[calc(100dvh-8rem)] overflow-y-auto pt-4 sm:max-h-[calc(100dvh-9rem)]">{children}</div>
         </div>
-        <div className="max-h-[calc(100dvh-7rem)] overflow-y-auto pt-4 sm:max-h-[calc(100dvh-8.5rem)]">{children}</div>
       </div>
     </div>
   );

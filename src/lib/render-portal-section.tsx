@@ -134,7 +134,8 @@ export async function renderPortalSection(
     const proRender = await getProPortalRenderContext();
     effectiveWorkspaceUserId = proRender.effectiveUserId;
     managerOwnerSubscriptionTier = proRender.subscriptionTier;
-    proEffectiveRole = proRender.ctx.effectiveRole === "owner" ? "owner" : "manager";
+    proEffectiveRole =
+      proRender.preview?.portal === "owner" || proRender.ctx.effectiveRole === "owner" ? "owner" : "manager";
   }
 
   if (kind === "admin" && section === "dashboard") {

@@ -597,9 +597,15 @@ export function ManagerApplications() {
           : row,
       );
       persist(next);
+      const updatedRow = next.find((candidate) => candidate.id === id);
+      if (updatedRow?.bucket === "approved") {
+        void syncHouseholdChargesFromServer().then(() => {
+          recordApprovedApplicationCharges(updatedRow, userId ?? null);
+        });
+      }
       showToast("Assigned house, room, stay type, and lease charges saved.");
     },
-    [rows, persist, showToast],
+    [rows, persist, showToast, userId],
   );
 
   const deleteApplication = async (id: string) => {

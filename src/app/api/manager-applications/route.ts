@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -49,6 +50,10 @@ async function persistNormalizedRow(db: ReturnType<typeof createSupabaseServiceR
     },
     { onConflict: "id" },
   );
+  if (row.bucket === "approved") {
+    const provisioned = await provisionApprovedResidentAccount(db, row);
+    if (!provisioned.ok) throw new Error(provisioned.error);
+  }
 }
 
 export async function GET() {
@@ -100,22 +105,15 @@ export async function POST(req: Request) {
       rows?: DemoApplicantRow[];
     };
     const db = createSupabaseServiceRoleClient();
+    const user = await sessionUser();
 
     if (body.action === "replace") {
       const rows = Array.isArray(body.rows) ? body.rows.map(normalizeRow) : [];
+      if (!user && rows.some((row) => row.bucket === "approved")) {
+        return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+      }
       for (const row of rows) {
-        await db.from("manager_application_records").upsert(
-          {
-            id: row.id,
-            manager_user_id: row.managerUserId || null,
-            resident_email: row.email?.trim().toLowerCase() || null,
-            property_id: row.propertyId || row.application?.propertyId || null,
-            assigned_property_id: row.assignedPropertyId || null,
-            row_data: row,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" },
-        );
+        await persistNormalizedRow(db, row.id, row);
       }
       return NextResponse.json({ ok: true });
     }
@@ -156,19 +154,10 @@ export async function POST(req: Request) {
 
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });
     const row = normalizeRow(body.row);
-    const { error } = await db.from("manager_application_records").upsert(
-      {
-        id: row.id,
-        manager_user_id: row.managerUserId || null,
-        resident_email: row.email?.trim().toLowerCase() || null,
-        property_id: row.propertyId || row.application?.propertyId || null,
-        assigned_property_id: row.assignedPropertyId || null,
-        row_data: row,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" },
-    );
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!user && row.bucket === "approved") {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+    await persistNormalizedRow(db, row.id, row);
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save application.";

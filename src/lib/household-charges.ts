@@ -40,6 +40,7 @@ export type HouseholdChargeKind =
   | "prorated_utilities"
   | "security_deposit"
   | "move_in_fee"
+  | "other_cost"
   | "payment_at_signing"
   | "work_order_charge";
 
@@ -256,7 +257,8 @@ function chargeBusinessKey(charge: HouseholdCharge): string {
     charge.kind === "utilities" ||
     charge.kind === "prorated_utilities" ||
     charge.kind === "security_deposit" ||
-    charge.kind === "move_in_fee"
+    charge.kind === "move_in_fee" ||
+    charge.kind === "other_cost"
   )) {
     return `${charge.kind}|${charge.applicationId}`;
   }
@@ -361,6 +363,8 @@ function chargeTitle(kind: HouseholdChargeKind): string {
       return "Security deposit";
     case "move_in_fee":
       return "Move-in cost";
+    case "other_cost":
+      return "Other cost";
     case "payment_at_signing":
       return "Payment due at signing";
     case "work_order_charge":
@@ -385,6 +389,8 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
       return sub.securityDeposit;
     case "move_in_fee":
       return sub.moveInFee;
+    case "other_cost":
+      return "$0";
     case "payment_at_signing":
       return paymentAtSigningPriceLabel(sub);
     case "work_order_charge":
@@ -437,6 +443,8 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
   raw: string;
   amount: number;
 } {
+  const override = row.application?.managerUtilitiesOverride?.trim();
+  if (override != null && override !== "") return { raw: override, amount: parseMoneyAmount(override) };
   const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const prop = getPropertyById(propertyId);
@@ -449,6 +457,11 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
 }
 
 function selectedRoomRentAmount(row: DemoApplicantRow): number {
+  const override = row.application?.managerRentOverride?.trim();
+  if (override) {
+    const amount = parseMoneyAmount(override);
+    if (amount > 0) return amount;
+  }
   const signedRent = Number(row.signedMonthlyRent ?? 0);
   if (Number.isFinite(signedRent) && signedRent > 0) return signedRent;
   const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
@@ -837,6 +850,11 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const venmoSnap = sub?.venmoPaymentsEnabled && sub.venmoContact?.trim() ? sub.venmoContact.trim() : undefined;
   const leaseStart = row.application?.leaseStart?.trim() || undefined;
   const moveInDue = dueLabelForLeaseStart(leaseStart);
+  const savedAmount = (raw: string | undefined, fallback: string | undefined): number => {
+    const value = raw?.trim();
+    if (value != null && value !== "") return parseMoneyAmount(value);
+    return parseMoneyAmount(fallback ?? "");
+  };
   const before = readAll();
   recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId);
   const rows = readAll().filter(
@@ -898,9 +916,16 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     );
   }
 
-  if (sub) {
-    pushCharge("security_deposit", parseMoneyAmount(sub.securityDeposit), chargeTitle("security_deposit"), true, "Before lease signing");
-    pushCharge("move_in_fee", parseMoneyAmount(sub.moveInFee), chargeTitle("move_in_fee"), false, "Before move-in");
+  const securityDeposit = savedAmount(row.application?.managerSecurityDepositOverride, sub?.securityDeposit);
+  pushCharge("security_deposit", securityDeposit, chargeTitle("security_deposit"), true, "Before lease signing");
+
+  const moveInFee = savedAmount(row.application?.managerMoveInFeeOverride, sub?.moveInFee);
+  pushCharge("move_in_fee", moveInFee, chargeTitle("move_in_fee"), false, "Before move-in");
+
+  const otherCostAmount = parseMoneyAmount(row.application?.managerOtherCostAmount ?? "");
+  if (otherCostAmount > 0) {
+    const otherCostTitle = row.application?.managerOtherCostLabel?.trim() || chargeTitle("other_cost");
+    pushCharge("other_cost", otherCostAmount, otherCostTitle, false, "Before move-in");
   }
 
   const next = dedupeCharges([...rows, ...created]);
