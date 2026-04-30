@@ -387,6 +387,32 @@ function readRaw(): LeasePipelineRow[] | null {
   return canUseStorage() ? memoryRows : null;
 }
 
+function leaseAgreementKey(row: Pick<LeasePipelineRow, "axisId" | "residentEmail" | "propertyId" | "roomChoice">): string {
+  return row.axisId?.trim() || `${row.residentEmail.trim().toLowerCase()}::${row.propertyId ?? ""}::${row.roomChoice ?? ""}`;
+}
+
+function findRawLeaseRowIndex(rowId: string): number {
+  const raw = readRaw() ?? [];
+  const directIdx = raw.findIndex((r) => r.id === rowId);
+  if (directIdx !== -1) return directIdx;
+  const logicalRow = readLeasePipeline().find((r) => r.id === rowId);
+  if (!logicalRow) return -1;
+  const logicalKey = leaseAgreementKey(logicalRow);
+  const matches = raw
+    .map((row, idx) => ({ row, idx }))
+    .filter(({ row }) => leaseAgreementKey(row) === logicalKey);
+  if (matches.length === 0) return -1;
+  matches.sort((a, b) => {
+    const aHasDoc = Number(Boolean(a.row.generatedHtml || a.row.managerUploadedPdf?.dataUrl));
+    const bHasDoc = Number(Boolean(b.row.generatedHtml || b.row.managerUploadedPdf?.dataUrl));
+    if (bHasDoc !== aHasDoc) return bHasDoc - aHasDoc;
+    const aTs = Date.parse(a.row.updatedAtIso || "");
+    const bTs = Date.parse(b.row.updatedAtIso || "");
+    return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+  });
+  return matches[0]!.idx;
+}
+
 function write(rows: LeasePipelineRow[]) {
   if (!canUseStorage()) return;
   if (!leaseRowsChanged(memoryRows, rows)) return;
@@ -956,8 +982,8 @@ export function residentRequestEdits(email: string, message: string): boolean {
 }
 
 export function sendLeaseToResident(rowId: string): boolean {
-  const rows = readLeasePipeline();
-  const idx = rows.findIndex((r) => r.id === rowId);
+  const rows = [...(readRaw() ?? readLeasePipeline())];
+  const idx = findRawLeaseRowIndex(rowId);
   if (idx === -1) return false;
   const row = rows[idx]!;
   if (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl) return false;
