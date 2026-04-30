@@ -471,11 +471,11 @@ ${houseRules ? `<p>${houseRules}</p>` : ""}
 
 <h2>4. Rent</h2>
 <table>
-  <tr><th width="50%">Monthly base rent</th><td><strong>${escapeHtml(typeof monthlyRentStr === "string" ? monthlyRentStr : String(monthlyRentStr))}</strong></td></tr>
+  <tr><th width="50%">Monthly base rent</th><td><strong>${escapeHtml(monthlyRentBaseStr)}</strong></td></tr>
+  ${monthToMonthSurcharge > 0 ? `<tr><th>Month-to-month surcharge</th><td><strong>+${fmtUsd(monthToMonthSurcharge)} / month (non-refundable)</strong></td></tr>` : ""}
   <tr><th>Utilities / services (monthly estimate)</th><td><strong>${utilitiesStr}</strong></td></tr>
   ${totalMonthly ? `<tr class="total-row"><th>Total monthly payment</th><td><strong>${totalMonthly}</strong></td></tr>` : ""}
 </table>
-${monthToMonthSurchargeNote}
 <p>Rent is due on the <strong>1st calendar day</strong> of each month. ${paymentMethod}</p>
 <p><strong>Late fee:</strong> If rent is not received by the <strong>5th of the month</strong>, a late fee of $50.00 shall be assessed and is immediately due. Additional late fees of $10.00 per day may accrue after the 10th of the month, not to exceed amounts permitted under RCW 59.18.283.</p>
 
