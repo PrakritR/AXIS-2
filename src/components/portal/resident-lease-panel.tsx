@@ -340,10 +340,14 @@ export function ResidentLeasePanel() {
   };
 
   const handleModalSign = (signatureName: string) => {
-    if (!email) return;
+    if (!email || !pipelineRow) return;
     if (residentSignLease(email, signatureName)) {
+      const signedRow = {
+        ...pipelineRow,
+        residentSignature: { role: "resident" as const, name: signatureName, signedAtIso: new Date().toISOString() },
+      };
       setShowSigningModal(false);
-      showToast(hasBothLeaseSignatures({ ...pipelineRow, residentSignature: { role: "resident", name: signatureName, signedAtIso: new Date().toISOString() } }) ? "Lease fully signed." : "Lease signed. Your manager still needs to sign.");
+      showToast(hasBothLeaseSignatures(signedRow) ? "Lease fully signed." : "Lease signed. Your manager still needs to sign.");
       setPipelineTick((t) => t + 1);
     } else {
       showToast("Could not sign — try again.");
