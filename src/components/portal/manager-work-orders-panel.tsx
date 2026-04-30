@@ -149,50 +149,48 @@ export function ManagerWorkOrdersPanel({
     return m;
   }, [rows, hcTick]);
 
+  /** Schedule the visit (date required). Cost + email optional — only creates a billing charge if both are provided. */
   const saveScheduleFromOpen = (row: DemoManagerWorkOrderRow) => {
     const visitAt = visitAtById[row.id] ?? "";
     const iso = fromDatetimeLocalValue(visitAt);
-    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-    const amt = parseMoneyAmount(draft.cost);
-    const email = draft.email.trim().toLowerCase();
     if (!iso) {
       showToast("Choose a visit date and time to schedule.");
       return;
     }
-    if (!Number.isFinite(amt) || amt < 0) {
-      showToast("Enter a valid cost (0 or more) to schedule this work order.");
-      return;
-    }
-    if (!email || !email.includes("@")) {
-      showToast("Enter the resident email for billing.");
-      return;
-    }
-    const costLabel = `$${amt.toFixed(2)}`;
+    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
+    const costTrimmed = draft.cost.trim();
+    const amt = costTrimmed ? parseMoneyAmount(costTrimmed) : 0;
+    const email = draft.email.trim().toLowerCase();
+
     updateManagerWorkOrder(row.id, (r) => ({
       ...r,
       bucket: "scheduled",
       status: "Scheduled",
       scheduledAtIso: iso,
       scheduled: formatScheduledLabel(iso),
-      cost: costLabel,
-      residentEmail: draft.email.trim(),
-      residentName: draft.name.trim() || r.residentName,
+      ...(costTrimmed && Number.isFinite(amt) && amt >= 0 ? { cost: `$${amt.toFixed(2)}` } : {}),
+      ...(email && email.includes("@") ? { residentEmail: draft.email.trim() } : {}),
+      ...(draft.name.trim() ? { residentName: draft.name.trim() } : {}),
     }));
-    const created = recordWorkOrderResidentCharge({
-      managerUserId: effectiveManagerId,
-      workOrderId: row.id,
-      propertyLabel: row.propertyName,
-      unit: row.unit,
-      workOrderTitle: row.title,
-      amountInput: draft.cost,
-      residentEmail: draft.email,
-      residentName: draft.name,
-    });
+
+    let created = null;
+    if (email && email.includes("@") && Number.isFinite(amt) && amt > 0) {
+      created = recordWorkOrderResidentCharge({
+        managerUserId: effectiveManagerId,
+        workOrderId: row.id,
+        propertyLabel: row.propertyName,
+        unit: row.unit,
+        workOrderTitle: row.title,
+        amountInput: draft.cost,
+        residentEmail: draft.email,
+        residentName: draft.name,
+      });
+    }
     if (created) setHcTick((n) => n + 1);
     showToast(
       created
-        ? "Work order scheduled and pending payment created for the resident."
-        : "Work order scheduled. Add a valid cost and email to create the pending payment.",
+        ? "Work order scheduled and pending payment created."
+        : "Work order scheduled. Add cost and resident email in Details to bill the resident.",
     );
     setExpandedId(null);
     onAfterSchedule?.();
@@ -224,7 +222,7 @@ export function ManagerWorkOrdersPanel({
     setExpandedId(null);
   };
 
-  /** Persist an estimated or pass-through cost without changing bucket (visible to the resident). */
+  /** Persist cost without changing bucket. */
   const saveLoggedCost = (row: DemoManagerWorkOrderRow, pendingCharge: ReturnType<typeof findPendingWorkOrderCharge>) => {
     if (pendingCharge) {
       showToast("Cost is locked while a pending payment exists.");
@@ -267,15 +265,14 @@ export function ManagerWorkOrdersPanel({
   return (
     <div className={PORTAL_DATA_TABLE_WRAP}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="min-w-[780px] w-full border-collapse text-left text-sm">
+        <table className="min-w-[820px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Unit</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>Scheduled</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
               <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
             </tr>
@@ -285,32 +282,64 @@ export function ManagerWorkOrdersPanel({
               const draft = billDraftById[row.id] ?? defaultBillDraft(row);
               const pendingCharge = pendingByWoId.get(row.id);
               const visitAt = visitAtById[row.id] ?? "";
+              const isExpanded = expandedId === row.id;
 
               return (
                 <Fragment key={row.id}>
                   <tr className={PORTAL_TABLE_TR}>
-                    <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-slate-800`}>{row.id}</td>
-                    <td className={PORTAL_TABLE_TD}>{row.propertyName}</td>
-                    <td className={PORTAL_TABLE_TD}>{row.unit}</td>
-                    <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
+                    <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>
+                      {row.title}
+                      <p className="mt-0.5 text-[11px] font-normal text-slate-500 line-clamp-1">{row.description}</p>
+                    </td>
                     <td className={PORTAL_TABLE_TD}>
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}
-                      >
+                      <span className="text-slate-800">{row.propertyName}</span>
+                      {row.unit ? <span className="text-slate-400"> · {row.unit}</span> : null}
+                    </td>
+                    <td className={PORTAL_TABLE_TD}>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
                         {row.priority}
                       </span>
                     </td>
                     <td className={PORTAL_TABLE_TD}>{row.status}</td>
+                    <td className={PORTAL_TABLE_TD}>
+                      {row.bucket === "open" ? (
+                        <span className="text-slate-400 text-xs">Not scheduled</span>
+                      ) : row.scheduled && row.scheduled !== "—" ? (
+                        <span className="text-slate-700 text-xs">{row.scheduled}</span>
+                      ) : (
+                        <span className="text-slate-400 text-xs">—</span>
+                      )}
+                    </td>
                     <td className={PORTAL_TABLE_TD}>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</td>
                     <td className={`${PORTAL_TABLE_TD} text-right`}>
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-1.5 flex-wrap">
+                        {row.bucket === "open" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100`}
+                            onClick={() => openExpand(row)}
+                          >
+                            Schedule
+                          </Button>
+                        ) : null}
+                        {row.bucket === "scheduled" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100`}
+                            onClick={() => markComplete(row)}
+                          >
+                            Complete
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
                           variant="outline"
                           className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                          onClick={() => (expandedId === row.id ? setExpandedId(null) : openExpand(row))}
+                          onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
                         >
-                          {expandedId === row.id ? "Hide" : "Details"}
+                          {isExpanded ? "Hide" : "Details"}
                         </Button>
                         <Button
                           type="button"
@@ -323,75 +352,72 @@ export function ManagerWorkOrdersPanel({
                       </div>
                     </td>
                   </tr>
-                  {expandedId === row.id ? (
+                  {isExpanded ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={8} className={PORTAL_TABLE_DETAIL_CELL}>
+                      <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
                         <p className="text-sm leading-relaxed text-slate-600">{row.description}</p>
                         <p className="mt-1.5 text-xs text-slate-500">
                           Resident preferred arrival:{" "}
                           <span className="font-medium text-slate-700">{row.preferredArrival?.trim() || "Anytime"}</span>
                         </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {row.bucket === "open" ? (
-                            <span>
-                              Visit: <span className="text-slate-700">not scheduled</span>
-                              {row.cost !== "—" ? (
-                                <>
-                                  {" "}
-                                  · Logged cost <span className="text-slate-700">{row.cost}</span>
-                                </>
-                              ) : null}
-                            </span>
-                          ) : (
-                            <span>
-                              Scheduled <span className="text-slate-700">{row.scheduled}</span>
-                              {row.cost !== "—" ? (
-                                <>
-                                  {" "}
-                                  · Logged cost <span className="text-slate-700">{row.cost}</span>
-                                </>
-                              ) : null}
-                            </span>
-                          )}
-                        </p>
 
+                        {/* Schedule section */}
                         {row.bucket !== "completed" ? (
                           <div className="mt-4 rounded-lg border border-slate-200/60 bg-white p-3">
-                            <p className="text-xs font-medium text-slate-800">Visit</p>
+                            <p className="text-xs font-semibold text-slate-800">
+                              {row.bucket === "open" ? "Schedule visit" : "Reschedule visit"}
+                            </p>
                             <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
                               {row.bucket === "open"
-                                ? "Pick a date and time, enter pass-through cost and resident email, then schedule. The work order stays Open until all are set."
-                                : "Adjust the visit time without changing billing. Use Payments to mark the resident line paid."}
+                                ? "Pick a date and time and click Schedule. Billing is optional and can be added after."
+                                : "Update the visit date and time. Billing is managed separately in Payments."}
                             </p>
-                            <div className="mt-2 max-w-md">
-                              <p className="mb-1 text-[11px] font-medium text-slate-600">Visit date &amp; time</p>
-                              <Input
-                                type="datetime-local"
-                                value={visitAt}
-                                onChange={(e) =>
-                                  setVisitAtById((prev) => ({
-                                    ...prev,
-                                    [row.id]: e.target.value,
-                                  }))
-                                }
-                                className="h-9 rounded-md text-sm"
-                              />
+                            <div className="mt-2 flex flex-wrap items-end gap-2">
+                              <div>
+                                <p className="mb-1 text-[11px] font-medium text-slate-600">Visit date &amp; time</p>
+                                <Input
+                                  type="datetime-local"
+                                  value={visitAt}
+                                  onChange={(e) =>
+                                    setVisitAtById((prev) => ({ ...prev, [row.id]: e.target.value }))
+                                  }
+                                  className="h-9 rounded-md text-sm"
+                                />
+                              </div>
+                              {row.bucket === "open" ? (
+                                <Button
+                                  type="button"
+                                  variant="primary"
+                                  className="h-9 rounded-full px-4 text-sm"
+                                  onClick={() => saveScheduleFromOpen(row)}
+                                >
+                                  Schedule visit
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-9 rounded-full px-4 text-sm"
+                                  onClick={() => rescheduleVisit(row)}
+                                >
+                                  Save new time
+                                </Button>
+                              )}
                             </div>
                           </div>
                         ) : null}
 
+                        {/* Billing section */}
                         {row.bucket !== "completed" ? (
                           <div className="mt-4 rounded-lg border border-slate-200/60 bg-white p-3">
-                            <p className="text-xs font-medium text-slate-800">Bill resident</p>
+                            <p className="text-xs font-semibold text-slate-800">Billing (optional)</p>
                             <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-                              Pass-through cost creates a pending line on Payments for you and the resident. When cost and
-                              email are valid on a scheduled work order, a pending charge is created automatically.
+                              Enter a pass-through cost and resident email to create a pending payment line. Leave blank if there is no charge.
                             </p>
                             {pendingCharge ? (
                               <p className="mt-2 rounded-md bg-emerald-50/90 px-2.5 py-1.5 text-[11px] text-emerald-900 ring-1 ring-emerald-200/70">
                                 Pending: <span className="font-semibold">{pendingCharge.balanceLabel}</span> ·{" "}
-                                <span className="font-medium">{pendingCharge.residentEmail}</span>. Mark paid in Payments
-                                before changing the amount.
+                                <span className="font-medium">{pendingCharge.residentEmail}</span>. Mark paid in Payments before changing the amount.
                               </p>
                             ) : null}
                             <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
@@ -451,11 +477,13 @@ export function ManagerWorkOrdersPanel({
                         ) : null}
 
                         {row.bucket === "completed" ? (
-                          <p className="mt-3 text-xs text-slate-500">This work order is completed. Billing history stays in Payments.</p>
+                          <p className="mt-3 text-xs text-slate-500">
+                            This work order is completed.{row.scheduled && row.scheduled !== "—" ? ` Visit was on ${row.scheduled}.` : ""} Billing history is in Payments.
+                          </p>
                         ) : null}
 
                         <PortalTableDetailActions>
-                          {row.bucket === "open" ? (
+                          {row.bucket !== "completed" && !pendingCharge ? (
                             <Button
                               type="button"
                               variant="outline"
@@ -463,37 +491,12 @@ export function ManagerWorkOrdersPanel({
                               onClick={() => saveLoggedCost(row, pendingCharge)}
                             >
                               Save cost
-                            </Button>
-                          ) : null}
-                          {row.bucket === "scheduled" && !pendingCharge ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => saveLoggedCost(row, pendingCharge)}
-                            >
-                              Save cost
-                            </Button>
-                          ) : null}
-                          {row.bucket === "open" ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => saveScheduleFromOpen(row)}
-                            >
-                              Schedule visit
                             </Button>
                           ) : null}
                           {row.bucket === "scheduled" ? (
-                            <>
-                              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => rescheduleVisit(row)}>
-                                Save new visit time
-                              </Button>
-                              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markComplete(row)}>
-                                Mark complete
-                              </Button>
-                            </>
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markComplete(row)}>
+                              Mark complete
+                            </Button>
                           ) : null}
                           <Button
                             type="button"
