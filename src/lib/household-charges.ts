@@ -176,10 +176,18 @@ export async function syncHouseholdChargesFromServer(): Promise<{
       const serverCharges = Array.isArray(body.charges) ? body.charges : [];
       const serverProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
       hydrateHouseholdStateFromSession();
+      const serverChargeIds = new Set(serverCharges.map((c) => c.id));
+      const serverProfileIds = new Set(serverProfiles.map((p) => p.id));
+      const hasLocalOnlyCharges = memoryCharges.some((c) => !serverChargeIds.has(c.id));
+      const hasLocalOnlyProfiles = memoryRentProfiles.some((p) => !serverProfileIds.has(p.id));
       // Server is source of truth for status; merge local-only items (not yet synced) on top
       memoryCharges = dedupeCharges([...serverCharges, ...memoryCharges]);
       memoryRentProfiles = dedupeRecurringRentProfiles([...serverProfiles, ...memoryRentProfiles]);
       persistHouseholdStateToSession();
+      // Backfill server with any local-only rows (created before API was wired, or from offline edits)
+      if (hasLocalOnlyCharges || hasLocalOnlyProfiles) {
+        postHouseholdPayload({ action: "replace", charges: memoryCharges, rentProfiles: memoryRentProfiles });
+      }
       syncAllRecurringRentCharges();
       return { charges: readAll(), rentProfiles: readRentProfiles() };
     })

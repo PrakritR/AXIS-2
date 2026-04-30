@@ -159,8 +159,8 @@ export function ManagerWorkOrdersPanel({
       showToast("Choose a visit date and time to schedule.");
       return;
     }
-    if (amt <= 0) {
-      showToast("Enter a pass-through cost greater than zero to move this work order to Scheduled.");
+    if (!Number.isFinite(amt) || amt < 0) {
+      showToast("Enter a valid cost (0 or more) to schedule this work order.");
       return;
     }
     if (!email || !email.includes("@")) {
@@ -238,8 +238,8 @@ export function ManagerWorkOrdersPanel({
       return;
     }
     const amt = parseMoneyAmount(trimmed);
-    if (amt <= 0) {
-      showToast("Enter a valid dollar amount or clear the field.");
+    if (!Number.isFinite(amt) || amt < 0) {
+      showToast("Enter a valid dollar amount (0 or more) or clear the field.");
       return;
     }
     const costLabel = `$${amt.toFixed(2)}`;

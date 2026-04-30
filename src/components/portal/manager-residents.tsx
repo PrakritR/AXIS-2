@@ -106,6 +106,29 @@ function previewLine(body: string, max = 120) {
   return `${normalized.slice(0, max)}…`;
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function toDatetimeLocalValue(iso: string | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function fromDatetimeLocalValue(s: string): string | null {
+  if (!s.trim()) return null;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function formatScheduledLabel(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 function ResidentWorkOrderCostEditor({
   row,
   onSaved,
@@ -143,8 +166,8 @@ function ResidentWorkOrderCostEditor({
       return;
     }
     const amt = parseMoneyAmount(trimmed);
-    if (amt <= 0) {
-      showToast("Enter a valid dollar amount or clear the field.");
+    if (!Number.isFinite(amt) || amt < 0) {
+      showToast("Enter a valid dollar amount (0 or more) or clear the field.");
       return;
     }
     updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
@@ -197,6 +220,7 @@ export function ManagerResidents() {
   const [messageSubject, setMessageSubject] = useState("");
   const [messageBody, setMessageBody] = useState("");
   const [signingLease, setSigningLease] = useState<LeasePipelineRow | null>(null);
+  const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -1084,7 +1108,47 @@ export function ManagerResidents() {
                                               {workOrder.priority}
                                             </span>
                                           </td>
-                                          <td className="py-2 pr-4 text-slate-700">{workOrder.scheduled}</td>
+                                          <td className="py-2 pr-4">
+                                            {workOrder.bucket === "completed" ? (
+                                              <span className="text-xs text-slate-700">{workOrder.scheduled !== "—" ? workOrder.scheduled : "—"}</span>
+                                            ) : (
+                                              <div className="flex flex-col gap-1">
+                                                {workOrder.scheduled && workOrder.scheduled !== "—" ? (
+                                                  <span className="text-xs text-slate-500">{workOrder.scheduled}</span>
+                                                ) : null}
+                                                <div className="flex items-center gap-1">
+                                                  <Input
+                                                    type="datetime-local"
+                                                    value={visitAtById[workOrder.id] ?? toDatetimeLocalValue(workOrder.scheduledAtIso)}
+                                                    onChange={(e) =>
+                                                      setVisitAtById((prev) => ({ ...prev, [workOrder.id]: e.target.value }))
+                                                    }
+                                                    className="h-7 w-[10rem] rounded-md text-[11px]"
+                                                  />
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="h-7 shrink-0 rounded-full px-2 py-0 text-[10px]"
+                                                    onClick={() => {
+                                                      const iso = fromDatetimeLocalValue(visitAtById[workOrder.id] ?? "");
+                                                      if (!iso) { showToast("Choose a date and time."); return; }
+                                                      updateManagerWorkOrder(workOrder.id, (row) => ({
+                                                        ...row,
+                                                        scheduledAtIso: iso,
+                                                        scheduled: formatScheduledLabel(iso),
+                                                        bucket: row.bucket === "open" ? "scheduled" : row.bucket,
+                                                        status: row.bucket === "open" ? "Scheduled" : row.status,
+                                                      }));
+                                                      setWorkOrderTick((n) => n + 1);
+                                                      showToast("Visit scheduled.");
+                                                    }}
+                                                  >
+                                                    Save
+                                                  </Button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </td>
                                           <td className="py-2 text-right">
                                             <div className="flex justify-end gap-2">
                                               {workOrder.bucket !== "completed" ? (
