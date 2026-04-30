@@ -1,7 +1,7 @@
 /**
  * Unified manager / admin / resident lease workflow backed by Supabase records.
  * Buckets match UI tabs: manager → admin → resident → signed.
- * Signing order: manager prepares/sends → resident signs (row moves to **signed**, “Awaiting manager signature”) → manager countersigns → stage “Signed”.
+ * Signing order: manager prepares/sends → resident signs → manager countersigns → fully signed.
  */
 
 import { type ManagerLeaseBucket } from "@/data/demo-portal";
@@ -9,7 +9,7 @@ import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/ge
 import { effectiveApplicationForRow, readManagerApplicationRows, signedRentLabelForRow } from "@/lib/manager-applications-storage";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
-import { clearUploadedOwnLease, readUploadedOwnLease, saveUploadedOwnLease } from "@/lib/resident-lease-upload";
+import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
@@ -134,6 +134,15 @@ export type LeaseSignature = {
   role: "manager" | "resident";
 };
 
+export type LeaseWorkflowStatus =
+  | "Draft"
+  | "Manager Review"
+  | "Admin Review"
+  | "Resident Signature Pending"
+  | "Manager Signature Pending"
+  | "Fully Signed"
+  | "Voided";
+
 export type LeasePipelineRow = {
   id: string;
   residentName: string;
@@ -153,7 +162,6 @@ export type LeasePipelineRow = {
   signedRentLabel?: string | null;
   application?: Partial<RentalWizardFormState>;
   generatedHtml?: string | null;
-  signedHtml?: string | null;
   generatedAtIso?: string | null;
   managerUploadedPdf?: { dataUrl: string; fileName: string; uploadedAt: string } | null;
   thread: LeaseThreadMessage[];
@@ -161,7 +169,56 @@ export type LeasePipelineRow = {
   residentSignature?: LeaseSignature | null;
   signatureName?: string | null;
   signedAtIso?: string | null;
+  status?: LeaseWorkflowStatus;
+  currentActorRole?: LeaseThreadRole | "system" | null;
+  residentSignedAt?: string | null;
+  managerSignedAt?: string | null;
+  adminReviewRequestedAt?: string | null;
+  sentToResidentAt?: string | null;
+  fullySignedAt?: string | null;
+  voidedAt?: string | null;
+  versionNumber?: number;
 };
+
+function workflowStatusForRow(
+  input: Pick<
+    LeasePipelineRow,
+    "bucket" | "managerSignature" | "residentSignature" | "signatureName" | "signedAtIso" | "voidedAt" | "generatedHtml" | "managerUploadedPdf"
+  >,
+): LeaseWorkflowStatus {
+  const residentSigned = Boolean(
+    (input.residentSignature?.name && input.residentSignature?.signedAtIso) || (input.signatureName && input.signedAtIso),
+  );
+  const managerSigned = Boolean(input.managerSignature?.name && input.managerSignature?.signedAtIso);
+  if (input.voidedAt) return "Voided";
+  if (managerSigned && residentSigned) return "Fully Signed";
+  if (input.bucket === "admin") return "Admin Review";
+  if (input.bucket === "resident") return "Resident Signature Pending";
+  if (input.bucket === "signed") return "Manager Signature Pending";
+  return input.generatedHtml || input.managerUploadedPdf ? "Manager Review" : "Draft";
+}
+
+function currentActorForStatus(status: LeaseWorkflowStatus): LeasePipelineRow["currentActorRole"] {
+  switch (status) {
+    case "Draft":
+    case "Manager Review":
+    case "Manager Signature Pending":
+      return "manager";
+    case "Admin Review":
+      return "admin";
+    case "Resident Signature Pending":
+      return "resident";
+    case "Fully Signed":
+    case "Voided":
+      return "system";
+    default:
+      return "system";
+  }
+}
+
+function stageLabelForStatus(status: LeaseWorkflowStatus): string {
+  return status;
+}
 
 /** Coerce partial rows from localStorage so UI never reads undefined thread / notes / bucket. */
 export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
@@ -189,22 +246,27 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
   );
   const residentSignature = normalizeLeaseSignature(r.residentSignature, "resident") ?? legacyResidentSignature;
   const managerSignature = normalizeLeaseSignature(r.managerSignature, "manager");
-  const residentSigned = Boolean(residentSignature?.name && residentSignature.signedAtIso);
-  const bothSigned = Boolean(managerSignature && residentSigned);
-
   let bucket: ManagerLeaseBucket =
     b === "manager" || b === "admin" || b === "resident" || b === "signed" ? b : "manager";
-  /** Legacy: resident already signed while bucket was still "resident". */
-  if (residentSigned && !managerSignature && bucket === "resident") {
-    bucket = "signed";
-  }
-
-  let stageLabel = String(r.stageLabel ?? "").trim() || stageLabelForBucket(bucket);
-  if (bothSigned && bucket === "signed") {
-    stageLabel = stageLabelForBucket("signed");
-  } else if (residentSigned && !managerSignature && bucket === "signed") {
-    stageLabel = "Awaiting manager signature";
-  }
+  const residentSigned = Boolean(residentSignature?.name && residentSignature.signedAtIso);
+  if (residentSigned && !managerSignature && bucket === "resident") bucket = "signed";
+  const status = workflowStatusForRow({
+    bucket,
+    managerSignature,
+    residentSignature,
+    signatureName: typeof r.signatureName === "string" ? r.signatureName : residentSignature?.name ?? null,
+    signedAtIso: typeof r.signedAtIso === "string" ? r.signedAtIso : residentSignature?.signedAtIso ?? null,
+    voidedAt: typeof r.voidedAt === "string" ? r.voidedAt : null,
+    generatedHtml: r.generatedHtml ?? null,
+    managerUploadedPdf: r.managerUploadedPdf ?? null,
+  });
+  const stageLabel = String(r.stageLabel ?? "").trim() || stageLabelForStatus(status);
+  const versionNumber =
+    typeof r.versionNumber === "number" && Number.isFinite(r.versionNumber)
+      ? Math.max(1, Math.floor(r.versionNumber))
+      : typeof r.pdfVersion === "number" && Number.isFinite(r.pdfVersion)
+        ? Math.max(1, Math.floor(r.pdfVersion))
+        : 1;
 
   return {
     id,
@@ -225,7 +287,6 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     signedRentLabel: typeof r.signedRentLabel === "string" ? r.signedRentLabel : null,
     application: r.application,
     generatedHtml: r.generatedHtml ?? null,
-    signedHtml: r.signedHtml ?? null,
     generatedAtIso: r.generatedAtIso ?? null,
     managerUploadedPdf: r.managerUploadedPdf ?? null,
     thread: safeThread,
@@ -233,6 +294,22 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     residentSignature,
     signatureName: typeof r.signatureName === "string" ? r.signatureName : residentSignature?.name ?? null,
     signedAtIso: typeof r.signedAtIso === "string" ? r.signedAtIso : residentSignature?.signedAtIso ?? null,
+    status,
+    currentActorRole:
+      (typeof r.currentActorRole === "string" ? (r.currentActorRole as LeasePipelineRow["currentActorRole"]) : null) ??
+      currentActorForStatus(status),
+    residentSignedAt: typeof r.residentSignedAt === "string" ? r.residentSignedAt : residentSignature?.signedAtIso ?? null,
+    managerSignedAt: typeof r.managerSignedAt === "string" ? r.managerSignedAt : managerSignature?.signedAtIso ?? null,
+    adminReviewRequestedAt: typeof r.adminReviewRequestedAt === "string" ? r.adminReviewRequestedAt : null,
+    sentToResidentAt: typeof r.sentToResidentAt === "string" ? r.sentToResidentAt : null,
+    fullySignedAt:
+      typeof r.fullySignedAt === "string"
+        ? r.fullySignedAt
+        : status === "Fully Signed"
+          ? managerSignature?.signedAtIso ?? null
+          : null,
+    voidedAt: typeof r.voidedAt === "string" ? r.voidedAt : null,
+    versionNumber,
   };
 }
 
@@ -276,9 +353,9 @@ function stageLabelForBucket(b: ManagerLeaseBucket): string {
     case "admin":
       return "Admin review";
     case "resident":
-      return "With resident";
+      return "Resident Signature Pending";
     case "signed":
-      return "Signed";
+      return "Manager Signature Pending";
     default:
       return "—";
   }
@@ -369,7 +446,6 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       signedRentLabel: signedRentLabelForRow(app),
       application: effectiveApplicationForRow(app),
       generatedHtml: idx === -1 ? null : next[idx]!.generatedHtml,
-      signedHtml: idx === -1 ? null : next[idx]!.signedHtml,
       generatedAtIso: idx === -1 ? null : next[idx]!.generatedAtIso,
       managerUploadedPdf: idx === -1 ? null : next[idx]!.managerUploadedPdf,
       thread: idx === -1 ? [] : next[idx]!.thread,
@@ -434,7 +510,7 @@ export function readLeasePipeline(managerUserId?: string | null): LeasePipelineR
     let stored = readRaw() ?? [];
     stored = stored.map(normalizeLeasePipelineRow);
     const rows = enrichFromApplications(stored);
-    const merged = syncApprovedApplications(rows, managerUserId);
+    const merged = dedupeLeasePipelineRows(syncApprovedApplications(rows, managerUserId));
     if (JSON.stringify(merged) !== JSON.stringify(rows)) {
       return merged;
     }
@@ -529,28 +605,27 @@ export function updateLeasePipelineRow(id: string, patch: Partial<LeasePipelineR
   if (idx === -1) return false;
   const cur = rows[idx]!;
   const iso = new Date().toISOString();
-  const nextRow: LeasePipelineRow = {
+  const nextRow = normalizeLeasePipelineRow({
     ...cur,
     ...patch,
     updatedAtIso: patch.updatedAtIso ?? iso,
     updated: patch.updated ?? formatUpdatedLabel(patch.updatedAtIso ?? iso),
-  };
-  if (patch.bucket && !patch.stageLabel) {
-    nextRow.stageLabel = stageLabelForBucket(patch.bucket);
-  }
+    versionNumber: patch.versionNumber ?? cur.versionNumber ?? cur.pdfVersion,
+  });
+  nextRow.stageLabel = patch.stageLabel ?? stageLabelForStatus(nextRow.status ?? workflowStatusForRow(nextRow));
+  nextRow.currentActorRole = patch.currentActorRole ?? currentActorForStatus(nextRow.status ?? workflowStatusForRow(nextRow));
   const next = [...rows];
   next[idx] = nextRow;
   write(next);
   return true;
 }
 
-/** Refresh `signedHtml` from `generatedHtml` and current signatures (e.g. after clearing a signature). */
-export function recomputeLeaseSignedHtml(rowId: string): boolean {
-  const rows = readLeasePipeline();
-  const row = rows.find((r) => r.id === rowId);
-  if (!row) return false;
-  const signedHtml = hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, row.generatedHtml) : null;
-  return updateLeasePipelineRow(rowId, { signedHtml });
+export function getLeaseDocumentHtml(row: LeasePipelineRow): string | null {
+  return hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, row.generatedHtml) : row.generatedHtml ?? null;
+}
+
+export function recomputeLeaseSignedHtml(): boolean {
+  return true;
 }
 
 export function appendLeaseThreadMessage(id: string, role: LeaseThreadRole, body: string): boolean {
@@ -577,6 +652,9 @@ export function generateLeaseHtmlForRow(rowId: string): { ok: true; version: num
   const rows = readLeasePipeline();
   const row = rows.find((r) => r.id === rowId);
   if (!row) return { ok: false, error: "Lease not found." };
+  if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
+    return { ok: false, error: "This lease can no longer be regenerated after signatures. Void/restart it first." };
+  }
   const app = row.application;
   if (!app || !Object.keys(app).length) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
@@ -588,13 +666,15 @@ export function generateLeaseHtmlForRow(rowId: string): { ok: true; version: num
   } catch {
     return { ok: false, error: "Could not build lease from saved application — check answers or regenerate after fixing data." };
   }
-  const version = row.pdfVersion + 1;
-  const signedHtml = hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, html) : null;
+  const version = (row.versionNumber ?? row.pdfVersion) + 1;
   const ok = updateLeasePipelineRow(rowId, {
     generatedHtml: html,
-    signedHtml,
+    managerUploadedPdf: null,
     generatedAtIso: new Date().toISOString(),
     pdfVersion: version,
+    versionNumber: version,
+    status: "Manager Review",
+    currentActorRole: "manager",
     notes: row.notes,
   });
   return ok ? { ok: true, version } : { ok: false, error: "Could not save generated lease." };
@@ -609,6 +689,10 @@ export function regenerateAllLeaseHtml(): { updated: number; skipped: number } {
   let updated = 0;
   let skipped = 0;
   for (const row of rows) {
+    if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
+      skipped++;
+      continue;
+    }
     const app = row.application;
     if (!app || !Object.keys(app).length) {
       skipped++;
@@ -617,12 +701,15 @@ export function regenerateAllLeaseHtml(): { updated: number; skipped: number } {
     try {
       const ctx = leaseContextFromApplication(app as RentalWizardFormState);
       const html = buildAiGeneratedLeaseHtml(ctx);
-      const version = row.pdfVersion + 1;
+      const version = (row.versionNumber ?? row.pdfVersion) + 1;
       updateLeasePipelineRow(row.id, {
         generatedHtml: html,
-        signedHtml: hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, html) : null,
+        managerUploadedPdf: null,
         generatedAtIso: new Date().toISOString(),
         pdfVersion: version,
+        versionNumber: version,
+        status: "Manager Review",
+        currentActorRole: "manager",
       });
       updated++;
     } catch {
@@ -644,21 +731,28 @@ export function downloadLeaseFromRow(row: LeasePipelineRow): void {
     a.remove();
     return;
   }
-  const residentOwn = row.residentEmail ? readUploadedOwnLease(row.residentEmail) : null;
-  if (residentOwn?.dataUrl) {
-    const a = document.createElement("a");
-    a.href = residentOwn.dataUrl;
-    a.download = residentOwn.fileName || "lease.pdf";
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    return;
-  }
-  if (row.signedHtml || row.generatedHtml) {
+  if (row.generatedHtml) {
     printLeaseAsPdf(row);
     return;
   }
+}
+
+export function dedupeLeasePipelineRows(rows: LeasePipelineRow[]): LeasePipelineRow[] {
+  const byAgreement = new Map<string, LeasePipelineRow>();
+  for (const row of rows) {
+    const key = row.axisId?.trim() || `${row.residentEmail.trim().toLowerCase()}::${row.propertyId ?? ""}::${row.roomChoice ?? ""}`;
+    const existing = byAgreement.get(key);
+    if (!existing) {
+      byAgreement.set(key, row);
+      continue;
+    }
+    const existingTs = Date.parse(existing.updatedAtIso || "");
+    const rowTs = Date.parse(row.updatedAtIso || "");
+    if ((Number.isFinite(rowTs) ? rowTs : 0) >= (Number.isFinite(existingTs) ? existingTs : 0)) {
+      byAgreement.set(key, row);
+    }
+  }
+  return [...byAgreement.values()];
 }
 
 export function managerUploadLeasePdf(rowId: string, file: File): Promise<{ ok: boolean; error?: string }> {
@@ -677,6 +771,10 @@ export function managerUploadLeasePdf(rowId: string, file: File): Promise<{ ok: 
       resolve({ ok: false, error: "Missing resident email on lease row." });
       return;
     }
+    if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
+      resolve({ ok: false, error: "This lease can no longer be replaced after signatures. Void/restart it first." });
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
@@ -685,11 +783,14 @@ export function managerUploadLeasePdf(rowId: string, file: File): Promise<{ ok: 
         fileName: file.name,
         uploadedAt: new Date().toISOString(),
       };
-      saveUploadedOwnLease(row.residentEmail, payload);
       const iso = new Date().toISOString();
       updateLeasePipelineRow(rowId, {
         managerUploadedPdf: payload,
-        pdfVersion: row.pdfVersion + 1,
+        generatedHtml: null,
+        pdfVersion: (row.versionNumber ?? row.pdfVersion) + 1,
+        versionNumber: (row.versionNumber ?? row.pdfVersion) + 1,
+        status: "Manager Review",
+        currentActorRole: "manager",
         updatedAtIso: iso,
         updated: formatUpdatedLabel(iso),
       });
@@ -706,7 +807,7 @@ export function residentSignLease(email: string, signatureName?: string): boolea
   const idx = rows.findIndex((r) => r.residentEmail.toLowerCase() === email.trim().toLowerCase());
   if (idx === -1) return false;
   const row = rows[idx]!;
-  if (row.bucket !== "resident") return false;
+  if (row.status !== "Resident Signature Pending" || row.bucket !== "resident" || row.residentSignature) return false;
   const iso = new Date().toISOString();
   const trimmedSignature = signatureName?.trim() || row.residentName || "Resident";
   const residentSignature: LeaseSignature = { role: "resident", name: trimmedSignature, signedAtIso: iso };
@@ -722,12 +823,15 @@ export function residentSignLease(email: string, signatureName?: string): boolea
   rows[idx] = {
     ...nextRowBase,
     bucket: "signed",
-    stageLabel: bothSigned ? stageLabelForBucket("signed") : "Awaiting manager signature",
+    status: bothSigned ? "Fully Signed" : "Manager Signature Pending",
+    currentActorRole: bothSigned ? "system" : "manager",
     thread,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
     notes: row.notes,
-    signedHtml: applyLeaseSignaturesToHtml(nextRowBase, row.generatedHtml),
+    residentSignedAt: iso,
+    sentToResidentAt: row.sentToResidentAt ?? row.updatedAtIso,
+    fullySignedAt: bothSigned ? iso : null,
   };
   write(rows);
   return true;
@@ -739,7 +843,7 @@ export function managerSignLease(rowId: string, signatureName: string): boolean 
   const idx = rows.findIndex((r) => r.id === rowId);
   if (idx === -1) return false;
   const row = rows[idx]!;
-  if (!residentHasSignedLease(row)) return false;
+  if (row.status !== "Manager Signature Pending" || row.bucket !== "signed" || !residentHasSignedLease(row) || row.managerSignature) return false;
   const trimmedSignature = signatureName.trim();
   if (!trimmedSignature) return false;
   const iso = new Date().toISOString();
@@ -753,11 +857,13 @@ export function managerSignLease(rowId: string, signatureName: string): boolean 
   rows[idx] = {
     ...nextRowBase,
     bucket: "signed",
-    stageLabel: bothSigned ? stageLabelForBucket("signed") : row.stageLabel,
+    status: bothSigned ? "Fully Signed" : "Manager Signature Pending",
+    currentActorRole: bothSigned ? "system" : "manager",
     thread,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
-    signedHtml: applyLeaseSignaturesToHtml(nextRowBase, row.generatedHtml),
+    managerSignedAt: iso,
+    fullySignedAt: bothSigned ? iso : null,
   };
   write(rows);
   return true;
@@ -776,7 +882,7 @@ export function printLeaseAsPdf(row: LeasePipelineRow): void {
     a.remove();
     return;
   }
-  const html = row.signedHtml ?? row.generatedHtml;
+  const html = getLeaseDocumentHtml(row);
   if (!html) return;
   const printHtml = html.replace(
     "</head>",
@@ -800,11 +906,76 @@ export function residentRequestEdits(email: string, message: string): boolean {
   rows[idx] = {
     ...row,
     bucket: "manager",
-    stageLabel: stageLabelForBucket("manager"),
+    status: "Manager Review",
+    currentActorRole: "manager",
     thread,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
   };
+  write(rows);
+  return true;
+}
+
+export function sendLeaseToResident(rowId: string): boolean {
+  const rows = readLeasePipeline();
+  const idx = rows.findIndex((r) => r.id === rowId);
+  if (idx === -1) return false;
+  const row = rows[idx]!;
+  if (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl) return false;
+  if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) return false;
+  const iso = new Date().toISOString();
+  rows[idx] = normalizeLeasePipelineRow({
+    ...row,
+    bucket: "resident",
+    status: "Resident Signature Pending",
+    currentActorRole: "resident",
+    sentToResidentAt: iso,
+    updatedAtIso: iso,
+    updated: formatUpdatedLabel(iso),
+    managerSignature: null,
+    residentSignature: null,
+    signatureName: null,
+    signedAtIso: null,
+  });
+  write(rows);
+  return true;
+}
+
+export function sendLeaseToAdminReview(rowId: string): boolean {
+  const rows = readLeasePipeline();
+  const idx = rows.findIndex((r) => r.id === rowId);
+  if (idx === -1) return false;
+  const row = rows[idx]!;
+  if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) return false;
+  const iso = new Date().toISOString();
+  rows[idx] = normalizeLeasePipelineRow({
+    ...row,
+    bucket: "admin",
+    status: "Admin Review",
+    currentActorRole: "admin",
+    adminReviewRequestedAt: iso,
+    updatedAtIso: iso,
+    updated: formatUpdatedLabel(iso),
+  });
+  write(rows);
+  return true;
+}
+
+export function sendLeaseBackToManager(rowId: string): boolean {
+  const rows = readLeasePipeline();
+  const idx = rows.findIndex((r) => r.id === rowId);
+  if (idx === -1) return false;
+  const row = rows[idx]!;
+  if (row.status === "Fully Signed" || row.status === "Voided") return false;
+  const iso = new Date().toISOString();
+  rows[idx] = normalizeLeasePipelineRow({
+    ...row,
+    bucket: "manager",
+    status: "Manager Review",
+    currentActorRole: "manager",
+    updatedAtIso: iso,
+    updated: formatUpdatedLabel(iso),
+  });
   write(rows);
   return true;
 }

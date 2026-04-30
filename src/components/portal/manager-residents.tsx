@@ -47,12 +47,12 @@ import {
   LEASE_PIPELINE_EVENT,
   managerUploadLeasePdf,
   readLeasePipeline,
+  sendLeaseBackToManager,
+  sendLeaseToResident,
   syncLeasePipelineFromServer,
-  updateLeasePipelineRow,
   downloadLeaseFromRow,
   printLeaseAsPdf,
   hasBothLeaseSignatures,
-  recomputeLeaseSignedHtml,
   residentHasSignedLease,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
@@ -695,10 +695,9 @@ export function ManagerResidents() {
                                             return;
                                           }
                                           appendLeaseThreadMessage(residentLease.id, "manager", "Sent lease to resident for review and signature.");
-                                          updateLeasePipelineRow(residentLease.id, { bucket: "resident", managerSignature: null });
-                                          recomputeLeaseSignedHtml(residentLease.id);
+                                          sendLeaseToResident(residentLease.id);
                                           setLeaseTick((n) => n + 1);
-                                          showToast("Lease moved to With resident.");
+                                          showToast("Lease moved to Resident Signature Pending.");
                                         }}
                                       >
                                         Send to resident
@@ -710,9 +709,9 @@ export function ManagerResidents() {
                                         className="rounded-full px-3 py-1 text-xs"
                                         onClick={() => {
                                           appendLeaseThreadMessage(residentLease.id, "manager", "Moved lease back to manager review.");
-                                          updateLeasePipelineRow(residentLease.id, { bucket: "manager" });
+                                          sendLeaseBackToManager(residentLease.id);
                                           setLeaseTick((n) => n + 1);
-                                          showToast("Lease moved to Manager review.");
+                                          showToast("Lease moved to Manager Review.");
                                         }}
                                       >
                                         Move to manager review
@@ -744,30 +743,18 @@ export function ManagerResidents() {
                                 ) : null}
                               </div>
                               {residentLease ? (
-                                <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                                  <div>
-                                    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3">
-                                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Generated lease</p>
-                                      <p className="mt-1 text-xs text-slate-500">
-                                        Original generated/uploaded lease before signatures are stamped.
-                                      </p>
-                                    </div>
-                                    <LeaseDocumentPreview className="mt-3" row={residentLease} documentKind="generated" />
+                                <div className="mt-4">
+                                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3">
+                                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Lease document</p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      Single active lease document. Signatures are applied to this same lease as the workflow advances.
+                                    </p>
                                   </div>
-                                  <div>
-                                    <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-3">
-                                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">Signed lease</p>
-                                      <p className="mt-1 text-xs text-emerald-900/80">
-                                        Shows manager and resident electronic signatures once collected.
-                                      </p>
-                                    </div>
-                                    <LeaseDocumentPreview
-                                      className="mt-3"
-                                      row={residentLease}
-                                      documentKind="signed"
-                                      emptyHint="No signed copy yet. The signed lease appears here after manager and resident signatures are collected."
-                                    />
-                                  </div>
+                                  <LeaseDocumentPreview
+                                    className="mt-3"
+                                    row={residentLease}
+                                    emptyHint="No lease document yet. Generate or upload one from Manager Review first."
+                                  />
                                 </div>
                               ) : (
                                 <p className="mt-3 text-sm text-slate-500">Approve the application and create or generate a lease here for this resident.</p>

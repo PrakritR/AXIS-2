@@ -25,11 +25,13 @@ import {
   deleteLeasePipelineRow,
   downloadLeaseFromRow,
   generateLeaseHtmlForRow,
+  getLeaseDocumentHtml,
   managerSignLease,
   managerUploadLeasePdf,
   printLeaseAsPdf,
-  recomputeLeaseSignedHtml,
-  updateLeasePipelineRow,
+  sendLeaseBackToManager,
+  sendLeaseToAdminReview,
+  sendLeaseToResident,
   hasBothLeaseSignatures,
   residentHasSignedLease,
   type LeasePipelineRow,
@@ -119,14 +121,8 @@ export function ManagerLeasesPipelinePanel({
       return;
     }
     appendLeaseThreadMessage(row.id, "manager", "Sent lease to resident for review and signature.");
-    if (
-      updateLeasePipelineRow(row.id, {
-        bucket: "resident",
-        managerSignature: null,
-      })
-    ) {
-      recomputeLeaseSignedHtml(row.id);
-      showToast("Lease moved to With resident.");
+    if (sendLeaseToResident(row.id)) {
+      showToast("Lease moved to Resident Signature Pending.");
       setExpandedId(null);
     } else showToast("Could not update.");
   };
@@ -146,32 +142,24 @@ export function ManagerLeasesPipelinePanel({
       return;
     }
     appendLeaseThreadMessage(row.id, "manager", text);
-    if (
-      updateLeasePipelineRow(row.id, {
-        bucket: "admin",
-      })
-    ) {
+    if (sendLeaseToAdminReview(row.id)) {
       setAdminNoteById((s) => ({ ...s, [row.id]: "" }));
-      showToast("Sent to admin review.");
+      showToast("Sent to Admin Review.");
       setExpandedId(null);
     } else showToast("Could not update.");
   };
 
   const onMoveToManagerReview = (row: LeasePipelineRow) => {
     appendLeaseThreadMessage(row.id, "manager", "Moved lease back to manager review.");
-    if (
-      updateLeasePipelineRow(row.id, {
-        bucket: "manager",
-      })
-    ) {
-      showToast("Lease moved to Manager review.");
+    if (sendLeaseBackToManager(row.id)) {
+      showToast("Lease moved to Manager Review.");
       setExpandedId(null);
     } else showToast("Could not update.");
   };
 
   const onManagerSign = (row: LeasePipelineRow) => {
     if (!residentHasSignedLease(row)) {
-      showToast("The resident must sign first. This row should be under Signed — Awaiting manager signature.");
+      showToast("The resident must sign first before the manager can countersign.");
       return;
     }
     const name = window.prompt("Type the manager / authorized agent name to sign this lease.");
@@ -233,6 +221,7 @@ export function ManagerLeasesPipelinePanel({
           <tbody>
             {bucketRows.map((row) => (
               <Fragment key={row.id}>
+                {/** current workflow status drives allowed actions; bucket only drives tab grouping */}
                 <tr className={PORTAL_TABLE_TR}>
                   <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.residentName}</td>
                   <td className={PORTAL_TABLE_TD}>{row.unit}</td>
@@ -253,7 +242,8 @@ export function ManagerLeasesPipelinePanel({
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
                     <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                       <p className="text-sm leading-relaxed text-slate-600">{row.notes}</p>
-                      <p className="mt-1.5 text-xs text-slate-500">PDF version v{row.pdfVersion}</p>
+                      <p className="mt-1.5 text-xs text-slate-500">Version v{row.versionNumber ?? row.pdfVersion}</p>
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{row.status ?? row.stageLabel}</p>
                       {row.managerSignature || row.residentSignature ? (
                         <div className="mt-2 grid gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3 py-2.5 text-xs text-emerald-900 sm:grid-cols-2">
                           <div>
@@ -309,7 +299,7 @@ export function ManagerLeasesPipelinePanel({
                       ) : null}
 
                       <PortalTableDetailActions placement="top">
-                        {bucket === "admin" ? (
+                        {row.status === "Admin Review" ? (
                           <>
                             <Button
                               type="button"
@@ -318,6 +308,30 @@ export function ManagerLeasesPipelinePanel({
                               onClick={() => onDownload(row)}
                             >
                               Download lease
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              disabled={generatingRowId === row.id}
+                              onClick={() => onGeneratePdf(row)}
+                            >
+                              {generatingRowId === row.id ? "Generating..." : "Regenerate lease"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              onClick={() => {
+                                setPendingRowId(row.id);
+                                uploadRef.current?.click();
+                              }}
+                              disabled={pendingRowId === row.id}
+                            >
+                              Upload corrected lease
+                            </Button>
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onMoveToManagerReview(row)}>
+                              Send back to manager
                             </Button>
                             <Button
                               type="button"
@@ -337,7 +351,7 @@ export function ManagerLeasesPipelinePanel({
                               disabled={generatingRowId === row.id}
                               onClick={() => onGeneratePdf(row)}
                             >
-                              {generatingRowId === row.id ? "Generating..." : "Generate lease"}
+                              {generatingRowId === row.id ? "Generating..." : "Regenerate lease"}
                             </Button>
                             <Button
                               type="button"
@@ -366,12 +380,12 @@ export function ManagerLeasesPipelinePanel({
                                 setPendingRowId(row.id);
                                 uploadRef.current?.click();
                               }}
-                              disabled={pendingRowId === row.id}
+                              disabled={pendingRowId === row.id || row.status === "Fully Signed"}
                             >
-                              Upload PDF
+                              Upload replacement
                             </Button>
 
-                            {bucket === "manager" ? (
+                            {row.status === "Manager Review" || row.status === "Draft" ? (
                               <>
                                 {!residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ? (
                                   <p className="max-w-xl text-xs leading-relaxed text-amber-800">
@@ -394,11 +408,22 @@ export function ManagerLeasesPipelinePanel({
                                   className={PORTAL_DETAIL_BTN}
                                   onClick={() => onRequestAdminEdits(row)}
                                 >
-                                  Request edits (admin)
+                                  Send to admin
                                 </Button>
                               </>
                             ) : null}
-                            {bucket === "resident" ? (
+                            {row.status === "Manager Signature Pending" ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => onManagerSign(row)}
+                                disabled={!residentHasSignedLease(row) || !getLeaseDocumentHtml(row)}
+                              >
+                                Manager sign lease
+                              </Button>
+                            ) : null}
+                            {row.status === "Resident Signature Pending" ? (
                               <Button
                                 type="button"
                                 variant="outline"
@@ -408,6 +433,7 @@ export function ManagerLeasesPipelinePanel({
                                 Move to manager review
                               </Button>
                             ) : null}
+                            {row.status !== "Fully Signed" ? (
                             <Button
                               type="button"
                               variant="outline"
@@ -416,15 +442,16 @@ export function ManagerLeasesPipelinePanel({
                             >
                               Delete lease
                             </Button>
+                            ) : null}
                           </>
                         )}
                       </PortalTableDetailActions>
 
-                      {bucket === "admin" ? (
+                      {row.status === "Admin Review" ? (
                         <>
                           <LeaseDocumentPreview
                             row={row}
-                            emptyHint="No lease PDF yet — generate from application data or upload when this lease is back in Manager review."
+                            emptyHint="No lease document yet — regenerate from application data or upload a corrected lease."
                           />
                           <div className="mt-4">
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
@@ -433,16 +460,14 @@ export function ManagerLeasesPipelinePanel({
                             <ThreadView row={row} />
                           </div>
                           <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">
-                            Admin review is read-only here — you can view the lease and comments only. Messaging and routing happen through
-                            prakritramachandran@gmail.com. When this returns to Manager review, you&apos;ll see admin feedback above and can reply or send
-                            the lease onward.
+                            Admin review is paused for resident actions. Correct the single lease document here, then send it back to the manager.
                           </p>
                         </>
                       ) : (
                         <>
                           <LeaseDocumentPreview row={row} />
                           <ThreadView row={row} />
-                          {bucket === "manager" && row.thread.some((m) => m.role === "admin") ? (
+                          {(row.status === "Manager Review" || row.status === "Draft") && row.thread.some((m) => m.role === "admin") ? (
                             <p className="mt-2 text-xs font-medium text-sky-900/90">
                               Admin feedback appears in the thread above — address it before sending to the resident or requesting another
                               admin pass.

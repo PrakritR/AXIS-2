@@ -1,22 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import {
-  demoResidentLeaseChecklist,
-  demoResidentLeaseHub,
-  demoResidentLeaseVersions,
-} from "@/data/demo-portal";
+import { demoResidentLeaseChecklist, demoResidentLeaseHub, demoResidentLeaseVersions } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import {
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
 import {
-  buildAiGeneratedLeaseHtml,
   downloadAiGeneratedLeaseHtml,
   gatherLeaseGenerationContext,
   leaseContextFromApplication,
@@ -33,13 +28,6 @@ import {
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
-import {
-  addUploadedOwnLease,
-  clearUploadedOwnLease,
-  readUploadedOwnLeases,
-  removeUploadedOwnLease,
-  type UploadedOwnLease,
-} from "@/lib/resident-lease-upload";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 type ChecklistRow = { id: string; label: string; done: boolean };
@@ -196,26 +184,16 @@ function LeaseSigningModal({
   );
 }
 
-const MAX_LEASE_PDF_BYTES = 12 * 1024 * 1024;
-
 export function ResidentLeasePanel() {
   const { showToast } = useAppUi();
   const session = usePortalSession();
   const [checklist, setChecklist] = useState<ChecklistRow[]>(() =>
     demoResidentLeaseChecklist.map((c) => ({ id: c.id, label: c.label, done: c.done })),
   );
-  const [aiPreviewUrl, setAiPreviewUrl] = useState<string | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-  const aiBlobUrlRef = useRef<string | null>(null);
   const [pipelineTick, setPipelineTick] = useState(0);
   const [editRequestDraft, setEditRequestDraft] = useState("");
   const [showSigningModal, setShowSigningModal] = useState(false);
-  const [uploadTick, setUploadTick] = useState(0);
   const email = session.email?.trim() || null;
-  const ownLeases = useMemo(() => {
-    void uploadTick;
-    return email ? readUploadedOwnLeases(email) : [];
-  }, [email, uploadTick]);
 
   useEffect(() => {
     const on = () => setPipelineTick((t) => t + 1);
@@ -225,15 +203,6 @@ export function ResidentLeasePanel() {
     return () => {
       window.removeEventListener(LEASE_PIPELINE_EVENT, on);
       window.removeEventListener("storage", on);
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (aiBlobUrlRef.current) {
-        URL.revokeObjectURL(aiBlobUrlRef.current);
-        aiBlobUrlRef.current = null;
-      }
     };
   }, []);
 
@@ -298,9 +267,9 @@ export function ResidentLeasePanel() {
     return shortToLongTermUpgradeBreakdown(propertyId, true);
   }, [pipelineRow, leaseCtx.application]);
 
-  const canSignElectronically = Boolean(pipelineRow?.bucket === "resident" && !pipelineRow.residentSignature && !leaseLocked);
-  /** Request edits, upload your copy, extension — only after manager sends lease to resident. */
-  const residentLeaseActions = Boolean(pipelineRow?.bucket === "resident" && !leaseLocked);
+  const canSignElectronically = Boolean(pipelineRow?.status === "Resident Signature Pending" && !pipelineRow.residentSignature && !leaseLocked);
+  const residentLeaseActions = Boolean(pipelineRow?.status === "Resident Signature Pending" && !leaseLocked);
+  const canRequestExtension = Boolean(pipelineRow?.status === "Fully Signed");
 
   const onDownloadAiLease = useCallback(() => {
     downloadAiGeneratedLeaseHtml(leaseCtx);
@@ -319,21 +288,16 @@ export function ResidentLeasePanel() {
         showToast("Print dialog opened — choose 'Save as PDF' to download.");
         return;
       }
-      if (ownLeases[0]) {
-        downloadLeaseFromRow(pipelineRow);
-        showToast("PDF download started.");
-        return;
-      }
       showToast("Ask your manager to generate the lease, or upload your PDF below.");
       return;
     }
     onDownloadAiLease();
-  }, [pipelineRow, ownLeases, onDownloadAiLease, showToast]);
+  }, [pipelineRow, onDownloadAiLease, showToast]);
 
   const onSignLease = () => {
     if (!email || leaseLocked) return;
     if (pipelineRow?.bucket !== "resident") {
-      showToast("Signing opens when your manager sends the lease to you (With resident stage).");
+      showToast("Signing opens when your manager sends the lease to you for resident signature.");
       return;
     }
     setShowSigningModal(true);
@@ -352,88 +316,6 @@ export function ResidentLeasePanel() {
     } else {
       showToast("Could not sign — try again.");
     }
-  };
-
-  const onSubmitEditRequest = () => {
-    if (!email || !editRequestDraft.trim()) {
-      showToast("Describe what should change.");
-      return;
-    }
-    if (residentRequestEdits(email, editRequestDraft.trim())) {
-      showToast("Edit request sent to your manager.");
-      setEditRequestDraft("");
-      setPipelineTick((t) => t + 1);
-    } else showToast("Could not send request.");
-  };
-
-  const buildPreviewBlobUrl = useCallback(() => {
-    const blob = new Blob([buildAiGeneratedLeaseHtml(leaseCtx)], { type: "text/html;charset=utf-8" });
-    if (aiBlobUrlRef.current) URL.revokeObjectURL(aiBlobUrlRef.current);
-    const u = URL.createObjectURL(blob);
-    aiBlobUrlRef.current = u;
-    setAiPreviewUrl(u);
-  }, [leaseCtx]);
-
-  const onPickOwnLeasePdf = async (files: FileList | null) => {
-    if (!email) {
-      showToast("Sign in to upload your lease.");
-      return;
-    }
-    const selected = Array.from(files ?? []);
-    if (!selected.length) return;
-    const validFiles = selected.filter((file) => file.type === "application/pdf" && file.size <= MAX_LEASE_PDF_BYTES);
-    if (!validFiles.length) {
-      showToast("Please choose PDF files under the size limit.");
-      return;
-    }
-    const hadInvalid = validFiles.length !== selected.length;
-    let savedCount = 0;
-    await Promise.all(
-      validFiles.map(
-        (file) =>
-          new Promise<void>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const dataUrl = reader.result as string;
-              addUploadedOwnLease(email, {
-                dataUrl,
-                fileName: file.name,
-                uploadedAt: new Date().toISOString(),
-              });
-              savedCount += 1;
-              resolve();
-            };
-            reader.onerror = () => resolve();
-            reader.readAsDataURL(file);
-          }),
-      ),
-    );
-    if (savedCount > 0) {
-      setUploadTick((tick) => tick + 1);
-      window.dispatchEvent(new Event(LEASE_PIPELINE_EVENT));
-      showToast(
-        hadInvalid
-          ? `${savedCount} PDF${savedCount === 1 ? "" : "s"} uploaded. Some files were skipped.`
-          : `${savedCount} PDF${savedCount === 1 ? "" : "s"} uploaded.`,
-      );
-    } else {
-      showToast("Could not read those files.");
-    }
-    if (uploadInputRef.current) uploadInputRef.current.value = "";
-  };
-
-  const onRemoveOwnLease = (upload: UploadedOwnLease) => {
-    if (!email) return;
-    removeUploadedOwnLease(email, upload.id);
-    setUploadTick((tick) => tick + 1);
-    showToast(`Removed ${upload.fileName}.`);
-  };
-
-  const onRemoveAllOwnLeases = () => {
-    if (!email) return;
-    clearUploadedOwnLease(email);
-    setUploadTick((tick) => tick + 1);
-    showToast("Removed all uploaded PDFs.");
   };
 
   if ((!pipelineRow || !leaseVisibleToResident) && email) {
@@ -472,6 +354,11 @@ export function ResidentLeasePanel() {
       titleAside={
         <>
           {residentLeaseActions ? (
+            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("This lease is waiting on your signature.")}>
+              Awaiting your signature
+            </Button>
+          ) : null}
+          {canRequestExtension ? (
             <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Extension request sent.")}>
               Request extension
             </Button>
@@ -545,7 +432,7 @@ export function ResidentLeasePanel() {
       {residentLeaseActions && email ? (
         <Card className="border-slate-200/80 p-5">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Request edits</p>
-          <p className="mt-1 text-sm text-slate-600">Send a note to your property manager. Your lease moves back to manager review.</p>
+          <p className="mt-1 text-sm text-slate-600">Send a note to your property manager if the lease needs changes. The lease will return to manager review.</p>
           <textarea
             rows={3}
             value={editRequestDraft}
@@ -553,7 +440,22 @@ export function ResidentLeasePanel() {
             placeholder="What needs to change in the lease?"
             className="mt-3 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800"
           />
-          <Button type="button" variant="outline" className="mt-3 rounded-full" onClick={onSubmitEditRequest}>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 rounded-full"
+            onClick={() => {
+              if (!email || !editRequestDraft.trim()) {
+                showToast("Describe what should change.");
+                return;
+              }
+              if (residentRequestEdits(email, editRequestDraft.trim())) {
+                showToast("Edit request sent to your manager.");
+                setEditRequestDraft("");
+                setPipelineTick((t) => t + 1);
+              } else showToast("Could not send request.");
+            }}
+          >
             Send edit request
           </Button>
         </Card>
@@ -561,7 +463,7 @@ export function ResidentLeasePanel() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="border-slate-200/80 p-5">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Term & move-in</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Lease summary</p>
           <p className="mt-1 text-[11px] text-slate-500">
             {summaryFromApp.subtitle}{" "}
             <Link href="/rent/apply" className="font-medium text-primary underline underline-offset-2">
@@ -589,98 +491,30 @@ export function ResidentLeasePanel() {
         </Card>
 
         <Card className="flex min-h-[260px] flex-col border-dashed border-slate-200/90 bg-slate-50/50 p-5">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Documents</p>
-          <p className="mt-2 text-sm font-semibold text-slate-900">AI-generated lease</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Lease document</p>
+          <p className="mt-2 text-sm font-semibold text-slate-900">{pipelineRow?.status ?? "Lease"}</p>
           <p className="mt-1 text-sm text-slate-600">
-            Built from your saved rental application (`axis:rental-application:draft:v1`) plus listing and manager submission when
-            available. Covers parties, premises, term, rent, deposit, utilities, shared spaces, pets, maintenance, access, default, notices,
-            governing law, disclosures, application summary, exhibits, and signature blocks — aligned with a standard room rental agreement.
+            You are viewing the single active lease document for this agreement. Only the allowed next action is shown based on its current status.
           </p>
-          {residentLeaseActions ? (
+          {leaseVisibleToResident ? (
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={buildPreviewBlobUrl}>
-                Preview AI lease
-              </Button>
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onDownloadLeasePackage}>
                 Download lease
               </Button>
             </div>
           ) : (
             <p className="mt-3 text-xs text-slate-600">
-              Preview and package downloads for your official lease unlock when your manager sends it to you (<strong>With resident</strong>
+              Preview and package downloads for your official lease unlock when your manager sends it to you for <strong>Resident Signature Pending</strong>
               ).
             </p>
           )}
 
-          <p className="mt-6 text-sm font-semibold text-slate-900">Your own lease (PDF)</p>
-          <p className="mt-1 text-sm text-slate-600">Upload a countersigned or attorney-provided PDF. Stored locally for this browser session.</p>
-          {residentLeaseActions ? (
-            <>
-              <input
-                ref={uploadInputRef}
-                type="file"
-                accept="application/pdf"
-                multiple
-                className="sr-only"
-                id="resident-upload-own-lease"
-                onChange={(e) => void onPickOwnLeasePdf(e.target.files)}
-              />
-              <div className="mt-3 flex flex-wrap gap-2">
-                <label
-                  htmlFor="resident-upload-own-lease"
-                  className="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
-                >
-                  Upload PDF
-                </label>
-                {ownLeases.length > 0 ? (
-                  <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onRemoveAllOwnLeases}>
-                    Remove all uploads
-                  </Button>
-                ) : null}
-              </div>
-              {ownLeases.length ? (
-                <ul className="mt-3 space-y-2">
-                  {ownLeases.map((upload) => (
-                    <li key={upload.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-800">{upload.fileName}</p>
-                        <p className="text-slate-500">{new Date(upload.uploadedAt).toLocaleString()}</p>
-                      </div>
-                      <Button type="button" variant="outline" className="rounded-full text-[11px]" onClick={() => onRemoveOwnLease(upload)}>
-                        Remove
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </>
-          ) : (
-            <p className="mt-3 text-xs text-slate-600">Upload opens when your manager has sent the lease to you for review and signature.</p>
-          )}
+          <p className="mt-6 text-sm font-semibold text-slate-900">Signing flow</p>
+          <p className="mt-1 text-sm text-slate-600">
+            You cannot replace or regenerate this lease. If something is wrong, request edits and your manager will revise the same lease record.
+          </p>
         </Card>
       </div>
-
-      {residentLeaseActions && ((aiPreviewUrl && !pipelineRow?.generatedHtml) || ownLeases.length > 0) ? (
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {aiPreviewUrl && !pipelineRow?.generatedHtml ? (
-            <Card className="overflow-hidden border-slate-200/80 p-0">
-              <p className="border-b border-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                AI lease preview (from your application draft)
-              </p>
-              <iframe title="AI-generated lease preview" src={aiPreviewUrl} className="h-[min(520px,55vh)] w-full bg-white" />
-            </Card>
-          ) : null}
-          {ownLeases.map((upload) => (
-            <Card key={upload.id} className="overflow-hidden border-slate-200/80 p-0">
-              <p className="border-b border-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Uploaded PDF · {upload.fileName}
-              </p>
-              <iframe title={`Uploaded lease PDF ${upload.fileName}`} src={upload.dataUrl} className="h-[min(520px,55vh)] w-full bg-slate-100" />
-            </Card>
-          ))}
-        </div>
-      ) : null}
-
       {upgradeBreakdown ? (
         <Card className="mt-6 border-blue-200/80 bg-blue-50/40 p-5">
           <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Upgrade to long-term rental</p>

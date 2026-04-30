@@ -13,7 +13,7 @@ import {
   generateLeaseHtmlForRow,
   managerUploadLeasePdf,
   readLeasePipeline,
-  updateLeasePipelineRow,
+  sendLeaseBackToManager,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
@@ -58,12 +58,12 @@ function StatusPill({ bucket }: { bucket: AdminLeaseBucketIndex }) {
       dot: "bg-sky-500",
     },
     2: {
-      label: "With resident",
+      label: "Resident signature pending",
       cls: "border-violet-200/90 bg-violet-50 text-violet-950",
       dot: "bg-violet-500",
     },
     3: {
-      label: "Signed",
+      label: "Manager signature pending / signed",
       cls: "border-emerald-200/90 bg-emerald-50 text-emerald-900",
       dot: "bg-emerald-500",
     },
@@ -212,7 +212,7 @@ function LeasePipelineAdminDetail({
               className="rounded-full"
               onClick={() => {
                 appendLeaseThreadMessage(row.id, "admin", "Returned to manager for updates.");
-                if (updateLeasePipelineRow(row.id, { bucket: "manager" })) {
+                if (sendLeaseBackToManager(row.id)) {
                   showToast("Sent back to manager.");
                   onSaved();
                 }

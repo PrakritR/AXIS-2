@@ -17,8 +17,8 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 const LEASE_LABELS: { id: ManagerLeaseBucket; label: string }[] = [
   { id: "manager", label: "Manager review" },
   { id: "admin", label: "Admin review" },
-  { id: "resident", label: "With resident" },
-  { id: "signed", label: "Signed" },
+  { id: "resident", label: "Resident signature pending" },
+  { id: "signed", label: "Manager signature pending / signed" },
 ];
 
 function countBuckets(rows: ReturnType<typeof readLeasePipeline>) {
