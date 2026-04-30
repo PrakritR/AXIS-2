@@ -28,8 +28,10 @@ import {
   managerSignLease,
   managerUploadLeasePdf,
   printLeaseAsPdf,
+  recomputeLeaseSignedHtml,
   updateLeasePipelineRow,
   hasBothLeaseSignatures,
+  residentHasSignedLease,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 
@@ -120,8 +122,10 @@ export function ManagerLeasesPipelinePanel({
     if (
       updateLeasePipelineRow(row.id, {
         bucket: "resident",
+        managerSignature: null,
       })
     ) {
+      recomputeLeaseSignedHtml(row.id);
       showToast("Lease moved to With resident.");
       setExpandedId(null);
     } else showToast("Could not update.");
@@ -166,6 +170,10 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onManagerSign = (row: LeasePipelineRow) => {
+    if (!residentHasSignedLease(row)) {
+      showToast("The resident must sign first. This row should be under Signed — Awaiting manager signature.");
+      return;
+    }
     const name = window.prompt("Type the manager / authorized agent name to sign this lease.");
     if (!name?.trim()) return;
     if (managerSignLease(row.id, name.trim())) {
@@ -339,13 +347,13 @@ export function ManagerLeasesPipelinePanel({
                             >
                               Download lease
                             </Button>
-                            {!row.managerSignature ? (
+                            {!row.managerSignature && residentHasSignedLease(row) ? (
                               <Button
                                 type="button"
                                 variant="outline"
                                 className={PORTAL_DETAIL_BTN}
                                 onClick={() => onManagerSign(row)}
-                                disabled={!row.generatedHtml}
+                                disabled={!row.generatedHtml && !row.managerUploadedPdf?.dataUrl}
                               >
                                 Sign as manager
                               </Button>

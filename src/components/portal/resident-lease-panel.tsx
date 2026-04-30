@@ -277,7 +277,7 @@ export function ResidentLeasePanel() {
     };
   })();
 
-  const leaseLocked = Boolean(pipelineRow?.bucket === "signed");
+  const leaseLocked = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
   const leaseVisibleToResident = Boolean(pipelineRow && (pipelineRow.bucket === "resident" || pipelineRow.bucket === "signed"));
 
   const upgradeBreakdown = useMemo(() => {

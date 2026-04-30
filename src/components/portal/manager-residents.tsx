@@ -22,13 +22,16 @@ import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   createManagerCharge,
+  chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
+  HOUSEHOLD_CHARGES_SESSION_KEY,
   markHouseholdChargePaid,
-  readChargesForResident,
+  readChargesForManagerResident,
+  syncHouseholdChargesFromServer,
   updateHouseholdChargeAmount,
   type HouseholdCharge,
 } from "@/lib/household-charges";
-import { readManagerApplicationRows, syncManagerApplicationsFromServer, writeManagerApplicationRows } from "@/lib/manager-applications-storage";
+import { readManagerApplicationRows, syncManagerApplicationsFromServer, writeManagerApplicationRows, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
@@ -49,6 +52,8 @@ import {
   downloadLeaseFromRow,
   printLeaseAsPdf,
   hasBothLeaseSignatures,
+  recomputeLeaseSignedHtml,
+  residentHasSignedLease,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 import {
@@ -126,7 +131,16 @@ export function ManagerResidents() {
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
-    return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === HOUSEHOLD_CHARGES_SESSION_KEY) on();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+      window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   useEffect(() => {
@@ -168,8 +182,12 @@ export function ManagerResidents() {
       syncLeasePipelineFromServer(userId),
       syncManagerWorkOrdersFromServer(),
       syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
+      syncHouseholdChargesFromServer(),
     ]).then(() => {
-      if (!cancelled) setPropertyTick((n) => n + 1);
+      if (!cancelled) {
+        setPropertyTick((n) => n + 1);
+        setHcTick((n) => n + 1);
+      }
     });
     void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY).then(() => {
       if (!cancelled) setInboxTick((n) => n + 1);
@@ -291,8 +309,8 @@ export function ManagerResidents() {
   const residentCharges = useMemo<HouseholdCharge[]>(() => {
     void hcTick;
     if (!selected?.email) return [];
-    return readChargesForResident(selected.email, null);
-  }, [selected, hcTick]);
+    return readChargesForManagerResident(selected.email, userId ?? null);
+  }, [selected, hcTick, userId]);
 
   const residentLease = useMemo<LeasePipelineRow | null>(() => {
     void leaseTick;
@@ -323,6 +341,14 @@ export function ManagerResidents() {
       .filter((thread) => thread.email.trim().toLowerCase() === email)
       .sort((a, b) => String(b.time).localeCompare(String(a.time)));
   }, [selected, inboxTick]);
+
+  const chargeCounts = useMemo(
+    () => ({
+      pending: residentCharges.filter((c) => c.status === "pending").length,
+      paid: residentCharges.filter((c) => c.status === "paid").length,
+    }),
+    [residentCharges],
+  );
 
   const visibleCharges = useMemo(
     () => residentCharges.filter((c) => c.status === chargeTab),
@@ -483,6 +509,10 @@ export function ManagerResidents() {
   }
 
   function signLeaseAsManager(row: LeasePipelineRow) {
+    if (!residentHasSignedLease(row)) {
+      showToast("The resident must sign the lease before you can countersign.");
+      return;
+    }
     const name = window.prompt("Type the manager / authorized agent name to sign this lease.");
     if (!name?.trim()) return;
     if (managerSignLease(row.id, name.trim())) {
@@ -625,12 +655,12 @@ export function ManagerResidents() {
                                     >
                                       {generatingLeaseRowId === residentLease.id ? "Generating..." : "Generate lease"}
                                     </Button>
-                                    {!residentLease.managerSignature ? (
+                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) ? (
                                       <Button
                                         type="button"
                                         variant="outline"
                                         className="rounded-full px-3 py-1 text-xs"
-                                        disabled={!residentLease.generatedHtml}
+                                        disabled={!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl}
                                         onClick={() => signLeaseAsManager(residentLease)}
                                       >
                                         Sign as manager
@@ -664,8 +694,9 @@ export function ManagerResidents() {
                                             showToast("Resident must create their account before the lease can be sent.");
                                             return;
                                           }
-                                          appendLeaseThreadMessage(residentLease.id, "manager", "Sent lease to resident for review.");
-                                          updateLeasePipelineRow(residentLease.id, { bucket: "resident" });
+                                          appendLeaseThreadMessage(residentLease.id, "manager", "Sent lease to resident for review and signature.");
+                                          updateLeasePipelineRow(residentLease.id, { bucket: "resident", managerSignature: null });
+                                          recomputeLeaseSignedHtml(residentLease.id);
                                           setLeaseTick((n) => n + 1);
                                           showToast("Lease moved to With resident.");
                                         }}
@@ -768,6 +799,9 @@ export function ManagerResidents() {
                                     }`}
                                   >
                                     {t === "pending" ? "Pending" : "Paid"}
+                                    <span className="ml-1 tabular-nums opacity-90">
+                                      ({t === "pending" ? chargeCounts.pending : chargeCounts.paid})
+                                    </span>
                                   </button>
                                 ))}
                                 {pendingBalance > 0 ? (
@@ -778,7 +812,11 @@ export function ManagerResidents() {
                               </div>
                               {visibleCharges.length === 0 ? (
                                 <p className="mt-3 text-sm text-slate-500">
-                                  {chargeTab === "pending" ? "No pending charges." : "No paid charges."}
+                                  {residentCharges.length === 0
+                                    ? "No charges for this resident yet. Approve their application with rent and deposit saved, or add a charge."
+                                    : chargeTab === "pending"
+                                      ? "No pending charges."
+                                      : "No paid charges."}
                                 </p>
                               ) : (
                                 <div className="mt-3 overflow-x-auto">
@@ -786,7 +824,9 @@ export function ManagerResidents() {
                                     <thead>
                                       <tr className="border-b border-slate-200">
                                         <th className="pb-2 text-left text-xs font-semibold text-slate-500">Charge</th>
+                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Due</th>
                                         <th className="pb-2 text-right text-xs font-semibold text-slate-500">Amount</th>
+                                        <th className="pb-2 text-right text-xs font-semibold text-slate-500">Balance</th>
                                         <th className="pb-2 text-right text-xs font-semibold text-slate-500">Status</th>
                                         <th className="pb-2 text-right text-xs font-semibold text-slate-500">Action</th>
                                       </tr>
@@ -795,7 +835,9 @@ export function ManagerResidents() {
                                       {visibleCharges.map((c) => (
                                         <tr key={c.id} className="border-b border-slate-100 last:border-0">
                                           <td className="py-2 pr-4 font-medium text-slate-900">{c.title}</td>
+                                          <td className="py-2 pr-4 text-xs text-slate-600">{chargeDueLabel(c)}</td>
                                           <td className="py-2 pr-4 text-right tabular-nums text-slate-700">{c.amountLabel}</td>
+                                          <td className="py-2 pr-4 text-right tabular-nums font-medium text-slate-800">{c.balanceLabel}</td>
                                           <td className="py-2 pr-4 text-right">
                                             <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusPill(c.status)}`}>
                                               {c.status === "paid" ? "Paid" : "Pending"}

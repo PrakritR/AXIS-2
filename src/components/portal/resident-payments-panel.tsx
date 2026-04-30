@@ -22,6 +22,7 @@ import { usePortalSession } from "@/hooks/use-portal-session";
 import {
   chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
+  HOUSEHOLD_CHARGES_SESSION_KEY,
   linkHouseholdChargesToResidentUser,
   readChargesForResident,
   syncHouseholdChargesFromServer,
@@ -57,7 +58,14 @@ export function ResidentPaymentsPanel() {
   useEffect(() => {
     const on = () => refresh();
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
-    return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === HOUSEHOLD_CHARGES_SESSION_KEY) refresh();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+      window.removeEventListener("storage", onStorage);
+    };
   }, [refresh]);
 
   useEffect(() => {

@@ -18,7 +18,7 @@ let memoryRentProfiles: RecurringRentProfile[] = [];
 const HOUSEHOLD_CHARGES_SYNC_TTL_MS = 15_000;
 let householdChargesLastSyncedAt = 0;
 let householdChargesSyncPromise: Promise<{ charges: HouseholdCharge[]; rentProfiles: RecurringRentProfile[] }> | null = null;
-const HOUSEHOLD_CHARGES_SESSION_KEY = "axis:household-charges:v1";
+export const HOUSEHOLD_CHARGES_SESSION_KEY = "axis:household-charges:v1";
 const HOUSEHOLD_RENT_PROFILES_SESSION_KEY = "axis:household-rent-profiles:v1";
 
 function chargesChanged(a: HouseholdCharge[], b: HouseholdCharge[]) {
@@ -909,6 +909,28 @@ export function readChargesForResident(email: string, userId: string | null): Ho
     .filter((charge) => shouldDisplayChargeInPayments(charge));
 }
 
+/**
+ * Whether the signed-in manager may view or mutate this charge (or legacy rows with no manager id).
+ * Does not allow cross-manager access when `charge.managerUserId` is set to another id.
+ */
+export function chargeVisibleToManager(charge: HouseholdCharge, managerUserId: string | null): boolean {
+  if (managerUserId == null || managerUserId === "") return true;
+  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  if (charge.managerUserId === scope) return true;
+  if (charge.managerUserId == null || charge.managerUserId === "") return true;
+  return false;
+}
+
+/** Charges for one resident email scoped to the manager viewing the Residents / Payments drill-down. */
+export function readChargesForManagerResident(email: string, managerUserId: string | null): HouseholdCharge[] {
+  const e = email.trim().toLowerCase();
+  if (!e) return [];
+  return dedupeCharges(readAll())
+    .filter((r) => r.residentEmail.trim().toLowerCase() === e)
+    .filter((r) => chargeVisibleToManager(r, managerUserId))
+    .filter((charge) => shouldDisplayChargeInPayments(charge));
+}
+
 export function readChargesForManager(managerUserId: string | null): HouseholdCharge[] {
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
   return dedupeCharges(readAll())
@@ -919,8 +941,7 @@ export function readChargesForManager(managerUserId: string | null): HouseholdCh
 export function deleteHouseholdCharge(chargeId: string, managerUserId: string | null): boolean {
   if (!isBrowser()) return false;
   const rows = readAll();
-  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
-  const idx = rows.findIndex((r) => r.id === chargeId && r.managerUserId === scope);
+  const idx = rows.findIndex((r) => r.id === chargeId && chargeVisibleToManager(r, managerUserId));
   if (idx === -1) return false;
   deleteChargeRowFromServer(chargeId);
   writeAll(rows.filter((_, i) => i !== idx));
@@ -929,8 +950,7 @@ export function deleteHouseholdCharge(chargeId: string, managerUserId: string | 
 
 export function markHouseholdChargePaid(chargeId: string, managerUserId: string | null): boolean {
   const rows = readAll();
-  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
-  const i = rows.findIndex((r) => r.id === chargeId && r.managerUserId === scope);
+  const i = rows.findIndex((r) => r.id === chargeId && chargeVisibleToManager(r, managerUserId));
   if (i === -1) return false;
   if (rows[i]!.status === "paid") return true;
   const now = new Date().toISOString();
@@ -1259,9 +1279,8 @@ export function updateHouseholdChargeAmount(
   newTitle?: string,
 ): boolean {
   if (!isBrowser() || !Number.isFinite(newAmount) || newAmount < 0) return false;
-  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
   const rows = readAll();
-  const i = rows.findIndex((r) => r.id === chargeId && r.managerUserId === scope);
+  const i = rows.findIndex((r) => r.id === chargeId && chargeVisibleToManager(r, managerUserId));
   if (i === -1) return false;
   const label = `$${newAmount.toFixed(2)}`;
   const next = [...rows];

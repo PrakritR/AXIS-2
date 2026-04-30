@@ -1,6 +1,7 @@
 /**
  * Unified manager / admin / resident lease workflow backed by Supabase records.
  * Buckets match UI tabs: manager → admin → resident → signed.
+ * Signing order: manager prepares/sends → resident signs (row moves to **signed**, “Awaiting manager signature”) → manager countersigns → stage “Signed”.
  */
 
 import { type ManagerLeaseBucket } from "@/data/demo-portal";
@@ -73,7 +74,7 @@ function electronicSignatureBlock(row: LeasePipelineRow): string {
 <!-- axis-signatures:start -->
 <section class="axis-esign">
   <h2>Electronic Signature Certificate</h2>
-  <p>This certificate is attached to and incorporated into this lease. Each typed name below was accepted in the Axis portal as an electronic signature.</p>
+  <p>This lease requires exactly two electronic signatures—one from the landlord / authorized agent and one from the resident / tenant. This certificate is the binding record for both. Each typed name below was accepted in the Axis portal as that party&apos;s electronic signature.</p>
   <div class="axis-esign-grid">
     ${signatureCard("Landlord / Authorized Agent", manager)}
     ${signatureCard("Resident / Tenant", resident)}
@@ -88,6 +89,13 @@ export function hasAnyLeaseSignature(row: LeasePipelineRow): boolean {
 
 export function hasBothLeaseSignatures(row: LeasePipelineRow): boolean {
   return Boolean(row.managerSignature && (row.residentSignature || (row.signatureName && row.signedAtIso)));
+}
+
+/** True if the resident has completed their electronic signature (including legacy signature fields). */
+export function residentHasSignedLease(row: LeasePipelineRow): boolean {
+  return Boolean(
+    (row.residentSignature?.name && row.residentSignature?.signedAtIso) || (row.signatureName && row.signedAtIso),
+  );
 }
 
 export function applyLeaseSignaturesToHtml(row: LeasePipelineRow, html: string | null | undefined): string | null {
@@ -159,8 +167,6 @@ export type LeasePipelineRow = {
 export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<LeasePipelineRow>;
   const b = r.bucket;
-  const bucket: ManagerLeaseBucket =
-    b === "manager" || b === "admin" || b === "resident" || b === "signed" ? b : "manager";
   const threads = Array.isArray(r.thread) ? r.thread : [];
   const safeThread: LeaseThreadMessage[] = threads.filter(
     (m): m is LeaseThreadMessage =>
@@ -183,12 +189,29 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
   );
   const residentSignature = normalizeLeaseSignature(r.residentSignature, "resident") ?? legacyResidentSignature;
   const managerSignature = normalizeLeaseSignature(r.managerSignature, "manager");
+  const residentSigned = Boolean(residentSignature?.name && residentSignature.signedAtIso);
+  const bothSigned = Boolean(managerSignature && residentSigned);
+
+  let bucket: ManagerLeaseBucket =
+    b === "manager" || b === "admin" || b === "resident" || b === "signed" ? b : "manager";
+  /** Legacy: resident already signed while bucket was still "resident". */
+  if (residentSigned && !managerSignature && bucket === "resident") {
+    bucket = "signed";
+  }
+
+  let stageLabel = String(r.stageLabel ?? "").trim() || stageLabelForBucket(bucket);
+  if (bothSigned && bucket === "signed") {
+    stageLabel = stageLabelForBucket("signed");
+  } else if (residentSigned && !managerSignature && bucket === "signed") {
+    stageLabel = "Awaiting manager signature";
+  }
+
   return {
     id,
     residentName: String(r.residentName ?? "").trim() || "—",
     residentEmail: String(r.residentEmail ?? "").trim(),
     unit: String(r.unit ?? "").trim() || "—",
-    stageLabel: String(r.stageLabel ?? "").trim() || stageLabelForBucket(bucket),
+    stageLabel,
     updated: String(r.updated ?? "").trim() || "—",
     bucket,
     pdfVersion: typeof r.pdfVersion === "number" && Number.isFinite(r.pdfVersion) ? Math.max(0, Math.floor(r.pdfVersion)) : 1,
@@ -521,6 +544,15 @@ export function updateLeasePipelineRow(id: string, patch: Partial<LeasePipelineR
   return true;
 }
 
+/** Refresh `signedHtml` from `generatedHtml` and current signatures (e.g. after clearing a signature). */
+export function recomputeLeaseSignedHtml(rowId: string): boolean {
+  const rows = readLeasePipeline();
+  const row = rows.find((r) => r.id === rowId);
+  if (!row) return false;
+  const signedHtml = hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, row.generatedHtml) : null;
+  return updateLeasePipelineRow(rowId, { signedHtml });
+}
+
 export function appendLeaseThreadMessage(id: string, role: LeaseThreadRole, body: string): boolean {
   const rows = readLeasePipeline();
   const idx = rows.findIndex((r) => r.id === id);
@@ -668,7 +700,7 @@ export function managerUploadLeasePdf(rowId: string, file: File): Promise<{ ok: 
   });
 }
 
-/** Resident electronically signs. The lease is fully signed only after the manager also signs. */
+/** Resident electronically signs; row always moves to **signed** (awaiting manager countersign unless already fully executed). */
 export function residentSignLease(email: string, signatureName?: string): boolean {
   const rows = readLeasePipeline();
   const idx = rows.findIndex((r) => r.residentEmail.toLowerCase() === email.trim().toLowerCase());
@@ -689,8 +721,8 @@ export function residentSignLease(email: string, signatureName?: string): boolea
   const bothSigned = hasBothLeaseSignatures(nextRowBase);
   rows[idx] = {
     ...nextRowBase,
-    bucket: bothSigned ? "signed" : "resident",
-    stageLabel: bothSigned ? stageLabelForBucket("signed") : "Resident signed; manager signature pending",
+    bucket: "signed",
+    stageLabel: bothSigned ? stageLabelForBucket("signed") : "Awaiting manager signature",
     thread,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
@@ -701,12 +733,13 @@ export function residentSignLease(email: string, signatureName?: string): boolea
   return true;
 }
 
-/** Manager / authorized agent electronically countersigns. */
+/** Manager / authorized agent electronically countersigns (only after the resident has signed). */
 export function managerSignLease(rowId: string, signatureName: string): boolean {
   const rows = readLeasePipeline();
   const idx = rows.findIndex((r) => r.id === rowId);
   if (idx === -1) return false;
   const row = rows[idx]!;
+  if (!residentHasSignedLease(row)) return false;
   const trimmedSignature = signatureName.trim();
   if (!trimmedSignature) return false;
   const iso = new Date().toISOString();
@@ -719,7 +752,7 @@ export function managerSignLease(rowId: string, signatureName: string): boolean 
   const thread = [...(row.thread ?? []), makeMsg("manager", `Manager signed electronically — ${trimmedSignature}.`)];
   rows[idx] = {
     ...nextRowBase,
-    bucket: bothSigned ? "signed" : row.bucket,
+    bucket: "signed",
     stageLabel: bothSigned ? stageLabelForBucket("signed") : row.stageLabel,
     thread,
     updatedAtIso: iso,

@@ -167,9 +167,6 @@ function leaseCss(): string {
     th, td { border: 1px solid #999; padding: 6px 9px; text-align: left; vertical-align: top; }
     th { background: #f0f0f0; font-weight: 700; }
     .total-row td { font-weight: 700; background: #f9f9f9; }
-    .sig { margin-top: 3rem; display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; }
-    .sig-block { padding-top: 0.4rem; font-size: 0.9rem; }
-    .sig-line { border-top: 1px solid #000; margin-top: 2.5rem; margin-bottom: 0.3rem; }
     .addendum { border-top: 3px double #333; margin-top: 3rem; padding-top: 1.5rem; }
     .page-break { page-break-before: always; }
     @media print { body { padding: 12px; font-size: 10pt; } }
@@ -442,11 +439,8 @@ ${houseRules ? `<p>${houseRules}</p>` : ""}
 <h2>10. Condition of Room</h2>
 <p>Guest agrees to leave the room and shared areas in clean, undamaged condition. Owner/Host may deduct unpaid amounts, cleaning costs, missing items, or damage beyond ordinary use from the deposit.</p>
 
-<h2>11. Signatures</h2>
-<div class="sig">
-  <div class="sig-block"><div class="sig-line"></div>Owner / Host Signature<br/>Date: _______________</div>
-  <div class="sig-block"><div class="sig-line"></div>Guest Signature<br/>Date: _______________</div>
-</div>
+<h2>11. Electronic Signature</h2>
+<p>Owner/Host and Guest each sign this agreement <strong>once</strong> through the Axis property portal. The <strong>Electronic Signature Certificate</strong> at the end of the signed document is the official record of both signatures. No handwritten signature blocks appear here.</p>
 </body></html>`;
   }
 
@@ -632,26 +626,8 @@ ${houseRules
   <tr><td>Total due at signing</td><td>${paySigning}</td><td>At signing</td></tr>
 </table>
 
-<h2>${proratedSection ? "26" : "25"}. Signatures</h2>
-<p>IN WITNESS WHEREOF, the parties have executed this Residential Room Rental Agreement as of the dates written below.</p>
-<div class="sig">
-  <div class="sig-block">
-    <p><strong>Landlord / Authorized Agent</strong><br/>On behalf of ${landlordEntity}</p>
-    <div class="sig-line"></div>
-    <p>Signature</p>
-    <div class="sig-line"></div>
-    <p>Printed name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</p>
-    <div class="sig-line"></div>
-    <p>Title</p>
-  </div>
-  <div class="sig-block">
-    <p><strong>Resident / Tenant</strong></p>
-    <div class="sig-line"></div>
-    <p>Signature</p>
-    <div class="sig-line"></div>
-    <p>Printed name: ${tenantName} &nbsp;&nbsp;&nbsp;&nbsp; Date</p>
-  </div>
-</div>
+<h2>${proratedSection ? "26" : "25"}. Electronic Signature</h2>
+<p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement <strong>one time</strong> through the Axis property portal (one manager signature and one resident signature). The <strong>Electronic Signature Certificate</strong> appended to the signed copy is the binding record for both parties. No duplicate handwritten signature lines are included in this document.</p>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div class="addendum page-break">
@@ -670,8 +646,7 @@ ${houseRules
   <tr><td>Common area general</td><td>&nbsp;</td><td>&nbsp;</td></tr>
   <tr><td>Other / notes</td><td colspan="2">&nbsp;</td></tr>
 </table>
-<p>Resident signature: ___________________________________ Date: ___________</p>
-<p>Landlord signature: ___________________________________ Date: ___________</p>
+<p>When you sign this Agreement in the Axis portal, those electronic signatures apply to this checklist as well. No separate signature lines are required on this page.</p>
 </div>
 
 <div class="addendum">
