@@ -153,14 +153,18 @@ export async function syncHouseholdChargesFromServer(): Promise<{
   rentProfiles: RecurringRentProfile[];
 }> {
   if (!isBrowser()) return { charges: [], rentProfiles: [] };
-  const hadLocalState = memoryCharges.length > 0 || memoryRentProfiles.length > 0;
-  memoryCharges = [];
-  memoryRentProfiles = [];
-  persistHouseholdStateToSession();
+  if (householdChargesSyncPromise) return householdChargesSyncPromise;
+  if (householdChargesLastSyncedAt > 0 && Date.now() - householdChargesLastSyncedAt < HOUSEHOLD_CHARGES_SYNC_TTL_MS) {
+    return { charges: readAll(), rentProfiles: readRentProfiles() };
+  }
+  householdChargesSyncPromise = Promise.resolve().then(() => {
+    hydrateHouseholdStateFromSession();
+    return { charges: readAll(), rentProfiles: readRentProfiles() };
+  });
+  const result = await householdChargesSyncPromise;
   householdChargesLastSyncedAt = Date.now();
   householdChargesSyncPromise = null;
-  if (hadLocalState) emit();
-  return { charges: [], rentProfiles: [] };
+  return result;
 }
 
 function readAll(): HouseholdCharge[] {
@@ -217,10 +221,6 @@ function applicationFeeFallbackChargeId(residentEmail: string, propertyId: strin
 
 function approvedChargeId(applicationId: string, kind: HouseholdChargeKind): string {
   return `hc_app_${chargeKeyPart(applicationId)}_${kind}`;
-}
-
-function recurringRentChargeId(profileId: string, month: string) {
-  return `hc_rent_${profileId}_${month}`;
 }
 
 function recurringRentProfileKey(profile: Pick<RecurringRentProfile, "residentEmail" | "propertyId">): string {
@@ -392,12 +392,6 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
     default:
       return "$0";
   }
-}
-
-function normalizeMoneyLabel(raw: string, amount: number): string {
-  const t = raw.trim();
-  if (t) return t.startsWith("$") ? t : `$${amount.toFixed(2)}`;
-  return `$${amount.toFixed(2)}`;
 }
 
 function moneyAmountLabel(amount: number): string {
@@ -697,14 +691,20 @@ export function linkHouseholdChargesToResidentUser(email: string, userId: string
 }
 
 export function readChargesForResident(email: string, userId: string | null): HouseholdCharge[] {
-  void email;
-  void userId;
-  return [];
+  const e = email.trim().toLowerCase();
+  return dedupeCharges(readAll())
+    .filter((r) => {
+      if (userId && r.residentUserId === userId) return true;
+      return Boolean(e && r.residentEmail.trim().toLowerCase() === e);
+    })
+    .filter((charge) => shouldDisplayChargeInPayments(charge));
 }
 
 export function readChargesForManager(managerUserId: string | null): HouseholdCharge[] {
-  void managerUserId;
-  return [];
+  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  return dedupeCharges(readAll())
+    .filter((r) => r.managerUserId === scope)
+    .filter((charge) => shouldDisplayChargeInPayments(charge));
 }
 
 export function deleteHouseholdCharge(chargeId: string, managerUserId: string | null): boolean {
@@ -759,6 +759,8 @@ export function recordApplicationCharges(
     residentName: string;
     residentUserId: string | null;
     propertyId: string;
+    applicationId?: string | null;
+    managerUserId?: string | null;
   },
   opts?: { skipApplicationFee?: boolean }
 ): void {
@@ -783,7 +785,7 @@ export function recordApplicationCharges(
       residentUserId: input.residentUserId,
       propertyId: input.propertyId,
       propertyLabel: prop?.title ?? "Listing",
-      managerUserId: prop?.managerUserId ?? null,
+      managerUserId: input.managerUserId ?? prop?.managerUserId ?? null,
       kind: "application_fee",
       title: chargeTitle("application_fee"),
       amountLabel: "$50",
@@ -800,15 +802,139 @@ export function recordApplicationCharges(
 }
 
 export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, managerUserId: string | null): boolean {
-  void row;
-  void managerUserId;
-  return false;
+  if (!isBrowser()) return false;
+  const residentEmail = row.email?.trim();
+  if (!residentEmail || !residentEmail.includes("@")) return false;
+  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  if (!propertyId) return false;
+  const beforeIds = new Set(readAll().map((charge) => charge.id));
+  const charge = ensurePendingApplicationFeeCharge({
+    residentEmail,
+    residentName: row.name || row.application?.fullLegalName || "Applicant",
+    residentUserId: null,
+    propertyId,
+    applicationId: row.id,
+    managerUserId: managerUserId ?? row.managerUserId ?? null,
+  });
+  return Boolean(charge && !beforeIds.has(charge.id));
 }
 
 export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null): boolean {
-  void row;
-  void managerUserId;
-  return false;
+  if (!isBrowser()) return false;
+  const residentEmail = row.email?.trim();
+  if (!residentEmail || !residentEmail.includes("@")) return false;
+  const applicationId = row.id.trim();
+  if (!applicationId) return false;
+  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  if (!propertyId) return false;
+
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Resident";
+  const propertyLabel = prop?.title ?? row.property ?? "Listing";
+  const effectiveManagerUserId = managerUserId ?? row.managerUserId ?? prop?.managerUserId ?? null;
+  const zelleSnap = sub?.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
+  const venmoSnap = sub?.venmoPaymentsEnabled && sub.venmoContact?.trim() ? sub.venmoContact.trim() : undefined;
+  const leaseStart = row.application?.leaseStart?.trim() || undefined;
+  const moveInDue = dueLabelForLeaseStart(leaseStart);
+  const before = readAll();
+  recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId);
+  const rows = readAll().filter(
+    (charge) => !(charge.applicationId === applicationId && charge.kind !== "application_fee"),
+  );
+  const existingKeys = new Set(rows.map((charge) => chargeBusinessKey(charge)));
+  const created: HouseholdCharge[] = [];
+
+  const pushCharge = (
+    kind: HouseholdChargeKind,
+    amount: number,
+    title: string,
+    blocksLeaseUntilPaid: boolean,
+    dueDateLabel = moveInDue,
+  ) => {
+    if (!(amount > 0)) return;
+    const label = moneyAmountLabel(Number(amount.toFixed(2)));
+    const charge: HouseholdCharge = {
+      id: approvedChargeId(applicationId, kind),
+      createdAt: new Date().toISOString(),
+      applicationId,
+      residentEmail,
+      residentName,
+      residentUserId: null,
+      propertyId,
+      propertyLabel,
+      managerUserId: effectiveManagerUserId,
+      kind,
+      title,
+      amountLabel: label,
+      balanceLabel: label,
+      status: "pending",
+      zelleContactSnapshot: zelleSnap,
+      venmoContactSnapshot: venmoSnap,
+      blocksLeaseUntilPaid,
+      dueDateLabel,
+    };
+    const key = chargeBusinessKey(charge);
+    if (existingKeys.has(key)) return;
+    existingKeys.add(key);
+    created.push(charge);
+  };
+
+  const rentAmount = selectedRoomRentAmount(row);
+  if (rentAmount > 0) {
+    const rentCharge = firstMonthRentChargeForLeaseStart(rentAmount, leaseStart);
+    pushCharge(rentCharge.kind, rentCharge.amount, rentCharge.title, true, moveInDue);
+  }
+
+  const utilities = selectedRoomUtilities(row);
+  if (utilities.amount > 0) {
+    const proration = leaseStartProration(leaseStart);
+    pushCharge(
+      proration.prorated ? "prorated_utilities" : "utilities",
+      proration.prorated ? utilities.amount * proration.factor : utilities.amount,
+      proration.prorated ? "Prorated utilities" : "Utilities",
+      false,
+      moveInDue,
+    );
+  }
+
+  if (sub) {
+    pushCharge("security_deposit", parseMoneyAmount(sub.securityDeposit), chargeTitle("security_deposit"), true, "Before lease signing");
+    pushCharge("move_in_fee", parseMoneyAmount(sub.moveInFee), chargeTitle("move_in_fee"), false, "Before move-in");
+  }
+
+  const next = dedupeCharges([...rows, ...created]);
+  const changed =
+    next.length !== before.length ||
+    JSON.stringify(next.map((charge) => charge.id).sort()) !== JSON.stringify(before.map((charge) => charge.id).sort());
+  if (changed) writeAll(next);
+  return changed;
+}
+
+export function removeApprovedApplicationCharges(applicationId: string, managerUserId: string | null): boolean {
+  if (!isBrowser()) return false;
+  const appId = applicationId.trim();
+  if (!appId) return false;
+  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  const rows = readAll();
+  const next = rows.filter(
+    (charge) => !(charge.applicationId === appId && charge.managerUserId === scope && charge.kind !== "application_fee"),
+  );
+  if (next.length === rows.length) return false;
+  writeAll(next);
+  return true;
+}
+
+export function removeAllApplicationCharges(applicationId: string, managerUserId: string | null): boolean {
+  if (!isBrowser()) return false;
+  const appId = applicationId.trim();
+  if (!appId) return false;
+  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  const rows = readAll();
+  const next = rows.filter((charge) => !(charge.applicationId === appId && charge.managerUserId === scope));
+  if (next.length === rows.length) return false;
+  writeAll(next);
+  return true;
 }
 
 /**

@@ -42,6 +42,13 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "@/lib/rental-application/data";
+import {
+  recordApprovedApplicationCharges,
+  recordSubmittedApplicationFeeCharge,
+  removeAllApplicationCharges,
+  removeApprovedApplicationCharges,
+  syncHouseholdChargesFromServer,
+} from "@/lib/household-charges";
 
 function ApplicantIds({ axisId }: { axisId: string }) {
   return (
@@ -362,6 +369,16 @@ export function ManagerApplications() {
     if (!row) return;
     const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket, stage: stageLabelForRow(r, nextBucket) } : r));
     persist(next);
+    const updatedRow = next.find((r) => r.id === id) ?? row;
+    await syncHouseholdChargesFromServer();
+    if (nextBucket === "approved") {
+      recordApprovedApplicationCharges(updatedRow, userId ?? null);
+    } else if (nextBucket === "pending") {
+      removeApprovedApplicationCharges(id, userId ?? null);
+      recordSubmittedApplicationFeeCharge(updatedRow, userId ?? null);
+    } else {
+      removeAllApplicationCharges(id, userId ?? null);
+    }
     if (row) {
       try {
         await syncResidentApproval(row, nextBucket);
@@ -422,6 +439,9 @@ export function ManagerApplications() {
       showToast(result.error ?? "Could not delete application.");
       return;
     }
+
+    await syncHouseholdChargesFromServer();
+    removeAllApplicationCharges(id, userId ?? null);
 
     let removedResidentAccess = true;
     if (email) {

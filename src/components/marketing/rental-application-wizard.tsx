@@ -250,16 +250,18 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       const pid = form.propertyId.trim();
       const emailTrim = form.email.trim();
       const prop = pid ? getPropertyById(pid) : undefined;
+      const axisId = makeNewApplicationId();
+      const listing = prop ?? readAllExtraListings().find((p) => p.id === pid);
 
       recordApplicationCharges({
         residentEmail: form.email,
         residentName: form.fullLegalName,
         residentUserId,
         propertyId: form.propertyId,
+        applicationId: axisId,
+        managerUserId: listing?.managerUserId ?? prop?.managerUserId ?? null,
       });
 
-      const axisId = makeNewApplicationId();
-      const listing = prop ?? readAllExtraListings().find((p) => p.id === pid);
       const feeCharge = findApplicationFeeCharge(form.email, pid, residentUserId);
       appendManagerApplicationRow({
         id: axisId,
