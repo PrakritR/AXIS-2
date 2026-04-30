@@ -23,6 +23,94 @@ function leaseRowsChanged(a: LeasePipelineRow[], b: LeasePipelineRow[]) {
   return JSON.stringify(a) !== JSON.stringify(b);
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function normalizeLeaseSignature(raw: unknown, role: "manager" | "resident"): LeaseSignature | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Partial<LeaseSignature>;
+  const name = typeof r.name === "string" ? r.name.trim() : "";
+  const signedAtIso = typeof r.signedAtIso === "string" ? r.signedAtIso.trim() : "";
+  if (!name || !signedAtIso) return null;
+  return { name, signedAtIso, role };
+}
+
+function signatureDateLabel(iso: string | undefined | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function electronicSignatureBlock(row: LeasePipelineRow): string {
+  const manager = row.managerSignature ?? null;
+  const resident = row.residentSignature ?? normalizeLeaseSignature(
+    row.signatureName && row.signedAtIso
+      ? { name: row.signatureName, signedAtIso: row.signedAtIso, role: "resident" }
+      : null,
+    "resident",
+  );
+  if (!manager && !resident) return "";
+  const signatureCard = (label: string, sig: LeaseSignature | null) => `
+    <div class="axis-esign-card">
+      <p class="axis-esign-label">${escapeHtml(label)}</p>
+      ${
+        sig
+          ? `<p class="axis-esign-name">${escapeHtml(sig.name)}</p><p class="axis-esign-meta">Electronically signed ${escapeHtml(signatureDateLabel(sig.signedAtIso))}</p>`
+          : `<p class="axis-esign-pending">Pending signature</p>`
+      }
+    </div>`;
+
+  return `
+<!-- axis-signatures:start -->
+<section class="axis-esign">
+  <h2>Electronic Signature Certificate</h2>
+  <p>This certificate is attached to and incorporated into this lease. Each typed name below was accepted in the Axis portal as an electronic signature.</p>
+  <div class="axis-esign-grid">
+    ${signatureCard("Landlord / Authorized Agent", manager)}
+    ${signatureCard("Resident / Tenant", resident)}
+  </div>
+</section>
+<!-- axis-signatures:end -->`;
+}
+
+export function hasAnyLeaseSignature(row: LeasePipelineRow): boolean {
+  return Boolean(row.managerSignature || row.residentSignature || (row.signatureName && row.signedAtIso));
+}
+
+export function hasBothLeaseSignatures(row: LeasePipelineRow): boolean {
+  return Boolean(row.managerSignature && (row.residentSignature || (row.signatureName && row.signedAtIso)));
+}
+
+export function applyLeaseSignaturesToHtml(row: LeasePipelineRow, html: string | null | undefined): string | null {
+  if (!html) return null;
+  const withoutExisting = html.replace(/\n?<!-- axis-signatures:start -->[\s\S]*?<!-- axis-signatures:end -->\n?/g, "\n");
+  const block = electronicSignatureBlock(row);
+  if (!block) return withoutExisting;
+  const style = `
+    .axis-esign { border-top: 3px double #333; margin-top: 3rem; padding-top: 1.5rem; }
+    .axis-esign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+    .axis-esign-card { border: 1px solid #999; min-height: 108px; padding: 12px; }
+    .axis-esign-label { margin: 0 0 0.5rem; font-weight: 700; }
+    .axis-esign-name { margin: 0.35rem 0; font-size: 1.35rem; font-family: Georgia, "Times New Roman", serif; font-style: italic; }
+    .axis-esign-meta, .axis-esign-pending { margin: 0; color: #555; font-size: 0.85rem; }
+  `;
+  const withStyle = withoutExisting.includes(".axis-esign")
+    ? withoutExisting
+    : withoutExisting.replace("</style>", `${style}</style>`);
+  return withStyle.includes("</body>")
+    ? withStyle.replace("</body>", `${block}\n</body>`)
+    : `${withStyle}\n${block}`;
+}
+
 export type LeaseThreadRole = "manager" | "admin" | "resident";
 
 export type LeaseThreadMessage = {
@@ -30,6 +118,12 @@ export type LeaseThreadMessage = {
   at: string;
   role: LeaseThreadRole;
   body: string;
+};
+
+export type LeaseSignature = {
+  name: string;
+  signedAtIso: string;
+  role: "manager" | "resident";
 };
 
 export type LeasePipelineRow = {
@@ -51,9 +145,12 @@ export type LeasePipelineRow = {
   signedRentLabel?: string | null;
   application?: Partial<RentalWizardFormState>;
   generatedHtml?: string | null;
+  signedHtml?: string | null;
   generatedAtIso?: string | null;
   managerUploadedPdf?: { dataUrl: string; fileName: string; uploadedAt: string } | null;
   thread: LeaseThreadMessage[];
+  managerSignature?: LeaseSignature | null;
+  residentSignature?: LeaseSignature | null;
   signatureName?: string | null;
   signedAtIso?: string | null;
 };
@@ -78,6 +175,14 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
       ? r.id.trim()
       : `lease_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const isoFallback = new Date().toISOString();
+  const legacyResidentSignature = normalizeLeaseSignature(
+    r.signatureName && r.signedAtIso
+      ? { name: r.signatureName, signedAtIso: r.signedAtIso, role: "resident" }
+      : null,
+    "resident",
+  );
+  const residentSignature = normalizeLeaseSignature(r.residentSignature, "resident") ?? legacyResidentSignature;
+  const managerSignature = normalizeLeaseSignature(r.managerSignature, "manager");
   return {
     id,
     residentName: String(r.residentName ?? "").trim() || "—",
@@ -97,11 +202,14 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     signedRentLabel: typeof r.signedRentLabel === "string" ? r.signedRentLabel : null,
     application: r.application,
     generatedHtml: r.generatedHtml ?? null,
+    signedHtml: r.signedHtml ?? null,
     generatedAtIso: r.generatedAtIso ?? null,
     managerUploadedPdf: r.managerUploadedPdf ?? null,
     thread: safeThread,
-    signatureName: typeof r.signatureName === "string" ? r.signatureName : null,
-    signedAtIso: typeof r.signedAtIso === "string" ? r.signedAtIso : null,
+    managerSignature,
+    residentSignature,
+    signatureName: typeof r.signatureName === "string" ? r.signatureName : residentSignature?.name ?? null,
+    signedAtIso: typeof r.signedAtIso === "string" ? r.signedAtIso : residentSignature?.signedAtIso ?? null,
   };
 }
 
@@ -238,9 +346,12 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       signedRentLabel: signedRentLabelForRow(app),
       application: effectiveApplicationForRow(app),
       generatedHtml: idx === -1 ? null : next[idx]!.generatedHtml,
+      signedHtml: idx === -1 ? null : next[idx]!.signedHtml,
       generatedAtIso: idx === -1 ? null : next[idx]!.generatedAtIso,
       managerUploadedPdf: idx === -1 ? null : next[idx]!.managerUploadedPdf,
       thread: idx === -1 ? [] : next[idx]!.thread,
+      managerSignature: idx === -1 ? null : next[idx]!.managerSignature,
+      residentSignature: idx === -1 ? null : next[idx]!.residentSignature,
       signatureName: idx === -1 ? null : next[idx]!.signatureName,
       signedAtIso: idx === -1 ? null : next[idx]!.signedAtIso,
     });
@@ -446,8 +557,10 @@ export function generateLeaseHtmlForRow(rowId: string): { ok: true; version: num
     return { ok: false, error: "Could not build lease from saved application — check answers or regenerate after fixing data." };
   }
   const version = row.pdfVersion + 1;
+  const signedHtml = hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, html) : null;
   const ok = updateLeasePipelineRow(rowId, {
     generatedHtml: html,
+    signedHtml,
     generatedAtIso: new Date().toISOString(),
     pdfVersion: version,
     notes: row.notes,
@@ -475,6 +588,7 @@ export function regenerateAllLeaseHtml(): { updated: number; skipped: number } {
       const version = row.pdfVersion + 1;
       updateLeasePipelineRow(row.id, {
         generatedHtml: html,
+        signedHtml: hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, html) : null,
         generatedAtIso: new Date().toISOString(),
         pdfVersion: version,
       });
@@ -509,7 +623,7 @@ export function downloadLeaseFromRow(row: LeasePipelineRow): void {
     a.remove();
     return;
   }
-  if (row.generatedHtml) {
+  if (row.signedHtml || row.generatedHtml) {
     printLeaseAsPdf(row);
     return;
   }
@@ -554,7 +668,7 @@ export function managerUploadLeasePdf(rowId: string, file: File): Promise<{ ok: 
   });
 }
 
-/** Resident electronically signs — moves lease to signed (no separate manager "mark signed"). */
+/** Resident electronically signs. The lease is fully signed only after the manager also signs. */
 export function residentSignLease(email: string, signatureName?: string): boolean {
   const rows = readLeasePipeline();
   const idx = rows.findIndex((r) => r.residentEmail.toLowerCase() === email.trim().toLowerCase());
@@ -562,18 +676,55 @@ export function residentSignLease(email: string, signatureName?: string): boolea
   const row = rows[idx]!;
   if (row.bucket !== "resident") return false;
   const iso = new Date().toISOString();
-  const sigMsg = signatureName ? `Signed electronically — ${signatureName}.` : "Signed electronically.";
+  const trimmedSignature = signatureName?.trim() || row.residentName || "Resident";
+  const residentSignature: LeaseSignature = { role: "resident", name: trimmedSignature, signedAtIso: iso };
+  const sigMsg = `Resident signed electronically — ${trimmedSignature}.`;
   const thread = [...(row.thread ?? []), makeMsg("resident", sigMsg)];
-  rows[idx] = {
+  const nextRowBase = normalizeLeasePipelineRow({
     ...row,
-    bucket: "signed",
-    stageLabel: stageLabelForBucket("signed"),
+    residentSignature,
+    signatureName: trimmedSignature,
+    signedAtIso: iso,
+  });
+  const bothSigned = hasBothLeaseSignatures(nextRowBase);
+  rows[idx] = {
+    ...nextRowBase,
+    bucket: bothSigned ? "signed" : "resident",
+    stageLabel: bothSigned ? stageLabelForBucket("signed") : "Resident signed; manager signature pending",
     thread,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
     notes: row.notes,
-    signatureName: signatureName ?? null,
-    signedAtIso: iso,
+    signedHtml: applyLeaseSignaturesToHtml(nextRowBase, row.generatedHtml),
+  };
+  write(rows);
+  return true;
+}
+
+/** Manager / authorized agent electronically countersigns. */
+export function managerSignLease(rowId: string, signatureName: string): boolean {
+  const rows = readLeasePipeline();
+  const idx = rows.findIndex((r) => r.id === rowId);
+  if (idx === -1) return false;
+  const row = rows[idx]!;
+  const trimmedSignature = signatureName.trim();
+  if (!trimmedSignature) return false;
+  const iso = new Date().toISOString();
+  const managerSignature: LeaseSignature = { role: "manager", name: trimmedSignature, signedAtIso: iso };
+  const nextRowBase = normalizeLeasePipelineRow({
+    ...row,
+    managerSignature,
+  });
+  const bothSigned = hasBothLeaseSignatures(nextRowBase);
+  const thread = [...(row.thread ?? []), makeMsg("manager", `Manager signed electronically — ${trimmedSignature}.`)];
+  rows[idx] = {
+    ...nextRowBase,
+    bucket: bothSigned ? "signed" : row.bucket,
+    stageLabel: bothSigned ? stageLabelForBucket("signed") : row.stageLabel,
+    thread,
+    updatedAtIso: iso,
+    updated: formatUpdatedLabel(iso),
+    signedHtml: applyLeaseSignaturesToHtml(nextRowBase, row.generatedHtml),
   };
   write(rows);
   return true;
@@ -592,7 +743,7 @@ export function printLeaseAsPdf(row: LeasePipelineRow): void {
     a.remove();
     return;
   }
-  const html = row.generatedHtml;
+  const html = row.signedHtml ?? row.generatedHtml;
   if (!html) return;
   const printHtml = html.replace(
     "</head>",

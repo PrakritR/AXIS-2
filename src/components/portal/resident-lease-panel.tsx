@@ -25,6 +25,7 @@ import {
   LEASE_PIPELINE_EVENT,
   downloadLeaseFromRow,
   findLeaseForResidentEmail,
+  hasBothLeaseSignatures,
   printLeaseAsPdf,
   residentRequestEdits,
   residentSignLease,
@@ -276,7 +277,7 @@ export function ResidentLeasePanel() {
     };
   })();
 
-  const leaseLocked = false;
+  const leaseLocked = Boolean(pipelineRow?.bucket === "signed");
   const leaseVisibleToResident = Boolean(pipelineRow && (pipelineRow.bucket === "resident" || pipelineRow.bucket === "signed"));
 
   const upgradeBreakdown = useMemo(() => {
@@ -297,7 +298,7 @@ export function ResidentLeasePanel() {
     return shortToLongTermUpgradeBreakdown(propertyId, true);
   }, [pipelineRow, leaseCtx.application]);
 
-  const canSignElectronically = Boolean(pipelineRow?.bucket === "resident" && !leaseLocked);
+  const canSignElectronically = Boolean(pipelineRow?.bucket === "resident" && !pipelineRow.residentSignature && !leaseLocked);
   /** Request edits, upload your copy, extension — only after manager sends lease to resident. */
   const residentLeaseActions = Boolean(pipelineRow?.bucket === "resident" && !leaseLocked);
 
@@ -342,7 +343,7 @@ export function ResidentLeasePanel() {
     if (!email) return;
     if (residentSignLease(email, signatureName)) {
       setShowSigningModal(false);
-      showToast("Lease signed. Your manager has been notified.");
+      showToast(hasBothLeaseSignatures({ ...pipelineRow, residentSignature: { role: "resident", name: signatureName, signedAtIso: new Date().toISOString() } }) ? "Lease fully signed." : "Lease signed. Your manager still needs to sign.");
       setPipelineTick((t) => t + 1);
     } else {
       showToast("Could not sign — try again.");
@@ -478,10 +479,10 @@ export function ResidentLeasePanel() {
             type="button"
             variant="primary"
             className="shrink-0 rounded-full"
-            disabled={leaseLocked || !canSignElectronically}
+            disabled={!canSignElectronically}
             onClick={() => onSignLease()}
           >
-            Sign lease
+            {pipelineRow?.residentSignature ? "Resident signed" : "Sign lease"}
           </Button>
         </>
       }
@@ -493,6 +494,29 @@ export function ResidentLeasePanel() {
             row={pipelineRow}
             emptyHint="Your manager will generate or upload your lease here. When it's ready, the full agreement appears in this preview."
           />
+          {pipelineRow.managerSignature || pipelineRow.residentSignature ? (
+            <Card className="mt-4 border-emerald-200/80 bg-emerald-50/60 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Signature status</p>
+              <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <p className="font-semibold text-slate-800">Manager</p>
+                  <p className={pipelineRow.managerSignature ? "text-emerald-800" : "text-amber-700"}>
+                    {pipelineRow.managerSignature
+                      ? `Signed by ${pipelineRow.managerSignature.name} · ${new Date(pipelineRow.managerSignature.signedAtIso).toLocaleString()}`
+                      : "Pending signature"}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-800">Resident</p>
+                  <p className={pipelineRow.residentSignature ? "text-emerald-800" : "text-amber-700"}>
+                    {pipelineRow.residentSignature
+                      ? `Signed by ${pipelineRow.residentSignature.name} · ${new Date(pipelineRow.residentSignature.signedAtIso).toLocaleString()}`
+                      : "Pending signature"}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          ) : null}
         </div>
       ) : null}
 

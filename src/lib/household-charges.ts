@@ -9,6 +9,7 @@ import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fee
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 
 export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
@@ -84,6 +85,8 @@ export type RecurringRentProfile = {
   roomLabel: string;
   managerUserId: string | null;
   monthlyRent: number;
+  /** Full monthly utilities/RUBS from listing or manager override — billed each month with rent. */
+  monthlyUtilities?: number;
   dueDay: number;
   startMonth: string;
   active: boolean;
@@ -249,9 +252,54 @@ function dedupeRecurringRentProfiles(rows: RecurringRentProfile[]): RecurringRen
   return [...byKey.values()];
 }
 
+function applicationPropertyIdForCharges(row: DemoApplicantRow): string {
+  return row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+}
+
+/** Update rent profiles with monthly utilities from approved application data (no sync recursion). */
+function backfillMonthlyUtilitiesOnRentProfiles(): void {
+  if (!isBrowser()) return;
+  const apps = readManagerApplicationRows().filter((a) => a.bucket === "approved" && a.email?.trim());
+  if (apps.length === 0) return;
+  const profiles = readRentProfiles();
+  let changed = false;
+  const next = profiles.map((p) => {
+    if (!p.active) return p;
+    if ((p.monthlyUtilities ?? 0) > 0) return p;
+    const email = p.residentEmail.trim().toLowerCase();
+    const propId = p.propertyId.trim();
+    const app = apps.find((a) => {
+      if (a.email!.trim().toLowerCase() !== email) return false;
+      return applicationPropertyIdForCharges(a) === propId;
+    });
+    if (!app) return p;
+    const u = selectedRoomUtilities(app);
+    if (!(u.amount > 0)) return p;
+    changed = true;
+    return {
+      ...p,
+      monthlyUtilities: Number(u.amount.toFixed(2)),
+      updatedAt: new Date().toISOString(),
+    };
+  });
+  if (!changed) return;
+  const normalized = dedupeRecurringRentProfiles(next);
+  memoryRentProfiles = normalized;
+  persistHouseholdStateToSession();
+  mirrorRentProfiles(normalized);
+}
+
 function chargeBusinessKey(charge: HouseholdCharge): string {
   if (charge.kind === "rent") {
     return `rent|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}|${charge.rentMonth ?? ""}`;
+  }
+  if (
+    charge.kind === "utilities" &&
+    charge.rentMonth &&
+    charge.recurringRentProfileId &&
+    !charge.applicationId
+  ) {
+    return `utilities_recurring|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}|${charge.rentMonth}`;
   }
   if (charge.applicationId && (
     charge.kind === "application_fee" ||
@@ -322,6 +370,14 @@ function shouldDisplayChargeInPayments(charge: HouseholdCharge, now = new Date()
       if (!due) return true;
       return due.getTime() - now.getTime() <= FUTURE_RENT_VISIBILITY_WINDOW_MS;
     }
+    case "utilities": {
+      if (charge.rentMonth && charge.recurringRentProfileId) {
+        const due = recurringRentDueDate(charge.rentMonth, charge.dueDay);
+        if (!due) return true;
+        return due.getTime() - now.getTime() <= FUTURE_RENT_VISIBILITY_WINDOW_MS;
+      }
+      return true;
+    }
     default:
       return true;
   }
@@ -329,7 +385,10 @@ function shouldDisplayChargeInPayments(charge: HouseholdCharge, now = new Date()
 
 export function chargeDueLabel(charge: HouseholdCharge): string {
   if (charge.dueDateLabel?.trim()) return charge.dueDateLabel.trim();
-  if (charge.kind === "rent" && charge.rentMonth) {
+  if (
+    (charge.kind === "rent" || (charge.kind === "utilities" && charge.recurringRentProfileId)) &&
+    charge.rentMonth
+  ) {
     return formatRecurringRentDueLabel(charge.rentMonth, charge.dueDay ?? 1);
   }
   switch (charge.kind) {
@@ -656,7 +715,8 @@ export function recordWorkOrderResidentCharge(input: {
 
 function syncAllRecurringRentCharges(): boolean {
   if (!isBrowser()) return false;
-  const profiles = readRentProfiles().filter((p) => p.active && p.monthlyRent > 0);
+  backfillMonthlyUtilitiesOnRentProfiles();
+  const profiles = readRentProfiles().filter((p) => p.active && (p.monthlyRent > 0 || (p.monthlyUtilities ?? 0) > 0));
   if (profiles.length === 0) return false;
 
   const now = new Date();
@@ -683,36 +743,71 @@ function syncAllRecurringRentCharges(): boolean {
       if (msTillDue > FUTURE_RENT_VISIBILITY_WINDOW_MS) break;
 
       const rentMonth = `${candidateYear}-${String(candidateMonthNum).padStart(2, "0")}`;
-      const chargeKey = `rent|${profile.residentEmail.trim().toLowerCase()}|${profile.propertyId}|${rentMonth}`;
-      const alreadyExists =
-        existing.some((c) => chargeBusinessKey(c) === chargeKey) ||
-        newCharges.some((c) => chargeBusinessKey(c) === chargeKey);
-      if (alreadyExists) continue;
-
       const dueLabel = formatRecurringRentDueLabel(rentMonth, dueDay);
       const monthLabel = candidateDate.toLocaleString("default", { month: "long", year: "numeric" });
-      newCharges.push({
-        id: `hc_rent_${chargeKeyPart(profile.residentEmail)}_${chargeKeyPart(profile.propertyId)}_${rentMonth}`,
-        createdAt: new Date().toISOString(),
-        residentEmail: profile.residentEmail,
-        residentName: profile.residentName,
-        residentUserId: profile.residentUserId,
-        propertyId: profile.propertyId,
-        propertyLabel: profile.propertyLabel,
-        managerUserId: profile.managerUserId,
-        kind: "rent",
-        title: `Rent — ${monthLabel}`,
-        amountLabel: moneyAmountLabel(profile.monthlyRent),
-        balanceLabel: moneyAmountLabel(profile.monthlyRent),
-        status: "pending",
-        recurringRentProfileId: profile.id,
-        rentMonth,
-        dueDay,
-        dueDateLabel: dueLabel,
-        blocksLeaseUntilPaid: false,
-        zelleContactSnapshot: profile.zelleContact,
-        venmoContactSnapshot: profile.venmoContact,
-      });
+
+      if (profile.monthlyRent > 0) {
+        const chargeKey = `rent|${profile.residentEmail.trim().toLowerCase()}|${profile.propertyId}|${rentMonth}`;
+        const alreadyExists =
+          existing.some((c) => chargeBusinessKey(c) === chargeKey) ||
+          newCharges.some((c) => chargeBusinessKey(c) === chargeKey);
+        if (!alreadyExists) {
+          newCharges.push({
+            id: `hc_rent_${chargeKeyPart(profile.residentEmail)}_${chargeKeyPart(profile.propertyId)}_${rentMonth}`,
+            createdAt: new Date().toISOString(),
+            residentEmail: profile.residentEmail,
+            residentName: profile.residentName,
+            residentUserId: profile.residentUserId,
+            propertyId: profile.propertyId,
+            propertyLabel: profile.propertyLabel,
+            managerUserId: profile.managerUserId,
+            kind: "rent",
+            title: `Rent — ${monthLabel}`,
+            amountLabel: moneyAmountLabel(profile.monthlyRent),
+            balanceLabel: moneyAmountLabel(profile.monthlyRent),
+            status: "pending",
+            recurringRentProfileId: profile.id,
+            rentMonth,
+            dueDay,
+            dueDateLabel: dueLabel,
+            blocksLeaseUntilPaid: false,
+            zelleContactSnapshot: profile.zelleContact,
+            venmoContactSnapshot: profile.venmoContact,
+          });
+        }
+      }
+
+      const utilAmt = profile.monthlyUtilities ?? 0;
+      if (utilAmt > 0) {
+        const utilKey = `utilities_recurring|${profile.residentEmail.trim().toLowerCase()}|${profile.propertyId}|${rentMonth}`;
+        const alreadyUtil =
+          existing.some((c) => chargeBusinessKey(c) === utilKey) ||
+          newCharges.some((c) => chargeBusinessKey(c) === utilKey);
+        if (!alreadyUtil) {
+          newCharges.push({
+            id: `hc_util_${chargeKeyPart(profile.residentEmail)}_${chargeKeyPart(profile.propertyId)}_${rentMonth}`,
+            createdAt: new Date().toISOString(),
+            residentEmail: profile.residentEmail,
+            residentName: profile.residentName,
+            residentUserId: profile.residentUserId,
+            propertyId: profile.propertyId,
+            propertyLabel: profile.propertyLabel,
+            managerUserId: profile.managerUserId,
+            kind: "utilities",
+            title: `Utilities — ${monthLabel}`,
+            amountLabel: moneyAmountLabel(utilAmt),
+            balanceLabel: moneyAmountLabel(utilAmt),
+            status: "pending",
+            recurringRentProfileId: profile.id,
+            rentMonth,
+            dueDay,
+            dueDateLabel: dueLabel,
+            blocksLeaseUntilPaid: false,
+            zelleContactSnapshot: profile.zelleContact,
+            venmoContactSnapshot: profile.venmoContact,
+          });
+        }
+      }
     }
   }
 
@@ -738,14 +833,22 @@ export function upsertRecurringRentProfile(input: {
   roomLabel: string;
   managerUserId: string | null;
   monthlyRent: number;
+  monthlyUtilities?: number;
   dueDay?: number;
   startMonth?: string;
   zelleContact?: string;
   venmoContact?: string;
 }): RecurringRentProfile | null {
   if (!isBrowser()) return null;
+  const profiles = readRentProfiles();
+  const key = `${input.residentEmail.trim().toLowerCase()}|${input.propertyId}`;
+  const existing = profiles.find((p) => recurringRentProfileKey(p) === key);
+  const monthlyUtilities =
+    input.monthlyUtilities !== undefined && Number.isFinite(input.monthlyUtilities)
+      ? Math.max(0, Number(input.monthlyUtilities))
+      : (existing?.monthlyUtilities ?? 0);
   const profile: RecurringRentProfile = {
-    id: `rrp_${chargeKeyPart(input.residentEmail)}_${chargeKeyPart(input.propertyId)}`,
+    id: existing?.id ?? `rrp_${chargeKeyPart(input.residentEmail)}_${chargeKeyPart(input.propertyId)}`,
     residentEmail: input.residentEmail,
     residentName: input.residentName,
     residentUserId: input.residentUserId ?? null,
@@ -754,6 +857,7 @@ export function upsertRecurringRentProfile(input: {
     roomLabel: input.roomLabel,
     managerUserId: input.managerUserId,
     monthlyRent: input.monthlyRent,
+    monthlyUtilities,
     dueDay: Math.min(28, Math.max(1, input.dueDay ?? 1)),
     startMonth: input.startMonth ?? currentRentMonth(),
     active: true,
@@ -761,8 +865,6 @@ export function upsertRecurringRentProfile(input: {
     zelleContact: input.zelleContact,
     venmoContact: input.venmoContact,
   };
-  const profiles = readRentProfiles();
-  const key = recurringRentProfileKey(profile);
   const next = profiles.some((p) => recurringRentProfileKey(p) === key)
     ? profiles.map((p) => (recurringRentProfileKey(p) === key ? profile : p))
     : [...profiles, profile];
@@ -1028,8 +1130,8 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     JSON.stringify(next.map((charge) => charge.id).sort()) !== JSON.stringify(before.map((charge) => charge.id).sort());
   if (changed) writeAll(next);
 
-  // Set up recurring monthly rent profile starting from the first full month after move-in
-  if (rentAmount > 0 && leaseStart) {
+  // Set up recurring monthly rent (+ utilities) profile starting from the first full month after move-in
+  if (leaseStart && (rentAmount > 0 || utilities.amount > 0)) {
     const [leaseYearRaw, leaseMonthRaw] = leaseStart.split("-").map(Number);
     if (leaseYearRaw && leaseMonthRaw) {
       // First full month is the calendar month after the lease start month
@@ -1044,6 +1146,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         roomLabel,
         managerUserId: effectiveManagerUserId,
         monthlyRent: rentAmount,
+        monthlyUtilities: utilities.amount > 0 ? Number(utilities.amount.toFixed(2)) : 0,
         dueDay: 1,
         startMonth,
         zelleContact: zelleSnap,

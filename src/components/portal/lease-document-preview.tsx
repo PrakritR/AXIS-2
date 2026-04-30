@@ -10,6 +10,7 @@ type Props = {
   /** Shown when there is no PDF and no generated HTML */
   emptyHint?: string;
   className?: string;
+  documentKind?: "latest" | "generated" | "signed";
 };
 
 function draftHtmlFromApplication(application: Partial<RentalWizardFormState> | undefined): string | null {
@@ -24,15 +25,21 @@ function draftHtmlFromApplication(application: Partial<RentalWizardFormState> | 
 /**
  * Preview of uploaded PDF, saved generated HTML, or a read-only draft built from application data.
  */
-export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
-  const pdfSrc = row.managerUploadedPdf?.dataUrl ?? null;
+export function LeaseDocumentPreview({ row, emptyHint, className, documentKind = "latest" }: Props) {
+  const pdfSrc = documentKind === "signed" ? null : row.managerUploadedPdf?.dataUrl ?? null;
+  const html =
+    documentKind === "generated"
+      ? row.generatedHtml
+      : documentKind === "signed"
+        ? row.signedHtml
+        : row.signedHtml ?? row.generatedHtml;
   const defaultEmpty =
     emptyHint ??
     "No lease document yet — click Generate lease (from application data) or upload a PDF to preview it here.";
 
   const syntheticHtml = useMemo(
-    () => (!pdfSrc && !row.generatedHtml ? draftHtmlFromApplication(row.application ?? undefined) : null),
-    [pdfSrc, row.generatedHtml, row.application],
+    () => (!pdfSrc && !html && documentKind !== "signed" ? draftHtmlFromApplication(row.application ?? undefined) : null),
+    [pdfSrc, html, row.application, documentKind],
   );
 
   const showSynthetic = Boolean(syntheticHtml);
@@ -40,7 +47,7 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
   return (
     <div className={`mt-4 overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50 ${className ?? ""}`}>
       <p className="border-b border-slate-200/80 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-        Lease document
+        {documentKind === "signed" ? "Signed lease document" : documentKind === "generated" ? "Generated lease document" : "Lease document"}
       </p>
       {showSynthetic ? (
         <p className="border-b border-sky-100 bg-sky-50/90 px-3 py-2 text-xs text-sky-900">
@@ -49,10 +56,10 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
       ) : null}
       {pdfSrc ? (
         <iframe title="Lease PDF preview" src={pdfSrc} className="h-[min(52vh,420px)] w-full bg-white" />
-      ) : row.generatedHtml ? (
+      ) : html ? (
         <iframe
-          title="Generated lease"
-          srcDoc={row.generatedHtml}
+          title={documentKind === "signed" ? "Signed lease" : "Generated lease"}
+          srcDoc={html}
           sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
           className="h-[min(52vh,420px)] w-full bg-white"
         />

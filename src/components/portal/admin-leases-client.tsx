@@ -116,6 +116,7 @@ function LeasePipelineAdminDetail({
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [reply, setReply] = useState("");
+  const [generating, setGenerating] = useState(false);
 
   const onPickFile: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
@@ -183,15 +184,24 @@ function LeasePipelineAdminDetail({
               type="button"
               variant="outline"
               className="rounded-full"
+              disabled={generating}
               onClick={() => {
-                const res = generateLeaseHtmlForRow(row.id);
-                if (res.ok === true) {
-                  showToast(`Regenerated draft v${res.version}.`);
-                  onSaved();
-                } else showToast(res.error ?? "Could not generate.");
+                if (generating) return;
+                setGenerating(true);
+                window.setTimeout(() => {
+                  try {
+                    const res = generateLeaseHtmlForRow(row.id);
+                    if (res.ok === true) {
+                      showToast(`Regenerated draft v${res.version}.`);
+                      onSaved();
+                    } else showToast(res.error ?? "Could not generate.");
+                  } finally {
+                    setGenerating(false);
+                  }
+                }, 0);
               }}
             >
-              Generate from application
+              {generating ? "Generating..." : "Generate from application"}
             </Button>
             <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={onPickFile} />
             <Button type="button" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>

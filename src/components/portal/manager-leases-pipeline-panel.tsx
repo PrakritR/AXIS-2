@@ -25,9 +25,11 @@ import {
   deleteLeasePipelineRow,
   downloadLeaseFromRow,
   generateLeaseHtmlForRow,
+  managerSignLease,
   managerUploadLeasePdf,
   printLeaseAsPdf,
   updateLeasePipelineRow,
+  hasBothLeaseSignatures,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 
@@ -74,15 +76,24 @@ export function ManagerLeasesPipelinePanel({
   const [adminNoteById, setAdminNoteById] = useState<Record<string, string>>({});
   const uploadRef = useRef<HTMLInputElement>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
+  const [generatingRowId, setGeneratingRowId] = useState<string | null>(null);
 
   void refreshKey;
   const bucketRows = useMemo(() => rows.filter((r) => r.bucket === bucket), [rows, bucket]);
 
   const onGeneratePdf = (row: LeasePipelineRow) => {
-    const res = generateLeaseHtmlForRow(row.id);
-    if (res.ok) {
-      showToast(`Lease generated from application data (v${res.version}).`);
-    } else showToast(res.error ?? "Could not generate.");
+    if (generatingRowId) return;
+    setGeneratingRowId(row.id);
+    window.setTimeout(() => {
+      try {
+        const res = generateLeaseHtmlForRow(row.id);
+        if (res.ok) {
+          showToast(`Lease generated from application data (v${res.version}).`);
+        } else showToast(res.error ?? "Could not generate.");
+      } finally {
+        setGeneratingRowId(null);
+      }
+    }, 0);
   };
 
   const onDownload = (row: LeasePipelineRow) => {
@@ -152,6 +163,17 @@ export function ManagerLeasesPipelinePanel({
       showToast("Lease moved to Manager review.");
       setExpandedId(null);
     } else showToast("Could not update.");
+  };
+
+  const onManagerSign = (row: LeasePipelineRow) => {
+    const name = window.prompt("Type the manager / authorized agent name to sign this lease.");
+    if (!name?.trim()) return;
+    if (managerSignLease(row.id, name.trim())) {
+      showToast(hasBothLeaseSignatures({ ...row, managerSignature: { role: "manager", name: name.trim(), signedAtIso: new Date().toISOString() } }) ? "Lease fully signed." : "Manager signature saved.");
+      setExpandedId(null);
+    } else {
+      showToast("Could not sign lease.");
+    }
   };
 
   const onPickUpload = async (rowId: string, files: FileList | null) => {
@@ -224,19 +246,40 @@ export function ManagerLeasesPipelinePanel({
                     <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                       <p className="text-sm leading-relaxed text-slate-600">{row.notes}</p>
                       <p className="mt-1.5 text-xs text-slate-500">PDF version v{row.pdfVersion}</p>
-                      {row.signatureName && row.signedAtIso ? (
-                        <div className="mt-2 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3 py-2.5 text-xs text-emerald-900">
-                          <span className="font-semibold">Signed electronically</span>
-                          {" — "}
-                          <span
-                            className="text-sm text-slate-800"
-                            style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
-                          >
-                            {row.signatureName}
-                          </span>
-                          <span className="ml-2 text-emerald-700">
-                            {new Date(row.signedAtIso).toLocaleString()}
-                          </span>
+                      {row.managerSignature || row.residentSignature ? (
+                        <div className="mt-2 grid gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3 py-2.5 text-xs text-emerald-900 sm:grid-cols-2">
+                          <div>
+                            <span className="font-semibold">Manager signature</span>
+                            {row.managerSignature ? (
+                              <p>
+                                <span
+                                  className="text-sm text-slate-800"
+                                  style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
+                                >
+                                  {row.managerSignature.name}
+                                </span>
+                                <span className="ml-2 text-emerald-700">{new Date(row.managerSignature.signedAtIso).toLocaleString()}</span>
+                              </p>
+                            ) : (
+                              <p className="text-amber-700">Pending</p>
+                            )}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Resident signature</span>
+                            {row.residentSignature ? (
+                              <p>
+                                <span
+                                  className="text-sm text-slate-800"
+                                  style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
+                                >
+                                  {row.residentSignature.name}
+                                </span>
+                                <span className="ml-2 text-emerald-700">{new Date(row.residentSignature.signedAtIso).toLocaleString()}</span>
+                              </p>
+                            ) : (
+                              <p className="text-amber-700">Pending</p>
+                            )}
+                          </div>
                         </div>
                       ) : null}
 
@@ -283,9 +326,10 @@ export function ManagerLeasesPipelinePanel({
                               type="button"
                               variant="outline"
                               className={PORTAL_DETAIL_BTN}
+                              disabled={generatingRowId === row.id}
                               onClick={() => onGeneratePdf(row)}
                             >
-                              Generate lease
+                              {generatingRowId === row.id ? "Generating..." : "Generate lease"}
                             </Button>
                             <Button
                               type="button"
@@ -295,6 +339,17 @@ export function ManagerLeasesPipelinePanel({
                             >
                               Download lease
                             </Button>
+                            {!row.managerSignature ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => onManagerSign(row)}
+                                disabled={!row.generatedHtml}
+                              >
+                                Sign as manager
+                              </Button>
+                            ) : null}
                             <Button
                               type="button"
                               variant="outline"
