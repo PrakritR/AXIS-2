@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -22,7 +22,9 @@ import {
   printLeaseAsPdf,
   residentCanViewLeaseRow,
   residentRequestEdits,
+  residentSendLeaseToManager,
   residentSignLease,
+  residentUploadLeasePdf,
   syncLeasePipelineFromServer,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
@@ -183,9 +185,11 @@ function LeaseSigningModal({
 export function ResidentLeasePanel() {
   const { showToast } = useAppUi();
   const session = usePortalSession();
+  const uploadRef = useRef<HTMLInputElement>(null);
   const [pipelineTick, setPipelineTick] = useState(0);
   const [editRequestDraft, setEditRequestDraft] = useState("");
   const [showSigningModal, setShowSigningModal] = useState(false);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
   const email = session.email?.trim() || null;
 
   useEffect(() => {
@@ -239,6 +243,9 @@ export function ResidentLeasePanel() {
   );
   const residentLeaseActions = Boolean(pipelineRow?.status === "Resident Signature Pending" && !leaseLocked);
   const canRequestExtension = Boolean(pipelineRow?.status === "Fully Signed");
+  const canUseManualPdfFlow = Boolean(
+    pipelineRow?.managerUploadedPdf?.dataUrl && pipelineRow?.status === "Resident Signature Pending" && !leaseLocked,
+  );
 
   const onDownloadAiLease = useCallback(() => {
     downloadAiGeneratedLeaseHtml(leaseCtx);
@@ -287,6 +294,30 @@ export function ResidentLeasePanel() {
     }
   };
 
+  const onUploadResidentPdf = async (file: File | null | undefined) => {
+    if (!file || !email) return;
+    setUploadingPdf(true);
+    const result = await residentUploadLeasePdf(email, file);
+    setUploadingPdf(false);
+    if (uploadRef.current) uploadRef.current.value = "";
+    if (result.ok) {
+      setPipelineTick((t) => t + 1);
+      showToast("Signed PDF uploaded.");
+    } else {
+      showToast(result.error ?? "Upload failed.");
+    }
+  };
+
+  const onSendToManager = () => {
+    if (!email) return;
+    if (residentSendLeaseToManager(email)) {
+      setPipelineTick((t) => t + 1);
+      showToast("Lease sent to manager.");
+    } else {
+      showToast("Upload the signed PDF first, then send it to your manager.");
+    }
+  };
+
   if ((!pipelineRow || !leaseVisibleToResident) && email) {
     return (
       <ManagerPortalPageShell title="Lease">
@@ -310,6 +341,14 @@ export function ResidentLeasePanel() {
 
   return (
     <>
+    <input
+      ref={uploadRef}
+      type="file"
+      accept="application/pdf"
+      className="sr-only"
+      aria-hidden
+      onChange={(e) => void onUploadResidentPdf(e.target.files?.[0])}
+    />
     {showSigningModal && pipelineRow ? (
       <LeaseSigningModal
         row={pipelineRow}
@@ -322,15 +361,26 @@ export function ResidentLeasePanel() {
       title="Lease"
       titleAside={
         <>
-          {residentLeaseActions ? (
-            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("This lease is waiting on your signature.")}>
-              Awaiting your signature
-            </Button>
-          ) : null}
           {canRequestExtension ? (
             <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Extension request sent.")}>
               Request extension
             </Button>
+          ) : null}
+          {canUseManualPdfFlow ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0 rounded-full"
+                onClick={() => uploadRef.current?.click()}
+                disabled={uploadingPdf}
+              >
+                {uploadingPdf ? "Uploading PDF..." : "Upload PDF"}
+              </Button>
+              <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onSendToManager}>
+                Send to manager
+              </Button>
+            </>
           ) : null}
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
             Download PDF
