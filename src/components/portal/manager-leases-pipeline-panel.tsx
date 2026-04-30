@@ -142,6 +142,18 @@ export function ManagerLeasesPipelinePanel({
     } else showToast("Could not update.");
   };
 
+  const onMoveToManagerReview = (row: LeasePipelineRow) => {
+    appendLeaseThreadMessage(row.id, "manager", "Moved lease back to manager review.");
+    if (
+      updateLeasePipelineRow(row.id, {
+        bucket: "manager",
+      })
+    ) {
+      showToast("Lease moved to Manager review.");
+      setExpandedId(null);
+    } else showToast("Could not update.");
+  };
+
   const onPickUpload = async (rowId: string, files: FileList | null) => {
     const f = files?.[0];
     if (!f) return;
@@ -322,6 +334,16 @@ export function ManagerLeasesPipelinePanel({
                                   Request edits (admin)
                                 </Button>
                               </>
+                            ) : null}
+                            {bucket === "resident" ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => onMoveToManagerReview(row)}
+                              >
+                                Move to manager review
+                              </Button>
                             ) : null}
                             <Button
                               type="button"

@@ -41,7 +41,7 @@ import {
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
-import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty } from "@/lib/rental-application/data";
+import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
 import {
   recordApprovedApplicationCharges,
   recordSubmittedApplicationFeeCharge,
@@ -81,7 +81,7 @@ async function syncResidentApproval(row: DemoApplicantRow, nextBucket: ManagerAp
   });
 }
 
-function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucket, assignedRoomChoice?: string) {
+function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucket) {
   if (bucket === "approved") return "Approved";
   if (bucket === "rejected") return "Rejected";
   return "Submitted";
@@ -133,34 +133,30 @@ function ManagerApplicationPlacementEditor({
 }: {
   row: DemoApplicantRow;
   propertyOptions: ManagerPropertyFilterOption[];
-  onSave: (propertyId: string, roomChoice: string, signedMonthlyRent: number) => void;
+  onSave: (propertyId: string, roomChoice: string, signedMonthlyRent: number, leaseTerm: string, leaseStart: string, leaseEnd: string) => void;
 }) {
   const initialPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const initialRoomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const initialSignedRent = row.signedMonthlyRent && row.signedMonthlyRent > 0 ? String(row.signedMonthlyRent) : "";
+  const initialLeaseTerm = row.application?.rentalType === "short_term" ? SHORT_TERM_LEASE_TERM : row.application?.leaseTerm?.trim() || "";
   const [propertyId, setPropertyId] = useState(initialPropertyId);
   const [roomChoice, setRoomChoice] = useState(initialRoomChoice);
   const [signedRent, setSignedRent] = useState(initialSignedRent);
+  const [leaseTerm, setLeaseTerm] = useState(initialLeaseTerm);
+  const [leaseStart, setLeaseStart] = useState(row.application?.leaseStart?.trim() || "");
+  const [leaseEnd, setLeaseEnd] = useState(row.application?.leaseEnd?.trim() || "");
   const userEditedRentRef = useRef(false);
-
-  useEffect(() => {
-    setPropertyId(row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "");
-    setRoomChoice(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "");
-    if (!userEditedRentRef.current) {
-      setSignedRent(row.signedMonthlyRent && row.signedMonthlyRent > 0 ? String(row.signedMonthlyRent) : "");
-    }
-  }, [row]);
 
   const roomOptions = useMemo(
     () =>
       propertyId
         ? getRoomOptionsForProperty(propertyId, {
-            leaseStart: row.application?.leaseStart,
-            leaseEnd: row.application?.leaseEnd,
+            leaseStart,
+            leaseEnd,
             excludeApplicationId: row.id,
           })
         : [],
-    [propertyId, row.application?.leaseEnd, row.application?.leaseStart, row.id],
+    [leaseEnd, leaseStart, propertyId, row.id],
   );
 
   const roomChoiceBelongsToProperty =
@@ -172,19 +168,6 @@ function ManagerApplicationPlacementEditor({
     const label = getRoomChoiceLabel(roomChoice);
     return label ? [{ value: roomChoice, label }, ...roomOptions] : roomOptions;
   }, [roomChoice, roomChoiceBelongsToProperty, roomOptions]);
-
-  useEffect(() => {
-    if (!roomChoice) return;
-    if (!roomChoiceBelongsToProperty) {
-      setRoomChoice("");
-    }
-  }, [roomChoice, roomChoiceBelongsToProperty]);
-
-  useEffect(() => {
-    if (userEditedRentRef.current || signedRent.trim()) return;
-    const inferred = inferRoomRent(propertyId, roomChoice);
-    if (inferred) setSignedRent(String(inferred));
-  }, [propertyId, roomChoice, signedRent]);
 
   const applicantChoices = [
     row.application?.roomChoice1?.trim(),
@@ -202,7 +185,16 @@ function ManagerApplicationPlacementEditor({
         <div className="grid flex-1 gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">House</span>
-            <Select value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
+            <Select
+              value={propertyId}
+              onChange={(e) => {
+                const nextPropertyId = e.target.value;
+                setPropertyId(nextPropertyId);
+                if (roomChoice && roomChoice !== nextPropertyId && !roomChoice.startsWith(`${nextPropertyId}::`)) {
+                  setRoomChoice("");
+                }
+              }}
+            >
               <option value="">Select property</option>
               {propertyOptions.map((opt) => (
                 <option key={opt.id} value={opt.id}>
@@ -213,7 +205,18 @@ function ManagerApplicationPlacementEditor({
           </label>
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Room</span>
-            <Select value={roomChoice} onChange={(e) => setRoomChoice(e.target.value)} disabled={!propertyId || displayedRoomOptions.length === 0}>
+            <Select
+              value={roomChoice}
+              onChange={(e) => {
+                const nextRoomChoice = e.target.value;
+                setRoomChoice(nextRoomChoice);
+                if (!userEditedRentRef.current && !signedRent.trim()) {
+                  const inferred = inferRoomRent(propertyId, nextRoomChoice);
+                  if (inferred) setSignedRent(String(inferred));
+                }
+              }}
+              disabled={!propertyId || displayedRoomOptions.length === 0}
+            >
               <option value="">{propertyId ? "Select room" : "Select house first"}</option>
               {displayedRoomOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -234,6 +237,48 @@ function ManagerApplicationPlacementEditor({
               placeholder="800"
             />
           </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Stay type</span>
+            <Select
+              value={leaseTerm}
+              onChange={(e) => {
+                const nextLeaseTerm = e.target.value;
+                setLeaseTerm(nextLeaseTerm);
+                if (nextLeaseTerm === "Month-to-Month") {
+                  setLeaseEnd("");
+                }
+              }}
+            >
+              <option value="">Select stay type</option>
+              <option value={SHORT_TERM_LEASE_TERM}>Short-Term Stay</option>
+              {LEASE_TERM_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt === "Month-to-Month" ? "Month-to-Month" : `${opt} lease`}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move-in date</span>
+            <input
+              type="date"
+              value={leaseStart}
+              onChange={(e) => setLeaseStart(e.target.value)}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {leaseTerm === SHORT_TERM_LEASE_TERM ? "Move-out date" : leaseTerm === "Month-to-Month" ? "Move-out date" : "Lease end"}
+            </span>
+            <input
+              type="date"
+              value={leaseEnd}
+              onChange={(e) => setLeaseEnd(e.target.value)}
+              disabled={leaseTerm === "Month-to-Month"}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-400 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+            />
+          </label>
         </div>
       </div>
 
@@ -245,6 +290,12 @@ function ManagerApplicationPlacementEditor({
         <p>
           <span className="font-medium text-slate-800">Current assignment:</span>{" "}
           {propertyId && roomChoice ? `${getPropertyById(propertyId)?.title ?? propertyId} · ${getRoomChoiceLabel(roomChoice)}` : "Not assigned yet"}
+        </p>
+        <p>
+          <span className="font-medium text-slate-800">Tenancy:</span>{" "}
+          {leaseTerm || "Not set yet"}
+          {leaseStart ? ` · move-in ${leaseStart}` : ""}
+          {leaseEnd ? ` · ${leaseTerm === SHORT_TERM_LEASE_TERM ? "move-out" : "end"} ${leaseEnd}` : ""}
         </p>
         <p>
           <span className="font-medium text-slate-800">Lease timing:</span>{" "}
@@ -263,8 +314,8 @@ function ManagerApplicationPlacementEditor({
           type="button"
           variant="outline"
           className={PORTAL_DETAIL_BTN_PRIMARY}
-          disabled={!propertyId || !roomChoice || !(Number.parseFloat(signedRent) > 0)}
-          onClick={() => onSave(propertyId, roomChoice, Number.parseFloat(signedRent))}
+          disabled={!propertyId || !roomChoice || !(Number.parseFloat(signedRent) > 0) || !leaseTerm || !leaseStart || (leaseTerm !== "Month-to-Month" && !leaseEnd)}
+          onClick={() => onSave(propertyId, roomChoice, Number.parseFloat(signedRent), leaseTerm, leaseStart, leaseEnd)}
         >
           Save placement
         </Button>
@@ -282,7 +333,6 @@ export function ManagerApplications() {
   const [rows, setRows] = useState<DemoApplicantRow[]>([]);
   const [portfolioTick, setPortfolioTick] = useState(0);
   const [roomSortDir, setRoomSortDir] = useState<"asc" | "desc">("asc");
-  const [propertyDataLoading, setPropertyDataLoading] = useState(false);
 
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
@@ -297,11 +347,9 @@ export function ManagerApplications() {
   useEffect(() => {
     if (!authReady || !userId) return;
     let cancelled = false;
-    setPropertyDataLoading(true);
     syncPropertyPipelineFromServer()
       .finally(() => {
         if (cancelled) return;
-        setPropertyDataLoading(false);
         setPortfolioTick((n) => n + 1);
       });
     return () => {
@@ -326,7 +374,8 @@ export function ManagerApplications() {
     writeManagerApplicationRows(next);
   }, []);
 
-  const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId, portfolioTick]);
+  const propertyDataLoading = authReady && Boolean(userId) && portfolioTick === 0;
+  const propertyOptions = buildManagerPropertyFilterOptions(userId);
   const placementPropertyOptions = propertyOptions;
 
   const scopedRows = useMemo(() => {
@@ -398,13 +447,14 @@ export function ManagerApplications() {
   };
 
   const savePlacement = useCallback(
-    (id: string, propertyId: string, roomChoice: string, signedMonthlyRent: number) => {
+    (id: string, propertyId: string, roomChoice: string, signedMonthlyRent: number, leaseTerm: string, leaseStart: string, leaseEnd: string) => {
       const property = getPropertyById(propertyId);
       const roomLabel = getRoomChoiceLabel(roomChoice);
-      if (!property || !roomLabel || !(signedMonthlyRent > 0)) {
-        showToast("Select a valid house, room, and signed rent.");
+      if (!property || !roomLabel || !(signedMonthlyRent > 0) || !leaseTerm || !leaseStart || (leaseTerm !== "Month-to-Month" && !leaseEnd)) {
+        showToast("Select a valid house, room, rent, and tenancy dates.");
         return;
       }
+      const rentalType: "short_term" | "standard" = leaseTerm === SHORT_TERM_LEASE_TERM ? "short_term" : "standard";
       const next = rows.map((row) =>
         row.id === id
           ? {
@@ -414,12 +464,23 @@ export function ManagerApplications() {
               assignedPropertyId: propertyId,
               assignedRoomChoice: roomChoice,
               signedMonthlyRent: Number(signedMonthlyRent.toFixed(2)),
-              stage: stageLabelForRow(row, row.bucket, roomChoice),
+              stage: stageLabelForRow(row, row.bucket),
+              application: row.application
+                ? {
+                    ...row.application,
+                    propertyId,
+                    roomChoice1: roomChoice,
+                    rentalType,
+                    leaseTerm,
+                    leaseStart,
+                    leaseEnd: leaseTerm === "Month-to-Month" ? "" : leaseEnd,
+                  }
+                : row.application,
             }
           : row,
       );
       persist(next);
-      showToast("Assigned house and room saved.");
+      showToast("Assigned house, room, and stay type saved.");
     },
     [rows, persist, showToast],
   );
@@ -579,10 +640,20 @@ export function ManagerApplications() {
                           {row.application ? (
                             <div className="mt-4 max-h-[min(70vh,520px)] overflow-y-auto rounded-xl border border-slate-200/80 bg-white p-4">
                               <ManagerApplicationPlacementEditor
+                                key={[
+                                  row.id,
+                                  row.assignedPropertyId,
+                                  row.assignedRoomChoice,
+                                  row.signedMonthlyRent,
+                                  row.application?.rentalType,
+                                  row.application?.leaseTerm,
+                                  row.application?.leaseStart,
+                                  row.application?.leaseEnd,
+                                ].join("|")}
                                 row={row}
                                 propertyOptions={placementPropertyOptions}
-                                onSave={(propertyId, roomChoice, signedMonthlyRent) =>
-                                  savePlacement(row.id, propertyId, roomChoice, signedMonthlyRent)
+                                onSave={(propertyId, roomChoice, signedMonthlyRent, leaseTerm, leaseStart, leaseEnd) =>
+                                  savePlacement(row.id, propertyId, roomChoice, signedMonthlyRent, leaseTerm, leaseStart, leaseEnd)
                                 }
                               />
                               <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Application on file</p>
