@@ -1075,11 +1075,16 @@ export function residentSendLeaseToManager(email: string): boolean {
   if (row.status !== "Resident Signature Pending") return false;
   if (!row.managerUploadedPdf?.dataUrl) return false;
   const iso = new Date().toISOString();
+  const thread = [
+    ...(row.thread ?? []),
+    makeMsg("resident", "Resident uploaded the signed PDF and sent it back to the manager."),
+  ];
   rows[idx] = normalizeLeasePipelineRow({
     ...row,
-    bucket: "manager",
-    status: "Manager Review",
+    bucket: "signed",
+    status: "Manager Signature Pending",
     currentActorRole: "manager",
+    thread,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
   });
