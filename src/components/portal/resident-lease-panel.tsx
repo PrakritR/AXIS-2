@@ -293,30 +293,15 @@ export function ResidentLeasePanel() {
       {leaseVisibleToResident && pipelineRow && email ? (
         <Card className="border-slate-200/80 p-5">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Messages</p>
-          {pipelineRow.thread?.length ? (
-            <ul className="mt-3 space-y-2 overflow-y-auto" style={{ maxHeight: "16rem" }}>
-              {pipelineRow.thread.map((m) => (
-                <li
-                  key={m.id}
-                  className={`rounded-xl px-3 py-2 text-sm ${m.role === "resident" ? "border border-blue-100 bg-blue-50" : "border border-slate-100 bg-slate-50"}`}
-                >
-                  <span className="font-semibold text-slate-800">{m.role === "resident" ? "You" : "Manager"}</span>
-                  <span className="ml-1.5 text-xs text-slate-400">{new Date(m.at).toLocaleString()}</span>
-                  <p className="mt-1 whitespace-pre-wrap text-slate-700">{m.body}</p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-sm text-slate-500">No messages yet — send a note to your manager below.</p>
-          )}
+          {/* Compose always at top so it's never pushed off-screen */}
           <textarea
             rows={3}
             value={editRequestDraft}
             onChange={(e) => setEditRequestDraft(e.target.value)}
             placeholder={residentLeaseActions ? "Ask for changes, or send a message to your manager…" : "Send a message to your manager…"}
-            className="mt-4 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="mt-3 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-2.5 flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
@@ -351,6 +336,24 @@ export function ResidentLeasePanel() {
               </Button>
             ) : null}
           </div>
+          {/* Thread history below compose */}
+          {pipelineRow.thread?.length ? (
+            <>
+              <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">History</p>
+              <ul className="mt-2 space-y-2">
+                {pipelineRow.thread.map((m) => (
+                  <li
+                    key={m.id}
+                    className={`rounded-xl px-3 py-2 text-sm ${m.role === "resident" ? "border border-blue-100 bg-blue-50" : "border border-slate-100 bg-slate-50"}`}
+                  >
+                    <span className="font-semibold text-slate-800">{m.role === "resident" ? "You" : "Manager"}</span>
+                    <span className="ml-1.5 text-xs text-slate-400">{new Date(m.at).toLocaleString()}</span>
+                    <p className="mt-1 whitespace-pre-wrap text-slate-700">{m.body}</p>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </Card>
       ) : null}
 
