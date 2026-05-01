@@ -25,6 +25,8 @@ import {
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
+import { ManagerCosignerReadonlyReview } from "@/components/portal/manager-cosigner-readonly-review";
+import { readCosignerSubmissionsForSignerAppId } from "@/lib/cosigner-submissions-storage";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   MANAGER_APPLICATIONS_EVENT,
@@ -49,6 +51,25 @@ import {
   removeApprovedApplicationCharges,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
+
+function CosignerSection({ applicationId }: { applicationId: string }) {
+  const subs = readCosignerSubmissionsForSignerAppId(applicationId);
+  if (subs.length === 0) return null;
+  return (
+    <>
+      {subs.map((cosub, i) => (
+        <div key={i} className="mt-4">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">
+            Co-signer on file{subs.length > 1 ? ` (${i + 1} of ${subs.length})` : ""}
+          </p>
+          <div className="mt-2.5">
+            <ManagerCosignerReadonlyReview sub={cosub} />
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
 
 function ApplicantIds({ axisId }: { axisId: string }) {
   return (
@@ -801,7 +822,7 @@ export function ManagerApplications() {
                           </PortalTableDetailActions>
 
                           {row.application ? (
-                            <div className="mt-4 max-h-[min(70vh,520px)] overflow-y-auto rounded-xl border border-slate-200/80 bg-white p-4">
+                            <div className="mt-4 max-h-[min(70vh,540px)] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
                               <ManagerApplicationPlacementEditor
                                 key={[
                                   row.id,
@@ -844,14 +865,15 @@ export function ManagerApplications() {
                                   )
                                 }
                               />
-                              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Application on file</p>
-                              <div className="mt-3">
+                              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">Application on file</p>
+                              <div className="mt-2.5">
                                 <ManagerApplicationReadonlyReview
                                   partial={effectiveApplicationForRow(row) ?? row.application}
                                   assignedPropertyId={row.assignedPropertyId}
                                   assignedRoomChoice={row.assignedRoomChoice}
                                 />
                               </div>
+                              <CosignerSection applicationId={row.id} />
                             </div>
                           ) : null}
 

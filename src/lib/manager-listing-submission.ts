@@ -120,6 +120,8 @@ export type ManagerListingSubmissionV1 = {
   houseRulesText: string;
   /** General house photos (common areas, exterior, kitchen) shown at the top of the public listing. */
   housePhotoDataUrls: string[];
+  /** Optional full-house walkthrough video shown on the public listing. */
+  houseVideoDataUrl?: string | null;
   leaseTermsBody: string;
   shortTermRentalsAllowed?: boolean;
   shortTermRequirements?: string;
@@ -392,6 +394,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     applicationFeeZelleEnabled,
     applicationFeeVenmoEnabled,
     housePhotoDataUrls,
+    houseVideoDataUrl: typeof (sub as Record<string, unknown>).houseVideoDataUrl === "string"
+      ? ((sub as Record<string, unknown>).houseVideoDataUrl as string) || null
+      : null,
   };
   delete (next as Record<string, unknown>).sharedSpacesDescription;
   delete (next as Record<string, unknown>).paymentAtSigning;
@@ -557,6 +562,7 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     petFriendly: false,
     houseOverview: "",
     housePhotoDataUrls: [],
+    houseVideoDataUrl: null,
     houseRulesText: "",
     leaseTermsBody: "",
     shortTermRentalsAllowed: false,

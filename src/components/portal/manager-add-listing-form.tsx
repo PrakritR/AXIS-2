@@ -161,19 +161,19 @@ const LISTING_FORM_STEPS = [
   { id: "bathrooms", label: "Bathrooms" },
   { id: "spaces", label: "Shared spaces" },
   { id: "lease", label: "Lease & pricing" },
-  { id: "media", label: "House photos" },
+  { id: "media", label: "Media" },
   { id: "finish", label: "Highlights" },
 ] as const;
 
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
-  home: "Property type, address, floors, baths, and how many bedrooms you’ll list — like Airbnb’s first steps.",
+  home: "Property type, address, floors, baths, and how many bedrooms you’ll list.",
   rooms: "Each rentable bedroom: name, floor, rent, availability, furnishing, photos, and video.",
   bathrooms: "Bath rows and which bedrooms use each one — powers the public “Rooms by bathroom” layout.",
   spaces: "Kitchen, laundry, lounge, outdoor — equipment, rules, and which bedrooms have access.",
   lease: "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
-  media: "Hero images at the top of your public listing — common areas and exterior.",
+  media: "Hero images and optional full-house walkthrough video at the top of your public listing.",
   finish: "Sidebar quick facts, building amenities, and final submit.",
 };
 
@@ -412,7 +412,7 @@ export function ManagerAddListingForm({
   };
 
   const addRoom = () => {
-    if (sub.rooms.length >= 8) return;
+    if (sub.rooms.length >= 20) return;
     setSub((s) => ({ ...s, rooms: [...s.rooms, emptyRoom(s.rooms.length)] }));
   };
 
@@ -492,8 +492,8 @@ export function ManagerAddListingForm({
   };
 
   const duplicateRoom = (i: number) => {
-    if (sub.rooms.length >= 8) {
-      showToast("Maximum 8 rooms.");
+    if (sub.rooms.length >= 20) {
+      showToast("Maximum 20 rooms.");
       return;
     }
     const copy = duplicateRoomEntry(sub.rooms[i]!);
@@ -742,6 +742,29 @@ export function ManagerAddListingForm({
     setRoom(roomIndex, { videoDataUrl: null });
   };
 
+  const onPickHouseVideo = async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("video/")) {
+      showToast("Please choose a video file.");
+      return;
+    }
+    const url = await fileToDataUrl(file, MAX_VID_BYTES);
+    if (!url) {
+      showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
+      return;
+    }
+    setSub((s) => ({ ...s, houseVideoDataUrl: url }));
+  };
+
+  const clearHouseVideo = () => setSub((s) => ({ ...s, houseVideoDataUrl: null }));
+
+  const onDropHouseVideo = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deactivateDropZone("house-video");
+    void onPickHouseVideo(event.dataTransfer.files?.[0] ?? null);
+  };
+
   const activateDropZone = (zoneId: string) => {
     setActiveDropZone(zoneId);
   };
@@ -934,11 +957,7 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-building"
             title="Tell us about your place"
-            description={
-              <>
-                Inspired by Airbnb’s flow: pick the property type and basics, then we’ll match room slots on the next step. Everything here can be changed later.
-              </>
-            }
+            description="Pick the property type and basics, then we’ll match room slots on the next step. Everything here can be changed later."
           >
             <div className="mb-6 rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/90 to-white px-4 py-4 sm:px-5">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Step 1 · Basics</p>
@@ -1560,7 +1579,7 @@ export function ManagerAddListingForm({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-bold text-slate-900">Room {i + 1}</p>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => duplicateRoom(i)} disabled={sub.rooms.length >= 8}>
+                        <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => duplicateRoom(i)} disabled={sub.rooms.length >= 20}>
                           Duplicate
                         </Button>
                         {sub.rooms.length > 1 ? (
@@ -2191,12 +2210,12 @@ export function ManagerAddListingForm({
           {stepIndex === 5 ? (
           <FormSection
             id="edit-house-photos"
-            title="House photos"
-            description="Hero gallery at the top of your public listing — exterior, kitchen, living areas, and other common spaces."
+            title="House media"
+            description="Hero gallery and optional walkthrough video at the top of your public listing — exterior, kitchen, living areas, and other common spaces."
           >
             <ListingSubsection
-              title="Upload images"
-              description="Add these after rooms and pricing so you know what you are showcasing. Up to 12 images; we compress for fast loading."
+              title="Photos"
+              description="Up to 12 images; we compress for fast loading."
             >
               <div
                 className={`mt-2 ${mediaDropZoneClass(activeDropZone === "house-photos")}`}
@@ -2241,6 +2260,56 @@ export function ManagerAddListingForm({
                   </div>
                 ) : (
                   <p className="mt-2 text-[11px] text-slate-500">No photos yet — optional for draft, recommended before you go live.</p>
+                )}
+              </div>
+            </ListingSubsection>
+
+            <ListingSubsection
+              title="Full-house video"
+              description="One walkthrough video of the whole property (~14 MB max). Shown prominently on your public listing."
+            >
+              <div
+                className={`mt-2 ${mediaDropZoneClass(activeDropZone === "house-video")}`}
+                onDragOver={(e) => handleDragOver(e, "house-video")}
+                onDragEnter={(e) => handleDragOver(e, "house-video")}
+                onDragLeave={(e) => handleDragLeave(e, "house-video")}
+                onDrop={onDropHouseVideo}
+              >
+                <input
+                  key={`house-video-in`}
+                  id="house-video-input"
+                  type="file"
+                  accept="video/*"
+                  className="sr-only"
+                  onChange={(e) => {
+                    void onPickHouseVideo(e.target.files?.[0] ?? null);
+                    e.target.value = "";
+                  }}
+                />
+                <label
+                  htmlFor="house-video-input"
+                  className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                >
+                  {sub.houseVideoDataUrl ? "Replace video" : "Add house video"}
+                </label>
+                <p className="mt-3 text-sm text-slate-600">Drag and drop a video here, or use the button above.</p>
+                {sub.houseVideoDataUrl ? (
+                  <div className="mt-3 space-y-2">
+                    <video
+                      src={sub.houseVideoDataUrl}
+                      controls
+                      className="max-h-48 w-full rounded-xl border border-slate-200 bg-black object-contain"
+                    />
+                    <button
+                      type="button"
+                      onClick={clearHouseVideo}
+                      className="text-xs font-medium text-rose-600 hover:text-rose-800"
+                    >
+                      Remove video
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[11px] text-slate-500">No video yet — optional.</p>
                 )}
               </div>
             </ListingSubsection>

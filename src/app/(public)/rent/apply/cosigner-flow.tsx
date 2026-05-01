@@ -2,9 +2,8 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { clearCosignerDraft, loadCosignerDraft, saveCosignerDraft } from "@/lib/rental-application/drafts";
 import { todayISO } from "@/lib/rental-application/state";
 import {
@@ -19,6 +18,7 @@ import {
   validateZip,
 } from "./apply-validation";
 import { ApplyFieldRow } from "./apply-field-row";
+import { appendCosignerSubmission } from "@/lib/cosigner-submissions-storage";
 
 const COSIGNER_STEPS = 5;
 
@@ -237,10 +237,11 @@ export function CosignerApplyFlow({
     if (step === 4 && !validateStep4()) return;
     if (step === 5) {
       if (!validateStep5()) return;
-      setFieldErrors({});
+      appendCosignerSubmission({ ...f, submittedAt: new Date().toISOString() });
       clearCosignerDraft();
       setF(emptyCosigner());
       setStep(1);
+      setFieldErrors({});
       showToast("Co-signer application submitted.");
       return;
     }
@@ -254,33 +255,27 @@ export function CosignerApplyFlow({
     else setStep((s) => s - 1);
   };
 
-  const inputClass = "";
   const err = (key: keyof CosignerFields | string) => (fieldErrors[key] ? errRing : "");
 
   return (
-    <>
-      <p className="mt-6 text-center text-xs font-semibold uppercase tracking-wide text-muted sm:text-left">Rent with Axis</p>
-      <p className="mt-1 text-center text-sm text-muted sm:text-left">
-        Step {step} of {COSIGNER_STEPS} — {stepTitle}
-      </p>
-
-      <div className="mt-6 flex items-center gap-3">
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
-          <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
+    <div
+      className="mt-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+      style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
+    >
+      <div className="border-b border-slate-100 pb-6">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+          Step {step} of {COSIGNER_STEPS} — Co-signer form
+        </p>
+        <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{stepTitle}</p>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out" style={{ width: `${progress}%` }} />
         </div>
-        <button type="button" className="text-xs font-semibold text-primary" onClick={() => showToast("Change type: coming soon")}>
-          Change type
-        </button>
       </div>
 
-      <Card className="mt-8 p-6">
+      <div className="pt-8">
         {step === 1 ? (
           <>
-            <CardHeader
-              title="Link This Co-Signer To A Signer Application"
-              subtitle="Provide the signer’s Axis ID, their full name, or both."
-            />
-            <div className="mt-6 divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100">
               <Field label="Signer Axis ID" optional hint="Recommended if you have their Axis ID." error={fieldErrors.signerAppId}>
                 <Input
                   value={f.signerAppId}
@@ -289,7 +284,7 @@ export function CosignerApplyFlow({
                     clearError("signerAppId");
                   }}
                   placeholder="AXIS-XXXXXXXX"
-                  className={`${inputClass} ${err("signerAppId")}`}
+                  className={err("signerAppId")}
                 />
               </Field>
               <Field label="Signer Full Name" optional hint="Use this when you do not have the Axis ID." error={fieldErrors.signerFullName}>
@@ -300,7 +295,7 @@ export function CosignerApplyFlow({
                     clearError("signerFullName");
                   }}
                   placeholder="First Last"
-                  className={`${inputClass} ${err("signerFullName")}`}
+                  className={err("signerFullName")}
                 />
               </Field>
             </div>
@@ -309,8 +304,7 @@ export function CosignerApplyFlow({
 
         {step === 2 ? (
           <>
-            <CardHeader title="Co-Signer Information" subtitle="All fields marked with * are required." />
-            <div className="mt-6 divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100">
               <Field label="Full name" hint="First and last name required." error={fieldErrors.fullName}>
                 <Input
                   value={f.fullName}
@@ -318,7 +312,7 @@ export function CosignerApplyFlow({
                     patchField(setF, "fullName", e.target.value);
                     clearError("fullName");
                   }}
-                  className={`${inputClass} ${err("fullName")}`}
+                  className={err("fullName")}
                 />
               </Field>
               <Field label="Email" error={fieldErrors.email}>
@@ -329,7 +323,7 @@ export function CosignerApplyFlow({
                     patchField(setF, "email", e.target.value);
                     clearError("email");
                   }}
-                  className={`${inputClass} ${err("email")}`}
+                  className={err("email")}
                 />
               </Field>
               <Field label="Phone number" hint="10 digits" error={fieldErrors.phone}>
@@ -341,7 +335,7 @@ export function CosignerApplyFlow({
                     clearError("phone");
                   }}
                   placeholder="(206) 555-0100"
-                  className={`${inputClass} ${err("phone")}`}
+                  className={err("phone")}
                 />
               </Field>
               <Field label="Date of birth" error={fieldErrors.dob}>
@@ -352,7 +346,7 @@ export function CosignerApplyFlow({
                     patchField(setF, "dob", e.target.value);
                     clearError("dob");
                   }}
-                  className={`${inputClass} ${err("dob")}`}
+                  className={err("dob")}
                 />
               </Field>
               <Field label="Driver's License / ID #" hint="Enter your license or ID number." error={fieldErrors.dlNumber}>
@@ -363,7 +357,7 @@ export function CosignerApplyFlow({
                     clearError("dlNumber");
                   }}
                   placeholder="License or ID number"
-                  className={`${inputClass} ${err("dlNumber")}`}
+                  className={err("dlNumber")}
                 />
               </Field>
               <Field label="Social Security #" hint="9 digits — ###-##-####" error={fieldErrors.ssn}>
@@ -374,7 +368,7 @@ export function CosignerApplyFlow({
                     clearError("ssn");
                   }}
                   placeholder="123-45-6789"
-                  className={`${inputClass} ${err("ssn")}`}
+                  className={err("ssn")}
                 />
               </Field>
               <Field label="Current address" className="sm:col-span-2" error={fieldErrors.address}>
@@ -385,7 +379,7 @@ export function CosignerApplyFlow({
                     clearError("address");
                   }}
                   placeholder="123 Main St"
-                  className={`${inputClass} ${err("address")}`}
+                  className={err("address")}
                 />
               </Field>
               <Field label="City" error={fieldErrors.city}>
@@ -396,7 +390,7 @@ export function CosignerApplyFlow({
                     clearError("city");
                   }}
                   placeholder="Your city"
-                  className={`${inputClass} ${err("city")}`}
+                  className={err("city")}
                 />
               </Field>
               <Field label="State" hint="Two letters, e.g. WA, CA" error={fieldErrors.state}>
@@ -408,7 +402,7 @@ export function CosignerApplyFlow({
                   }}
                   placeholder="WA"
                   maxLength={2}
-                  className={`${inputClass} ${err("state")}`}
+                  className={err("state")}
                 />
               </Field>
               <Field label="ZIP" error={fieldErrors.zip}>
@@ -419,7 +413,7 @@ export function CosignerApplyFlow({
                     clearError("zip");
                   }}
                   placeholder="98105"
-                  className={`${inputClass} ${err("zip")}`}
+                  className={err("zip")}
                 />
               </Field>
             </div>
@@ -428,8 +422,7 @@ export function CosignerApplyFlow({
 
         {step === 3 ? (
           <>
-            <CardHeader title="Employment & Income" />
-            <div className="mt-6 divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100">
               <ApplyFieldRow label="Not employed" optional hint="Check if you are not currently working.">
                 <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
                   <input
@@ -458,7 +451,7 @@ export function CosignerApplyFlow({
                       clearError("otherIncome");
                     }}
                     placeholder="0"
-                    className={`${inputClass} ${err("otherIncome")}`}
+                    className={err("otherIncome")}
                   />
                 </Field>
             ) : (
@@ -470,7 +463,7 @@ export function CosignerApplyFlow({
                         patchField(setF, "employerName", e.target.value);
                         clearError("employerName");
                       }}
-                      className={`${inputClass} ${err("employerName")}`}
+                      className={err("employerName")}
                     />
                   </Field>
                   <Field label="Employer address" error={fieldErrors.employerAddress}>
@@ -480,7 +473,7 @@ export function CosignerApplyFlow({
                         patchField(setF, "employerAddress", e.target.value);
                         clearError("employerAddress");
                       }}
-                      className={`${inputClass} ${err("employerAddress")}`}
+                      className={err("employerAddress")}
                     />
                   </Field>
                   <Field label="Supervisor name" error={fieldErrors.supervisorName}>
@@ -490,7 +483,7 @@ export function CosignerApplyFlow({
                         patchField(setF, "supervisorName", e.target.value);
                         clearError("supervisorName");
                       }}
-                      className={`${inputClass} ${err("supervisorName")}`}
+                      className={err("supervisorName")}
                     />
                   </Field>
                   <Field label="Supervisor phone" optional error={fieldErrors.supervisorPhone}>
@@ -501,7 +494,7 @@ export function CosignerApplyFlow({
                         clearError("supervisorPhone");
                       }}
                       placeholder="(206) 555-0100"
-                      className={`${inputClass} ${err("supervisorPhone")}`}
+                      className={err("supervisorPhone")}
                     />
                   </Field>
                   <Field label="Job title" error={fieldErrors.jobTitle}>
@@ -511,7 +504,7 @@ export function CosignerApplyFlow({
                         patchField(setF, "jobTitle", e.target.value);
                         clearError("jobTitle");
                       }}
-                      className={`${inputClass} ${err("jobTitle")}`}
+                      className={err("jobTitle")}
                     />
                   </Field>
                   <Field label="Monthly income ($)" error={fieldErrors.monthlyIncome}>
@@ -522,7 +515,7 @@ export function CosignerApplyFlow({
                         clearError("monthlyIncome");
                       }}
                       placeholder="0"
-                      className={`${inputClass} ${err("monthlyIncome")}`}
+                      className={err("monthlyIncome")}
                     />
                   </Field>
                   <Field label="Annual income ($)" error={fieldErrors.annualIncome}>
@@ -533,7 +526,7 @@ export function CosignerApplyFlow({
                         clearError("annualIncome");
                       }}
                       placeholder="0"
-                      className={`${inputClass} ${err("annualIncome")}`}
+                      className={err("annualIncome")}
                     />
                   </Field>
                 <Field label="Employment start date" error={fieldErrors.employmentStart}>
@@ -544,7 +537,7 @@ export function CosignerApplyFlow({
                       patchField(setF, "employmentStart", e.target.value);
                       clearError("employmentStart");
                     }}
-                    className={`${inputClass} ${err("employmentStart")}`}
+                    className={err("employmentStart")}
                   />
                 </Field>
                 <Field label="Other / Non-Employment Income ($)" optional hint="Optional — e.g. rental income, investments">
@@ -552,7 +545,6 @@ export function CosignerApplyFlow({
                     value={f.otherIncome}
                     onChange={(e) => patchField(setF, "otherIncome", e.target.value)}
                     placeholder="0"
-                    className={inputClass}
                   />
                 </Field>
               </>
@@ -563,36 +555,35 @@ export function CosignerApplyFlow({
 
         {step === 4 ? (
           <>
-            <CardHeader title="Financial Background / Legal" />
-            <div className="mt-6 divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100">
               <Field label="Bankruptcy history" error={fieldErrors.bankruptcy}>
-                <select
+                <Select
                   value={f.bankruptcy}
                   onChange={(e) => {
                     patchField(setF, "bankruptcy", e.target.value);
                     clearError("bankruptcy");
                   }}
-                  className={`${inputClass} w-full rounded-2xl border border-[#e0e4ec] bg-auth-input-bg px-3 py-2.5 text-sm outline-none focus:border-primary ${err("bankruptcy")}`}
+                  className={err("bankruptcy")}
                 >
                   <option value="">Select…</option>
                   <option value="never">Never filed</option>
                   <option value="past_discharged">Past bankruptcy (discharged)</option>
                   <option value="current">Current / active</option>
-                </select>
+                </Select>
               </Field>
               <Field label="Criminal convictions" error={fieldErrors.criminal}>
-                <select
+                <Select
                   value={f.criminal}
                   onChange={(e) => {
                     patchField(setF, "criminal", e.target.value);
                     clearError("criminal");
                   }}
-                  className={`${inputClass} w-full rounded-2xl border border-[#e0e4ec] bg-auth-input-bg px-3 py-2.5 text-sm outline-none focus:border-primary ${err("criminal")}`}
+                  className={err("criminal")}
                 >
                   <option value="">Select…</option>
                   <option value="no">No</option>
                   <option value="yes">Yes</option>
-                </select>
+                </Select>
               </Field>
             </div>
             <div
@@ -632,8 +623,7 @@ export function CosignerApplyFlow({
 
         {step === 5 ? (
           <>
-            <CardHeader title="Signature" />
-            <div className="mt-6 divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100">
               <Field label="Co-Signer Signature" error={fieldErrors.signature}>
                 <Input
                   value={f.signature}
@@ -642,7 +632,7 @@ export function CosignerApplyFlow({
                     clearError("signature");
                   }}
                   placeholder="Type your full legal name"
-                  className={`${inputClass} ${err("signature")}`}
+                  className={err("signature")}
                 />
               </Field>
               <Field label="Date signed" error={fieldErrors.dateSigned}>
@@ -653,23 +643,23 @@ export function CosignerApplyFlow({
                     patchField(setF, "dateSigned", e.target.value);
                     clearError("dateSigned");
                   }}
-                  className={`${inputClass} ${err("dateSigned")}`}
+                  className={err("dateSigned")}
                 />
               </Field>
             </div>
           </>
         ) : null}
-      </Card>
+      </div>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
-        <Button type="button" variant="outline" className="sm:w-auto" onClick={handleBack}>
+      <div className="mt-10 flex flex-col-reverse gap-3 border-t border-slate-100 pt-8 sm:flex-row sm:items-center sm:justify-between">
+        <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack}>
           Back
         </Button>
-        <Button type="button" className="sm:min-w-[200px]" onClick={handleContinue}>
+        <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={handleContinue}>
           {step === 5 ? "Submit co-signer form" : "Continue"}
         </Button>
       </div>
-    </>
+    </div>
   );
 }
 
