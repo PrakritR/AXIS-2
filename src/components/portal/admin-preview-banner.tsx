@@ -13,7 +13,7 @@ export function AdminPreviewBanner({ label }: { label: string | null }) {
   };
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-center text-sm text-amber-950 lg:px-8">
+    <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-[max(1rem,env(safe-area-inset-left,0px))] py-2.5 pe-[max(1rem,env(safe-area-inset-right,0px))] text-center text-sm text-amber-950 lg:px-8">
       <span className="font-semibold">Admin preview</span>
       {label ? <span>— viewing as {label}</span> : null}
       <button

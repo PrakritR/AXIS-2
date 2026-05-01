@@ -3,7 +3,7 @@ import Link from "next/link";
 /** Shown for Free-tier property portal users — links to Plan where they can choose Pro or Business. */
 export function ManagerPlanBanner({ planHref = "/portal/plan" }: { planHref?: string }) {
   return (
-    <div className="shrink-0 border-b border-amber-300 bg-[#fffbeb] px-4 py-2.5 text-center text-sm text-amber-950 lg:px-8">
+    <div className="shrink-0 border-b border-amber-300 bg-[#fffbeb] px-[max(1rem,env(safe-area-inset-left,0px))] py-2.5 pe-[max(1rem,env(safe-area-inset-right,0px))] text-center text-sm text-amber-950 lg:px-8">
       <p className="font-medium">
         <span className="font-semibold">Free</span> plan — 1 property, calendar & inbox, account links (1 manager / 1 owner side), no lease pipeline.
         Upgrade to{" "}

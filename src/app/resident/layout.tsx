@@ -1,6 +1,8 @@
 import { PublicNavbar } from "@/components/layout/public-navbar";
+import { AccountLinksSync } from "@/components/portal/account-links-sync";
 import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
+import { PORTAL_MAIN_CONTENT_CLASS } from "@/lib/portal-layout-classes";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole } from "@/lib/auth/portal-access";
@@ -28,7 +30,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSidebar definition={residentPortal} />
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <main className="relative z-0 min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto overscroll-contain px-4 py-6 lg:px-8 lg:py-8">
+          <main className={PORTAL_MAIN_CONTENT_CLASS}>
             {children}
           </main>
         </div>

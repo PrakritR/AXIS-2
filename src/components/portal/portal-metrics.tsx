@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /** Outer white “card” wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
-  "rounded-[28px] border border-slate-200/80 bg-white/92 p-4 shadow-[0_18px_50px_-42px_rgba(15,23,42,0.2)] backdrop-blur-sm sm:p-6";
+  "rounded-2xl border border-slate-200/80 bg-white/92 p-4 shadow-[0_18px_50px_-42px_rgba(15,23,42,0.2)] backdrop-blur-sm sm:rounded-[28px] sm:p-6";
 
 /** Calendar week grid outer frame (matches manager calendar chrome). */
 export const PORTAL_CALENDAR_FRAME = "overflow-hidden rounded-2xl border border-slate-200 bg-slate-200";
@@ -252,8 +252,8 @@ export function ManagerPortalPageShell({
 }) {
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-slate-950">{title}</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">{title}</h1>
         {titleAside ? <div className="flex flex-wrap items-center gap-2 sm:justify-end">{titleAside}</div> : null}
       </div>
       {filterRow ? <div className="mt-5">{filterRow}</div> : null}

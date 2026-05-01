@@ -6,8 +6,13 @@ import type {
   ManagerListingSubmissionV1,
   ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
-import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS, sanitizeRoomAmenityText, splitLineList } from "@/data/manager-listing-presets";
+import { normalizeManagerListingSubmissionV1, formatListingBasicsSummary } from "@/lib/manager-listing-submission";
+import {
+  LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS,
+  LISTING_TOTAL_BATH_OPTIONS,
+  sanitizeRoomAmenityText,
+  splitLineList,
+} from "@/data/manager-listing-presets";
 import { parseMonthlyRent } from "@/lib/listings-search";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import {
@@ -357,9 +362,17 @@ function deriveQuickFacts(
   return [
     { label: "Neighborhood", value: property.neighborhood || "—" },
     { label: "Rooms listed", value: String(rooms.length || property.beds) },
-    { label: "Bathrooms", value: String(sub.bathrooms.filter((b) => b.name.trim()).length || property.baths) },
-    ...(sub.homeStructureNote?.trim()
-      ? [{ label: "Floors / layout", value: sub.homeStructureNote.trim() }]
+    {
+      label: "Bathrooms",
+      value: (() => {
+        const fromBasics = LISTING_TOTAL_BATH_OPTIONS.find((o) => o.id === sub.listingTotalBathroomsId)?.label;
+        if (fromBasics) return fromBasics;
+        const n = sub.bathrooms.filter((b) => b.name.trim()).length;
+        return n ? String(n) : String(property.baths);
+      })(),
+    },
+    ...(sub.homeStructureNote?.trim() || formatListingBasicsSummary(sub).trim()
+      ? [{ label: "Property & layout", value: sub.homeStructureNote.trim() || formatListingBasicsSummary(sub).trim() }]
       : []),
     { label: "Pets", value: sub.petFriendly ? "Pet-friendly (subject to approval)" : "No pets (per submission)" },
     { label: "Building", value: property.buildingName || "—" },

@@ -160,3 +160,61 @@ export function furnishingSelectState(furnishing: string): { select: FurnishingS
   if (FURNISHING_KNOWN.has(t)) return { select: t as FurnishingSelectValue, custom: "" };
   return { select: "", custom: "" };
 }
+
+/** Airbnb-style “create listing” basics — property type tiles + dropdown-friendly ids. */
+export const LISTING_PROPERTY_TYPE_OPTIONS = [
+  { id: "house", label: "House", hint: "Detached or standalone home" },
+  { id: "townhouse", label: "Townhouse", hint: "Row or attached home" },
+  { id: "apartment", label: "Apartment", hint: "Flat in a building" },
+  { id: "condo", label: "Condo", hint: "Owned unit in a building" },
+  { id: "duplex", label: "Duplex / triplex", hint: "Small multi-unit building" },
+  { id: "other", label: "Other", hint: "Describe in overview" },
+] as const;
+
+export const LISTING_PLACE_CATEGORY_OPTIONS = [
+  {
+    id: "shared_home",
+    label: "Shared home — rent by bedroom",
+    short: "Shared home",
+    hint: "Roommates / coliving — each room listed separately",
+  },
+  {
+    id: "entire_home",
+    label: "Entire place — one lease for the home",
+    short: "Entire home",
+    hint: "Rent the full unit; you can still itemize rooms inside Axis",
+  },
+] as const;
+
+export const LISTING_STORIES_OPTIONS = [
+  { id: "1", label: "Single level (1 floor)" },
+  { id: "2", label: "2 floors" },
+  { id: "3", label: "3 floors" },
+  { id: "4", label: "4+ floors" },
+  { id: "split", label: "Split level" },
+] as const;
+
+export const LISTING_TOTAL_BATH_OPTIONS = [
+  { id: "1", label: "1 bathroom" },
+  { id: "1.5", label: "1.5 bathrooms" },
+  { id: "2", label: "2 bathrooms" },
+  { id: "2.5", label: "2.5 bathrooms" },
+  { id: "3", label: "3 bathrooms" },
+  { id: "3.5", label: "3.5 bathrooms" },
+  { id: "4", label: "4 bathrooms" },
+  { id: "4+", label: "4+ bathrooms" },
+] as const;
+
+export const LISTING_BEDROOM_SLOT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+
+/** Sentinel for room floor `<select>` when value is custom text. */
+export const ROOM_FLOOR_LEVEL_CUSTOM = "__floor_custom__";
+
+export const LISTING_ROOM_FLOOR_LEVEL_OPTIONS = [
+  { id: "basement", label: "Basement / garden level" },
+  { id: "main", label: "1st / main floor" },
+  { id: "2", label: "2nd floor" },
+  { id: "3", label: "3rd floor" },
+  { id: "4+", label: "4th floor or higher" },
+  { id: "loft", label: "Loft / attic" },
+] as const;

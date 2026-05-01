@@ -1,5 +1,12 @@
 /** Full manager “add listing” payload — drives generated listing detail page (localStorage-backed). */
 
+import {
+  LISTING_PLACE_CATEGORY_OPTIONS,
+  LISTING_PROPERTY_TYPE_OPTIONS,
+  LISTING_STORIES_OPTIONS,
+  LISTING_TOTAL_BATH_OPTIONS,
+} from "@/data/manager-listing-presets";
+
 export type PaymentAtSigningOptionId =
   | "security_deposit"
   | "move_in_fee"
@@ -98,6 +105,13 @@ export type ManagerListingSubmissionV1 = {
   neighborhood: string;
   /** Free text: stories, floor count, unit type (e.g. “3-story townhouse”). Show in sidebar when set. */
   homeStructureNote: string;
+  /** Structured basics (create-listing wizard). Fills quick facts when `homeStructureNote` is empty. */
+  listingPropertyTypeId?: string;
+  listingPlaceCategoryId?: string;
+  listingStoriesId?: string;
+  listingTotalBathroomsId?: string;
+  /** Rentable bedroom slots — synced to `rooms.length` when leaving the home step. */
+  listingBedroomSlots?: number;
   tagline: string;
   petFriendly: boolean;
   /** Long-form house / coliving description shown on listing */
@@ -345,8 +359,21 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     ? sub.housePhotoDataUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0).slice(0, 12)
     : [];
 
+  const listingBedroomSlots =
+    typeof sub.listingBedroomSlots === "number" && sub.listingBedroomSlots >= 1
+      ? Math.min(8, Math.round(sub.listingBedroomSlots))
+      : rooms.length;
+
   const next = {
     ...sub,
+    listingPropertyTypeId: typeof sub.listingPropertyTypeId === "string" ? sub.listingPropertyTypeId : "",
+    listingPlaceCategoryId:
+      typeof sub.listingPlaceCategoryId === "string" && sub.listingPlaceCategoryId.trim()
+        ? sub.listingPlaceCategoryId.trim()
+        : "shared_home",
+    listingStoriesId: typeof sub.listingStoriesId === "string" ? sub.listingStoriesId : "",
+    listingTotalBathroomsId: typeof sub.listingTotalBathroomsId === "string" ? sub.listingTotalBathroomsId : "",
+    listingBedroomSlots,
     homeStructureNote: typeof sub.homeStructureNote === "string" ? sub.homeStructureNote : "",
     houseRulesText: typeof sub.houseRulesText === "string" ? sub.houseRulesText : "",
     shortTermRentalsAllowed: Boolean(sub.shortTermRentalsAllowed),
@@ -447,6 +474,72 @@ export function emptySharedSpace(index: number): ManagerSharedSpaceSubmission {
   };
 }
 
+/** One-line summary from structured listing basics (public quick facts). */
+export function formatListingBasicsSummary(sub: ManagerListingSubmissionV1): string {
+  const chunks: string[] = [];
+  const pt = LISTING_PROPERTY_TYPE_OPTIONS.find((o) => o.id === sub.listingPropertyTypeId)?.label;
+  if (pt) chunks.push(pt);
+  const pc = LISTING_PLACE_CATEGORY_OPTIONS.find((o) => o.id === sub.listingPlaceCategoryId)?.short;
+  if (pc) chunks.push(pc);
+  const st = LISTING_STORIES_OPTIONS.find((o) => o.id === sub.listingStoriesId)?.label;
+  if (st) chunks.push(st);
+  const tb = LISTING_TOTAL_BATH_OPTIONS.find((o) => o.id === sub.listingTotalBathroomsId)?.label;
+  if (tb) chunks.push(tb);
+  const n = sub.listingBedroomSlots ?? sub.rooms.length;
+  if (n > 0) chunks.push(`${n} bedroom${n === 1 ? "" : "s"} for rent`);
+  return chunks.join(" · ");
+}
+
+export function isRoomSlotRemovable(room: ManagerRoomSubmission): boolean {
+  const name = room.name.trim();
+  const defaultName = /^Room \d+$/.test(name);
+  const avail = (room.availability ?? "").trim();
+  const defaultAvail = avail === "" || avail === "Available now";
+  const util = (room.utilitiesEstimate ?? "").replace(/^\$/, "").trim();
+  return (
+    (defaultName || name.length === 0) &&
+    room.monthlyRent === 0 &&
+    room.photoDataUrls.length === 0 &&
+    !room.videoDataUrl &&
+    !room.detail.trim() &&
+    !room.roomAmenitiesText.trim() &&
+    !room.furnishing.trim() &&
+    defaultAvail &&
+    util.length === 0
+  );
+}
+
+export type ApplyBedroomSlotsResult =
+  | { ok: true; sub: ManagerListingSubmissionV1 }
+  | { ok: false; message: string };
+
+export function applyListingBedroomSlots(
+  sub: ManagerListingSubmissionV1,
+  target: number,
+): ApplyBedroomSlotsResult {
+  const clamped = Math.max(1, Math.min(8, Math.round(target)));
+  let rooms = [...sub.rooms];
+  if (rooms.length < clamped) {
+    while (rooms.length < clamped) rooms.push(emptyRoom(rooms.length));
+    return { ok: true, sub: { ...sub, rooms, listingBedroomSlots: clamped } };
+  }
+  if (rooms.length > clamped) {
+    while (rooms.length > clamped) {
+      const last = rooms[rooms.length - 1]!;
+      if (!isRoomSlotRemovable(last)) {
+        return {
+          ok: false,
+          message:
+            "To list fewer bedrooms, remove or clear the extra room rows (starting from the last one), or raise the bedroom count again.",
+        };
+      }
+      rooms.pop();
+    }
+    return { ok: true, sub: { ...sub, rooms, listingBedroomSlots: clamped } };
+  }
+  return { ok: true, sub: { ...sub, listingBedroomSlots: clamped } };
+}
+
 export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
   return {
     v: 1,
@@ -455,6 +548,11 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     zip: "",
     neighborhood: "",
     homeStructureNote: "",
+    listingPropertyTypeId: "",
+    listingPlaceCategoryId: "shared_home",
+    listingStoriesId: "",
+    listingTotalBathroomsId: "",
+    listingBedroomSlots: 1,
     tagline: "",
     petFriendly: false,
     houseOverview: "",

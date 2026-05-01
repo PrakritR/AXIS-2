@@ -48,10 +48,11 @@ export function TabNav({
   }, [sync]);
 
   return (
-    <div
-      ref={wrapRef}
-      className="relative flex flex-wrap gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1"
-    >
+    <div className="max-w-full overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        ref={wrapRef}
+        className="relative inline-flex min-w-max flex-nowrap gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1"
+      >
       {pill.w > 0 ? (
         <span
           aria-hidden
@@ -69,7 +70,7 @@ export function TabNav({
               if (el) linkRefs.current.set(t.id, el);
               else linkRefs.current.delete(t.id);
             }}
-            className={`relative z-10 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
+            className={`relative z-10 shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
               active ? "text-slate-950" : "text-slate-600 hover:text-slate-900"
             }`}
           >
@@ -77,6 +78,7 @@ export function TabNav({
           </Link>
         );
       })}
+    </div>
     </div>
   );
 }
@@ -174,7 +176,7 @@ export function SectionTabs({
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{title}</h1>
         <div className="mt-3">
           <TabNav items={tabs} activeId={activeId} />
         </div>

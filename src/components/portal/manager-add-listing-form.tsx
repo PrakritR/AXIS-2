@@ -18,6 +18,7 @@ import {
   PRO_MAX_PROPERTIES,
 } from "@/lib/manager-access";
 import {
+  applyListingBedroomSlots,
   createDefaultListingSubmission,
   normalizeManagerListingSubmissionV1,
   duplicateRoomEntry,
@@ -39,8 +40,15 @@ import {
 import {
   BATHROOM_EXTRA_AMENITY_PRESETS,
   HOUSE_WIDE_AMENITY_PRESETS,
+  LISTING_BEDROOM_SLOT_OPTIONS,
+  LISTING_PLACE_CATEGORY_OPTIONS,
+  LISTING_PROPERTY_TYPE_OPTIONS,
+  LISTING_ROOM_FLOOR_LEVEL_OPTIONS,
+  LISTING_STORIES_OPTIONS,
+  LISTING_TOTAL_BATH_OPTIONS,
   ROOM_AMENITY_PRESETS,
   ROOM_AVAILABILITY_OPTIONS,
+  ROOM_FLOOR_LEVEL_CUSTOM,
   ROOM_FURNITURE_PRESETS,
   ROOM_FURNISHING_OPTIONS,
   SHARED_SPACE_AMENITY_PRESETS,
@@ -49,6 +57,7 @@ import {
   parseFurnitureSet,
   sanitizeRoomAmenityText,
   splitLineList,
+  furnishingSelectState,
 } from "@/data/manager-listing-presets";
 import { loadListingPresetConfig, type ListingPresetConfig } from "@/lib/site-content";
 import { effectiveRoomAvailabilityLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
@@ -58,6 +67,13 @@ const selectInputCls =
 
 /** Sentinel value for room availability `<select>` when the saved string is not a preset. */
 const ROOM_AVAIL_CUSTOM = "__custom__";
+
+function roomFloorSelectValue(floor: string): string {
+  const hit = LISTING_ROOM_FLOOR_LEVEL_OPTIONS.find((o) => o.label === floor);
+  if (hit) return hit.id;
+  if (!floor.trim()) return "";
+  return ROOM_FLOOR_LEVEL_CUSTOM;
+}
 
 function ChevronDownTiny({ className = "" }: { className?: string }) {
   return (
@@ -152,7 +168,7 @@ const LISTING_FORM_STEPS = [
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
-  home: "Building identity, address, floors or levels, and how you describe the home — before room details.",
+  home: "Property type, address, floors, baths, and how many bedrooms you’ll list — like Airbnb’s first steps.",
   rooms: "Each rentable bedroom: name, floor, rent, availability, furnishing, photos, and video.",
   bathrooms: "Bath rows and which bedrooms use each one — powers the public “Rooms by bathroom” layout.",
   spaces: "Kitchen, laundry, lounge, outdoor — equipment, rules, and which bedrooms have access.",
@@ -205,13 +221,13 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: stri
 }
 
 /** In CSS grid rows, bottom-aligns the control with siblings when label/hint blocks differ in height. */
-function GridField({ children }: { children: React.ReactNode }) {
+function GridField({ children, className }: { children: React.ReactNode; className?: string }) {
   const parts = Children.toArray(children);
   if (parts.length !== 2) {
-    return <>{children}</>;
+    return <div className={className}>{children}</div>;
   }
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className={`flex h-full min-h-0 flex-col ${className ?? ""}`}>
       <div className="shrink-0">{parts[0]}</div>
       <div className="mt-auto w-full shrink-0">{parts[1]}</div>
     </div>
@@ -322,6 +338,29 @@ export function ManagerAddListingForm({
         showToast("Fill in building name, address, ZIP, and neighborhood to continue.");
         return false;
       }
+      const strictBasics = !isEditMode;
+      if (strictBasics) {
+        if (!sub.listingPropertyTypeId?.trim()) {
+          showToast("Choose a property type.");
+          return false;
+        }
+        if (!sub.listingPlaceCategoryId?.trim()) {
+          showToast("Select what kind of listing this is.");
+          return false;
+        }
+        if (!sub.listingStoriesId?.trim()) {
+          showToast("Select how many floors or levels the home has.");
+          return false;
+        }
+        if (!sub.listingTotalBathroomsId?.trim()) {
+          showToast("Select how many bathrooms the home has.");
+          return false;
+        }
+        if (!sub.listingBedroomSlots || sub.listingBedroomSlots < 1) {
+          showToast("Select how many bedrooms you will list for rent.");
+          return false;
+        }
+      }
     }
     if (i === 1) {
       if (!sub.rooms.some((r) => r.name.trim())) {
@@ -334,6 +373,15 @@ export function ManagerAddListingForm({
 
   const goNext = () => {
     if (!canContinueFromStep(stepIndex)) return;
+    if (stepIndex === 0) {
+      const slots = sub.listingBedroomSlots ?? sub.rooms.length;
+      const applied = applyListingBedroomSlots(sub, slots);
+      if (!applied.ok) {
+        showToast(applied.message);
+        return;
+      }
+      setSub(applied.sub);
+    }
     setStepIndex((s) => Math.min(s + 1, lastStepIndex));
   };
 
@@ -885,9 +933,59 @@ export function ManagerAddListingForm({
           {stepIndex === 0 ? (
           <FormSection
             id="edit-building"
-            title="Home & layout"
-            description="Put the property on the map and help renters picture the home before you add individual rooms."
+            title="Tell us about your place"
+            description={
+              <>
+                Inspired by Airbnb’s flow: pick the property type and basics, then we’ll match room slots on the next step. Everything here can be changed later.
+              </>
+            }
           >
+            <div className="mb-6 rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/90 to-white px-4 py-4 sm:px-5">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Step 1 · Basics</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">What kind of place is this?</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {LISTING_PROPERTY_TYPE_OPTIONS.map((opt) => {
+                  const on = sub.listingPropertyTypeId === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setSub((s) => ({ ...s, listingPropertyTypeId: opt.id }))}
+                      className={`rounded-2xl border px-3 py-3 text-left transition ${
+                        on
+                          ? "border-primary bg-white shadow-[0_8px_28px_-18px_rgba(37,99,235,0.45)] ring-2 ring-primary/25"
+                          : "border-slate-200/90 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <span className="text-sm font-semibold text-slate-900">{opt.label}</span>
+                      <span className="mt-0.5 block text-xs leading-snug text-slate-500">{opt.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-5 text-sm font-semibold text-slate-900">What are you listing?</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {LISTING_PLACE_CATEGORY_OPTIONS.map((opt) => {
+                  const on = sub.listingPlaceCategoryId === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setSub((s) => ({ ...s, listingPlaceCategoryId: opt.id }))}
+                      className={`rounded-2xl border px-4 py-3.5 text-left transition ${
+                        on
+                          ? "border-primary bg-white shadow-[0_8px_28px_-18px_rgba(37,99,235,0.45)] ring-2 ring-primary/25"
+                          : "border-slate-200/90 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <span className="text-sm font-semibold text-slate-900">{opt.label}</span>
+                      <span className="mt-0.5 block text-xs text-slate-500">{opt.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <FieldLabel>Building name *</FieldLabel>
@@ -895,24 +993,91 @@ export function ManagerAddListingForm({
               </div>
               <div className="sm:col-span-2">
                 <FieldLabel>Street address *</FieldLabel>
-                <Input value={sub.address} onChange={(e) => setSub((s) => ({ ...s, address: e.target.value }))} />
+                <Input value={sub.address} onChange={(e) => setSub((s) => ({ ...s, address: e.target.value }))} placeholder="Street, unit if any" />
               </div>
               <GridField>
                 <FieldLabel>ZIP *</FieldLabel>
-                <Input value={sub.zip} onChange={(e) => setSub((s) => ({ ...s, zip: e.target.value }))} maxLength={10} />
+                <Input value={sub.zip} onChange={(e) => setSub((s) => ({ ...s, zip: e.target.value }))} maxLength={10} inputMode="numeric" />
               </GridField>
               <GridField>
                 <FieldLabel>Neighborhood *</FieldLabel>
-                <Input value={sub.neighborhood} onChange={(e) => setSub((s) => ({ ...s, neighborhood: e.target.value }))} />
+                <Input value={sub.neighborhood} onChange={(e) => setSub((s) => ({ ...s, neighborhood: e.target.value }))} placeholder="e.g. Capitol Hill" />
               </GridField>
-              <div className="sm:col-span-2">
-                <FieldLabel hint="e.g. 3 floors, garden level + two upper stories, single-story ranch. Shown on the listing when quick facts are auto-generated.">
-                  Floors / levels in the home
+
+              <GridField>
+                <FieldLabel>Floors / levels in the home *</FieldLabel>
+                <div className="relative">
+                  <Select
+                    aria-label="Number of floors"
+                    className={`${selectInputCls} appearance-none pr-10`}
+                    value={sub.listingStoriesId ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, listingStoriesId: e.target.value }))}
+                  >
+                    <option value="">Select</option>
+                    {LISTING_STORIES_OPTIONS.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                    <ChevronDownTiny />
+                  </span>
+                </div>
+              </GridField>
+              <GridField>
+                <FieldLabel>Bathrooms in the home *</FieldLabel>
+                <div className="relative">
+                  <Select
+                    aria-label="Total bathrooms"
+                    className={`${selectInputCls} appearance-none pr-10`}
+                    value={sub.listingTotalBathroomsId ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, listingTotalBathroomsId: e.target.value }))}
+                  >
+                    <option value="">Select</option>
+                    {LISTING_TOTAL_BATH_OPTIONS.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                    <ChevronDownTiny />
+                  </span>
+                </div>
+              </GridField>
+              <GridField className="sm:col-span-2">
+                <FieldLabel hint="We’ll open that many room cards on the next step. You can still add or remove rows later.">
+                  Bedrooms you’ll list for rent *
                 </FieldLabel>
-                <Input
+                <div className="relative max-w-md">
+                  <Select
+                    aria-label="Bedrooms for rent"
+                    className={`${selectInputCls} appearance-none pr-10`}
+                    value={String(sub.listingBedroomSlots ?? sub.rooms.length)}
+                    onChange={(e) => setSub((s) => ({ ...s, listingBedroomSlots: Math.max(1, Math.min(8, Number(e.target.value) || 1)) }))}
+                  >
+                    {LISTING_BEDROOM_SLOT_OPTIONS.map((n) => (
+                      <option key={n} value={n}>
+                        {n} bedroom{n === 1 ? "" : "s"}
+                      </option>
+                    ))}
+                  </Select>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                    <ChevronDownTiny />
+                  </span>
+                </div>
+              </GridField>
+
+              <div className="sm:col-span-2">
+                <FieldLabel hint="Optional — only if the layout is unusual (split level, ADU, etc.). Otherwise your selections above appear on the listing.">
+                  Extra layout note
+                </FieldLabel>
+                <Textarea
+                  className="min-h-[72px]"
                   value={sub.homeStructureNote}
                   onChange={(e) => setSub((s) => ({ ...s, homeStructureNote: e.target.value }))}
-                  placeholder="Optional — helps renters understand the layout"
+                  placeholder="e.g. Garden apartment in a triplex; private entrance on the side."
                 />
               </div>
               <div className="sm:col-span-2">
@@ -1411,8 +1576,46 @@ export function ManagerAddListingForm({
                         <Input value={room.name} onChange={(e) => setRoom(i, { name: e.target.value })} placeholder="Room 12A" />
                       </GridField>
                       <GridField>
-                        <FieldLabel hint="e.g. first floor, garden level.">Floor / level</FieldLabel>
-                        <Input value={room.floor} onChange={(e) => setRoom(i, { floor: e.target.value })} placeholder="First floor" />
+                        <FieldLabel hint="Preset or custom wording.">Floor / level</FieldLabel>
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <Select
+                              aria-label={`Floor for ${room.name || `room ${i + 1}`}`}
+                              className={`${selectInputCls} appearance-none pr-10`}
+                              value={roomFloorSelectValue(room.floor)}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (v === ROOM_FLOOR_LEVEL_CUSTOM) {
+                                  if (LISTING_ROOM_FLOOR_LEVEL_OPTIONS.some((o) => o.label === room.floor)) {
+                                    setRoom(i, { floor: "" });
+                                  }
+                                  return;
+                                }
+                                const label = LISTING_ROOM_FLOOR_LEVEL_OPTIONS.find((o) => o.id === v)?.label ?? "";
+                                setRoom(i, { floor: label });
+                              }}
+                            >
+                              <option value="">Select floor</option>
+                              {LISTING_ROOM_FLOOR_LEVEL_OPTIONS.map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {o.label}
+                                </option>
+                              ))}
+                              <option value={ROOM_FLOOR_LEVEL_CUSTOM}>Custom…</option>
+                            </Select>
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                              <ChevronDownTiny />
+                            </span>
+                          </div>
+                          {roomFloorSelectValue(room.floor) === ROOM_FLOOR_LEVEL_CUSTOM ? (
+                            <Input
+                              value={room.floor}
+                              onChange={(e) => setRoom(i, { floor: e.target.value })}
+                              placeholder="e.g. Garden level, half-basement"
+                              aria-label="Custom floor"
+                            />
+                          ) : null}
+                        </div>
                       </GridField>
                       <GridField>
                         <FieldLabel>Monthly rent *</FieldLabel>
@@ -1426,6 +1629,34 @@ export function ManagerAddListingForm({
                             placeholder="800"
                           />
                         </div>
+                      </GridField>
+                      <GridField className="sm:col-span-2">
+                        <FieldLabel hint="Choose a preset or use the detailed checklist below.">Furnishing</FieldLabel>
+                        <div className="relative">
+                          <Select
+                            aria-label="Furnishing preset"
+                            className={`${selectInputCls} appearance-none pr-10`}
+                            value={furnishingSelectState(room.furnishing).select}
+                            onChange={(e) => setRoom(i, { furnishing: e.target.value })}
+                          >
+                            {ROOM_FURNISHING_OPTIONS.map((o) => (
+                              <option key={o.value || "empty"} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </Select>
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                            <ChevronDownTiny />
+                          </span>
+                        </div>
+                        {!furnishingSelectState(room.furnishing).select && furnishingSelectState(room.furnishing).custom ? (
+                          <Input
+                            className="mt-2"
+                            value={furnishingSelectState(room.furnishing).custom}
+                            onChange={(e) => setRoom(i, { furnishing: e.target.value })}
+                            placeholder="Describe furnishing"
+                          />
+                        ) : null}
                       </GridField>
                       <GridField>
                         <FieldLabel hint="Monthly estimate used in signing totals.">Utilities estimate</FieldLabel>
@@ -1488,7 +1719,7 @@ export function ManagerAddListingForm({
                         </div>
                       </GridField>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Select all items included in this room.">Furnishing</FieldLabel>
+                        <FieldLabel hint="Toggle specific items included in this room.">Furniture &amp; items</FieldLabel>
                         <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
                           <label className="mb-2 flex cursor-pointer items-center gap-2 border-b border-slate-100 pb-2 text-sm">
                             <input
