@@ -106,7 +106,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         hour: "numeric",
         minute: "2-digit",
       });
-      if (p.kind === "admin") {
+      if (p.includesAxisAdmin) {
         appendPortalMessageToAdminInbox({
           role: "resident",
           name: p.senderName,
@@ -118,14 +118,14 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       const row: DemoResidentInboxThread = {
         id: `sent_${Date.now()}`,
         from: "You",
-        email: p.kind === "admin" ? "prakritramachandran@gmail.com" : p.toEmailLine,
+        email: p.toEmailLine,
         subject: p.subject.trim(),
         preview: previewLine(p.body),
         when,
         unread: false,
         body: p.body.trim(),
       };
-      if (p.kind === "peer") {
+      if (p.includesDirectoryRecipients) {
         appendPersistedInboxThread(
           MANAGER_INBOX_STORAGE_KEY,
           {
@@ -144,7 +144,11 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       }
       setSent((prev) => [row, ...prev]);
       setComposeOpen(false);
-      showToast(p.kind === "admin" ? "Message sent to prakritramachandran@gmail.com." : "Message sent.");
+      showToast(
+        p.includesAxisAdmin && !p.includesDirectoryRecipients
+          ? "Message sent to Axis Housing admin."
+          : "Message sent.",
+      );
       router.push("/resident/inbox/sent");
       router.refresh();
     },

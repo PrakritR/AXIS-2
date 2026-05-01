@@ -1,5 +1,5 @@
 /**
- * Portal compose address books: empty until messaging is backed by real relationships in the database.
+ * Portal compose address books. Expand when messaging is backed by real relationships.
  */
 
 export type InboxContactRole = "manager" | "resident" | "owner";
@@ -11,6 +11,82 @@ export type InboxScopedContact = {
   role: InboxContactRole;
 };
 
-export function contactsForPortal(_portal: "resident" | "manager" | "owner"): InboxScopedContact[] {
-  return [];
+/** Axis partner inbox (admin). */
+export const PRIMARY_AXIS_ADMIN_EMAIL = "prakritramachandran@gmail.com";
+
+export const PRIMARY_AXIS_ADMIN_LABEL = "Axis Housing admin";
+
+/** UI buckets — how the compose modal groups recipients. */
+export type InboxRecipientCategory = "admin" | "management" | "resident";
+
+/** Which address-book roles appear under Management / Resident for each portal. */
+export function rolesForRecipientCategory(
+  portal: "resident" | "manager" | "owner",
+  category: InboxRecipientCategory,
+): InboxContactRole[] {
+  if (category === "admin") return [];
+  if (portal === "manager") {
+    if (category === "management") return ["owner"];
+    return ["resident"];
+  }
+  if (portal === "resident") {
+    /* Tenants: staff + landlords under Management; household peers under Resident. */
+    if (category === "management") return ["manager", "owner"];
+    return ["resident"];
+  }
+  /* owner portal */
+  if (category === "management") return ["manager"];
+  return ["resident"];
+}
+
+export function categoryForContactRole(
+  portal: "resident" | "manager" | "owner",
+  role: InboxContactRole,
+): InboxRecipientCategory {
+  if (portal === "resident") {
+    if (role === "resident") return "resident";
+    return "management";
+  }
+  if (portal === "manager") {
+    if (role === "owner") return "management";
+    return "resident";
+  }
+  if (role === "manager") return "management";
+  return "resident";
+}
+
+function contactsVisibleInPortal(portal: "resident" | "manager" | "owner", list: InboxScopedContact[]) {
+  const roles = new Set<InboxContactRole>([
+    ...rolesForRecipientCategory(portal, "management"),
+    ...rolesForRecipientCategory(portal, "resident"),
+  ]);
+  return list.filter((c) => roles.has(c.role));
+}
+
+const SEED_CONTACTS: InboxScopedContact[] = [
+  { id: "contact-mgr-1", name: "Jordan Patel", email: "j.patel@propertyteam.example.com", role: "manager" },
+  { id: "contact-mgr-2", name: "Riley Chen", email: "r.chen@propertyteam.example.com", role: "manager" },
+  { id: "contact-res-1", name: "Arnav Shanbhag", email: "arnavjs78@gmail.com", role: "resident" },
+  { id: "contact-res-2", name: "Sam Rivera", email: "s.rivera@example.com", role: "resident" },
+  {
+    id: "contact-own-1",
+    name: "Northside Holdings LLC",
+    email: "leasing@northsideholdings.example.com",
+    role: "owner",
+  },
+  { id: "contact-own-2", name: "Eastview Property Group", email: "contact@eastviewpg.example.com", role: "owner" },
+];
+
+export function contactsForPortal(portal: "resident" | "manager" | "owner"): InboxScopedContact[] {
+  return contactsVisibleInPortal(portal, SEED_CONTACTS);
+}
+
+export function broadcastStubForCategory(category: InboxRecipientCategory): { label: string; email: string } {
+  if (category === "admin") {
+    return { label: `All admins (${PRIMARY_AXIS_ADMIN_LABEL})`, email: PRIMARY_AXIS_ADMIN_EMAIL };
+  }
+  if (category === "management") {
+    return { label: "All management", email: "broadcast-management@axis.local" };
+  }
+  return { label: "All residents", email: "broadcast-residents@axis.local" };
 }

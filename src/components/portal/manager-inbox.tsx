@@ -146,7 +146,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         hour: "numeric",
         minute: "2-digit",
       });
-      if (p.kind === "admin") {
+      if (p.includesAxisAdmin) {
         appendPortalMessageToAdminInbox({
           role: "manager",
           name: p.senderName,
@@ -160,7 +160,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         id,
         folder: "sent",
         from: "You",
-        email: p.kind === "admin" ? "prakritramachandran@gmail.com" : p.toEmailLine,
+        email: p.toEmailLine,
         subject: p.subject.trim(),
         preview: previewLine(p.body),
         body: p.body.trim(),
@@ -169,7 +169,11 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       };
       setLocal((prev) => [row, ...prev]);
       setComposeOpen(false);
-      showToast(p.kind === "admin" ? "Message sent to prakritramachandran@gmail.com." : "Message sent.");
+      showToast(
+        p.includesAxisAdmin && !p.includesDirectoryRecipients
+          ? "Message sent to Axis Housing admin."
+          : "Message sent.",
+      );
       router.push(`${portalBase}/inbox/sent`);
     },
     [router, showToast, portalBase],
