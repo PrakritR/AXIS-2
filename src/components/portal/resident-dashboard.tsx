@@ -5,8 +5,23 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
-import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
+import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { usePortalSession } from "@/hooks/use-portal-session";
+import {
+  LEASE_PIPELINE_EVENT,
+  findLeaseForResidentEmail,
+  residentCanViewLeaseRow,
+  syncLeasePipelineFromServer,
+  type LeasePipelineRow,
+} from "@/lib/lease-pipeline-storage";
+import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
+import { MANAGER_WORK_ORDERS_EVENT, readManagerWorkOrderRows, syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
+import {
+  countUnopenedPersistedInbox,
+  PORTAL_INBOX_CHANGED_EVENT,
+  RESIDENT_INBOX_STORAGE_KEY,
+  syncPersistedInboxFromServer,
+} from "@/lib/portal-inbox-storage";
 
 function StatLink({ label, value, href }: { label: string; value: string; href: string }) {
   return (
@@ -21,6 +36,27 @@ function StatLink({ label, value, href }: { label: string; value: string; href: 
 }
 
 type ResidentApplicationStatus = "pending" | "approved" | "rejected";
+
+function leaseDashboardLabel(row: LeasePipelineRow | null, applicationApproved: boolean): string {
+  if (!applicationApproved) return "—";
+  if (!row) return "Not started";
+  if (!residentCanViewLeaseRow(row)) {
+    if (row.status === "Voided") return "Voided";
+    if (row.status === "Admin Review") return "In admin review";
+    if (row.status === "Manager Review" || row.status === "Draft") return "Being prepared";
+    return "In progress";
+  }
+  switch (row.status) {
+    case "Fully Signed":
+      return "Active";
+    case "Resident Signature Pending":
+      return "Sign now";
+    case "Manager Signature Pending":
+      return "Awaiting manager";
+    default:
+      return row.status?.trim() ? row.status : "In progress";
+  }
+}
 
 export function ResidentDashboard({
   applicationApproved = false,
@@ -47,9 +83,63 @@ export function ResidentDashboard({
   const [applicationStage, setApplicationStage] = useState(applicationApproved ? "Approved" : "Submitted");
   const [applicationProperty, setApplicationProperty] = useState<string | null>(null);
   const [applicationId, setApplicationId] = useState<string | null>(initialApplicationId);
-  const openWorkOrders = 0;
-  const inboxUnread = 0;
   const managerIsFree = managerSubscriptionTier === "free";
+
+  const [leaseTick, setLeaseTick] = useState(0);
+  useEffect(() => {
+    const on = () => setLeaseTick((n) => n + 1);
+    void syncLeasePipelineFromServer().then(on);
+    window.addEventListener(LEASE_PIPELINE_EVENT, on);
+    return () => {
+      window.removeEventListener(LEASE_PIPELINE_EVENT, on);
+    };
+  }, []);
+
+  const leaseRow = useMemo(() => {
+    void leaseTick;
+    if (!email) return null;
+    return findLeaseForResidentEmail(email);
+  }, [leaseTick, email]);
+
+  const [workTick, setWorkTick] = useState(0);
+  useEffect(() => {
+    const sync = () => setWorkTick((n) => n + 1);
+    sync();
+    void syncManagerWorkOrdersFromServer().then(sync);
+    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  const activeMaintenanceCount = useMemo(() => {
+    void workTick;
+    if (!email) return 0;
+    return readManagerWorkOrderRows().filter(
+      (r) =>
+        r.residentEmail?.trim().toLowerCase() === email && (r.bucket === "open" || r.bucket === "scheduled"),
+    ).length;
+  }, [workTick, email]);
+
+  const [inboxTick, setInboxTick] = useState(0);
+  useEffect(() => {
+    const onInbox = (e: Event) => {
+      const key = (e as CustomEvent<{ key?: string }>).detail?.key;
+      if (!key || key === RESIDENT_INBOX_STORAGE_KEY) setInboxTick((n) => n + 1);
+    };
+    void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY).then(() => setInboxTick((n) => n + 1));
+    window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, onInbox as EventListener);
+    return () => {
+      window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, onInbox as EventListener);
+    };
+  }, []);
+
+  const inboxUnread = useMemo(() => {
+    void inboxTick;
+    return countUnopenedPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK);
+  }, [inboxTick]);
 
   useEffect(() => {
     let alive = true;
@@ -96,6 +186,11 @@ export function ResidentDashboard({
 
   const canOpenFullPortal = applicationStatus === "approved" && !managerIsFree;
 
+  const leaseLabel = useMemo(
+    () => leaseDashboardLabel(leaseRow, applicationStatus === "approved"),
+    [applicationStatus, leaseRow],
+  );
+
   const statusNotice = useMemo(() => {
     if (showTestAccessNote) {
       return { tone: "border-sky-200/80 bg-sky-50/80 text-sky-950", body: "Test access active — resident portal is unlocked for this email." };
@@ -126,9 +221,13 @@ export function ResidentDashboard({
         <div className="space-y-4">
           <p className={`rounded-2xl border px-4 py-3 text-sm ${statusNotice.tone}`}>{statusNotice.body}</p>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <StatLink label="Lease" value={canOpenFullPortal ? "Active" : "—"} href="/resident/lease" />
-            <StatLink label="Work orders" value={canOpenFullPortal ? String(openWorkOrders) : "—"} href="/resident/work-orders" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <StatLink label="Lease status" value={leaseLabel} href="/resident/lease" />
+            <StatLink
+              label="Active maintenance"
+              value={canOpenFullPortal ? String(activeMaintenanceCount) : "—"}
+              href="/resident/work-orders"
+            />
             <StatLink label="Inbox" value={String(inboxUnread)} href="/resident/inbox/unopened" />
           </div>
         </div>
@@ -141,7 +240,7 @@ export function ResidentDashboard({
       <div className="space-y-4">
         <p className={`rounded-2xl border px-4 py-3 text-sm ${statusNotice.tone}`}>{statusNotice.body}</p>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatLink label="Application" value={applicationId ?? applicationStage} href="/resident/inbox/unopened" />
           <StatLink label="Inbox" value={String(inboxUnread)} href="/resident/inbox/unopened" />
         </div>

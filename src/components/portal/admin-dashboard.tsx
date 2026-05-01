@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { readInboxMessages } from "@/lib/demo-admin-partner-inbox";
+import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
   getPartnerInquiryWindows,
@@ -13,6 +15,7 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
+import { LEASE_PIPELINE_EVENT, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 
 function StatCard({
   label,
@@ -45,6 +48,9 @@ export function AdminDashboard() {
   const [eventTick, setEventTick] = useState(0);
   const [counts, setCounts] = useState({ managers: 0, residents: 0, owners: 0 });
   const [propertiesTotal, setPropertiesTotal] = useState("0");
+  const [pendingPropertyApprovals, setPendingPropertyApprovals] = useState("0");
+  const [leaseReviewCount, setLeaseReviewCount] = useState("0");
+  const [inboxUnread, setInboxUnread] = useState("0");
 
   const loadPortalUserCounts = useCallback(async () => {
     try {
@@ -118,13 +124,32 @@ export function AdminDashboard() {
     const syncProperties = () => {
       const [p0, p1, p2, p3, p4] = adminKpiCounts();
       setPropertiesTotal(String(p0 + p1 + p2 + p3 + p4));
+      setPendingPropertyApprovals(String(p0));
     };
-    syncProperties();
-    window.addEventListener(PROPERTY_PIPELINE_EVENT, syncProperties);
-    window.addEventListener("storage", syncProperties);
+    const syncLeases = () => {
+      const [, adminBucket] = adminLeaseKpiCounts();
+      setLeaseReviewCount(String(adminBucket));
+    };
+    const syncInbox = () => {
+      const n = readInboxMessages().filter((m) => m.folder === "inbox" && !m.read).length;
+      setInboxUnread(String(n));
+    };
+    const bumpOps = () => {
+      syncProperties();
+      syncLeases();
+      syncInbox();
+    };
+    bumpOps();
+    void syncLeasePipelineFromServer(null).then(() => syncLeases());
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, bumpOps);
+    window.addEventListener(LEASE_PIPELINE_EVENT, bumpOps);
+    window.addEventListener(ADMIN_UI_EVENT, bumpOps);
+    window.addEventListener("storage", bumpOps);
     return () => {
-      window.removeEventListener(PROPERTY_PIPELINE_EVENT, syncProperties);
-      window.removeEventListener("storage", syncProperties);
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, bumpOps);
+      window.removeEventListener(LEASE_PIPELINE_EVENT, bumpOps);
+      window.removeEventListener(ADMIN_UI_EVENT, bumpOps);
+      window.removeEventListener("storage", bumpOps);
     };
   }, []);
 
@@ -144,14 +169,17 @@ export function AdminDashboard() {
         ) : null}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <StatCard label="Properties" value={propertiesTotal} href="/admin/properties" />
+        <StatCard label="Pending property review" value={pendingPropertyApprovals} href="/admin/properties" />
+        <StatCard label="Leases in admin review" value={leaseReviewCount} href="/admin/leases" />
         <StatCard
           label="Axis users"
           value={String(counts.managers + counts.owners + counts.residents)}
           href="/admin/axis-users"
         />
         <StatCard label="Calendar" value={eventsTotal} href="/admin/events" />
+        <StatCard label="Inbox unread" value={inboxUnread} href="/admin/inbox/unopened" />
       </div>
     </div>
   );

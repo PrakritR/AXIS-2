@@ -7,72 +7,95 @@ import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/componen
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { demoResidentInboxThreads } from "@/data/demo-portal";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
-import { appendPersistedInboxThread, MANAGER_INBOX_STORAGE_KEY } from "@/lib/portal-inbox-storage";
-import type { DemoResidentInboxThread } from "@/data/demo-portal";
+import {
+  appendPersistedInboxThread,
+  MANAGER_INBOX_STORAGE_KEY,
+  PORTAL_INBOX_CHANGED_EVENT,
+  type PersistedInboxThread,
+  persistInbox,
+  loadPersistedInbox,
+  RESIDENT_INBOX_STORAGE_KEY,
+  syncPersistedInboxFromServer,
+} from "@/lib/portal-inbox-storage";
 
-let residentSentRows: DemoResidentInboxThread[] = [];
+type InboxThread = PersistedInboxThread;
 
-function readSentRows(): DemoResidentInboxThread[] {
-  return residentSentRows;
+/** Stable seed when localStorage is empty (matches demo-portal resident inbox seeds). */
+export const RESIDENT_INBOX_THREAD_FALLBACK: PersistedInboxThread[] = demoResidentInboxThreads.map((t) => ({
+  id: t.id,
+  folder: "inbox" as const,
+  from: t.from,
+  email: t.email,
+  subject: t.subject,
+  preview: t.preview,
+  body: t.body,
+  time: t.when,
+  unread: t.unread,
+}));
+
+function previewLine(body: string, max = 100) {
+  const x = body.trim().replace(/\s+/g, " ");
+  if (x.length <= max) return x;
+  return `${x.slice(0, max)}…`;
 }
 
-function writeSentRows(rows: DemoResidentInboxThread[]) {
-  if (typeof window === "undefined") return;
-  residentSentRows = rows;
-  window.dispatchEvent(new Event("axis-resident-inbox"));
-}
-
-function toRows(
-  list: { id: string; from: string; email: string; subject: string; preview: string; when: string; unread: boolean }[],
-): PortalInboxTableRow[] {
+function toRows(list: InboxThread[]): PortalInboxTableRow[] {
   return list.map((t) => ({
     id: t.id,
     name: t.from,
     email: t.email,
     topic: t.subject,
     preview: t.preview,
-    whenLabel: t.when,
+    whenLabel: t.time,
     read: !t.unread,
   }));
 }
 
-function previewLine(body: string, max = 100) {
-  const t = body.trim().replace(/\s+/g, " ");
-  if (t.length <= max) return t;
-  return `${t.slice(0, max)}…`;
+function countThreads(threads: InboxThread[]) {
+  return {
+    unopened: threads.filter((t) => t.folder === "inbox" && t.unread).length,
+    opened: threads.filter((t) => t.folder === "inbox" && !t.unread).length,
+    sent: threads.filter((t) => t.folder === "sent").length,
+    trash: threads.filter((t) => t.folder === "trash").length,
+  };
 }
 
 export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
-  const [threads, setThreads] = useState<DemoResidentInboxThread[]>([]);
-  const [sent, setSent] = useState<DemoResidentInboxThread[]>([]);
-  const [composeOpen, setComposeOpen] = useState(false);
+  const [local, setLocal] = useState<InboxThread[]>(
+    () => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[],
+  );
+  const [persistReady] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   useEffect(() => {
-    setSent(readSentRows());
-    const sync = () => setSent(readSentRows());
-    window.addEventListener("axis-resident-inbox", sync);
-    return () => window.removeEventListener("axis-resident-inbox", sync);
+    void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY).then((rows) => setLocal(rows as InboxThread[]));
   }, []);
 
   useEffect(() => {
-    writeSentRows(sent);
-  }, [sent]);
+    const sync = (evt?: Event) => {
+      if (evt && evt.type === PORTAL_INBOX_CHANGED_EVENT) {
+        const ce = evt as CustomEvent<{ key?: string }>;
+        if (ce.detail?.key && ce.detail.key !== RESIDENT_INBOX_STORAGE_KEY) return;
+      }
+      setLocal(loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[]);
+    };
+    window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
+    return () => {
+      window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
+    };
+  }, []);
 
-  const trashCount = 0;
+  useEffect(() => {
+    if (!persistReady) return;
+    persistInbox(RESIDENT_INBOX_STORAGE_KEY, local);
+  }, [local, persistReady]);
 
-  const counts = useMemo(
-    () => ({
-      unopened: threads.filter((t) => t.unread).length,
-      opened: threads.filter((t) => !t.unread).length,
-      sent: sent.length,
-      trash: trashCount,
-    }),
-    [threads, sent, trashCount],
-  );
+  const counts = useMemo(() => countThreads(local), [local]);
 
   const tabs = useMemo(
     () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: counts[id as keyof typeof counts] })),
@@ -80,21 +103,20 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   );
 
   const rowsForTab = useMemo(() => {
-    if (tabId === "unopened") return threads.filter((t) => t.unread);
-    if (tabId === "opened") return threads.filter((t) => !t.unread);
-    if (tabId === "sent") return sent;
+    if (tabId === "unopened") return local.filter((t) => t.folder === "inbox" && t.unread);
+    if (tabId === "opened") return local.filter((t) => t.folder === "inbox" && !t.unread);
+    if (tabId === "sent") return local.filter((t) => t.folder === "sent");
     return [];
-  }, [threads, sent, tabId]);
+  }, [local, tabId]);
 
   const bodyById = useMemo(() => {
     const m: Record<string, string> = {};
-    for (const t of threads) m[t.id] = t.body;
-    for (const t of sent) m[t.id] = t.body;
+    for (const t of local) m[t.id] = t.body;
     return m;
-  }, [threads, sent]);
+  }, [local]);
 
   const markRead = (id: string) => {
-    setThreads((ts) => ts.map((t) => (t.id === id ? { ...t, unread: false } : t)));
+    setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
     showToast("Marked as read.");
   };
 
@@ -115,15 +137,17 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           body: p.body.trim(),
         });
       }
-      const row: DemoResidentInboxThread = {
-        id: `sent_${Date.now()}`,
+      const id = `sent_${Date.now()}`;
+      const row: InboxThread = {
+        id,
+        folder: "sent",
         from: "You",
         email: p.toEmailLine,
         subject: p.subject.trim(),
         preview: previewLine(p.body),
-        when,
-        unread: false,
         body: p.body.trim(),
+        time: when,
+        unread: false,
       };
       if (p.includesDirectoryRecipients) {
         appendPersistedInboxThread(
@@ -142,7 +166,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           [],
         );
       }
-      setSent((prev) => [row, ...prev]);
+      setLocal((prev) => [row, ...prev]);
       setComposeOpen(false);
       showToast(
         p.includesAxisAdmin && !p.includesDirectoryRecipients
@@ -156,7 +180,10 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   );
 
   const refreshInbox = () => {
-    showToast("Inbox refreshed.");
+    void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+      setLocal(rows as InboxThread[]);
+      showToast("Inbox refreshed.");
+    });
   };
 
   const emptyCopy =
