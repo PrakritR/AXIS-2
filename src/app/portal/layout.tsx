@@ -8,7 +8,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
   const nav = await buildProPortalDefinition();
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f5f5f7]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f5f5f7]">
       <AccountLinksSync />
       <PublicNavbar />
       <PortalTopBanners
@@ -17,10 +17,12 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
         previewLabel={nav.previewLabel}
         showPlanBanner={nav.showPlanBanner}
       />
-      <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-x-hidden lg:flex-row">
+      <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSidebar definition={nav.definition} />
-        <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip">
-          <main className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip px-4 py-6 lg:px-8 lg:py-8">{children}</main>
+        <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <main className="relative z-0 min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto overscroll-contain px-4 py-6 lg:px-8 lg:py-8">
+            {children}
+          </main>
         </div>
       </div>
     </div>
