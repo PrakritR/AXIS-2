@@ -65,8 +65,8 @@ export function PublicNavbar() {
       id="axis-public-navbar"
       className={`sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)] transition-[background,box-shadow,border-color,backdrop-filter] duration-300 ease-out ${
         scrolled
-          ? "border-slate-200/80 bg-[#f5f5f7]/85 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_36px_-24px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-[#f5f5f7]/78"
-          : "border-transparent bg-[#f5f5f7]/96 shadow-none backdrop-blur-none"
+          ? "border-slate-200/80 bg-background/85 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_36px_-24px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/78"
+          : "border-transparent bg-background/96 shadow-none backdrop-blur-none"
       }`}
     >
       <div className="mx-auto grid min-h-[56px] w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 sm:px-5 lg:grid-cols-[auto_1fr_auto]">

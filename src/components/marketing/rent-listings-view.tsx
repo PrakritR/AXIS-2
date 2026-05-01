@@ -106,14 +106,16 @@ export function RentListingsView() {
   );
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Listings</p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-        {hasSearch ? "Available rooms" : "Available properties"}
-      </h1>
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-5 sm:py-14">
+      <div className="border-b border-slate-200/70 pb-6">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Listings</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-[-0.02em] text-slate-950 sm:text-3xl">
+          {hasSearch ? "Available rooms" : "Available properties"}
+        </h1>
+      </div>
 
       {hasSearch ? (
-        <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3.5 text-sm text-slate-700 shadow-[var(--shadow-sm)] sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <p>
             {centerZip !== null ? (
               <>
@@ -166,7 +168,7 @@ export function RentListingsView() {
       ) : null}
 
       {hasSearch && roomResults.length === 0 ? (
-        <div className="mt-12 rounded-3xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-14 text-center">
+        <div className="mt-12 rounded-[1.5rem] border border-dashed border-slate-200/90 bg-white/70 px-6 py-14 text-center shadow-[var(--shadow-sm)]">
           <p className="text-base font-semibold text-slate-800">No rooms match these filters</p>
           <p className="mt-2 text-sm text-slate-600">
             Try a later move-in date, a larger radius, a higher max rent, or set bathroom to Any.

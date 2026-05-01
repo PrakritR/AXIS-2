@@ -21,7 +21,7 @@ export function PortalTopbar({ definition }: { definition: PortalDefinition }) {
   const { showToast } = useAppUi();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-[#f5f5f7]/88 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-background/88 backdrop-blur-xl">
       <div className="flex items-center justify-between gap-3 px-4 py-3 lg:px-8">
         <div className="min-w-0">
           <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Signed in</p>

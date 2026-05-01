@@ -122,7 +122,6 @@ export function ProAccountLinksPanel({
   }, [userId, localTick]);
 
   const [axisInput, setAxisInput] = useState("");
-  const [selectedKind, setSelectedKind] = useState<"manager" | "owner">("manager");
   const [lookupBusy, setLookupBusy] = useState(false);
   const [draftAxisId, setDraftAxisId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState<string | null>(null);
@@ -157,7 +156,7 @@ export function ProAccountLinksPanel({
 
   const linkCap = maxAccountLinksForTier(skuTier);
   const participantUsedCount = remoteInvites.filter(
-    (i) => i.tabKind === selectedKind && (i.status === "pending" || i.status === "accepted"),
+    (i) => i.status === "pending" || i.status === "accepted",
   ).length;
   const atLinkCap =
     linkCap != null &&
@@ -200,15 +199,6 @@ export function ProAccountLinksPanel({
         setDraftAxisId(null);
         return;
       }
-      const lookedUpRole = String(body.role ?? "").toLowerCase();
-      if (lookedUpRole && lookedUpRole !== selectedKind) {
-        showToast("Choose the matching link role for that Axis ID.");
-        setDraftAxisId(null);
-        setDraftName(null);
-        setDraftUserId(null);
-        return;
-      }
-
       setDraftAxisId(raw);
       setDraftName(body.displayName ?? raw);
       setDraftUserId(body.userId ?? null);
@@ -251,7 +241,7 @@ export function ProAccountLinksPanel({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             inviteeAxisId: draftAxisId,
-            tabKind: selectedKind,
+            tabKind: "manager",
             assignedPropertyIds: ids,
             payoutPercentForManager: payout,
           }),
@@ -287,7 +277,7 @@ export function ProAccountLinksPanel({
       id: generateRelationshipId(),
       linkedAxisId: draftAxisId,
       linkedDisplayName: draftName ?? draftAxisId,
-      perspective: selectedKind === "owner" ? "owner_tab" : "manager_tab",
+      perspective: "manager_tab",
       payoutPercentForManager: payout,
       assignedPropertyIds: ids,
       createdAt: new Date().toISOString(),
@@ -426,15 +416,15 @@ export function ProAccountLinksPanel({
   const activeCards = useRemote ? activeRemote : localRows;
 
   return (
-    <ManagerPortalPageShell title="Account links">
+    <ManagerPortalPageShell title="Linked accounts">
       <div className="mx-auto max-w-3xl space-y-8">
         <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-            Account relationships
+            Account links
           </p>
-          <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900">Link another workspace</h2>
+          <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900">Link account</h2>
           <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            Verify their <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span>, then assign the properties and split amount for that relationship.
+            Enter their <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span> to link another property portal account.
           </p>
           {!useRemote && remoteLoaded ? (
             <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900">
@@ -464,28 +454,9 @@ export function ProAccountLinksPanel({
         </div>
 
         <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-6 shadow-sm">
-          <p className="text-sm font-semibold text-slate-900">New invite</p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)_auto] sm:items-end">
-            <label className="block text-xs font-semibold text-slate-600">
-              Link role
-              <select
-                value={selectedKind}
-                onChange={(e) => {
-                  const next = e.target.value === "owner" ? "owner" : "manager";
-                  setSelectedKind(next);
-                  setDraftAxisId(null);
-                  setDraftName(null);
-                  setDraftUserId(null);
-                  setSelectedProps({});
-                  setInviteeAtCap(false);
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-              >
-                <option value="manager">Manager</option>
-                <option value="owner">Owner</option>
-              </select>
-            </label>
-            <label className="block flex-1 text-xs font-semibold text-slate-600">
+          <p className="text-sm font-semibold text-slate-900">New link</p>
+          <div className="mt-4 flex gap-3 sm:items-end">
+            <label className="block min-w-0 flex-1 text-xs font-semibold text-slate-600">
               {AXIS_ID_LABEL}
               <input
                 type="text"
@@ -502,7 +473,7 @@ export function ProAccountLinksPanel({
               onClick={() => void lookup()}
               title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
             >
-              {lookupBusy ? "Checking…" : "Verify account"}
+              {lookupBusy ? "Checking…" : "Link account"}
             </Button>
           </div>
 

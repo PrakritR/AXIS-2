@@ -13,34 +13,14 @@ import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { LEASE_PIPELINE_EVENT, readLeasePipeline, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser, collectAccessiblePropertyIds } from "@/lib/manager-portfolio-access";
-import {
-  countUnopenedPersistedInbox,
-  MANAGER_INBOX_STORAGE_KEY,
-  PORTAL_INBOX_CHANGED_EVENT,
-  type PersistedInboxThread,
-  syncPersistedInboxFromServer,
-} from "@/lib/portal-inbox-storage";
 import { readManagerWorkOrderRows, subscribeManagerWorkOrders, syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_DASHBOARD_TILE_LINK, PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilter } from "./manager-section-shell";
-import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "./portal-metrics";
 
 function safeLeasePipelineCount(userId: string | null): number {
   try {
     if (!userId) return 0;
     return readLeasePipeline(userId).length;
-  } catch {
-    return 0;
-  }
-}
-
-function leaseNeedsManagerAction(userId: string | null): number {
-  if (!userId) return 0;
-  try {
-    return readLeasePipeline(userId).filter((r) => {
-      const s = r.status;
-      return s === "Draft" || s === "Manager Review" || s === "Manager Signature Pending";
-    }).length;
   } catch {
     return 0;
   }
@@ -55,14 +35,6 @@ function workOrderVisibleToManager(row: DemoManagerWorkOrderRow, userId: string 
   return false;
 }
 
-function safeInboxUnopened(key: string, fallback: PersistedInboxThread[]): number {
-  try {
-    return countUnopenedPersistedInbox(key, fallback);
-  } catch {
-    return 0;
-  }
-}
-
 function formatUpcomingTourTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
@@ -73,7 +45,7 @@ function StatLink({ label, value, href }: { label: string; value: string; href: 
   return (
     <Link
       href={href}
-      className="block rounded-xl border border-slate-200/80 bg-white px-5 py-4 transition hover:border-primary/35 hover:shadow-sm"
+      className={PORTAL_DASHBOARD_TILE_LINK}
     >
       <p className={PORTAL_KPI_VALUE}>{value}</p>
       <p className={PORTAL_KPI_LABEL}>{label}</p>
@@ -200,32 +172,6 @@ export function ManagerDashboard() {
     return safeLeasePipelineCount(userId);
   }, [leaseTick, userId]);
 
-  const leasesNeedingAction = useMemo(() => {
-    void leaseTick;
-    return leaseNeedsManagerAction(userId);
-  }, [leaseTick, userId]);
-
-  const [inboxTick, setInboxTick] = useState(0);
-  useEffect(() => {
-    const onInboxEvent = (e: Event) => {
-      const key = (e as CustomEvent<{ key?: string }>).detail?.key;
-      const want = MANAGER_INBOX_STORAGE_KEY;
-      if (!key || key === want) setInboxTick((n) => n + 1);
-    };
-    const want = MANAGER_INBOX_STORAGE_KEY;
-    void syncPersistedInboxFromServer(want).then(() => setInboxTick((n) => n + 1));
-    window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, onInboxEvent as EventListener);
-    return () => {
-      window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, onInboxEvent as EventListener);
-    };
-  }, []);
-
-  const inboxUnopenedCount = useMemo(() => {
-    void inboxTick;
-    const key = MANAGER_INBOX_STORAGE_KEY;
-    return safeInboxUnopened(key, []);
-  }, [inboxTick]);
-
   const [workOrderRows, setWorkOrderRows] = useState<DemoManagerWorkOrderRow[]>([]);
   useEffect(() => {
     const sync = () => setWorkOrderRows(readManagerWorkOrderRows());
@@ -292,14 +238,11 @@ export function ManagerDashboard() {
           </p>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatLink label="Properties" value={String(pipelineSummary.totalProperties)} href={`${portalBase}/properties`} />
           <StatLink label="Applications" value={String(visibleApplications.length)} href={`${portalBase}/applications`} />
-          <StatLink label="Pending applications" value={String(pendingApplications)} href={`${portalBase}/applications`} />
           <StatLink label="Leases" value={String(leasePipelineCount)} href={`${portalBase}/leases`} />
-          <StatLink label="Leases needing action" value={String(leasesNeedingAction)} href={`${portalBase}/leases`} />
           <StatLink label="Open work orders" value={String(openWorkOrders)} href={`${portalBase}/work-orders`} />
-          <StatLink label="Inbox" value={String(inboxUnopenedCount)} href={`${portalBase}/inbox/unopened`} />
         </div>
       </div>
     </ManagerPortalPageShell>

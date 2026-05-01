@@ -73,7 +73,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
   }, [accountOpen]);
 
   const desktopAside = (
-    <aside className="relative z-40 hidden h-full min-h-0 w-72 shrink-0 self-stretch flex-col overflow-hidden border-r border-slate-200/80 bg-[#fbfbfd] lg:flex">
+    <aside className="relative z-40 hidden h-full min-h-0 w-[17.5rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-slate-200/60 bg-[#fafbfd] lg:flex">
       <div className={`px-6 py-6 text-white ${accentHeader}`}>
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72">Axis Housing</p>
         <p className="mt-2 text-lg font-semibold tracking-[-0.02em] leading-snug">{definition.title}</p>
@@ -88,8 +88,10 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                 href={s.href}
                 prefetch
                 onClick={(event) => leavePaymentsSection(event, s.section, s.href)}
-                className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
-                  active ? "bg-white text-slate-950 shadow-[0_10px_26px_-22px_rgba(15,23,42,0.35)]" : "text-slate-600 hover:bg-white hover:text-slate-950"
+                className={`flex min-h-10 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-medium transition duration-200 ${
+                  active
+                    ? "bg-white text-slate-950 shadow-[var(--shadow-sm)] ring-1 ring-slate-200/80"
+                    : "text-slate-600 hover:bg-white/90 hover:text-slate-950"
                 }`}
               >
                 {adminNavIcons ? (
@@ -126,7 +128,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
 
       {/* Mobile: persistent portal nav (marketing navbar stays above via layout). */}
       <div className="shrink-0 lg:hidden">
-        <div className="border-b border-slate-200/80 bg-[#fbfbfd] lg:hidden">
+        <div className="border-b border-slate-200/55 bg-[#fafbfd] lg:hidden">
           <div className="flex items-center gap-2.5 px-3 pt-2 sm:px-4">
             <div className={`h-11 w-1.5 shrink-0 rounded-full ${accentBar}`} aria-hidden />
             <div className="min-w-0 flex-1 py-1">
@@ -154,8 +156,8 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                   onClick={(event) => leavePaymentsSection(event, s.section, s.href)}
                   className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
                     active
-                      ? "bg-white text-slate-950 shadow-[0_6px_20px_-14px_rgba(15,23,42,0.45)] ring-1 ring-slate-200/90"
-                      : "bg-slate-200/50 text-slate-700 ring-1 ring-transparent hover:bg-slate-200/70"
+                      ? "bg-white text-slate-950 shadow-[var(--shadow-sm)] ring-1 ring-slate-200/75"
+                      : "bg-slate-200/40 text-slate-700 ring-1 ring-transparent hover:bg-slate-200/65"
                   }`}
                 >
                   {adminNavIcons ? (
@@ -178,7 +180,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               aria-label="Close account menu"
               onClick={() => setAccountOpen(false)}
             />
-            <div className="fixed right-0 bottom-0 left-0 z-[100] max-h-[min(70vh,28rem)] overflow-y-auto rounded-t-2xl border border-slate-200/90 bg-[#fbfbfd] px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] shadow-[0_-20px_48px_-20px_rgba(15,23,42,0.35)] lg:hidden">
+            <div className="fixed right-0 bottom-0 left-0 z-[100] max-h-[min(70vh,28rem)] overflow-y-auto rounded-t-[1.35rem] border border-slate-200/80 bg-[#fafbfd] px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] shadow-[0_-24px_48px_-20px_rgba(15,23,42,0.28)] lg:hidden">
               <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-slate-300/90" aria-hidden />
               <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Account</p>
               <div className="mt-3 space-y-1 border-t border-slate-100 pt-3">

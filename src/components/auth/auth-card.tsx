@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 /** Portal auth card — white surface, soft shadow, reference radii. */
 export function AuthCard({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-[26px] border border-[#e0e4ec] bg-white px-5 py-8 shadow-[0_20px_60px_-24px_rgba(15,23,42,0.14)] sm:px-10 sm:py-10">
+    <div
+      className="rounded-[28px] border border-slate-200/85 bg-white/98 px-5 py-8 shadow-[var(--shadow-card)] backdrop-blur-[2px] ring-1 ring-white/70 sm:px-10 sm:py-10"
+    >
       {children}
     </div>
   );

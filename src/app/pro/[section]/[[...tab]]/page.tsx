@@ -1,4 +1,4 @@
-import { renderPortalSection } from "@/lib/render-portal-section";
+import { redirect } from "next/navigation";
 
 export default async function ProPortalSectionPage({
   params,
@@ -6,5 +6,6 @@ export default async function ProPortalSectionPage({
   params: Promise<{ section: string; tab?: string[] }>;
 }) {
   const { section, tab } = await params;
-  return renderPortalSection("pro", section, tab);
+  const tabPath = tab?.length ? `/${tab.join("/")}` : "";
+  redirect(`/portal/${section}${tabPath}`);
 }

@@ -21,8 +21,8 @@ const footerLinkClass =
 
 export function PublicFooter() {
   return (
-    <footer className="border-t border-slate-200/70 bg-[#f5f5f7]">
-      <div className="mx-auto max-w-6xl px-6 pb-6 pt-10 sm:px-5">
+    <footer className="border-t border-slate-200/70 bg-background">
+      <div className="mx-auto max-w-6xl rounded-t-2xl px-6 pb-6 pt-10 sm:px-5">
         <div className="flex flex-col gap-8 border-b border-slate-200/60 pb-6 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
           <div className="max-w-[18rem] shrink-0 space-y-3">
             <AxisLogoLink href="/" />

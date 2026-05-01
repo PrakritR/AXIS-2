@@ -1,8 +1,12 @@
 import type { ReactNode } from "react";
 
+/** Dashboard / KPI link tiles (manager, resident, admin). */
+export const PORTAL_DASHBOARD_TILE_LINK =
+  "block rounded-xl border border-slate-200/70 bg-white/97 px-5 py-4 shadow-[0_2px_14px_-6px_rgba(15,23,42,0.08)] transition-[border-color,box-shadow,transform] duration-200 hover:border-primary/30 hover:shadow-[0_14px_40px_-22px_rgba(10,132,255,0.16)] hover:-translate-y-0.5 active:translate-y-0";
+
 /** Outer white “card” wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
-  "rounded-2xl border border-slate-200/80 bg-white/92 p-4 shadow-[0_18px_50px_-42px_rgba(15,23,42,0.2)] backdrop-blur-sm sm:rounded-[28px] sm:p-6";
+  "rounded-2xl border border-slate-200/70 bg-white/95 p-4 shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6";
 
 /** Calendar week grid outer frame (matches manager calendar chrome). */
 export const PORTAL_CALENDAR_FRAME = "overflow-hidden rounded-2xl border border-slate-200 bg-slate-200";
@@ -185,7 +189,9 @@ export function PortalKpiTabStrip({
 
 /** Inner well for tables / lists below KPI rows. */
 export function PortalContentWell({ children }: { children: ReactNode }) {
-  return <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">{children}</div>;
+  return (
+    <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/75 bg-white shadow-[0_2px_16px_-8px_rgba(15,23,42,0.08)]">{children}</div>
+  );
 }
 
 /** Admin portal pattern: pill strip with label + count (Managers / Leases / Applications). */
@@ -253,10 +259,10 @@ export function ManagerPortalPageShell({
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">{title}</h1>
+        <h1 className="text-[1.35rem] font-bold tracking-[-0.02em] text-slate-950 sm:text-[1.75rem]">{title}</h1>
         {titleAside ? <div className="flex flex-wrap items-center gap-2 sm:justify-end">{titleAside}</div> : null}
       </div>
-      {filterRow ? <div className="mt-5">{filterRow}</div> : null}
+      {filterRow ? <div className="mt-5 border-b border-slate-100/90 pb-5">{filterRow}</div> : null}
       <div className="mt-5">{children}</div>
     </div>
   );

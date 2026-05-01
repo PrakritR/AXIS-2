@@ -28,15 +28,17 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
   const showPlanBanner = ownerTier === "free";
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#f5f5f7]">
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
       <AccountLinksSync />
       <PublicNavbar />
-      <PortalTopBanners
-        planHref="/owner/plan"
-        showPreviewBanner={showPreviewBanner}
-        previewLabel={previewLabel}
-        showPlanBanner={showPlanBanner}
-      />
+      <div className="shrink-0">
+        <PortalTopBanners
+          planHref="/owner/plan"
+          showPreviewBanner={showPreviewBanner}
+          previewLabel={previewLabel}
+          showPlanBanner={showPlanBanner}
+        />
+      </div>
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSidebar definition={proPortal} />
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

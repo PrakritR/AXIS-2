@@ -120,13 +120,13 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
 
   return (
     <div
-      className="mx-auto w-full max-w-[1060px] rounded-2xl px-4 py-6 sm:px-10 sm:py-9"
+      className="mx-auto w-full max-w-[1060px] rounded-[1.35rem] px-4 py-6 ring-1 ring-white/60 sm:rounded-[1.75rem] sm:px-10 sm:py-9"
       style={{
-        background: "rgba(255,255,255,0.75)",
+        background: "rgba(255,255,255,0.82)",
         backdropFilter: "blur(24px)",
         WebkitBackdropFilter: "blur(24px)",
-        border: "1px solid rgba(0,0,0,0.06)",
-        boxShadow: "0 8px 40px rgba(0,0,0,0.07), 0 1px 0 rgba(255,255,255,0.9) inset",
+        border: "1px solid rgba(15,23,42,0.06)",
+        boxShadow: "var(--shadow-card), 0 1px 0 rgba(255,255,255,0.92) inset",
       }}
     >
       {/* Row 1: main filters */}

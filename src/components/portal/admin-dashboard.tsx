@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { PORTAL_DASHBOARD_TILE_LINK, PORTAL_KPI_LABEL, PORTAL_KPI_VALUE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { readInboxMessages } from "@/lib/demo-admin-partner-inbox";
 import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
@@ -29,7 +29,7 @@ function StatCard({
   return (
     <Link
       href={href}
-      className="block min-w-[10rem] rounded-xl border border-slate-200/80 bg-white px-5 py-4 transition hover:border-primary/35 hover:shadow-sm"
+      className={`${PORTAL_DASHBOARD_TILE_LINK} min-w-[10rem]`}
     >
       <p className={PORTAL_KPI_VALUE}>{value}</p>
       <p className={PORTAL_KPI_LABEL}>{label}</p>
@@ -154,30 +154,25 @@ export function AdminDashboard() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className={PORTAL_SECTION_SURFACE}>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
-        {nextAdminMeeting ? (
-          <Link
-            href="/admin/events"
-            className="mt-4 block rounded-2xl border border-sky-200/80 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 transition hover:border-sky-300 hover:bg-sky-50"
-          >
-            <span className="font-semibold">{upcomingAdminMeetings.length} upcoming calendar item{upcomingAdminMeetings.length === 1 ? "" : "s"}:</span>{" "}
-            {pendingMeetingCount} pending · {confirmedMeetingCount} confirmed. Next: {nextAdminMeeting.label} at{" "}
-            <span className="font-semibold">{formatUpcomingMeetingTime(nextAdminMeeting.start)}</span>.
-          </Link>
-        ) : null}
+    <div className={`${PORTAL_SECTION_SURFACE} space-y-5`}>
+      <div className="flex items-center justify-between">
+        <h1 className="text-[1.75rem] font-bold tracking-[-0.02em] text-slate-900">Dashboard</h1>
       </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      {nextAdminMeeting ? (
+        <Link
+          href="/admin/events"
+          className="block rounded-2xl border border-sky-200/70 bg-gradient-to-br from-sky-50/90 to-white px-4 py-3.5 text-sm text-sky-950 shadow-[var(--shadow-sm)] transition hover:border-sky-300/90 hover:shadow-md"
+        >
+          <span className="font-semibold">{upcomingAdminMeetings.length} upcoming calendar item{upcomingAdminMeetings.length === 1 ? "" : "s"}:</span>{" "}
+          {pendingMeetingCount} pending · {confirmedMeetingCount} confirmed. Next: {nextAdminMeeting.label} at{" "}
+          <span className="font-semibold">{formatUpcomingMeetingTime(nextAdminMeeting.start)}</span>.
+        </Link>
+      ) : null}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatCard label="Properties" value={propertiesTotal} href="/admin/properties" />
-        <StatCard label="Pending property review" value={pendingPropertyApprovals} href="/admin/properties" />
-        <StatCard label="Leases in admin review" value={leaseReviewCount} href="/admin/leases" />
-        <StatCard
-          label="Axis users"
-          value={String(counts.managers + counts.owners + counts.residents)}
-          href="/admin/axis-users"
-        />
+        <StatCard label="Pending review" value={pendingPropertyApprovals} href="/admin/properties" />
+        <StatCard label="Leases in review" value={leaseReviewCount} href="/admin/leases" />
+        <StatCard label="Users" value={String(counts.managers + counts.owners + counts.residents)} href="/admin/axis-users" />
         <StatCard label="Calendar" value={eventsTotal} href="/admin/events" />
         <StatCard label="Inbox unread" value={inboxUnread} href="/admin/inbox/unopened" />
       </div>

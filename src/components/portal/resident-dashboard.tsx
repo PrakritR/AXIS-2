@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell, PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_DASHBOARD_TILE_LINK, PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -27,7 +27,7 @@ function StatLink({ label, value, href }: { label: string; value: string; href: 
   return (
     <Link
       href={href}
-      className="block rounded-xl border border-slate-200/80 bg-white px-5 py-4 transition hover:border-primary/35 hover:shadow-sm"
+      className={PORTAL_DASHBOARD_TILE_LINK}
     >
       <p className={PORTAL_KPI_VALUE}>{value}</p>
       <p className={PORTAL_KPI_LABEL}>{label}</p>

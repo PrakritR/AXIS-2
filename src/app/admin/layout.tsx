@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await assertAdminPortalAccess();
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#f5f5f7]">
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
       <PublicNavbar />
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSidebar definition={adminPortal} />

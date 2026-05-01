@@ -184,9 +184,10 @@ export default function PartnerPricingPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen px-4 py-16 sm:py-20">
+    <div className="min-h-screen px-4 py-14 sm:px-5 sm:py-20">
       <div className="mx-auto max-w-3xl text-center">
-        <h1 className="text-5xl font-black tracking-tight text-[#0d1f4e] sm:text-6xl">Start with Axis.</h1>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Partner pricing</p>
+        <h1 className="mt-3 text-4xl font-bold tracking-[-0.03em] text-[#0d1f4e] sm:text-5xl md:text-[3.25rem]">Start with Axis.</h1>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-500">
           Choose a tier, fill out the form below, and complete checkout (or free-tier setup). Your plan and contact
           details are confirmed here before you create your property portal account.
