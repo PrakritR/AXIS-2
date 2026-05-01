@@ -34,7 +34,11 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
   }, [pathname]);
 
   const hasSignOut =
-    definition.kind === "resident" || definition.kind === "manager" || definition.kind === "owner" || definition.kind === "admin";
+    definition.kind === "resident" ||
+    definition.kind === "manager" ||
+    definition.kind === "owner" ||
+    definition.kind === "admin" ||
+    definition.kind === "pro";
 
   const accent =
     definition.accent === "teal"

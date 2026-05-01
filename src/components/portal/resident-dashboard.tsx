@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
-import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 function StatLink({ label, value, href }: { label: string; value: string; href: string }) {
@@ -52,19 +52,23 @@ export function ResidentDashboard({
   const managerIsFree = managerSubscriptionTier === "free";
 
   useEffect(() => {
-    const sync = () => {
+    let alive = true;
+
+    const applyRows = () => {
       const rows = readManagerApplicationRows();
       const matching = email
         ? rows.filter((row) => row.email?.trim().toLowerCase() === email)
         : [];
-      const row = matching.at(-1);
+      const row = matching[0];
 
       if (row?.bucket === "approved" || row?.bucket === "rejected" || row?.bucket === "pending") {
+        if (!alive) return;
         setApplicationStatus(row.bucket);
         setApplicationStage(row.stage?.trim() || (row.bucket === "approved" ? "Approved" : row.bucket === "rejected" ? "Rejected" : "Submitted"));
         setApplicationProperty(row.property?.trim() || null);
         setApplicationId(row.id?.trim() || null);
       } else {
+        if (!alive) return;
         setApplicationStatus(applicationApproved ? "approved" : "pending");
         setApplicationStage(applicationApproved ? "Approved" : "Submitted");
         setApplicationProperty(null);
@@ -72,12 +76,21 @@ export function ResidentDashboard({
       }
     };
 
+    const sync = () => {
+      applyRows();
+      void syncManagerApplicationsFromServer({ force: true }).then(() => {
+        if (!alive) return;
+        applyRows();
+      });
+    };
+
     sync();
-    window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
-    window.addEventListener("storage", sync);
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, applyRows);
+    window.addEventListener("storage", applyRows);
     return () => {
-      window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
-      window.removeEventListener("storage", sync);
+      alive = false;
+      window.removeEventListener(MANAGER_APPLICATIONS_EVENT, applyRows);
+      window.removeEventListener("storage", applyRows);
     };
   }, [applicationApproved, email, initialApplicationId]);
 
