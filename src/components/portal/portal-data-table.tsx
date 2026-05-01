@@ -11,13 +11,13 @@ export const PORTAL_TABLE_HEAD_ROW = "border-b border-slate-200/60 bg-slate-50/4
 
 /** Primary data row. */
 export const PORTAL_TABLE_TR =
-  "border-b border-slate-100/90 align-top transition-colors last:border-0 hover:bg-slate-50/70";
+  "border-b border-slate-100/90 transition-colors last:border-0 hover:bg-slate-50/70";
 
 /** Expanded detail row (full-width cell below the summary row). */
 export const PORTAL_TABLE_DETAIL_ROW = "border-b border-slate-100/90 bg-slate-50/25 last:border-0";
 
 /** Compact body cell padding. */
-export const PORTAL_TABLE_TD = "px-4 py-2.5 align-top text-sm text-slate-700";
+export const PORTAL_TABLE_TD = "px-4 py-3 align-middle text-sm text-slate-700";
 
 /** Detail row cell padding. */
 export const PORTAL_TABLE_DETAIL_CELL = "px-4 py-3 align-top";
