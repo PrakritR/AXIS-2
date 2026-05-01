@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -360,6 +361,31 @@ export function ManagerWorkOrdersPanel({
                           Resident preferred arrival:{" "}
                           <span className="font-medium text-slate-700">{row.preferredArrival?.trim() || "Anytime"}</span>
                         </p>
+                        {row.photoDataUrls?.length ? (
+                          <div className="mt-4">
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Photos</p>
+                            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                              {row.photoDataUrls.map((src, index) => (
+                                <a
+                                  key={`${row.id}-photo-${index}`}
+                                  href={src}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+                                >
+                                  <Image
+                                    src={src}
+                                    alt={`Work order photo ${index + 1}`}
+                                    width={240}
+                                    height={180}
+                                    className="h-28 w-full object-cover"
+                                    unoptimized
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
 
                         {/* Schedule section */}
                         {row.bucket !== "completed" ? (

@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/input";
@@ -51,6 +52,7 @@ function priorityClass(p: string) {
 export function ResidentWorkOrdersPanel() {
   const { showToast } = useAppUi();
   const session = usePortalSession();
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [bucket, setBucket] = useState<ResidentWorkBucket>("open");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -58,6 +60,7 @@ export function ResidentWorkOrdersPanel() {
   const [category, setCategory] = useState("Plumbing");
   const [priority, setPriority] = useState("Medium");
   const [preferredArrival, setPreferredArrival] = useState("");
+  const [photoDataUrls, setPhotoDataUrls] = useState<string[]>([]);
   const [allWorkOrders, setAllWorkOrders] = useState<DemoManagerWorkOrderRow[]>([]);
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
@@ -97,6 +100,37 @@ export function ResidentWorkOrdersPanel() {
     setCategory("Plumbing");
     setPriority("Medium");
     setPreferredArrival("");
+    setPhotoDataUrls([]);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  };
+
+  const fileToDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+      reader.readAsDataURL(file);
+    });
+
+  const onPickPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const remaining = 6 - photoDataUrls.length;
+    if (remaining <= 0) {
+      showToast("You can attach up to 6 photos.");
+      return;
+    }
+    const next = [...photoDataUrls];
+    for (let i = 0; i < Math.min(files.length, remaining); i += 1) {
+      const file = files[i];
+      if (!file) continue;
+      if (!file.type.startsWith("image/")) {
+        showToast("Only image files can be attached.");
+        return;
+      }
+      const dataUrl = await fileToDataUrl(file);
+      next.push(dataUrl);
+    }
+    setPhotoDataUrls(next);
   };
 
   const submitNew = () => {
@@ -129,6 +163,7 @@ export function ResidentWorkOrdersPanel() {
       preferredArrival: prefLabel,
       residentName: application?.name,
       residentEmail,
+      photoDataUrls,
     };
     writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
     setAllWorkOrders(readManagerWorkOrderRows());
@@ -150,6 +185,16 @@ export function ResidentWorkOrdersPanel() {
         <ManagerPortalStatusPills tabs={statusTabs} activeId={bucket} onChange={(id) => setBucket(id as ResidentWorkBucket)} />
       }
     >
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="sr-only"
+        onChange={(e) => {
+          void onPickPhotos(e.target.files);
+        }}
+      />
       <div className={PORTAL_DATA_TABLE_WRAP}>
         {rows.length === 0 ? (
           <PortalDataTableEmpty
@@ -207,6 +252,31 @@ export function ResidentWorkOrdersPanel() {
                           <p className="mt-1">{row.cost !== "—" && row.cost.trim() ? row.cost : "Not set yet"}</p>
                           <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Description</p>
                           <p className="mt-1.5 leading-relaxed">{row.description}</p>
+                          {row.photoDataUrls?.length ? (
+                            <>
+                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Photos</p>
+                              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {row.photoDataUrls.map((src, index) => (
+                                  <a
+                                    key={`${row.id}-photo-${index}`}
+                                    href={src}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+                                  >
+                                    <Image
+                                      src={src}
+                                      alt={`Work order photo ${index + 1}`}
+                                      width={240}
+                                      height={180}
+                                      className="h-28 w-full object-cover"
+                                      unoptimized
+                                    />
+                                  </a>
+                                ))}
+                              </div>
+                            </>
+                          ) : null}
                           {bucket === "open" ? (
                             <PortalTableDetailActions>
                               <Button
@@ -271,10 +341,36 @@ export function ResidentWorkOrdersPanel() {
               className="bg-white"
             />
           </div>
-          <p className="text-xs text-slate-500">Photos attach in production; the button below confirms intent.</p>
-          <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => showToast("Photos attach when media upload is enabled.")}>
+          <p className="text-xs text-slate-500">Attach up to 6 photos to help maintenance understand the issue.</p>
+          <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => photoInputRef.current?.click()}>
             Add photos
           </Button>
+          {photoDataUrls.length ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {photoDataUrls.map((src, index) => (
+                <div key={`new-photo-${index}`} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                  <Image
+                    src={src}
+                    alt={`Selected work order photo ${index + 1}`}
+                    width={240}
+                    height={180}
+                    className="h-24 w-full object-cover"
+                    unoptimized
+                  />
+                  <div className="flex justify-end p-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 rounded-full px-3 text-[11px]"
+                      onClick={() => setPhotoDataUrls((current) => current.filter((_, i) => i !== index))}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setCreateOpen(false)}>

@@ -132,6 +132,7 @@ export type DemoManagerWorkOrderRow = {
   assignedPropertyId?: string;
   assignedRoomChoice?: string;
   managerUserId?: string | null;
+  photoDataUrls?: string[];
 };
 
 export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];
