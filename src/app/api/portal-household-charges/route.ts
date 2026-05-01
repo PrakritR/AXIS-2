@@ -16,14 +16,23 @@ async function getUserContext() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   const db = createSupabaseServiceRoleClient();
-  const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
+  const [profileResult, rolesResult] = await Promise.all([
+    db.from("profiles").select("email, role").eq("id", user.id).maybeSingle(),
+    db.from("profile_roles").select("role").eq("user_id", user.id),
+  ]);
+  const profile = profileResult.data;
   const admin = await isAdminUser(user.id);
+  const roleRows = (rolesResult.data ?? []).map((r) => String(r.role).toLowerCase());
+  const legacyRole = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+  const allRoles = roleRows.length > 0 ? roleRows : (legacyRole ? [legacyRole] : []);
+  const isManagerOrOwner = allRoles.some((r) => r === "manager" || r === "owner");
+  const resolvedRole = admin ? "admin" : isManagerOrOwner ? "manager" : "resident";
   return {
     db,
     user: {
       id: user.id,
       email: (profile?.email ?? user.email ?? "").trim().toLowerCase(),
-      role: admin ? "admin" : String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase(),
+      role: resolvedRole,
     },
   };
 }
@@ -45,12 +54,14 @@ export async function GET() {
 
     if (user.role === "admin") {
       // admin sees all
-    } else if (user.role === "resident") {
+    } else if (user.role === "manager") {
+      // Managers see charges they own; also include any where they appear as a resident (edge case)
+      chargeQuery = chargeQuery.or(`manager_user_id.eq.${user.id},resident_user_id.eq.${user.id},resident_email.eq.${user.email}`);
+      profileQuery = profileQuery.or(`manager_user_id.eq.${user.id},resident_user_id.eq.${user.id},resident_email.eq.${user.email}`);
+    } else {
+      // Resident — match by user_id or email
       chargeQuery = chargeQuery.or(`resident_user_id.eq.${user.id},resident_email.eq.${user.email}`);
       profileQuery = profileQuery.or(`resident_user_id.eq.${user.id},resident_email.eq.${user.email}`);
-    } else {
-      chargeQuery = chargeQuery.eq("manager_user_id", user.id);
-      profileQuery = profileQuery.eq("manager_user_id", user.id);
     }
 
     const [chargeResult, profileResult] = await Promise.all([chargeQuery, profileQuery]);
