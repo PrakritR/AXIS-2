@@ -54,13 +54,13 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
 
   /** Shared property portal chrome: gradient header, white rail, slate-900 active row + arrow affordance. */
   const desktopAside = (
-    <aside className="sticky top-0 z-40 hidden h-full min-h-0 w-72 shrink-0 flex-col self-stretch border-r border-slate-200/80 bg-[#fbfbfd] lg:flex">
+    <aside className="sticky top-0 z-40 hidden h-screen w-72 shrink-0 flex-col border-r border-slate-200/80 bg-[#fbfbfd] lg:flex">
       <div className={`px-6 py-6 text-white ${accent}`}>
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72">Axis Housing</p>
         <p className="mt-2 text-lg font-semibold tracking-[-0.02em] leading-snug">{definition.title}</p>
       </div>
       <nav className="flex min-h-0 flex-1 flex-col px-3 py-4">
-        <div className="min-h-0 flex-1 space-y-1">
+        <div className="min-h-0 flex-1 overflow-y-auto space-y-1">
           {navItems.map((s) => {
             const active = activeSection === s.section;
             return (
