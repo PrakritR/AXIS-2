@@ -780,34 +780,45 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
 
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={`grid gap-4 ${rows.length >= 3 ? "xl:grid-cols-3" : ""} md:grid-cols-2`}>
         {rows.map((c) => (
           <div
             key={c.id}
-            className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/80 p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md sm:p-5"
+            className="group relative overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white via-white to-slate-50/90 p-4 shadow-sm ring-1 ring-slate-900/[0.04] transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/15 sm:p-5"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Package</p>
-                <p className="mt-1 text-base font-bold tracking-tight text-slate-900">{c.label}</p>
+            <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary to-primary/40 opacity-90" aria-hidden />
+            <div className="relative pl-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Package</p>
+                  <p className="mt-1 text-lg font-bold tracking-tight text-slate-900">{c.label}</p>
+                  <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-600">{c.roomsLine}</p>
+                </div>
+                {c.promo ? <AvailabilityPill text={c.promo} /> : null}
               </div>
-              {c.promo ? <AvailabilityPill text={c.promo} /> : null}
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-slate-100 bg-white/80 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Price</p>
+              <div className="mt-4 rounded-xl border border-slate-100 bg-white/90 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Monthly</p>
                 <div className="mt-1 flex flex-wrap items-baseline gap-2">
-                  {c.strikethrough ? <span className="text-xs text-slate-400 line-through">{c.strikethrough}</span> : null}
-                  <span className="text-lg font-bold text-slate-900">{c.price}</span>
+                  {c.strikethrough ? <span className="text-sm text-slate-400 line-through">{c.strikethrough}</span> : null}
+                  <span className="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{c.price}</span>
                 </div>
               </div>
-              <div className="rounded-xl border border-slate-100 bg-white/80 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Rooms</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">{c.roomsLine}</p>
-              </div>
+              {c.summaryItems && c.summaryItems.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {c.summaryItems.slice(0, 3).map((item) => (
+                    <span
+                      key={`${c.id}-${item.label}`}
+                      className="inline-flex items-center rounded-full border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-700"
+                    >
+                      <span className="text-slate-500">{item.label}:</span>
+                      <span className="ml-1 text-slate-900">{item.value}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <BundleRoomPreview row={c} />
+              <DetailsButton className="mt-4 w-full" onClick={() => setModal({ kind: "bundle", row: c })} />
             </div>
-            <BundleRoomPreview row={c} />
-            <DetailsButton className="mt-4 w-full" onClick={() => setModal({ kind: "bundle", row: c })} />
           </div>
         ))}
       </div>

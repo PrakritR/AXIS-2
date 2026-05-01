@@ -20,6 +20,21 @@ export function normalizeApplicationAxisId(id: string): string {
   return `AXIS-${suffix || Date.now().toString(36).toUpperCase()}`;
 }
 
+/** Same application id shown in property portal + create-account; not derived from auth user UUID. */
+export function resolveResidentPortalAxisId(input: {
+  profileManagerId?: string | null;
+  authUserAxisId?: string | null;
+  applicationRowId?: string | null;
+}): string {
+  const fromProfile = input.profileManagerId?.trim();
+  if (fromProfile) return normalizeApplicationAxisId(fromProfile);
+  const fromAuth = typeof input.authUserAxisId === "string" ? input.authUserAxisId.trim() : "";
+  if (fromAuth) return normalizeApplicationAxisId(fromAuth);
+  const fromRow = input.applicationRowId?.trim();
+  if (fromRow) return normalizeApplicationAxisId(fromRow);
+  return "";
+}
+
 function normalizeApplicationRow(row: DemoApplicantRow): DemoApplicantRow {
   const nextId = normalizeApplicationAxisId(row.id);
   return nextId === row.id ? row : { ...row, id: nextId };

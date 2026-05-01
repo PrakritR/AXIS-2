@@ -329,8 +329,11 @@ function chargeBusinessKey(charge: HouseholdCharge): string {
   ) {
     return `utilities_recurring|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}|${charge.rentMonth}`;
   }
+  /** One pending/paid application fee per resident email + listing — avoids duplicates when id linkage or property id varies on the row. */
+  if (charge.kind === "application_fee") {
+    return `application_fee|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}`;
+  }
   if (charge.applicationId && (
-    charge.kind === "application_fee" ||
     charge.kind === "first_month_rent" ||
     charge.kind === "prorated_rent" ||
     charge.kind === "utilities" ||
@@ -344,6 +347,38 @@ function chargeBusinessKey(charge: HouseholdCharge): string {
   return charge.id;
 }
 
+function mergeHouseholdApplicationFeeRows(a: HouseholdCharge, b: HouseholdCharge): HouseholdCharge {
+  const aPaid = a.status === "paid";
+  const bPaid = b.status === "paid";
+  const [primary, secondary] =
+    aPaid && !bPaid
+      ? [a, b]
+      : bPaid && !aPaid
+        ? [b, a]
+        : ((): [HouseholdCharge, HouseholdCharge] => {
+            const ta = new Date(a.createdAt).getTime();
+            const tb = new Date(b.createdAt).getTime();
+            if (Number.isFinite(ta) && Number.isFinite(tb) && ta >= tb) return [a, b];
+            return [b, a];
+          })();
+  const applicationId = primary.applicationId?.trim() || secondary.applicationId?.trim() || undefined;
+  const paid = aPaid || bPaid;
+  const mergedId = applicationId ? applicationFeeChargeIdForApplication(applicationId) : primary.id;
+  return {
+    ...primary,
+    id: mergedId,
+    applicationId,
+    residentUserId: primary.residentUserId ?? secondary.residentUserId ?? null,
+    residentName: primary.residentName?.trim() ? primary.residentName : secondary.residentName,
+    status: paid ? "paid" : primary.status,
+    paidAt: paid ? primary.paidAt || secondary.paidAt : undefined,
+    balanceLabel: paid ? "$0.00" : primary.balanceLabel,
+    amountLabel: primary.amountLabel?.trim() ? primary.amountLabel : secondary.amountLabel,
+    zelleContactSnapshot: primary.zelleContactSnapshot ?? secondary.zelleContactSnapshot,
+    venmoContactSnapshot: primary.venmoContactSnapshot ?? secondary.venmoContactSnapshot,
+  };
+}
+
 function dedupeCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
   const byKey = new Map<string, HouseholdCharge>();
   for (const charge of rows) {
@@ -351,6 +386,10 @@ function dedupeCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
     const existing = byKey.get(key);
     if (!existing) {
       byKey.set(key, charge);
+      continue;
+    }
+    if (existing.kind === "application_fee" && charge.kind === "application_fee") {
+      byKey.set(key, mergeHouseholdApplicationFeeRows(existing, charge));
       continue;
     }
     if (existing.status !== "paid" && charge.status === "paid") {
@@ -591,15 +630,22 @@ export function findApplicationFeeCharge(
   propertyId: string,
   residentUserId?: string | null,
   applicationId?: string | null,
+  propertyIdAliases?: readonly string[] | null,
 ): HouseholdCharge | undefined {
   const e = residentEmail.trim().toLowerCase();
+  const props = new Set(
+    [propertyId, ...(propertyIdAliases ?? [])].map((p) => String(p ?? "").trim()).filter(Boolean),
+  );
   return readAll().find((r) => {
     if (r.kind !== "application_fee") return false;
-    if (applicationId?.trim() && r.applicationId === applicationId.trim()) return true;
-    if (r.propertyId !== propertyId) return false;
-    if (r.residentEmail.trim().toLowerCase() === e) return true;
-    if (residentUserId && r.residentUserId === residentUserId) return true;
-    return false;
+    const emailMatch = r.residentEmail.trim().toLowerCase() === e;
+    const userMatch = Boolean(residentUserId && r.residentUserId === residentUserId);
+    if (applicationId?.trim() && r.applicationId === applicationId.trim()) {
+      return emailMatch || userMatch;
+    }
+    if (!emailMatch && !userMatch) return false;
+    if (props.size === 0) return false;
+    return props.has(r.propertyId);
   });
 }
 
@@ -649,6 +695,8 @@ export function ensurePendingApplicationFeeCharge(input: {
   propertyId: string;
   applicationId?: string | null;
   managerUserId?: string | null;
+  /** Match an existing fee created under another id on the row (e.g. `application.propertyId` vs `assignedPropertyId`). */
+  propertyIdAliases?: string[] | null;
 }): HouseholdCharge | null {
   const email = input.residentEmail.trim();
   if (!email || !email.includes("@")) return null;
@@ -662,8 +710,27 @@ export function ensurePendingApplicationFeeCharge(input: {
   }
   if (amt <= 0) return null;
 
-  const existing = findApplicationFeeCharge(email, input.propertyId, input.residentUserId, input.applicationId);
-  if (existing) return existing;
+  const existing = findApplicationFeeCharge(
+    email,
+    input.propertyId,
+    input.residentUserId,
+    input.applicationId,
+    input.propertyIdAliases,
+  );
+  if (existing) {
+    const canonical = input.propertyId.trim();
+    if (canonical && existing.propertyId !== canonical) {
+      const rows = readAll();
+      const i = rows.findIndex((r) => r.id === existing.id);
+      if (i !== -1) {
+        const next = [...rows];
+        next[i] = { ...next[i]!, propertyId: canonical };
+        writeAll(next);
+        return next[i]!;
+      }
+    }
+    return existing;
+  }
 
   const zelleSnap =
     sub && sub.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
@@ -1093,7 +1160,13 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   if (!isBrowser()) return false;
   const residentEmail = row.email?.trim();
   if (!residentEmail || !residentEmail.includes("@")) return false;
-  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  const pidAssigned = row.assignedPropertyId?.trim() || "";
+  const pidRow = row.propertyId?.trim() || "";
+  const pidApp = row.application?.propertyId?.trim() || "";
+  const ordered = [pidAssigned, pidRow, pidApp].filter(Boolean);
+  const uniquePids = [...new Set(ordered)];
+  const propertyId = uniquePids[0] || "";
+  const propertyIdAliases = uniquePids.slice(1);
   if (!propertyId) return false;
   const beforeIds = new Set(readAll().map((charge) => charge.id));
   const charge = ensurePendingApplicationFeeCharge({
@@ -1103,6 +1176,7 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
     propertyId,
     applicationId: row.id,
     managerUserId: managerUserId ?? row.managerUserId ?? null,
+    propertyIdAliases,
   });
   return Boolean(charge && !beforeIds.has(charge.id));
 }

@@ -343,17 +343,20 @@ export function ListingDetailSections({
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
-                        Grouped packages
+                        Pricing packages
                       </p>
                       <h2 className="mt-1 text-xl font-bold tracking-tight text-[#0f172a]">
                         Bundles & leasing
                       </h2>
                       <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
-                        Compare rooms, pricing, utilities, and signing costs without digging through one long row.
+                        Compare grouped leases at a glance. Each card rolls up rooms, rent, utilities context, and signing
+                        charges — open <span className="font-semibold text-slate-800">Details</span> for the full breakdown.
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
-                      {rich.bundleCards.length} package{rich.bundleCards.length === 1 ? "" : "s"}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+                        {rich.bundleCards.length} package{rich.bundleCards.length === 1 ? "" : "s"}
+                      </div>
                     </div>
                   </div>
                   <div className="mt-5">

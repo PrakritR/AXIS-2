@@ -99,6 +99,7 @@ export const ROOM_AVAILABILITY_OPTIONS = [
   "Available soon",
   "Waitlist",
   "Signed — not available",
+  "Unavailable",
 ] as const;
 
 export const ROOM_FURNISHING_OPTIONS = [

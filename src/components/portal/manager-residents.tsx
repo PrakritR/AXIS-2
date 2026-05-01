@@ -37,7 +37,13 @@ import {
   updateHouseholdChargeAmount,
   type HouseholdCharge,
 } from "@/lib/household-charges";
-import { readManagerApplicationRows, syncManagerApplicationsFromServer, writeManagerApplicationRows, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
+import {
+  readManagerApplicationRows,
+  syncManagerApplicationsFromServer,
+  writeManagerApplicationRows,
+  MANAGER_APPLICATIONS_EVENT,
+  normalizeApplicationAxisId,
+} from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
@@ -378,7 +384,7 @@ export function ManagerResidents() {
           propertyLabel: prop?.title?.trim() || row.property,
           roomLabel,
           signedMonthlyRent: row.signedMonthlyRent ?? null,
-          axisId: `AXIS-R-${row.id.slice(0, 8).toUpperCase()}`,
+          axisId: normalizeApplicationAxisId(row.id),
         };
       });
   }, [userId, hcTick, residentAccountEmails]);

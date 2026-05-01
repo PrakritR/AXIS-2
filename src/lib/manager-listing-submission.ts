@@ -96,6 +96,8 @@ export type ManagerListingSubmissionV1 = {
   address: string;
   zip: string;
   neighborhood: string;
+  /** Free text: stories, floor count, unit type (e.g. “3-story townhouse”). Show in sidebar when set. */
+  homeStructureNote: string;
   tagline: string;
   petFriendly: boolean;
   /** Long-form house / coliving description shown on listing */
@@ -345,6 +347,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   const next = {
     ...sub,
+    homeStructureNote: typeof sub.homeStructureNote === "string" ? sub.homeStructureNote : "",
     houseRulesText: typeof sub.houseRulesText === "string" ? sub.houseRulesText : "",
     shortTermRentalsAllowed: Boolean(sub.shortTermRentalsAllowed),
     shortTermRequirements: typeof sub.shortTermRequirements === "string" ? sub.shortTermRequirements : "",
@@ -451,6 +454,7 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     address: "",
     zip: "",
     neighborhood: "",
+    homeStructureNote: "",
     tagline: "",
     petFriendly: false,
     houseOverview: "",

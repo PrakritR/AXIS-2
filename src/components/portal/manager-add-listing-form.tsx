@@ -4,7 +4,7 @@ import type { DragEvent, FormEvent, ReactNode } from "react";
 import { Children, useEffect, useMemo, useRef, useState } from "react";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input, Select, Textarea } from "@/components/ui/input";
 import {
   submitManagerPendingPropertyToServer,
   updateExtraListingFromSubmissionOnServer,
@@ -51,9 +51,21 @@ import {
   splitLineList,
 } from "@/data/manager-listing-presets";
 import { loadListingPresetConfig, type ListingPresetConfig } from "@/lib/site-content";
+import { effectiveRoomAvailabilityLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 
 const selectInputCls =
   "min-h-[44px] w-full rounded-xl border border-black/[0.08] bg-black/[0.04] px-3.5 py-2.5 text-[14px] text-[#1d1d1f] outline-none transition focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/20";
+
+/** Sentinel value for room availability `<select>` when the saved string is not a preset. */
+const ROOM_AVAIL_CUSTOM = "__custom__";
+
+function ChevronDownTiny({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
 
 const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
   houseWide: [...HOUSE_WIDE_AMENITY_PRESETS],
@@ -126,18 +138,28 @@ const SHARED_SPACE_TEMPLATES = [
   },
 ] as const;
 
-/** Multi-step flow for all listing data used by the public page. */
+/** Multi-step flow: home & layout first, then rooms → shared layout → money → media → highlights. */
 const LISTING_FORM_STEPS = [
-  { id: "building", label: "Building" },
-  { id: "lease", label: "Lease & costs" },
+  { id: "home", label: "Home & layout" },
   { id: "rooms", label: "Rooms" },
   { id: "bathrooms", label: "Bathrooms" },
   { id: "spaces", label: "Shared spaces" },
-  { id: "facts", label: "Quick facts" },
-  { id: "amenities", label: "Amenities" },
+  { id: "lease", label: "Lease & pricing" },
+  { id: "media", label: "House photos" },
+  { id: "finish", label: "Highlights" },
 ] as const;
 
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
+
+const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
+  home: "Building identity, address, floors or levels, and how you describe the home — before room details.",
+  rooms: "Each rentable bedroom: name, floor, rent, availability, furnishing, photos, and video.",
+  bathrooms: "Bath rows and which bedrooms use each one — powers the public “Rooms by bathroom” layout.",
+  spaces: "Kitchen, laundry, lounge, outdoor — equipment, rules, and which bedrooms have access.",
+  lease: "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
+  media: "Hero images at the top of your public listing — common areas and exterior.",
+  finish: "Sidebar quick facts, building amenities, and final submit.",
+};
 
 /** Reads a file and returns a compressed JPEG data URL. Falls back to raw data URL for non-image files. */
 async function fileToDataUrl(file: File, maxBytes: number): Promise<string | null> {
@@ -298,6 +320,12 @@ export function ManagerAddListingForm({
     if (i === 0) {
       if (!sub.buildingName.trim() || !sub.address.trim() || !sub.zip.trim() || !sub.neighborhood.trim()) {
         showToast("Fill in building name, address, ZIP, and neighborhood to continue.");
+        return false;
+      }
+    }
+    if (i === 1) {
+      if (!sub.rooms.some((r) => r.name.trim())) {
+        showToast("Add at least one room with a name before continuing.");
         return false;
       }
     }
@@ -544,6 +572,23 @@ export function ManagerAddListingForm({
     });
   };
 
+  const applyBundleRoomScope = (bundleIndex: number, mode: "all_named" | "none") => {
+    setSub((s) => {
+      const bundles = [...(s.bundles ?? [])];
+      const cur = bundles[bundleIndex];
+      if (!cur) return s;
+      const named = s.rooms.filter((r) => r.name.trim());
+      const includedRoomIds = mode === "all_named" ? named.map((r) => r.id) : [];
+      bundles[bundleIndex] = {
+        ...cur,
+        includedRoomIds,
+        roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
+        price: bundleRentLabel(includedRoomIds, s.rooms),
+      };
+      return { ...s, bundles };
+    });
+  };
+
   const setQuickFact = (i: number, patch: Partial<ManagerQuickFactRow>) => {
     setSub((s) => {
       const quickFacts = [...(s.quickFacts ?? [])];
@@ -780,8 +825,8 @@ export function ManagerAddListingForm({
               <h2 className="text-xl font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "Create listing"}</h2>
               <p className="mt-1 text-sm text-slate-600">
                 {isEditMode
-                  ? "Update any step below. Use Back and Continue to move between categories, then save when you are done — your public listing updates from this data."
-                  : "Work through each step. Nothing is submitted automatically — use the Submit listing button on the final step when everything is ready."}
+                  ? "Steps follow how renters experience the listing — home and layout first, then rooms, shared areas, lease packages, photos, and highlights."
+                  : "Begin with the property story and layout, define each room, then bathrooms and common areas. Add lease bundles and pricing when rents are set, then hero photos and amenities."}
               </p>
             </div>
             <button
@@ -793,28 +838,34 @@ export function ManagerAddListingForm({
               ×
             </button>
           </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
-            {LISTING_FORM_STEPS.map((step, i) => (
-              <button
-                key={step.id}
-                type="button"
-                onClick={() => {
-                  if (i < stepIndex || canContinueFromStep(stepIndex)) setStepIndex(i);
-                }}
-                className={`flex min-h-10 items-center justify-center rounded-2xl border px-3 py-2 text-center text-[11px] font-semibold transition ${
-                  i === stepIndex
-                    ? "border-primary bg-primary text-white shadow-sm"
-                    : i < stepIndex
-                      ? "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200"
-                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700"
-                }`}
-              >
-                <span className={`mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${i === stepIndex ? "bg-white/20 text-white" : "bg-slate-200/70 text-slate-600"}`}>
-                  {i + 1}
-                </span>
-                {step.label}
-              </button>
-            ))}
+          <div className="mt-3 -mx-1 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+            <div className="flex min-w-max gap-2 px-1">
+              {LISTING_FORM_STEPS.map((step, i) => (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => {
+                    if (i < stepIndex || canContinueFromStep(stepIndex)) setStepIndex(i);
+                  }}
+                  className={`flex min-h-10 shrink-0 items-center justify-center rounded-2xl border px-3 py-2 text-center text-[11px] font-semibold transition sm:min-w-[118px] ${
+                    i === stepIndex
+                      ? "border-primary bg-primary text-white shadow-sm"
+                      : i < stepIndex
+                        ? "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200"
+                        : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                  }`}
+                >
+                  <span
+                    className={`mr-1.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] ${
+                      i === stepIndex ? "bg-white/20 text-white" : "bg-slate-200/70 text-slate-600"
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  {step.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
             <div
@@ -822,70 +873,21 @@ export function ManagerAddListingForm({
               style={{ width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%` }}
             />
           </div>
+          <p className="mt-3 rounded-2xl bg-slate-50/90 px-3 py-2.5 text-sm leading-snug text-slate-600">
+            <span className="font-semibold text-slate-900">{LISTING_FORM_STEPS[stepIndex]?.label}</span>
+            <span className="text-slate-400"> · </span>
+            {LISTING_STEP_BLURBS[LISTING_FORM_STEPS[stepIndex]!.id]}
+          </p>
         </div>
 
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-24 sm:px-6">
-          {/* ── Step 0: Building & listing ── */}
+          {/* ── Step 0: Home & layout ── */}
           {stepIndex === 0 ? (
           <FormSection
             id="edit-building"
-            title="Building & listing"
-            description="Address, photos, and public description."
+            title="Home & layout"
+            description="Put the property on the map and help renters picture the home before you add individual rooms."
           >
-            <div className="mb-6">
-              <ListingSubsection
-                title="House photos"
-                description="Exterior, kitchen, living areas — appear at the top of your public listing."
-              >
-                <div>
-                  <div
-                    className={`mt-2 ${mediaDropZoneClass(activeDropZone === "house-photos")}`}
-                    onDragOver={(e) => handleDragOver(e, "house-photos")}
-                    onDragEnter={(e) => handleDragOver(e, "house-photos")}
-                    onDragLeave={(e) => handleDragLeave(e, "house-photos")}
-                    onDrop={onDropHousePhotos}
-                  >
-                    <input
-                      id="house-photos-input"
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="sr-only"
-                      onChange={(e) => {
-                        void onPickHousePhotos(e.target.files);
-                        e.target.value = "";
-                      }}
-                    />
-                    <label
-                      htmlFor="house-photos-input"
-                      className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
-                    >
-                      Add house photos
-                    </label>
-                    <p className="mt-3 text-sm text-slate-600">Drag and drop photos here, or use the button above.</p>
-                    {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
-                          <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                            <img src={url} alt="" className="h-full w-full object-cover" />
-                            <button
-                              type="button"
-                              className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70"
-                              onClick={() => removeHousePhoto(pi)}
-                              aria-label="Remove photo"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-[11px] text-slate-500">Up to {MAX_HOUSE_PHOTOS} photos. Images are auto-compressed for fast loading.</p>
-                    )}
-                  </div>
-                </div>
-              </ListingSubsection>
-            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <FieldLabel>Building name *</FieldLabel>
@@ -903,6 +905,16 @@ export function ManagerAddListingForm({
                 <FieldLabel>Neighborhood *</FieldLabel>
                 <Input value={sub.neighborhood} onChange={(e) => setSub((s) => ({ ...s, neighborhood: e.target.value }))} />
               </GridField>
+              <div className="sm:col-span-2">
+                <FieldLabel hint="e.g. 3 floors, garden level + two upper stories, single-story ranch. Shown on the listing when quick facts are auto-generated.">
+                  Floors / levels in the home
+                </FieldLabel>
+                <Input
+                  value={sub.homeStructureNote}
+                  onChange={(e) => setSub((s) => ({ ...s, homeStructureNote: e.target.value }))}
+                  placeholder="Optional — helps renters understand the layout"
+                />
+              </div>
               <div className="sm:col-span-2">
                 <FieldLabel>Listing tagline</FieldLabel>
                 <Input value={sub.tagline} onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))} placeholder="Short headline for search cards" />
@@ -925,12 +937,23 @@ export function ManagerAddListingForm({
                   placeholder="e.g. Quiet hours 10pm–8am · No smoking indoors"
                 />
               </div>
+              <div className="sm:col-span-2">
+                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 transition hover:border-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={sub.petFriendly}
+                    onChange={(e) => setSub((s) => ({ ...s, petFriendly: e.target.checked }))}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300"
+                  />
+                  <span className="text-sm font-medium text-slate-800">Pet-friendly listing (subject to approval)</span>
+                </label>
+              </div>
             </div>
           </FormSection>
           ) : null}
 
-          {/* ── Step 1: Lease, fees & costs ── */}
-          {stepIndex === 1 ? (
+          {/* ── Step 4: Lease, fees & costs ── */}
+          {stepIndex === 4 ? (
           <FormSection
             id="edit-lease"
             title="Lease, fees & costs"
@@ -1017,55 +1040,101 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 title="Lease bundles"
-                description="Create packages for applicants who want to rent the whole house or multiple rooms together."
+                description="Optional packages on the public listing — whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
               >
-                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-                  <p className="text-sm font-semibold text-blue-950">Generate bundle options from your rooms</p>
-                  <p className="mt-1 text-xs leading-5 text-blue-900/75">
-                    Add rooms first, then generate bundles. You can edit the name, price, promo, and selected rooms before submitting.
+                <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-white p-4 sm:p-5">
+                  <p className="text-sm font-semibold text-violet-950">Build from your rooms</p>
+                  <p className="mt-1 text-xs leading-5 text-violet-900/80">
+                    Bundle rent defaults to the sum of selected room rents — edit the price when you offer a discount. Use strikethrough + promo for limited-time offers.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"
-                      className="rounded-full bg-white text-xs"
+                      className="rounded-full border-violet-200 bg-white text-xs"
                       onClick={() => addGeneratedBundle("whole_house")}
                       disabled={!sub.rooms.some((room) => room.name.trim())}
                     >
-                      + Whole house lease
+                      Whole house
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
-                      className="rounded-full bg-white text-xs"
+                      className="rounded-full border-violet-200 bg-white text-xs"
                       onClick={() => addGeneratedBundle("multi_room")}
                       disabled={sub.rooms.filter((room) => room.name.trim()).length < 2}
                     >
-                      + Multi-room bundle
+                      Pair / group
                     </Button>
                     <Button type="button" variant="primary" className="rounded-full text-xs" onClick={addBundle}>
-                      + Blank bundle
+                      Custom (blank)
                     </Button>
                   </div>
                 </div>
 
                 {(sub.bundles ?? []).length === 0 ? (
                   <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm text-slate-600">
-                    No lease bundles added yet. If you leave this empty, the public listing will show default per-room pricing.
+                    No bundles yet — renters will still see per-room pricing from the Rooms step. Add a bundle when you want to advertise a combined lease.
                   </p>
                 ) : (
                   <div className="mt-4 space-y-4">
                     {(sub.bundles ?? []).map((bundle, i) => {
                       const selectedIds = new Set(bundle.includedRoomIds ?? []);
+                      const namedRooms = sub.rooms.filter((r) => r.name.trim());
+                      const selectedRooms = namedRooms.filter((r) => selectedIds.has(r.id));
+                      const rentSum = selectedRooms.reduce((sum, r) => sum + (Number.isFinite(r.monthlyRent) ? r.monthlyRent : 0), 0);
+                      const priceNum = bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim();
+                      const hasManualPrice = priceNum.length > 0 && Number(priceNum) !== rentSum;
                       return (
-                        <div key={bundle.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-bold text-slate-950">Bundle {i + 1}</p>
-                            <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBundle(i)}>
-                              Remove
-                            </button>
+                        <div
+                          key={bundle.id}
+                          className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_12px_40px_-28px_rgba(15,23,42,0.35)]"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 sm:px-5">
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Package {i + 1}</p>
+                              <p className="mt-1 text-xs text-slate-600">
+                                {selectedRooms.length} room{selectedRooms.length === 1 ? "" : "s"} selected
+                                {rentSum > 0 ? (
+                                  <>
+                                    {" "}
+                                    · Base rent sum <span className="font-semibold text-slate-800">${rentSum}/mo</span>
+                                  </>
+                                ) : null}
+                                {hasManualPrice ? (
+                                  <span className="ml-1 font-medium text-amber-800">· Custom bundle price</span>
+                                ) : null}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-8 rounded-full px-3 text-[11px]"
+                                onClick={() => applyBundleRoomScope(i, "all_named")}
+                                disabled={namedRooms.length === 0}
+                                aria-label="Select all named rooms"
+                              >
+                                All rooms
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-8 rounded-full px-3 text-[11px]"
+                                onClick={() => applyBundleRoomScope(i, "none")}
+                              >
+                                Clear
+                              </Button>
+                              <button
+                                type="button"
+                                className="rounded-full px-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                                onClick={() => removeBundle(i)}
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </div>
-                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
                             <GridField>
                               <FieldLabel>Bundle name</FieldLabel>
                               <Input
@@ -1075,7 +1144,7 @@ export function ManagerAddListingForm({
                               />
                             </GridField>
                             <GridField>
-                              <FieldLabel hint="Auto-summed when generated; edit if offering a discount.">Bundle rent</FieldLabel>
+                              <FieldLabel hint="Defaults to sum of room rents; edit for discounts.">Bundle rent / mo</FieldLabel>
                               <div className="relative">
                                 <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
                                 <Input
@@ -1083,12 +1152,12 @@ export function ManagerAddListingForm({
                                   className="pl-8"
                                   value={bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
                                   onChange={(e) => setBundle(i, { price: e.target.value })}
-                                  placeholder="4500"
+                                  placeholder={rentSum > 0 ? String(rentSum) : "4500"}
                                 />
                               </div>
                             </GridField>
                             <GridField>
-                              <FieldLabel hint="Optional old price shown crossed out.">Original price</FieldLabel>
+                              <FieldLabel hint="Optional — shows crossed out on the listing.">Original price</FieldLabel>
                               <div className="relative">
                                 <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
                                 <Input
@@ -1105,21 +1174,26 @@ export function ManagerAddListingForm({
                               <Input
                                 value={bundle.promo}
                                 onChange={(e) => setBundle(i, { promo: e.target.value })}
-                                placeholder="Best for groups, discounted full-house lease"
+                                placeholder="Best for groups — limited availability"
                               />
                             </GridField>
                             <div className="sm:col-span-2">
-                              <FieldLabel>Select rooms included in this bundle</FieldLabel>
+                              <FieldLabel>Rooms in this bundle</FieldLabel>
                               <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 lg:grid-cols-3">
                                 {sub.rooms.map((room) => (
-                                  <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-sm">
+                                  <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-sm shadow-sm">
                                     <input
                                       type="checkbox"
                                       className="h-4 w-4 rounded border-slate-300"
                                       checked={selectedIds.has(room.id)}
                                       onChange={(e) => toggleBundleRoom(i, room.id, e.target.checked)}
                                     />
-                                    <span className="font-medium text-slate-800">{roomLabelForBundle(room)}</span>
+                                    <span className="min-w-0 font-medium text-slate-800">
+                                      <span className="truncate">{roomLabelForBundle(room)}</span>
+                                      {room.monthlyRent > 0 ? (
+                                        <span className="ml-1 tabular-nums text-xs font-normal text-slate-500">· ${room.monthlyRent}</span>
+                                      ) : null}
+                                    </span>
                                   </label>
                                 ))}
                               </div>
@@ -1287,12 +1361,12 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {/* ── Step 2: Rooms ── */}
-          {stepIndex === 2 ? (
+          {/* ── Step 1: Rooms ── */}
+          {stepIndex === 1 ? (
           <FormSection
             id="edit-rooms"
             title="Rooms"
-            description="Add each rentable room with rent and utilities. Bathroom assignments are in the next step."
+            description="Define each bedroom renters can apply for. Add bathrooms in the next step, then common areas — that order matches how the public page is organized."
           >
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
               <p className="text-sm text-slate-500">Photos and one optional video per room.</p>
@@ -1304,6 +1378,18 @@ export function ManagerAddListingForm({
               {sub.rooms.map((room, i) => {
                 const isUnfurnished = room.furnishing.trim().toLowerCase() === "unfurnished";
                 const checkedFurniture = parseFurnitureSet(room.furnishing);
+                const listingPropertyId = editListingId ?? editPendingId ?? null;
+                const roomChoiceKey = listingPropertyId ? `${listingPropertyId}${LISTING_ROOM_CHOICE_SEP}${room.id}` : null;
+                const rawAvailability = room.availability;
+                const rawTrim = rawAvailability.trim();
+                const presetOpts = listingPresets.availability;
+                const matchesPreset = presetOpts.some((p) => p === rawTrim);
+                const availabilitySelectValue = matchesPreset ? rawTrim : ROOM_AVAIL_CUSTOM;
+                let publicAvailabilityNote: string | null = null;
+                if (roomChoiceKey) {
+                  const effective = effectiveRoomAvailabilityLabel(roomChoiceKey, rawAvailability);
+                  if (effective.trim() !== rawTrim) publicAvailabilityNote = effective;
+                }
                 return (
                   <div key={room.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1355,19 +1441,50 @@ export function ManagerAddListingForm({
                         </div>
                       </GridField>
                       <GridField>
-                        <FieldLabel>Availability</FieldLabel>
-                        <div>
-                          <Input
-                            value={room.availability}
-                            onChange={(e) => setRoom(i, { availability: e.target.value })}
-                            list={`room-avail-${room.id}`}
-                            placeholder="Available now"
-                          />
-                          <datalist id={`room-avail-${room.id}`}>
-                            {listingPresets.availability.map((opt) => (
-                              <option key={opt} value={opt} />
-                            ))}
-                          </datalist>
+                        <FieldLabel hint="Preset or custom wording. Public copy also reflects approved applications for this listing.">
+                          Availability
+                        </FieldLabel>
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <Select
+                              aria-label="Room availability preset"
+                              className="appearance-none pr-10"
+                              value={availabilitySelectValue}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (v === ROOM_AVAIL_CUSTOM) {
+                                  if (matchesPreset) setRoom(i, { availability: "" });
+                                  return;
+                                }
+                                setRoom(i, { availability: v });
+                              }}
+                            >
+                              {presetOpts.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                              <option value={ROOM_AVAIL_CUSTOM}>Custom…</option>
+                            </Select>
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                              <ChevronDownTiny />
+                            </span>
+                          </div>
+                          {availabilitySelectValue === ROOM_AVAIL_CUSTOM ? (
+                            <Input
+                              value={rawAvailability}
+                              onChange={(e) => setRoom(i, { availability: e.target.value })}
+                              placeholder="e.g. Available after June 1, 2026"
+                              aria-label="Custom availability text"
+                            />
+                          ) : null}
+                          {publicAvailabilityNote ? (
+                            <p className="rounded-xl border border-amber-200/90 bg-amber-50/80 px-3 py-2 text-[11px] leading-snug text-amber-950">
+                              Renters currently see <span className="font-semibold">{publicAvailabilityNote}</span> on the public
+                              listing for this room because of an approved application overlapping those dates. The value you set
+                              above is still saved as your listing copy.
+                            </p>
+                          ) : null}
                         </div>
                       </GridField>
                       <div className="sm:col-span-2">
@@ -1535,7 +1652,7 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {stepIndex === 3 ? (
+          {stepIndex === 2 ? (
           <FormSection
             id="edit-bath"
             title="Bathrooms"
@@ -1682,7 +1799,7 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {stepIndex === 4 ? (
+          {stepIndex === 3 ? (
           <FormSection
             id="edit-shared"
             title="Shared spaces"
@@ -1842,81 +1959,127 @@ export function ManagerAddListingForm({
 
           {stepIndex === 5 ? (
           <FormSection
-            id="edit-quick-facts"
-            title="Quick facts (sidebar)"
-            description="Optional. Rows here replace the auto-generated sidebar on the public listing. Leave empty to derive from building and room data."
+            id="edit-house-photos"
+            title="House photos"
+            description="Hero gallery at the top of your public listing — exterior, kitchen, living areas, and other common spaces."
           >
-            <div className="space-y-4">
-              {(sub.quickFacts ?? []).map((qf, i) => (
-                <div key={qf.id} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                  <div>
-                    <FieldLabel>Label</FieldLabel>
-                    <Input value={qf.label} onChange={(e) => setQuickFact(i, { label: e.target.value })} placeholder="e.g. Neighborhood" />
+            <ListingSubsection
+              title="Upload images"
+              description="Add these after rooms and pricing so you know what you are showcasing. Up to 12 images; we compress for fast loading."
+            >
+              <div
+                className={`mt-2 ${mediaDropZoneClass(activeDropZone === "house-photos")}`}
+                onDragOver={(e) => handleDragOver(e, "house-photos")}
+                onDragEnter={(e) => handleDragOver(e, "house-photos")}
+                onDragLeave={(e) => handleDragLeave(e, "house-photos")}
+                onDrop={onDropHousePhotos}
+              >
+                <input
+                  id="house-photos-input"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="sr-only"
+                  onChange={(e) => {
+                    void onPickHousePhotos(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <label
+                  htmlFor="house-photos-input"
+                  className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                >
+                  Add house photos
+                </label>
+                <p className="mt-3 text-sm text-slate-600">Drag and drop photos here, or use the button above.</p>
+                {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
+                      <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                        <img src={url} alt="" className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70"
+                          onClick={() => removeHousePhoto(pi)}
+                          aria-label="Remove photo"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <FieldLabel>Value</FieldLabel>
-                    <Input value={qf.value} onChange={(e) => setQuickFact(i, { value: e.target.value })} placeholder="—" />
-                  </div>
-                  <button type="button" className="text-xs font-semibold text-rose-600 hover:underline sm:pb-2" onClick={() => removeQuickFact(i)}>
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addQuickFact}>
-                + Add quick fact
-              </Button>
-            </div>
+                ) : (
+                  <p className="mt-2 text-[11px] text-slate-500">No photos yet — optional for draft, recommended before you go live.</p>
+                )}
+              </div>
+            </ListingSubsection>
           </FormSection>
           ) : null}
 
           {stepIndex === 6 ? (
           <FormSection
-            id="edit-amenities"
-            title="Amenities"
-            description={
-              <>
-                Building-wide and neighborhood amenities for the main listing grid. Kitchen appliances, shared desk, TV, and similar belong in{" "}
-                <span className="font-medium text-slate-800">Shared spaces</span>; bathroom finishes in{" "}
-                <span className="font-medium text-slate-800">Bathrooms</span>; bedroom items in{" "}
-                <span className="font-medium text-slate-800">Rooms</span>.
-              </>
-            }
+            id="edit-highlights"
+            title="Highlights & submit"
+            description="Fine-tune the sidebar and building amenity grid, then submit for review."
           >
-            <div className="space-y-4">
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                <input
-                  type="checkbox"
-                  checked={sub.petFriendly}
-                  onChange={(e) => setSub((s) => ({ ...s, petFriendly: e.target.checked }))}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300"
-                />
-                <span className="text-sm font-medium text-slate-800">Pet-friendly (subject to approval)</span>
-              </label>
-              <div>
-                <FieldLabel hint="Tap all that apply.">Common amenities</FieldLabel>
-                <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {listingPresets.houseWide.map((p) => {
-                    const on = splitLineList(sub.amenitiesText).includes(p.label);
-                    return (
-                      <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300"
-                          checked={on}
-                          onChange={(e) =>
-                            setSub((s) => ({
-                              ...s,
-                              amenitiesText: mergeToggleLine(s.amenitiesText, p.label, e.target.checked),
-                            }))
-                          }
-                        />
-                        <span className="font-medium text-slate-800">{p.label}</span>
-                      </label>
-                    );
-                  })}
+            <div className="space-y-8">
+              <ListingSubsection
+                title="Quick facts (sidebar)"
+                description="Optional. Rows here replace the auto-generated sidebar. Leave empty to use building, room count, floors, and pet policy from earlier steps."
+              >
+                <div className="space-y-4">
+                  {(sub.quickFacts ?? []).map((qf, i) => (
+                    <div key={qf.id} className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                      <div>
+                        <FieldLabel>Label</FieldLabel>
+                        <Input value={qf.label} onChange={(e) => setQuickFact(i, { label: e.target.value })} placeholder="e.g. Neighborhood" />
+                      </div>
+                      <div>
+                        <FieldLabel>Value</FieldLabel>
+                        <Input value={qf.value} onChange={(e) => setQuickFact(i, { value: e.target.value })} placeholder="—" />
+                      </div>
+                      <button type="button" className="text-xs font-semibold text-rose-600 hover:underline sm:pb-2" onClick={() => removeQuickFact(i)}>
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addQuickFact}>
+                    + Add quick fact
+                  </Button>
                 </div>
-              </div>
-              <div className="rounded-2xl border border-primary/15 bg-primary/[0.04] p-4 sm:p-5">
+              </ListingSubsection>
+
+              <ListingSubsection
+                title="Building & neighborhood amenities"
+                description="What shows in the main amenities table on the listing. Kitchen gear, shared desks, and TV belong under Shared spaces; bathroom finishes under Bathrooms."
+              >
+                <div>
+                  <FieldLabel hint="Tap all that apply.">Common amenities</FieldLabel>
+                  <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {listingPresets.houseWide.map((p) => {
+                      const on = splitLineList(sub.amenitiesText).includes(p.label);
+                      return (
+                        <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300"
+                            checked={on}
+                            onChange={(e) =>
+                              setSub((s) => ({
+                                ...s,
+                                amenitiesText: mergeToggleLine(s.amenitiesText, p.label, e.target.checked),
+                              }))
+                            }
+                          />
+                          <span className="font-medium text-slate-800">{p.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </ListingSubsection>
+
+              <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-white p-4 sm:p-6">
                 <p className="text-sm font-bold text-slate-950">{isEditMode ? "Ready to submit changes?" : "Ready to submit this listing?"}</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
                   {isEditMode
@@ -1949,7 +2112,7 @@ export function ManagerAddListingForm({
             <div className="flex flex-wrap justify-end gap-2">
               {!isFinalStep ? (
                 <Button type="button" className="rounded-full" onClick={goNext} disabled={busy}>
-                  {stepIndex === lastStepIndex - 1 ? "Review & submit" : "Continue"}
+                  {stepIndex === lastStepIndex - 1 ? "Highlights →" : "Continue"}
                 </Button>
               ) : (
                 <Button type="submit" form="manager-add-listing-form" className="rounded-full" disabled={busy}>

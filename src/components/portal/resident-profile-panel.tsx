@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import {
+  normalizeApplicationAxisId,
+  readManagerApplicationRows,
+  resolveResidentPortalAxisId,
+} from "@/lib/manager-applications-storage";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
@@ -30,7 +34,10 @@ export function ResidentProfilePanel() {
     (async () => {
       try {
         const supabase = createSupabaseBrowserClient();
-        const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.userId).maybeSingle();
+        const [{ data: profile }, { data: authUser }] = await Promise.all([
+          supabase.from("profiles").select("*").eq("id", session.userId).maybeSingle(),
+          supabase.auth.getUser(),
+        ]);
         if (cancelled) return;
 
         const normalizedEmail = (session.email ?? "").trim().toLowerCase();
@@ -49,24 +56,42 @@ export function ResidentProfilePanel() {
           matchingApplication?.application?.phone?.trim() ||
           "";
 
+        const meta = authUser?.user?.user_metadata as Record<string, unknown> | undefined;
+        const metaAxis = typeof meta?.axis_id === "string" ? meta.axis_id : null;
+
         setUserId(session.userId);
         setEmail(session.email ?? "");
         setName((current) => current || resolvedName);
         setPhone((current) => current || resolvedPhone);
-        setAxisId(profile?.id ? `AXIS-R-${profile.id.slice(0, 8).toUpperCase()}` : "");
+        setAxisId(
+          resolveResidentPortalAxisId({
+            profileManagerId: profile?.manager_id,
+            authUserAxisId: metaAxis,
+            applicationRowId: matchingApplication?.id,
+          }),
+        );
+
+        const appCanonical = matchingApplication?.id
+          ? normalizeApplicationAxisId(matchingApplication.id)
+          : "";
+        const storedManagerAxis = normalizeApplicationAxisId(String(profile?.manager_id ?? ""));
+        const needsAxisBackfill = Boolean(
+          appCanonical && storedManagerAxis !== appCanonical,
+        );
 
         const needsProfileBackfill =
           !profile ||
           !String(profile.full_name ?? "").trim() ||
           !String(profile.phone ?? "").trim();
 
-        if (needsProfileBackfill) {
+        if (needsProfileBackfill || needsAxisBackfill) {
           void fetch("/api/profile/backfill", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               fullName: resolvedName || undefined,
               phone: resolvedPhone || undefined,
+              ...(needsAxisBackfill ? { axisId: appCanonical } : {}),
             }),
           }).catch(() => undefined);
         }

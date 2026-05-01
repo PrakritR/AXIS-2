@@ -9,12 +9,12 @@ export const dynamic = "force-dynamic";
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await assertAdminPortalAccess();
   return (
-    <div className="flex min-h-screen flex-col bg-[#f5f5f7]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f5f5f7]">
       <PublicNavbar />
-      <div className="flex min-h-0 w-full flex-1 flex-col lg:flex-row">
+      <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSidebar definition={adminPortal} />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <main className="flex min-h-0 flex-1 flex-col px-4 py-6 lg:px-8 lg:py-8">
+        <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <main className="relative z-0 min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto overscroll-contain px-4 py-6 lg:px-8 lg:py-8">
             <AdminNotificationBanners />
             {children}
           </main>

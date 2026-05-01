@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
-import { AUTO_RESIDENT_PASSWORD } from "@/lib/auth/provision-approved-resident";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
-import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { generateAxisId } from "@/lib/manager-id";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -73,7 +71,7 @@ export async function POST(req: Request) {
       email_confirm: true,
       user_metadata: {
         role: "resident",
-        axis_id: normalAxisId,
+        axis_id: matchingApplication.id,
       },
     });
 
@@ -93,34 +91,20 @@ export async function POST(req: Request) {
       }
       const { data: existingAuth } = await supabase.auth.admin.getUserById(existingId);
       const metadata = existingAuth.user?.user_metadata as Record<string, unknown> | undefined;
-      const metadataAxisId = typeof metadata?.axis_id === "string" ? metadata.axis_id.trim() : "";
-      const autoProvisioned =
-        metadata?.auto_provisioned_resident === true &&
-        axisIdVariants(metadataAxisId).includes(matchingApplication.id);
 
-      if (autoProvisioned) {
-        await supabase.auth.admin.updateUserById(existingId, {
-          password,
-          email_confirm: true,
-          user_metadata: {
-            ...(metadata ?? {}),
-            role: "resident",
-            axis_id: matchingApplication.id,
-            auto_provisioned_resident: false,
-            resident_password_claimed_at: new Date().toISOString(),
-          },
-        });
-      } else {
-        await supabase.auth.admin.updateUserById(existingId, { email_confirm: true });
-        const pwCheck = await assertPasswordMatchesExistingAuthUser(normalEmail, password);
-        if (!pwCheck.ok) {
-          const tempPwCheck = applicationApproved
-            ? await assertPasswordMatchesExistingAuthUser(normalEmail, AUTO_RESIDENT_PASSWORD)
-            : { ok: false as const, message: pwCheck.message };
-          if (!tempPwCheck.ok) return NextResponse.json({ error: pwCheck.message }, { status: 401 });
-          await supabase.auth.admin.updateUserById(existingId, { password });
-        }
-      }
+      // Email + Axis ID already matched `manager_application_records` — treat this as proof of identity
+      // so the applicant can set or change the login password (not required to reuse an old one).
+      await supabase.auth.admin.updateUserById(existingId, {
+        password,
+        email_confirm: true,
+        user_metadata: {
+          ...(metadata ?? {}),
+          role: "resident",
+          axis_id: matchingApplication.id,
+          auto_provisioned_resident: false,
+          resident_password_claimed_at: new Date().toISOString(),
+        },
+      });
       userId = existingId;
       reusedExistingAuthUser = true;
     } else {

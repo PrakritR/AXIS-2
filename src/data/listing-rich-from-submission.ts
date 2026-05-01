@@ -358,6 +358,9 @@ function deriveQuickFacts(
     { label: "Neighborhood", value: property.neighborhood || "—" },
     { label: "Rooms listed", value: String(rooms.length || property.beds) },
     { label: "Bathrooms", value: String(sub.bathrooms.filter((b) => b.name.trim()).length || property.baths) },
+    ...(sub.homeStructureNote?.trim()
+      ? [{ label: "Floors / layout", value: sub.homeStructureNote.trim() }]
+      : []),
     { label: "Pets", value: sub.petFriendly ? "Pet-friendly (subject to approval)" : "No pets (per submission)" },
     { label: "Building", value: property.buildingName || "—" },
     {
