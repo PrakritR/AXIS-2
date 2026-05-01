@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -24,12 +25,14 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   createManagerCharge,
   chargeDueLabel,
+  HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
   HOUSEHOLD_CHARGES_EVENT,
   HOUSEHOLD_CHARGES_SESSION_KEY,
   findPendingWorkOrderCharge,
   markHouseholdChargePaid,
   parseMoneyAmount,
   readChargesForManagerResident,
+  recordWorkOrderResidentCharge,
   syncHouseholdChargesFromServer,
   updateHouseholdChargeAmount,
   type HouseholdCharge,
@@ -132,9 +135,11 @@ function formatScheduledLabel(iso: string): string {
 function ResidentWorkOrderCostEditor({
   row,
   onSaved,
+  managerUserId,
 }: {
   row: DemoManagerWorkOrderRow;
   onSaved: () => void;
+  managerUserId: string | null;
 }) {
   const { showToast } = useAppUi();
   const [hcTick, setHcTick] = useState(0);
@@ -171,8 +176,23 @@ function ResidentWorkOrderCostEditor({
       return;
     }
     updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
+    const residentEmail = row.residentEmail?.trim() ?? "";
+    const residentName = row.residentName?.trim() ?? "";
+    const createdCharge =
+      residentEmail && residentEmail.includes("@")
+        ? recordWorkOrderResidentCharge({
+            managerUserId: managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
+            workOrderId: row.id,
+            propertyLabel: row.propertyName,
+            unit: row.unit,
+            workOrderTitle: row.title,
+            amountInput: trimmed,
+            residentEmail,
+            residentName,
+          })
+        : null;
     onSaved();
-    showToast("Cost saved — visible to the resident.");
+    showToast(createdCharge ? "Cost saved and payment created." : "Cost saved — visible to the resident.");
   };
 
   return (
@@ -1073,90 +1093,123 @@ export function ManagerResidents() {
                               {residentWorkOrders.length === 0 ? (
                                 <p className="mt-3 text-sm text-slate-500">No work orders for this resident yet.</p>
                               ) : (
-                                <div className="mt-3 overflow-x-auto">
-                                  <table className="w-full border-collapse text-sm">
-                                    <thead>
-                                      <tr className="border-b border-slate-200">
-                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Title</th>
-                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Preferred arrival</th>
-                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Cost</th>
-                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Status</th>
-                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Priority</th>
-                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Visit</th>
-                                        <th className="pb-2 text-right text-xs font-semibold text-slate-500">Action</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {residentWorkOrders.map((workOrder) => (
-                                        <tr key={workOrder.id} className="border-b border-slate-100 last:border-0">
-                                          <td className="py-2 pr-4">
-                                            <p className="font-medium text-slate-900">{workOrder.title}</p>
-                                            <p className="whitespace-pre-wrap text-xs text-slate-500">{workOrder.description}</p>
-                                          </td>
-                                          <td className="max-w-[140px] py-2 pr-4 text-xs text-slate-700">
-                                            {workOrder.preferredArrival ?? "Anytime"}
-                                          </td>
-                                          <td className="py-2 pr-4">
-                                            <ResidentWorkOrderCostEditor
-                                              key={`${workOrder.id}-${workOrder.cost}`}
-                                              row={workOrder}
-                                              onSaved={() => setWorkOrderTick((n) => n + 1)}
-                                            />
-                                          </td>
-                                          <td className="py-2 pr-4 text-slate-700">{workOrder.status}</td>
-                                          <td className="py-2 pr-4">
-                                            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                                              {workOrder.priority}
-                                            </span>
-                                          </td>
-                                          <td className="py-2 pr-4">
-                                            {workOrder.bucket === "completed" ? (
-                                              <span className="text-xs text-slate-700">{workOrder.scheduled !== "—" ? workOrder.scheduled : "—"}</span>
-                                            ) : (
-                                              <div className="flex flex-col gap-1">
-                                                {workOrder.scheduled && workOrder.scheduled !== "—" ? (
-                                                  <span className="text-xs text-slate-500">{workOrder.scheduled}</span>
-                                                ) : null}
-                                                <div className="flex items-center gap-1">
-                                                  <Input
-                                                    type="datetime-local"
-                                                    value={visitAtById[workOrder.id] ?? toDatetimeLocalValue(workOrder.scheduledAtIso)}
-                                                    onChange={(e) =>
-                                                      setVisitAtById((prev) => ({ ...prev, [workOrder.id]: e.target.value }))
-                                                    }
-                                                    className="h-7 w-[10rem] rounded-md text-[11px]"
-                                                  />
-                                                  <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="h-7 shrink-0 rounded-full px-2 py-0 text-[10px]"
-                                                    onClick={() => {
-                                                      const iso = fromDatetimeLocalValue(visitAtById[workOrder.id] ?? "");
-                                                      if (!iso) { showToast("Choose a date and time."); return; }
-                                                      updateManagerWorkOrder(workOrder.id, (row) => ({
-                                                        ...row,
-                                                        scheduledAtIso: iso,
-                                                        scheduled: formatScheduledLabel(iso),
-                                                        bucket: row.bucket === "open" ? "scheduled" : row.bucket,
-                                                        status: row.bucket === "open" ? "Scheduled" : row.status,
-                                                      }));
-                                                      setWorkOrderTick((n) => n + 1);
-                                                      showToast("Visit scheduled.");
-                                                    }}
-                                                  >
-                                                    Save
-                                                  </Button>
+                                <div className="mt-4 space-y-4">
+                                  {residentWorkOrders.map((workOrder) => {
+                                    const pendingCharge = findPendingWorkOrderCharge(workOrder.id);
+                                    return (
+                                      <div key={workOrder.id} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <p className="text-base font-semibold text-slate-900">{workOrder.title}</p>
+                                              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                                                {workOrder.priority}
+                                              </span>
+                                              <span className="inline-flex rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                                                {workOrder.status}
+                                              </span>
+                                            </div>
+                                            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{workOrder.description}</p>
+                                            <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                                              <div>
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Preferred arrival</p>
+                                                <p className="mt-1 text-slate-800">{workOrder.preferredArrival?.trim() || "Anytime"}</p>
+                                              </div>
+                                              <div>
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Visit</p>
+                                                <p className="mt-1 text-slate-800">{workOrder.scheduled && workOrder.scheduled !== "—" ? workOrder.scheduled : "Not scheduled"}</p>
+                                              </div>
+                                              <div>
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Current cost</p>
+                                                <p className="mt-1 text-slate-800">{workOrder.cost !== "—" && workOrder.cost.trim() ? workOrder.cost : "—"}</p>
+                                              </div>
+                                              <div>
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Payment</p>
+                                                <p className="mt-1 text-slate-800">{pendingCharge ? `Pending · ${pendingCharge.balanceLabel}` : "No pending payment"}</p>
+                                              </div>
+                                            </div>
+                                            {workOrder.photoDataUrls?.length ? (
+                                              <div className="mt-4">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Photos</p>
+                                                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                                                  {workOrder.photoDataUrls.map((src, index) => (
+                                                    <a
+                                                      key={`${workOrder.id}-photo-${index}`}
+                                                      href={src}
+                                                      target="_blank"
+                                                      rel="noreferrer"
+                                                      className="block overflow-hidden rounded-xl border border-slate-200 bg-white"
+                                                    >
+                                                      <Image
+                                                        src={src}
+                                                        alt={`Work order photo ${index + 1}`}
+                                                        width={240}
+                                                        height={180}
+                                                        className="h-28 w-full object-cover"
+                                                        unoptimized
+                                                      />
+                                                    </a>
+                                                  ))}
                                                 </div>
                                               </div>
-                                            )}
-                                          </td>
-                                          <td className="py-2 text-right">
-                                            <div className="flex justify-end gap-2">
+                                            ) : null}
+                                          </div>
+
+                                          <div className="w-full rounded-2xl border border-slate-200 bg-white p-3 lg:w-[22rem]">
+                                            <div>
+                                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cost</p>
+                                              <div className="mt-2">
+                                                <ResidentWorkOrderCostEditor
+                                                  key={`${workOrder.id}-${workOrder.cost}`}
+                                                  row={workOrder}
+                                                  managerUserId={userId ?? null}
+                                                  onSaved={() => {
+                                                    setWorkOrderTick((n) => n + 1);
+                                                    setHcTick((n) => n + 1);
+                                                    void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
+                                                  }}
+                                                />
+                                              </div>
+                                            </div>
+                                            <div className="mt-4">
+                                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Visit date & time</p>
+                                              <div className="mt-2 flex flex-col gap-2">
+                                                <Input
+                                                  type="datetime-local"
+                                                  value={visitAtById[workOrder.id] ?? toDatetimeLocalValue(workOrder.scheduledAtIso)}
+                                                  onChange={(e) =>
+                                                    setVisitAtById((prev) => ({ ...prev, [workOrder.id]: e.target.value }))
+                                                  }
+                                                  className="h-10 rounded-xl text-sm"
+                                                />
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  className="rounded-full"
+                                                  onClick={() => {
+                                                    const iso = fromDatetimeLocalValue(visitAtById[workOrder.id] ?? "");
+                                                    if (!iso) { showToast("Choose a date and time."); return; }
+                                                    updateManagerWorkOrder(workOrder.id, (row) => ({
+                                                      ...row,
+                                                      scheduledAtIso: iso,
+                                                      scheduled: formatScheduledLabel(iso),
+                                                      bucket: row.bucket === "open" ? "scheduled" : row.bucket,
+                                                      status: row.bucket === "open" ? "Scheduled" : row.status,
+                                                    }));
+                                                    setWorkOrderTick((n) => n + 1);
+                                                    showToast("Visit scheduled.");
+                                                  }}
+                                                >
+                                                  Save visit
+                                                </Button>
+                                              </div>
+                                            </div>
+                                            <div className="mt-4 flex flex-wrap gap-2">
                                               {workOrder.bucket !== "completed" ? (
                                                 <Button
                                                   type="button"
                                                   variant="outline"
-                                                  className="rounded-full px-2 py-0.5 text-xs"
+                                                  className="rounded-full"
                                                   onClick={() => {
                                                     updateManagerWorkOrder(workOrder.id, (row) => ({
                                                       ...row,
@@ -1173,21 +1226,22 @@ export function ManagerResidents() {
                                               <Button
                                                 type="button"
                                                 variant="outline"
-                                                className="rounded-full px-2 py-0.5 text-xs"
+                                                className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
                                                 onClick={() => {
                                                   deleteManagerWorkOrderRow(workOrder.id);
                                                   setWorkOrderTick((n) => n + 1);
+                                                  setHcTick((n) => n + 1);
                                                   showToast("Work order deleted.");
                                                 }}
                                               >
                                                 Delete
                                               </Button>
                                             </div>
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
