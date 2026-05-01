@@ -23,19 +23,19 @@ export const MANAGER_PLAN_TIERS: ManagerPlanTierDefinition[] = [
     monthly: {
       headline: "Free",
       period: null,
-      sub: "Core operations with strict limits — 1 property, no lease pipeline.",
+      sub: "List properties, run applications, and schedule tours — 1 property.",
     },
     annual: {
       headline: "Free",
       period: null,
-      sub: "Core operations with strict limits — 1 property, no lease pipeline.",
+      sub: "List properties, run applications, and schedule tours — 1 property.",
     },
     features: [
-      { text: "1 active property (1 house)", included: true },
-      { text: "Applications, payments, calendar, inbox, account links (1 manager + 1 owner)", included: true },
-      { text: "Axis platform fee: 2% on application fees · 0.25% on rent", included: true },
-      { text: "Lease pipeline", included: false },
-      { text: "Work orders", included: false },
+      { text: "1 active property listing", included: true },
+      { text: "Applications & touring (calendar)", included: true },
+      { text: "No Axis platform fees", included: true },
+      { text: "Resident tab (leases, work orders)", included: false },
+      { text: "Inbox & account links", included: false },
     ],
   },
   {
@@ -44,7 +44,7 @@ export const MANAGER_PLAN_TIERS: ManagerPlanTierDefinition[] = [
     monthly: {
       headline: "$20",
       period: "/ mo",
-      sub: "Two properties, richer collaboration, full operational suite.",
+      sub: "Full resident management — leases, work orders, inbox, and account links.",
     },
     annual: {
       headline: "$192",
@@ -52,9 +52,10 @@ export const MANAGER_PLAN_TIERS: ManagerPlanTierDefinition[] = [
       sub: "Same as monthly, ~20% off when billed annually.",
     },
     features: [
-      { text: "Up to 2 properties · up to 2 linked owners · up to 2 linked managers", included: true },
-      { text: "Lease pipeline, work orders, calendar, inbox — all features", included: true },
-      { text: "Axis platform fee: 2% on application fees · 0% on rent", included: true },
+      { text: "Up to 2 properties · 2 linked owners · 2 linked managers", included: true },
+      { text: "Resident tab: lease generation & work orders", included: true },
+      { text: "Inbox & account links", included: true },
+      { text: "No Axis platform fees", included: true },
     ],
   },
   {
@@ -63,7 +64,7 @@ export const MANAGER_PLAN_TIERS: ManagerPlanTierDefinition[] = [
     monthly: {
       headline: "$200",
       period: "/ mo",
-      sub: "Portfolio scale — 20 units, 20 owners, 20 managers, no Axis take on payments.",
+      sub: "Portfolio scale — 20 properties, 20 owners, 20 managers.",
     },
     annual: {
       headline: "$1,920",
@@ -73,7 +74,7 @@ export const MANAGER_PLAN_TIERS: ManagerPlanTierDefinition[] = [
     features: [
       { text: "Up to 20 properties · 20 owner links · 20 manager links", included: true },
       { text: "All Pro features — full portal", included: true },
-      { text: "Axis platform fee: 0% on application fees · 0% on rent", included: true },
+      { text: "No Axis platform fees", included: true },
       { text: "Priority admin support", included: true },
     ],
   },

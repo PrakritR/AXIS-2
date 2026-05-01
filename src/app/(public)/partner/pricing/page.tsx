@@ -37,19 +37,19 @@ const TIERS: {
     monthly: {
       headline: "Free",
       period: null,
-      sub: "List properties, collect rent, and run applications.",
+      sub: "List properties, run applications, and schedule tours.",
     },
     annual: {
       headline: "Free",
       period: null,
-      sub: "List properties, collect rent, and run applications.",
+      sub: "List properties, run applications, and schedule tours.",
     },
     features: [
-      { text: "Property listings", included: true },
-      { text: "Rent collection access", included: true },
+      { text: "1 property listing", included: true },
       { text: "Application process", included: true },
-      { text: "Lease generation access", included: false },
-      { text: "Work order system", included: false },
+      { text: "Touring calendar", included: true },
+      { text: "Resident tab (leases & work orders)", included: false },
+      { text: "Inbox & account links", included: false },
     ],
   },
   {
@@ -60,20 +60,19 @@ const TIERS: {
     monthly: {
       headline: "$20",
       period: "/ month",
-      sub: "Everything in Free, plus leases & work orders — up to 2 properties.",
+      sub: "Full resident management — leases, work orders, inbox & account links.",
     },
     annual: {
       headline: "$192",
       period: "/ year",
-      sub: "Everything in Free, plus leases & work orders — up to 2 properties, 20% off annual billing.",
+      sub: "Full resident management — leases, work orders, inbox & account links. 20% off annual billing.",
     },
     features: [
-      { text: "Property listings", included: true },
-      { text: "Rent collection access", included: true },
+      { text: "Up to 2 property listings", included: true },
       { text: "Application process", included: true },
-      { text: "Lease generation access", included: true },
-      { text: "Work order system", included: true },
-      { text: "Manage up to 2 properties", included: true },
+      { text: "Touring calendar", included: true },
+      { text: "Resident tab: lease generation & work orders", included: true },
+      { text: "Inbox & account links", included: true },
     ],
   },
   {

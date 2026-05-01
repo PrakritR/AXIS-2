@@ -12,11 +12,11 @@ export type PlatformFeeKind = "application_fee" | "rent";
 
 export const PLATFORM_FEE_BPS_BY_TIER: Record<ManagerSkuTier, Record<PlatformFeeKind, number>> = {
   free: {
-    application_fee: 200,
-    rent: 25,
+    application_fee: 0,
+    rent: 0,
   },
   pro: {
-    application_fee: 200,
+    application_fee: 0,
     rent: 0,
   },
   business: {

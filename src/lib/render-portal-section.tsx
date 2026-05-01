@@ -60,9 +60,9 @@ function ResidentFreeTierFeatureNotice({ title }: { title: string }) {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-900/70">Property plan</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950">Property is using the Free tier</h2>
           <p className="mt-3 text-sm leading-6 text-slate-700">
-            This resident tab is visible so you can see what exists in the portal, but access to{" "}
-            <span className="font-semibold text-slate-900">{title.toLowerCase()}</span> is not included while the property stays on the Free tier.
-            Inbox, dashboard, and profile are still available.
+            Access to <span className="font-semibold text-slate-900">{title.toLowerCase()}</span> is not available while
+            the property manager is on the Free tier. Ask your property manager to upgrade to Pro or Business to enable
+            this feature.
           </p>
         </div>
       </ManagerPortalPageShell>

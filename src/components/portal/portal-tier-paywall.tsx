@@ -10,10 +10,10 @@ export function PortalTierPaywall({ basePath }: { basePath: "/portal" }) {
     <ManagerPortalPageShell title="Upgrade to Pro">
       <div className="mx-auto max-w-lg space-y-4 text-center">
         <p className="text-sm leading-relaxed text-slate-600">
-          This area is not included on the <span className="font-semibold text-slate-900">Free</span> plan. Upgrade to{" "}
-          <span className="font-semibold text-slate-900">Pro</span> or <span className="font-semibold text-slate-900">Business</span> for lease
-          generation, work orders, and higher property & account-link limits. On Free you still have up to 1 property, applications, payments, calendar,
-          inbox, and limited account linking.
+          This area requires <span className="font-semibold text-slate-900">Pro</span> or{" "}
+          <span className="font-semibold text-slate-900">Business</span>. Upgrade to unlock the Residents tab — lease
+          generation, work orders, inbox, and account links. The Free plan includes property listings, applications, and
+          the touring calendar.
         </p>
         <Link href={`${basePath}/plan`} className={primaryCta}>
           View plans &amp; upgrade

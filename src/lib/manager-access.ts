@@ -16,18 +16,14 @@ export const MANAGER_TIER_MONTHLY_USD: Record<ManagerSkuTier, number> = {
 };
 
 /**
- * Sections available on Free / “owner starter” subscription for managers and owners:
- * listings, applications, payments, account linking, calendar, inbox, profile, plan.
- * Other sections (e.g. leases, work orders) still require Pro+.
+ * Sections available on Free: property listings, applications, and calendar (touring).
+ * Residents tab (leases, work orders, inbox, account links) requires Pro+.
  */
 export const FREE_SUBSCRIPTION_SECTIONS = new Set([
   "dashboard",
   "properties",
   "applications",
-  "payments",
-  "relationships",
   "calendar",
-  "inbox",
   "profile",
   "plan",
 ]);

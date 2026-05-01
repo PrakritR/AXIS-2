@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
-import { getManagerPurchaseSku, normalizeManagerSkuTier, paidWorkspacePortalTitle } from "@/lib/manager-access";
+import { FREE_SUBSCRIPTION_SECTIONS, getManagerPurchaseSku, normalizeManagerSkuTier, paidWorkspacePortalTitle } from "@/lib/manager-access";
 import type { PreviewPortal } from "@/lib/auth/preview-types";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -82,8 +82,12 @@ export async function buildProPortalDefinition(): Promise<{
     previewLabel = p?.full_name?.trim() || p?.email || preview.targetUserId;
   }
 
+  const sections = isFree
+    ? proPortal.sections.filter((s) => FREE_SUBSCRIPTION_SECTIONS.has(s.section))
+    : proPortal.sections;
+
   return {
-    definition: { ...proPortal, sections: proPortal.sections, title: portalTitle },
+    definition: { ...proPortal, sections, title: portalTitle },
     showPlanBanner: isFree,
     showPreviewBanner,
     previewLabel,
