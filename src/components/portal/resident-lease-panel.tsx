@@ -301,7 +301,7 @@ export function ResidentLeasePanel() {
             placeholder={residentLeaseActions ? "Ask for changes, or send a message to your manager…" : "Send a message to your manager…"}
             className="mt-3 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
-          <div className="mt-2.5 flex flex-wrap gap-2">
+          <div className="mt-2.5">
             <Button
               type="button"
               variant="outline"
@@ -318,23 +318,6 @@ export function ResidentLeasePanel() {
             >
               Send message
             </Button>
-            {residentLeaseActions ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                onClick={() => {
-                  if (!editRequestDraft.trim()) { showToast("Describe what should change."); return; }
-                  if (residentRequestEdits(email, editRequestDraft.trim())) {
-                    showToast("Edit request sent — lease returned to manager review.");
-                    setEditRequestDraft("");
-                    setPipelineTick((t) => t + 1);
-                  } else showToast("Could not send request.");
-                }}
-              >
-                Request edits
-              </Button>
-            ) : null}
           </div>
           {/* Thread history below compose */}
           {pipelineRow.thread?.length ? (
