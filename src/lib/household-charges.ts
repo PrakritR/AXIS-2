@@ -161,13 +161,13 @@ function mirrorRentProfiles(rows: RecurringRentProfile[]) {
   postHouseholdPayload({ action: "replace", charges: readAll(), rentProfiles: rows });
 }
 
-export async function syncHouseholdChargesFromServer(): Promise<{
+export async function syncHouseholdChargesFromServer(force = false): Promise<{
   charges: HouseholdCharge[];
   rentProfiles: RecurringRentProfile[];
 }> {
   if (!isBrowser()) return { charges: [], rentProfiles: [] };
   if (householdChargesSyncPromise) return householdChargesSyncPromise;
-  if (householdChargesLastSyncedAt > 0 && Date.now() - householdChargesLastSyncedAt < HOUSEHOLD_CHARGES_SYNC_TTL_MS) {
+  if (!force && householdChargesLastSyncedAt > 0 && Date.now() - householdChargesLastSyncedAt < HOUSEHOLD_CHARGES_SYNC_TTL_MS) {
     return { charges: readAll(), rentProfiles: readRentProfiles() };
   }
   householdChargesSyncPromise = fetch("/api/portal-household-charges")
@@ -355,6 +355,9 @@ function dedupeCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
     }
     if (existing.status !== "paid" && charge.status === "paid") {
       byKey.set(key, charge);
+      continue;
+    }
+    if (existing.status === "paid" && charge.status !== "paid") {
       continue;
     }
     const existingCreatedAt = new Date(existing.createdAt).getTime();

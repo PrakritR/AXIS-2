@@ -52,7 +52,7 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
-    void syncHouseholdChargesFromServer().then(on);
+    void syncHouseholdChargesFromServer(true).then(on);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
   }, []);

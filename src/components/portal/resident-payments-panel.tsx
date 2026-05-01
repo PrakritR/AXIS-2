@@ -71,7 +71,7 @@ export function ResidentPaymentsPanel() {
   useEffect(() => {
     if (!session.ready) return;
     if (session.userId && email) linkHouseholdChargesToResidentUser(email, session.userId);
-    void syncHouseholdChargesFromServer().finally(refresh);
+    void syncHouseholdChargesFromServer(true).finally(refresh);
   }, [email, refresh, session.ready, session.userId]);
 
   const charges = useMemo(() => {
@@ -114,7 +114,7 @@ export function ResidentPaymentsPanel() {
           variant="outline"
           className="shrink-0 rounded-full"
           onClick={() => {
-            void syncHouseholdChargesFromServer().then(() => {
+            void syncHouseholdChargesFromServer(true).then(() => {
               refresh();
               showToast("Refreshed payments.");
             });

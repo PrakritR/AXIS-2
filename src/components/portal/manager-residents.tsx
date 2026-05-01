@@ -607,6 +607,7 @@ export function ManagerResidents() {
     if (markHouseholdChargePaid(chargeId, userId ?? null)) {
       showToast("Marked as paid.");
       setHcTick((n) => n + 1);
+      void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
     }
   }
 
