@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
+import { parseMonthlyRent } from "@/lib/listings-search";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 
 const LISTING_PHOTO_IDS = [
@@ -36,17 +38,15 @@ export function PropertyCard({ property }: { property: MockProperty }) {
   const applyHref = buildRentalApplyHref({ propertyId: property.id });
   const rich = useMemo(() => getListingRichContent(property), [property]);
   const heroUrls = rich.heroHousePhotoUrls?.filter(Boolean) ?? [];
-  const [slide, setSlide] = useState(0);
+  const [slidesByProperty, setSlidesByProperty] = useState<Record<string, number>>({});
   const slideCount = heroUrls.length > 0 ? heroUrls.length : LISTING_PHOTO_IDS.length;
-
-  useEffect(() => {
-    setSlide(0);
-  }, [property.id, heroUrls.length]);
+  const slide = slidesByProperty[property.id] ?? 0;
+  const activeSlide = slide % slideCount;
 
   const slideSrc =
     heroUrls.length > 0
-      ? heroUrls[slide % heroUrls.length]!
-      : listingPhotoSrc(LISTING_PHOTO_IDS[slide % LISTING_PHOTO_IDS.length]!);
+      ? heroUrls[activeSlide % heroUrls.length]!
+      : listingPhotoSrc(LISTING_PHOTO_IDS[activeSlide % LISTING_PHOTO_IDS.length]!);
 
   const sharedHousing =
     /\bshared\b/i.test(property.tagline) || property.beds >= 5 || /\bco-?living\b/i.test(property.tagline);
@@ -59,23 +59,39 @@ export function PropertyCard({ property }: { property: MockProperty }) {
         : property.tagline
       : `${property.neighborhood} housing — see listing for rooms and pricing.`;
 
-  const mid = useMemo(() => {
-    const m = property.rentLabel.replace(/,/g, "").match(/\$(\d+)/);
-    return m ? Number(m[1]) : 800;
-  }, [property.rentLabel]);
-  const rentLow2 = Math.max(400, mid - 75);
-  const rentHigh2 = mid + 75;
+  const rentRangeLabel = useMemo(() => {
+    const roomPrices = rich.floorPlans
+      .flatMap((floor) => floor.rooms)
+      .map((room) => parseMonthlyRent(room.price.replace("/month", "/ mo")))
+      .filter((value): value is number => value !== null && Number.isFinite(value) && value > 0);
+
+    if (roomPrices.length > 0) {
+      const low = Math.min(...roomPrices);
+      const high = Math.max(...roomPrices);
+      return low === high ? `$${low}` : `$${low}–$${high}`;
+    }
+
+    const fallback = parseMonthlyRent(property.rentLabel.replace("/month", "/ mo"));
+    return fallback !== null ? `$${fallback}` : property.rentLabel.trim() || "—";
+  }, [property.rentLabel, rich.floorPlans]);
 
   const tags = [sharedHousing ? "Shared housing" : null, property.neighborhood, "Seattle", property.petFriendly ? "Pet-friendly" : null].filter(
     Boolean,
   ) as string[];
 
   const go = (d: number) => setSlide((s) => (s + d + slideCount * 10) % slideCount);
+  const setSlide = (next: number | ((current: number) => number)) => {
+    setSlidesByProperty((current) => {
+      const previous = current[property.id] ?? 0;
+      const resolved = typeof next === "function" ? next(previous) : next;
+      return { ...current, [property.id]: resolved };
+    });
+  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_14px_44px_-34px_rgba(15,23,42,0.28)] transition duration-200 ease-out hover:border-primary/20 hover:shadow-[0_20px_54px_-36px_rgba(15,23,42,0.34)]">
       <div className="relative aspect-[16/10] overflow-hidden bg-slate-200">
-        <img src={slideSrc} alt={title} className="absolute inset-0 h-full w-full object-cover" />
+        <Image src={slideSrc} alt={title} fill sizes="(min-width: 1024px) 33vw, 100vw" className="absolute inset-0 object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
         {sharedHousing ? (
           <div className="absolute left-3 top-3">
@@ -110,16 +126,14 @@ export function PropertyCard({ property }: { property: MockProperty }) {
               key={i}
               type="button"
               aria-label={`Photo ${i + 1}`}
-              className={`h-1.5 w-1.5 rounded-full transition ${i === slide ? "bg-white" : "bg-white/40"}`}
+              className={`h-1.5 w-1.5 rounded-full transition ${i === activeSlide ? "bg-white" : "bg-white/40"}`}
               onClick={() => setSlide(i)}
             />
           ))}
         </div>
         <div className="absolute bottom-3 right-3 text-right text-white drop-shadow-sm">
           <span className="text-[11px] font-medium opacity-90">from </span>
-          <span className="text-lg font-bold">
-            ${rentLow2}–${rentHigh2}
-          </span>
+          <span className="text-lg font-bold">{rentRangeLabel}</span>
           <span className="text-[11px] font-semibold">/mo</span>
         </div>
       </div>
