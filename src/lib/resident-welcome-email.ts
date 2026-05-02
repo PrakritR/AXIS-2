@@ -1,10 +1,8 @@
 /**
- * Welcome email for approved applicants — opens the manager's mail client with a prefilled message.
- * (No transactional email provider in this demo; mailto is reliable everywhere.)
- *
- * Note: mailto: URLs hit implementation length limits (often ~2k characters). The prefilled body
- * for mailto is intentionally short; use `buildResidentWelcomeEmailBody` for a full plaintext draft.
+ * Welcome email for approved applicants — server-side send (Resend) and optional mailto fallback.
  */
+
+export const RESIDENT_WELCOME_EMAIL_SUBJECT = "Your Axis resident portal — account setup";
 
 export function residentAccountCreationUrl(origin: string, axisId: string): string {
   const base = origin.replace(/\/$/, "");
@@ -39,6 +37,39 @@ export function buildResidentWelcomeEmailBody(params: {
     "",
     "— Axis Housing",
   ].join("\n");
+}
+
+function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escapeHtmlAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/** HTML version for transactional email providers. */
+export function buildResidentWelcomeEmailHtml(params: {
+  residentName?: string;
+  axisId: string;
+  signupUrl: string;
+}): string {
+  const greeting = params.residentName?.trim()
+    ? `Hi ${escapeHtmlText(params.residentName.trim())},`
+    : "Hi,";
+  const id = escapeHtmlText(params.axisId.trim());
+  const href = escapeHtmlAttr(params.signupUrl);
+  return `<!DOCTYPE html>
+<html>
+<body style="font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;font-size:15px;max-width:36rem">
+<p>${greeting}</p>
+<p>Welcome to Axis Housing. Your rental application has been approved.</p>
+<p><strong>Your Axis ID:</strong> ${id}</p>
+<p><a href="${href}">Create your resident portal account</a></p>
+<p>You can use the portal for lease signing, payments, work orders, and move-in details your property shares with you.</p>
+<p>Use the same email address you used on your rental application when you create your account.</p>
+<p style="color:#64748b">— Axis Housing</p>
+</body>
+</html>`;
 }
 
 /** Shorter body so mailto: stays under typical browser/mail-client URL limits. */
@@ -76,7 +107,7 @@ export function buildResidentWelcomeMailtoHref(params: {
     axisId: params.axisId,
     signupUrl,
   });
-  const subject = encodeURIComponent("Your Axis resident portal — account setup");
+  const subject = encodeURIComponent(RESIDENT_WELCOME_EMAIL_SUBJECT);
   const encBody = encodeURIComponent(body);
   const to = encodeURIComponent(params.residentEmail.trim());
   return `mailto:${to}?subject=${subject}&body=${encBody}`;

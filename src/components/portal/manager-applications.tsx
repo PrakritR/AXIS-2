@@ -45,7 +45,7 @@ import {
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
-import { openResidentWelcomeMailto } from "@/lib/resident-welcome-email";
+import { openMailtoHref } from "@/lib/resident-welcome-email";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
 import {
   recordApprovedApplicationCharges,
@@ -509,6 +509,7 @@ function ManagerApplicationsContent() {
   const [rows, setRows] = useState<DemoApplicantRow[]>([]);
   const [portfolioTick, setPortfolioTick] = useState(0);
   const [roomSortDir, setRoomSortDir] = useState<"asc" | "desc">("asc");
+  const [welcomeEmailBusyFor, setWelcomeEmailBusyFor] = useState<string | null>(null);
 
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
@@ -606,6 +607,46 @@ function ManagerApplicationsContent() {
     void syncPropertyPipelineFromServer().then(() => setPortfolioTick((n) => n + 1));
     showToast("Refreshed.");
   }, [showToast]);
+
+  const sendResidentWelcomeEmail = useCallback(
+    async (row: DemoApplicantRow) => {
+      const email = row.email?.trim();
+      if (!email) return;
+      setWelcomeEmailBusyFor(row.id);
+      try {
+        const res = await fetch("/api/portal/send-resident-welcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ to: email, residentName: row.name, axisId: row.id }),
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          mailtoHref?: string;
+        };
+        if (res.ok && data.ok) {
+          showToast("Welcome email sent to the applicant.");
+          return;
+        }
+        if (typeof data.mailtoHref === "string" && data.mailtoHref) {
+          openMailtoHref(data.mailtoHref);
+          showToast(
+            res.status === 503
+              ? "Email provider not configured — opened a draft in your mail app. Set RESEND_API_KEY (and RESEND_FROM) to send automatically."
+              : `Could not send automatically (${data.error ?? "error"}). Opened a draft in your mail app.`,
+          );
+          return;
+        }
+        showToast(data.error ?? "Could not send welcome email.");
+      } catch {
+        showToast("Could not send welcome email.");
+      } finally {
+        setWelcomeEmailBusyFor(null);
+      }
+    },
+    [showToast],
+  );
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket) => {
     const row = rows.find((r) => r.id === id);
@@ -849,17 +890,10 @@ function ManagerApplicationsContent() {
                                 type="button"
                                 variant="outline"
                                 className={PORTAL_DETAIL_BTN_PRIMARY}
-                                onClick={() => {
-                                  openResidentWelcomeMailto({
-                                    residentEmail: row.email!.trim(),
-                                    residentName: row.name,
-                                    axisId: row.id,
-                                    origin: window.location.origin,
-                                  });
-                                  showToast("Opening your email app with a draft to the applicant.");
-                                }}
+                                disabled={welcomeEmailBusyFor === row.id}
+                                onClick={() => void sendResidentWelcomeEmail(row)}
                               >
-                                Email portal setup
+                                {welcomeEmailBusyFor === row.id ? "Sending…" : "Email portal setup"}
                               </Button>
                             ) : null}
                             <Button
