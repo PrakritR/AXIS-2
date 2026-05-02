@@ -57,35 +57,35 @@ function CosignerSection({ applicationId }: { applicationId: string }) {
   const subs = readCosignerSubmissionsForSignerAppId(applicationId);
   if (subs.length === 0) return null;
   return (
-    <>
+    <div className="mt-6 space-y-6">
       {subs.map((cosub, i) => (
-        <div key={i} className="mt-4">
+        <div key={i}>
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">
             Co-signer on file{subs.length > 1 ? ` (${i + 1} of ${subs.length})` : ""}
           </p>
-          <div className="mt-2.5">
+          <div className="mt-3">
             <ManagerCosignerReadonlyReview sub={cosub} />
           </div>
         </div>
       ))}
-    </>
+    </div>
   );
 }
 
 function ApplicantIds({ axisId }: { axisId: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4">
+    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-5 sm:p-6">
       <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Axis ID</p>
-      <p className="mt-2 font-mono text-sm font-medium text-slate-900">{axisId}</p>
+      <p className="mt-3 font-mono text-sm font-medium leading-relaxed text-slate-900">{axisId}</p>
     </div>
   );
 }
 
 function ApplicationInfoCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/80 bg-white px-5 py-4 shadow-sm sm:py-[1.125rem]">
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</p>
-      <div className="mt-1.5 text-sm font-semibold text-slate-900">{value}</div>
+      <div className="mt-2 text-sm font-semibold leading-snug text-slate-900">{value}</div>
     </div>
   );
 }
@@ -240,21 +240,21 @@ function ManagerApplicationPlacementEditor({
   ].filter(Boolean).join(" · ");
 
   return (
-    <div className="rounded-3xl border border-slate-200/90 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm sm:p-7">
+      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Final placement</p>
-          <h3 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-slate-950">House, room, lease dates, and charges</h3>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+          <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-slate-950">House, room, lease dates, and charges</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
             Update the final resident setup here. These saved values drive lease details and resident payment charges.
           </p>
         </div>
-        <span className="inline-flex w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800 ring-1 ring-blue-200/80">
+        <span className="inline-flex w-fit shrink-0 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 ring-1 ring-blue-200/80">
           {row.bucket === "approved" ? "Approved application" : "Editable placement"}
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
         <ApplicationInfoCard label="Current assignment" value={assignmentLabel} />
         <ApplicationInfoCard
           label="Tenant rent"
@@ -263,10 +263,10 @@ function ManagerApplicationPlacementEditor({
         <ApplicationInfoCard label="Tenancy" value={tenancyLabel} />
       </div>
 
-      <div className="mt-5 space-y-5">
+      <div className="mt-7 space-y-7">
         <section>
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Placement</p>
-          <div className="grid gap-3 lg:grid-cols-4">
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Placement</p>
+          <div className="grid gap-4 lg:grid-cols-4">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">House</span>
             <Select
@@ -325,8 +325,8 @@ function ManagerApplicationPlacementEditor({
         </section>
 
         <section>
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Dates</p>
-          <div className="grid gap-3 md:grid-cols-3">
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Dates</p>
+          <div className="grid gap-4 md:grid-cols-3">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Stay type</span>
             <Select
@@ -373,8 +373,8 @@ function ManagerApplicationPlacementEditor({
         </section>
 
         <section>
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Charges</p>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Charges</p>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Utilities</span>
             <input
@@ -437,7 +437,7 @@ function ManagerApplicationPlacementEditor({
         </section>
         </div>
 
-      <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50/80 p-4 text-sm text-slate-600 lg:grid-cols-3">
+      <div className="mt-5 grid gap-4 rounded-2xl bg-slate-50/90 p-5 text-sm text-slate-600 lg:grid-cols-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Applicant choices</p>
           <p className="mt-1.5 text-slate-800">
@@ -458,7 +458,7 @@ function ManagerApplicationPlacementEditor({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-6 flex flex-wrap items-center gap-2.5">
         <Button
           type="button"
           variant="outline"
@@ -730,7 +730,7 @@ export function ManagerApplications() {
         </>
       }
       filterRow={
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
           {propertyDataLoading ? <p className="text-xs text-slate-500">Loading properties from backend…</p> : null}
         </div>
@@ -777,12 +777,12 @@ export function ManagerApplications() {
                   <Fragment key={row.id}>
                     <tr className={PORTAL_TABLE_TR}>
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                        <p className="font-medium text-slate-900">{row.name}</p>
-                        {row.email ? <p className="mt-0.5 text-xs text-slate-500">{row.email}</p> : null}
-                        <p className="mt-0.5 font-mono text-[10px] text-slate-400">{row.id}</p>
+                        <p className="font-medium leading-snug text-slate-900">{row.name}</p>
+                        {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{row.email}</p> : null}
+                        <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-slate-400">{row.id}</p>
                       </td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.property}</td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle`}>{displayRoomForRow(row)}</td>
+                      <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
+                      <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
                       <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
                         <Button
                           type="button"
@@ -797,7 +797,8 @@ export function ManagerApplications() {
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
                         <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-                          <PortalTableDetailActions>
+                          <div className="mx-auto max-w-5xl space-y-8">
+                          <PortalTableDetailActions placement="top">
                             {row.bucket === "pending" ? (
                               <>
                                 <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setRowBucket(row.id, "approved")}>
@@ -840,7 +841,7 @@ export function ManagerApplications() {
                           </PortalTableDetailActions>
 
                           {row.application ? (
-                            <div className="mt-4 max-h-[min(70vh,540px)] overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                            <div className="max-h-[min(72vh,600px)] overflow-y-auto overscroll-contain rounded-3xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/50 p-5 shadow-[0_2px_20px_-12px_rgba(15,23,42,0.12)] sm:p-7">
                               <ManagerApplicationPlacementEditor
                                 key={[
                                   row.id,
@@ -883,8 +884,9 @@ export function ManagerApplications() {
                                   )
                                 }
                               />
+                              <div className="mt-8 border-t border-slate-200/80 pt-8">
                               <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">Application on file</p>
-                              <div className="mt-2.5">
+                              <div className="mt-4">
                                 <ManagerApplicationReadonlyReview
                                   partial={effectiveApplicationForRow(row) ?? row.application}
                                   assignedPropertyId={row.assignedPropertyId}
@@ -892,14 +894,18 @@ export function ManagerApplications() {
                                 />
                               </div>
                               <CosignerSection applicationId={row.id} />
+                              </div>
                             </div>
                           ) : null}
 
+                          <div className="space-y-5 rounded-2xl border border-slate-200/70 bg-white/80 p-5 sm:p-6">
                           <ApplicantIds axisId={row.id} />
 
-                          <p className="mt-4 text-sm leading-relaxed text-slate-600">
+                          <p className="text-sm leading-relaxed text-slate-600">
                             <span className="font-medium text-slate-800">Manager notes</span> — {row.detail}
                           </p>
+                          </div>
+                          </div>
                         </td>
                       </tr>
                     ) : null}

@@ -21,7 +21,7 @@ function maskSsnReview(ssn: string) {
 function ReviewSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+      <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3.5 sm:px-5">
         <h3 className="text-[0.8125rem] font-semibold text-slate-700">{title}</h3>
       </div>
       <dl className="divide-y divide-slate-100 text-sm">{children}</dl>
@@ -31,9 +31,9 @@ function ReviewSection({ title, children }: { title: string; children: ReactNode
 
 function Row({ k, v }: { k: string; v: ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-start sm:gap-4">
-      <dt className="w-full shrink-0 text-xs font-medium leading-5 text-slate-500 sm:w-32">{k}</dt>
-      <dd className="min-w-0 flex-1 break-words leading-5 text-slate-900">{v}</dd>
+    <div className="flex flex-col gap-1 px-4 py-3.5 sm:flex-row sm:items-start sm:gap-5 sm:px-5 sm:py-3.5">
+      <dt className="w-full shrink-0 text-xs font-medium leading-5 text-slate-500 sm:w-36">{k}</dt>
+      <dd className="min-w-0 flex-1 break-words leading-relaxed text-slate-900">{v}</dd>
     </div>
   );
 }
@@ -54,7 +54,7 @@ export function ManagerApplicationReadonlyReview({
   const assignedProperty = assignedPropertyId ? getPropertyById(assignedPropertyId) : undefined;
 
   return (
-    <div className="grid gap-3 xl:grid-cols-2">
+    <div className="grid gap-5 xl:grid-cols-2 xl:gap-6">
       {assignedPropertyId || assignedRoomChoice ? (
         <ReviewSection title="Manager final placement">
           <Row k="Assigned property" v={displayOrDash(assignedProperty?.title)} />

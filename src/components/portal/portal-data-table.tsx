@@ -14,13 +14,13 @@ export const PORTAL_TABLE_TR =
   "border-b border-slate-100/90 transition-colors last:border-0 hover:bg-slate-50/70";
 
 /** Expanded detail row (full-width cell below the summary row). */
-export const PORTAL_TABLE_DETAIL_ROW = "border-b border-slate-100/90 bg-slate-50/25 last:border-0";
+export const PORTAL_TABLE_DETAIL_ROW = "border-b border-slate-100/90 bg-slate-50/40 last:border-0";
 
-/** Compact body cell padding. */
-export const PORTAL_TABLE_TD = "px-4 py-3 align-middle text-sm text-slate-700";
+/** Data cell padding — room for name / property lines to breathe. */
+export const PORTAL_TABLE_TD = "px-4 py-4 align-middle text-sm text-slate-700 sm:px-5 sm:py-[1.125rem]";
 
 /** Detail row cell padding. */
-export const PORTAL_TABLE_DETAIL_CELL = "px-4 py-3 align-top";
+export const PORTAL_TABLE_DETAIL_CELL = "px-4 py-5 align-top sm:px-6 sm:py-8";
 
 /**
  * Action strip in an expanded detail row — subtle divider + compact buttons.
@@ -37,9 +37,9 @@ export function PortalTableDetailActions({
   if (children == null) return null;
   const edge =
     placement === "top"
-      ? "mt-3 mb-4 border-b border-slate-200/50 pb-4"
-      : "mt-4 border-t border-slate-200/50 pt-4";
-  return <div className={`flex flex-wrap items-center gap-1.5 ${edge}`}>{children}</div>;
+      ? "mb-6 border-b border-slate-200/70 pb-6"
+      : "mt-6 border-t border-slate-200/70 pt-6";
+  return <div className={`flex flex-wrap items-center gap-2 sm:gap-2.5 ${edge}`}>{children}</div>;
 }
 
 /** “Details” / “Hide” toggle on the summary row (use with `Button variant="outline"`). */

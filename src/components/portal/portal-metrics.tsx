@@ -258,19 +258,19 @@ export function ManagerPortalPageShell({
 }) {
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <h1 className="text-[1.35rem] font-bold tracking-[-0.02em] text-slate-950 sm:text-[1.75rem]">{title}</h1>
-        {titleAside ? <div className="flex flex-wrap items-center gap-2 sm:justify-end">{titleAside}</div> : null}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <h1 className="min-w-0 text-[1.35rem] font-bold tracking-[-0.02em] text-slate-950 sm:text-[1.75rem]">{title}</h1>
+        {titleAside ? <div className="flex flex-wrap items-center gap-2.5 sm:justify-end sm:pt-0.5">{titleAside}</div> : null}
       </div>
-      {filterRow ? <div className="mt-5 border-b border-slate-100/90 pb-5">{filterRow}</div> : null}
-      <div className="mt-5">{children}</div>
+      {filterRow ? <div className="mt-6 border-b border-slate-100/90 pb-6">{filterRow}</div> : null}
+      <div className="mt-6">{children}</div>
     </div>
   );
 }
 
 /** Table header cell class (admin leases / managers / portal tabs). */
 export const MANAGER_TABLE_TH =
-  "px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400";
+  "px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:px-5";
 
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */
 export const PORTAL_KPI_CHIP_INACTIVE =
