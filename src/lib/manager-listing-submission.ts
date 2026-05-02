@@ -20,6 +20,14 @@ export const PAYMENT_AT_SIGNING_OPTIONS: readonly { id: PaymentAtSigningOptionId
   { id: "first_month_utilities", label: "First month utilities" },
 ];
 
+export type ManagerRoomUnavailableRange = {
+  id: string;
+  /** Inclusive YYYY-MM-DD — room cannot be leased overlapping this span. */
+  start: string;
+  /** Inclusive YYYY-MM-DD */
+  end: string;
+};
+
 export type ManagerRoomSubmission = {
   id: string;
   name: string;
@@ -30,6 +38,8 @@ export type ManagerRoomSubmission = {
   moveInAvailableDate: string;
   /** Keys, parking, access, what to bring — shown to placed residents. Required for new listings. */
   moveInInstructions: string;
+  /** Manager-defined blocks when the room must not be booked (overlaps disallowed with applicant lease). */
+  manualUnavailableRanges: ManagerRoomUnavailableRange[];
   detail: string;
   /** Furnishing level or what is included (shown on listing). */
   furnishing: string;
@@ -258,6 +268,24 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         typeof (legacyRoom as ManagerRoomSubmission & { moveInInstructions?: unknown }).moveInInstructions === "string"
           ? (legacyRoom as ManagerRoomSubmission & { moveInInstructions: string }).moveInInstructions.trim()
           : "",
+      manualUnavailableRanges: (() => {
+        const raw = (legacyRoom as ManagerRoomSubmission & { manualUnavailableRanges?: unknown }).manualUnavailableRanges;
+        if (!Array.isArray(raw)) return [];
+        const out: ManagerRoomUnavailableRange[] = [];
+        for (const item of raw) {
+          if (!item || typeof item !== "object") continue;
+          const o = item as Record<string, unknown>;
+          const id =
+            typeof o.id === "string" && o.id.trim()
+              ? o.id.trim()
+              : `unavail-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+          const start = typeof o.start === "string" ? o.start.trim() : "";
+          const end = typeof o.end === "string" ? o.end.trim() : "";
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) continue;
+          out.push({ id, start, end });
+        }
+        return out;
+      })(),
     };
   });
 
@@ -425,6 +453,7 @@ export function emptyRoom(index: number): ManagerRoomSubmission {
     availability: "Available now",
     moveInAvailableDate: "",
     moveInInstructions: "",
+    manualUnavailableRanges: [],
     detail: "",
     furnishing: "",
     roomAmenitiesText: "",
@@ -465,6 +494,11 @@ export function duplicateRoomEntry(source: ManagerRoomSubmission): ManagerRoomSu
     utilitiesEstimate: source.utilitiesEstimate ?? "",
     furnishing: source.furnishing ?? "",
     roomAmenitiesText: source.roomAmenitiesText ?? "",
+    manualUnavailableRanges: (source.manualUnavailableRanges ?? []).map((r) => ({
+      id: rid("unavail"),
+      start: r.start,
+      end: r.end,
+    })),
   };
 }
 
@@ -525,6 +559,7 @@ export function isRoomSlotRemovable(room: ManagerRoomSubmission): boolean {
     !room.furnishing.trim() &&
     !(room.moveInAvailableDate ?? "").trim() &&
     !(room.moveInInstructions ?? "").trim() &&
+    (room.manualUnavailableRanges ?? []).length === 0 &&
     defaultAvail &&
     util.length === 0
   );

@@ -1,9 +1,11 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { clearCosignerDraft, loadCosignerDraft, saveCosignerDraft } from "@/lib/rental-application/drafts";
 import { todayISO } from "@/lib/rental-application/state";
 import {
@@ -92,15 +94,21 @@ const errRing = "border-red-500 ring-2 ring-red-100";
 
 export function CosignerApplyFlow({
   onBack,
-  showToast,
+  onDone,
 }: {
   onBack: () => void;
-  showToast: (msg: string) => void;
+  /** Called from the success screen when the user finishes (e.g. navigate back to the main application). */
+  onDone?: () => void;
 }) {
   const [step, setStep] = useState(1);
   const [f, setF] = useState<CosignerFields>(emptyCosigner);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [draftReady, setDraftReady] = useState(false);
+  const [postSubmit, setPostSubmit] = useState<{
+    linkedAxisId: string;
+    linkedSignerName: string;
+    cosignerName: string;
+  } | null>(null);
 
   useEffect(() => {
     const draft = loadCosignerDraft<CosignerFields>();
@@ -237,12 +245,15 @@ export function CosignerApplyFlow({
     if (step === 4 && !validateStep4()) return;
     if (step === 5) {
       if (!validateStep5()) return;
+      const linkedAxisId = f.signerAppId.trim();
+      const linkedSignerName = f.signerFullName.trim();
+      const cosignerName = f.fullName.trim();
       appendCosignerSubmission({ ...f, submittedAt: new Date().toISOString() });
       clearCosignerDraft();
       setF(emptyCosigner());
       setStep(1);
       setFieldErrors({});
-      showToast("Co-signer application submitted.");
+      setPostSubmit({ linkedAxisId, linkedSignerName, cosignerName });
       return;
     }
     setFieldErrors({});
@@ -256,6 +267,78 @@ export function CosignerApplyFlow({
   };
 
   const err = (key: keyof CosignerFields | string) => (fieldErrors[key] ? errRing : "");
+
+  const resetAfterSuccess = () => {
+    setPostSubmit(null);
+    setF(emptyCosigner());
+    setStep(1);
+    setFieldErrors({});
+  };
+
+  if (postSubmit) {
+    const displayAxis = postSubmit.linkedAxisId ? normalizeApplicationAxisId(postSubmit.linkedAxisId) : "";
+    return (
+      <div
+        className="mt-8 rounded-3xl border border-emerald-200/90 bg-emerald-50/40 p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+        style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
+      >
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Co-signer form received</p>
+        <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Thank you — you&apos;re all set</h2>
+        <p className="mt-3 text-sm leading-relaxed text-slate-700">
+          Your co-signer details are on file and linked to the primary application. The property manager can review everything under{" "}
+          <strong className="text-slate-900">Property Portal → Applications</strong> on the primary applicant&apos;s record. The
+          primary applicant does not need to resubmit.
+        </p>
+        <div className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linked primary application</p>
+          {displayAxis ? (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Application ID (Axis ID)</p>
+              <p className="mt-1 font-mono text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{displayAxis}</p>
+            </div>
+          ) : postSubmit.linkedSignerName ? (
+            <p className="text-sm font-medium text-slate-800">
+              Signer name: <span className="text-slate-900">{postSubmit.linkedSignerName}</span>
+            </p>
+          ) : (
+            <p className="text-sm text-slate-600">Linked using the primary applicant&apos;s Axis ID or signer name from step 1.</p>
+          )}
+          {postSubmit.cosignerName ? (
+            <p className="border-t border-slate-100 pt-3 text-sm text-slate-700">
+              Co-signer: <span className="font-semibold text-slate-900">{postSubmit.cosignerName}</span>
+            </p>
+          ) : null}
+        </div>
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-[48px] px-8"
+            onClick={() => {
+              resetAfterSuccess();
+            }}
+          >
+            Submit another co-signer
+          </Button>
+          <Button
+            type="button"
+            className="min-h-[48px] px-8"
+            onClick={() => {
+              resetAfterSuccess();
+              onDone?.();
+            }}
+          >
+            Back to rental application
+          </Button>
+        </div>
+        <p className="mt-6 text-center text-sm text-slate-600">
+          <Link href="/rent/apply" className="font-semibold text-primary underline-offset-4 hover:underline">
+            Main application home
+          </Link>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -1,7 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
+import { buildPortalApplicationOpenHref } from "@/lib/manager-applications-storage";
 import { digitsOnly } from "@/lib/rental-application/masks";
 
 function displayOrDash(v: string | null | undefined) {
@@ -35,12 +37,34 @@ function Row({ k, v }: { k: string; v: ReactNode }) {
   );
 }
 
-export function ManagerCosignerReadonlyReview({ sub }: { sub: CosignerSubmission }) {
+export function ManagerCosignerReadonlyReview({
+  sub,
+  primaryApplicationAxisId,
+}: {
+  sub: CosignerSubmission;
+  /** Primary applicant Axis ID — same row this co-signer submission is attached to in Applications. */
+  primaryApplicationAxisId: string;
+}) {
   const bankruptcyLabel =
     sub.bankruptcy === "never" ? "Never filed" : sub.bankruptcy === "past_discharged" ? "Past (discharged)" : sub.bankruptcy === "current" ? "Current / active" : "—";
   const criminalLabel = sub.criminal === "no" ? "No" : sub.criminal === "yes" ? "Yes" : "—";
 
   return (
+    <div className="space-y-3">
+      {primaryApplicationAxisId.trim() ? (
+        <div className="rounded-xl border border-sky-200/90 bg-sky-50/80 px-4 py-3">
+          <Link
+            href={buildPortalApplicationOpenHref(primaryApplicationAxisId)}
+            className="text-sm font-semibold text-sky-900 underline-offset-4 hover:underline"
+          >
+            Open primary application in Property Portal
+          </Link>
+          <p className="mt-1 text-xs leading-relaxed text-slate-600">
+            Jumps to <span className="font-mono text-[11px] text-slate-800">{primaryApplicationAxisId.trim()}</span> on the
+            Applications page.
+          </p>
+        </div>
+      ) : null}
     <div className="grid gap-3 xl:grid-cols-2">
       <ReviewSection title="Link to signer">
         <Row k="Signer Axis ID" v={displayOrDash(sub.signerAppId)} />
@@ -90,6 +114,7 @@ export function ManagerCosignerReadonlyReview({ sub }: { sub: CosignerSubmission
         <Row k="Signature" v={displayOrDash(sub.signature)} />
         <Row k="Date signed" v={displayOrDash(sub.dateSigned)} />
       </ReviewSection>
+    </div>
     </div>
   );
 }

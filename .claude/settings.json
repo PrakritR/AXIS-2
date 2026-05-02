@@ -5,7 +5,18 @@
       "Bash(git stash *)",
       "Bash(git commit -m ' *)",
       "Bash(xargs ls *)",
-      "Bash(xargs -I {} basename {})"
+      "Bash(xargs -I {} basename {})",
+      "Bash(grep -n \"inputClass\\\\|\\\\`}\" /Users/prakritramachandran/axis-2/src/app/\\\\\\(public\\\\\\)/rent/apply/cosigner-flow.tsx)",
+      "Bash(perl -i -pe 's/className=\\\\{err\\\\\\(\\(\"[^\"]+\"\\)\\(\\\\\\)\\)`\\\\}/className={err\\($1$2}/g' /Users/prakritramachandran/axis-2/src/app/\\\\\\(public\\\\\\)/rent/apply/cosigner-flow.tsx)",
+      "Bash(grep -n '`}' /Users/prakritramachandran/axis-2/src/app/\\\\\\(public\\\\\\)/rent/apply/cosigner-flow.tsx)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 status)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 diff --stat)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 log --oneline -5)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 add 'src/app/\\(public\\)/rent/apply/cosigner-flow.tsx' src/components/portal/manager-add-listing-form.tsx src/components/portal/manager-application-readonly-review.tsx src/components/portal/manager-applications.tsx src/components/portal/manager-cosigner-readonly-review.tsx src/lib/cosigner-submissions-storage.ts src/lib/manager-listing-submission.ts)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 commit -m ' *)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 push origin main)",
+      "Bash(python3 -c ' *)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 add src/lib/manager-access.ts src/lib/platform-fees.ts src/data/manager-plan-tiers.ts src/lib/portals/pro-nav.ts src/components/portal/portal-tier-paywall.tsx src/lib/render-portal-section.tsx 'src/app/\\(public\\)/partner/pricing/page.tsx')"
     ]
   }
 }

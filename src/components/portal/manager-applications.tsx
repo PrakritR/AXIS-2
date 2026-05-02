@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -32,6 +33,7 @@ import {
   MANAGER_APPLICATIONS_EVENT,
   deleteManagerApplicationFromServer,
   effectiveApplicationForRow,
+  normalizeApplicationAxisId,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
   writeManagerApplicationRows,
@@ -43,7 +45,7 @@ import {
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
-import { buildResidentWelcomeMailtoHref } from "@/lib/resident-welcome-email";
+import { openResidentWelcomeMailto } from "@/lib/resident-welcome-email";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
 import {
   recordApprovedApplicationCharges,
@@ -64,7 +66,7 @@ function CosignerSection({ applicationId }: { applicationId: string }) {
             Co-signer on file{subs.length > 1 ? ` (${i + 1} of ${subs.length})` : ""}
           </p>
           <div className="mt-3">
-            <ManagerCosignerReadonlyReview sub={cosub} />
+            <ManagerCosignerReadonlyReview sub={cosub} primaryApplicationAxisId={applicationId} />
           </div>
         </div>
       ))}
@@ -488,8 +490,19 @@ function ManagerApplicationPlacementEditor({
 }
 
 export function ManagerApplications() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading applications…</div>}>
+      <ManagerApplicationsContent />
+    </Suspense>
+  );
+}
+
+function ManagerApplicationsContent() {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
   const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -569,6 +582,24 @@ export function ManagerApplications() {
       return roomSortDir === "asc" ? cmp : -cmp;
     });
   }, [scopedRows, bucket, propertyFilter, roomSortDir]);
+
+  useEffect(() => {
+    const raw = (searchParams.get("open") ?? searchParams.get("axisId") ?? "").trim();
+    if (!raw || scopedRows.length === 0) return;
+    const id = normalizeApplicationAxisId(raw).toUpperCase();
+    const hit = scopedRows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === id);
+    if (!hit) return;
+    setBucket(hit.bucket);
+    setExpandedId(hit.id);
+    requestAnimationFrame(() => {
+      document.getElementById(`portal-application-${hit.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("open");
+    nextParams.delete("axisId");
+    const qs = nextParams.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [searchParams, scopedRows, pathname, router]);
 
   const refreshTable = useCallback(() => {
     setRows(readManagerApplicationRows());
@@ -775,7 +806,7 @@ export function ManagerApplications() {
               ) : (
                 rowsForBucket.map((row) => (
                   <Fragment key={row.id}>
-                    <tr className={PORTAL_TABLE_TR}>
+                    <tr id={`portal-application-${row.id}`} className={PORTAL_TABLE_TR}>
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
                         <p className="font-medium leading-snug text-slate-900">{row.name}</p>
                         {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{row.email}</p> : null}
@@ -819,12 +850,13 @@ export function ManagerApplications() {
                                 variant="outline"
                                 className={PORTAL_DETAIL_BTN_PRIMARY}
                                 onClick={() => {
-                                  window.location.href = buildResidentWelcomeMailtoHref({
+                                  openResidentWelcomeMailto({
                                     residentEmail: row.email!.trim(),
                                     residentName: row.name,
                                     axisId: row.id,
                                     origin: window.location.origin,
                                   });
+                                  showToast("Opening your email app with a draft to the applicant.");
                                 }}
                               >
                                 Email portal setup

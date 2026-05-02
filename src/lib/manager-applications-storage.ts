@@ -20,6 +20,13 @@ export function normalizeApplicationAxisId(id: string): string {
   return `AXIS-${suffix || Date.now().toString(36).toUpperCase()}`;
 }
 
+/** Opens Property Portal → Applications with this primary application expanded. */
+export function buildPortalApplicationOpenHref(axisId: string): string {
+  const id = normalizeApplicationAxisId(axisId.trim()).toUpperCase();
+  if (!id) return "/portal/applications";
+  return `/portal/applications?open=${encodeURIComponent(id)}`;
+}
+
 /** Same application id shown in property portal + create-account; not derived from auth user UUID. */
 export function resolveResidentPortalAxisId(input: {
   profileManagerId?: string | null;

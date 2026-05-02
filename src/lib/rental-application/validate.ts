@@ -105,8 +105,18 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
     if (!mtm && sd && ed && !e.leaseStart && !e.leaseEnd) {
       if (ed.getTime() <= sd.getTime()) e.leaseEnd = "Lease end date must be after lease start date.";
     }
-    const avail = getDemoRoomAvailabilityMessage(f.roomChoice1, start);
-    if (avail) e.roomChoice1 = avail;
+    if (r1 && !e.roomChoice1) {
+      const a1 = getDemoRoomAvailabilityMessage(r1, start, mtm ? undefined : end, f.leaseTerm);
+      if (a1) e.roomChoice1 = a1;
+    }
+    if (r2 && !e.roomChoice2) {
+      const a2 = getDemoRoomAvailabilityMessage(r2, start, mtm ? undefined : end, f.leaseTerm);
+      if (a2) e.roomChoice2 = a2;
+    }
+    if (r3 && !e.roomChoice3) {
+      const a3 = getDemoRoomAvailabilityMessage(r3, start, mtm ? undefined : end, f.leaseTerm);
+      if (a3) e.roomChoice3 = a3;
+    }
     return e;
   }
 

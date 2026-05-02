@@ -86,6 +86,8 @@ export type WizardStepsProps = {
     displayLabel: string;
     amount: number;
   };
+  /** Incremented when public approved-occupancy sync completes; ties room availability to server data. */
+  occupancySyncEpoch: number;
   setPhone: (next: string) => void;
   setLandlordPhone: (next: string) => void;
   setPrevLandlordPhone: (next: string) => void;
@@ -109,7 +111,7 @@ function maskSsnReview(ssn: string) {
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, propertyOptions, patch, goToStep, editFromReview, applicationFeeGate } = p;
+  const { step, form, errors, propertyOptions, patch, goToStep, editFromReview, applicationFeeGate, occupancySyncEpoch } = p;
 
   if (step === 1) {
     return (
@@ -254,6 +256,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   }
 
   if (step === 3) {
+    void occupancySyncEpoch;
     const roomOptionParams = {
       leaseStart: form.leaseStart,
       leaseEnd: form.leaseEnd,

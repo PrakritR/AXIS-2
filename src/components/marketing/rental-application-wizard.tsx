@@ -28,7 +28,7 @@ import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-app
 import { RENTAL_WIZARD_STEP_COUNT } from "@/lib/rental-application/types";
 import { maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
-import { appendManagerApplicationRow } from "@/lib/manager-applications-storage";
+import { appendManagerApplicationRow, syncPublicApprovedApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { RentalWizardStepBody } from "./rental-wizard-steps";
 
 const processedApplicationFeeSessions = new Set<string>();
@@ -80,6 +80,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const [reviewReturnStep, setReviewReturnStep] = useState<number | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [postSubmit, setPostSubmit] = useState<{ axisId: string } | null>(null);
+  /** Bumps after server sync so step 3 room dropdowns re-filter against approved occupancy. */
+  const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
   const router = useRouter();
 
   const listingPrefillKey = useMemo(() => {
@@ -91,6 +93,10 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       searchParams.get("listingRoomId") ?? "",
     ].join("|");
   }, [searchParams]);
+
+  useEffect(() => {
+    void syncPublicApprovedApplicationsFromServer().then(() => setOccupancySyncEpoch((n) => n + 1));
+  }, []);
 
   useEffect(() => {
     const on = () => setExtrasTick((n) => n + 1);
@@ -619,6 +625,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 propertyOptions={propertyOptions}
                 patch={patchForm}
                 applicationFeeGate={applicationFeeGate}
+                occupancySyncEpoch={occupancySyncEpoch}
                 setPhone={setPhone}
                 setLandlordPhone={setLandlordPhone}
                 setPrevLandlordPhone={setPrevLandlordPhone}

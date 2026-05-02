@@ -1,3 +1,5 @@
+import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+
 export type CosignerSubmission = {
   signerAppId: string;
   signerFullName: string;
@@ -65,7 +67,7 @@ export function appendCosignerSubmission(sub: CosignerSubmission) {
 
 export function readCosignerSubmissionsForSignerAppId(signerAppId: string): CosignerSubmission[] {
   hydrate();
-  const id = signerAppId.trim().toUpperCase();
+  const id = normalizeApplicationAxisId(signerAppId).toUpperCase();
   if (!id) return [];
-  return memory.filter((s) => s.signerAppId.trim().toUpperCase() === id);
+  return memory.filter((s) => normalizeApplicationAxisId(s.signerAppId).toUpperCase() === id);
 }
