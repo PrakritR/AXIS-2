@@ -101,7 +101,7 @@ export function AxisLogoMarkSoft({ className = "" }: { className?: string }) {
 export function AxisLogoWordmark() {
   return (
     <span className="leading-none">
-      <span className="block text-[17px] font-semibold tracking-[-0.035em] text-[#0f172a]">AXIS</span>
+      <span className="block text-[17px] font-semibold tracking-[-0.035em] text-[#0f172a]">Axis</span>
       <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Housing</span>
     </span>
   );

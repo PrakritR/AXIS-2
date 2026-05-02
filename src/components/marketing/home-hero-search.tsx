@@ -91,7 +91,10 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
 
   const zipDigits = zip.replace(/\D/g, "").slice(0, 5);
   const zipValid = zipDigits.length === 5;
-  const hasInteraction = zipValid || moveIn !== "" || budgetTouched || bathroom !== "any";
+  /** Hero search only runs once a concrete move-in date is chosen (YYYY-MM-DD from date input). */
+  const moveInSelected = moveIn.trim().length > 0;
+  const hasOtherFilters =
+    zipValid || budgetTouched || bathroom !== "any" || moveOut.trim().length > 0;
   const pct = ((budget - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
   const filteredRooms = useMemo(
@@ -131,7 +134,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
     >
       {/* Row 1: main filters */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <FieldBlock label="Move-in date">
+        <FieldBlock label="Move-in date" required>
           <input type="date" value={moveIn} onChange={(e) => setMoveIn(e.target.value)} className={inputCls} />
         </FieldBlock>
 
@@ -212,7 +215,13 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
 
       <div className="my-6 h-px w-full bg-black/[0.05]" />
 
-      {hasInteraction ? (
+      {hasOtherFilters && !moveInSelected ? (
+        <p className="text-center text-[13px] font-medium text-amber-800/90">
+          Select a <span className="whitespace-nowrap">move-in date</span> to run your search.
+        </p>
+      ) : null}
+
+      {moveInSelected ? (
         <div className="flex w-full flex-col items-center gap-3 text-center">
           <p className="text-[13px] text-[#6e6e73]">
             {zipValid
@@ -253,7 +262,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         <div className="flex flex-col items-center gap-3 text-center">
           <span className="text-[#6e6e73]/25" aria-hidden><SearchIcon size={26} /></span>
           <p className="text-[13px] text-[#6e6e73]/60">
-            Enter a ZIP, move-in date, or adjust budget to search listings
+            Choose a <span className="font-medium text-[#6e6e73]">move-in date</span> to search listings. ZIP, budget, and bath filters are optional.
           </p>
           <Link
             href="/rent/listings"
@@ -267,11 +276,12 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   );
 }
 
-function FieldBlock({ label, optional, hint, children }: { label: string; optional?: boolean; hint?: string; children: React.ReactNode }) {
+function FieldBlock({ label, optional, required: isRequired, hint, children }: { label: string; optional?: boolean; required?: boolean; hint?: string; children: React.ReactNode }) {
   return (
     <div>
       <div className="mb-2 flex items-baseline gap-1.5">
         <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6e6e73]">{label}</span>
+        {isRequired && <span className="text-[11px] font-medium text-[#007aff]">(required)</span>}
         {optional && <span className="text-[11px] font-normal text-[#6e6e73]/50">(optional)</span>}
       </div>
       {hint && <p className="mb-1.5 text-[11px] text-[#6e6e73]/50">{hint}</p>}
