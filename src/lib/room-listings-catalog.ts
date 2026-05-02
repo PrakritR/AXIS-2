@@ -90,6 +90,9 @@ function availabilityLabel(room: ListingRoomRow): string {
 
 function bathroomHintFromRoom(room: ListingRoomRow): string {
   const blob = `${room.modal.roomNotes ?? room.detail} ${room.modal.setupLine} ${(room.modal.roomAmenityLabels ?? []).join(" ")}`.toLowerCase();
+  const n = room.bathroomShareCount;
+  if (typeof n === "number" && n === 1) return "Private bath";
+  if (typeof n === "number" && n >= 2) return `${n}-person shared bath`;
   if (/\ben[- ]?suite\b|private bath|private\b/.test(blob)) return "Private bath";
   if (/\bshared\b.*\bbath\b|\bshares bathroom\b/.test(blob)) {
     const m = blob.match(/(\d+)[- ]?person/);
@@ -100,9 +103,8 @@ function bathroomHintFromRoom(room: ListingRoomRow): string {
   return "Bath setup on listing";
 }
 
-export function roomMatchesBathroomFilter(room: ListingRoomRow, bathroomId: string): boolean {
-  if (bathroomId === "any") return true;
-  const blob = [
+function roomSearchTextBlob(room: ListingRoomRow): string {
+  return [
     room.modal.roomNotes ?? room.detail,
     room.modal.setupLine,
     ...room.modal.includedTags,
@@ -110,19 +112,49 @@ export function roomMatchesBathroomFilter(room: ListingRoomRow, bathroomId: stri
   ]
     .join(" ")
     .toLowerCase();
+}
+
+function roomMatchesBathroomFilterHeuristic(room: ListingRoomRow, bathroomId: string): boolean {
+  const blob = roomSearchTextBlob(room);
   if (bathroomId === "private") {
-    return /\bprivate\b|en[- ]?suite|private bath/.test(blob);
+    return /\bprivate\b|en[- ]?suite|en suite\b|private bath/.test(blob);
   }
+  // Avoid `\d[- ]?share` — it matches "2 shared" (floor 2 + shared bath).
   if (bathroomId === "2-share") {
-    return /2[- ]?person|two[- ]?person|2[- ]?share|shared with 1\b/.test(blob);
+    return (
+      /\b(?:2|two)[\s\-–]+(?:person|people|resident|roommates)\b/i.test(blob) ||
+      /\bshared with\s+(?:one|1)(?:\s+other)?\s+(?:person|people|resident|roommate)s?\b/i.test(blob) ||
+      /\b1\s+other\s+(?:person|people|resident|roommate)\b/i.test(blob)
+    );
   }
   if (bathroomId === "3-share") {
-    return /3[- ]?person|three[- ]?person|3[- ]?share|shared with 2\b/.test(blob);
+    return (
+      /\b(?:3|three)[\s\-–]+(?:person|people|resident|roommates)\b/i.test(blob) ||
+      /\bshared with\s+(?:2|two)(?:\s+other)?\s+(?:person|people|resident|roommate)s?\b/i.test(blob)
+    );
   }
   if (bathroomId === "4-share") {
-    return /4[- ]?person|four[- ]?person|4[- ]?share|shared with 3\b/.test(blob);
+    return (
+      /\b(?:4|four)[\s\-–]+(?:person|people|resident|roommates)\b/i.test(blob) ||
+      /\bshared with\s+(?:3|three)(?:\s+other)?\s+(?:person|people|resident|roommate)s?\b/i.test(blob)
+    );
   }
   return true;
+}
+
+export function roomMatchesBathroomFilter(room: ListingRoomRow, bathroomId: string): boolean {
+  if (bathroomId === "any") return true;
+
+  const n = room.bathroomShareCount;
+  if (typeof n === "number" && Number.isFinite(n) && n > 0) {
+    if (bathroomId === "private") return n === 1;
+    if (bathroomId === "2-share") return n === 2;
+    if (bathroomId === "3-share") return n === 3;
+    if (bathroomId === "4-share") return n === 4;
+    return false;
+  }
+
+  return roomMatchesBathroomFilterHeuristic(room, bathroomId);
 }
 
 /** Parse YYYY-MM-DD or MM/DD/YYYY or any Date-parseable string into midnight local Date. */
@@ -200,9 +232,9 @@ export function filterRoomListings(
         if (!roomMatchesBathroomFilter(room, opts.bathroom)) continue;
         const rentNumeric = parseMonthlyRent(room.price.replace("/month", "/ mo"));
         const budgetOk =
-          opts.maxBudgetNum === null || !Number.isFinite(opts.maxBudgetNum) || rentNumeric === null
+          opts.maxBudgetNum === null || !Number.isFinite(opts.maxBudgetNum)
             ? true
-            : rentNumeric <= opts.maxBudgetNum;
+            : rentNumeric !== null && rentNumeric <= opts.maxBudgetNum;
         if (!budgetOk) continue;
 
         rows.push({

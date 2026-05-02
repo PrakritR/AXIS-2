@@ -32,17 +32,24 @@ export function parseRadiusParam(raw: string | undefined): RadiusMiles {
   return 10;
 }
 
-/** First dollar amount in a label like "$950 / mo" until rent is numeric in the API. */
+/**
+ * Lowest rent dollar amount in the price segment (before `/mo` etc.).
+ * Avoids treating the first `$` in a longer string (e.g. utilities in the same field) as rent.
+ */
 export function parseMonthlyRent(rentLabel: string): number | null {
-  const m = rentLabel.replace(/,/g, "").match(/\$(\d+)/);
-  if (!m) return null;
-  const n = Number.parseInt(m[1], 10);
-  return Number.isFinite(n) ? n : null;
+  const normalized = rentLabel.replace(/,/g, "").trim();
+  if (!normalized) return null;
+  const head = normalized.split("/")[0] ?? normalized;
+  const amounts = [...head.matchAll(/\$(\d+)/g)]
+    .map((m) => Number.parseInt(m[1]!, 10))
+    .filter((x) => Number.isFinite(x));
+  if (amounts.length === 0) return null;
+  return Math.min(...amounts);
 }
 
 export function propertyWithinMaxBudget(rentLabel: string, maxBudget: number | null): boolean {
   if (maxBudget === null || !Number.isFinite(maxBudget)) return true;
   const rent = parseMonthlyRent(rentLabel);
-  if (rent === null) return true;
+  if (rent === null) return false;
   return rent <= maxBudget;
 }

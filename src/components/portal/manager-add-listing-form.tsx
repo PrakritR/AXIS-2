@@ -169,7 +169,7 @@ const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
   home: "Property type, address, floors, baths, and how many bedrooms you’ll list.",
-  rooms: "Each rentable bedroom: name, floor, rent, availability, furnishing, photos, and video.",
+  rooms: "Each rentable bedroom: name, floor, rent, availability, move-in date and instructions, furnishing, photos, and video.",
   bathrooms: "Bath rows and which bedrooms use each one — powers the public “Rooms by bathroom” layout.",
   spaces: "Kitchen, laundry, lounge, outdoor — equipment, rules, and which bedrooms have access.",
   lease: "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
@@ -366,6 +366,12 @@ export function ManagerAddListingForm({
       if (!sub.rooms.some((r) => r.name.trim())) {
         showToast("Add at least one room with a name before continuing.");
         return false;
+      }
+      for (const r of sub.rooms) {
+        if (r.name.trim() && r.monthlyRent > 0 && (!r.moveInAvailableDate.trim() || !r.moveInInstructions.trim())) {
+          showToast("Each room with a name and monthly rent needs an earliest move-in date and move-in instructions.");
+          return false;
+        }
       }
     }
     return true;
@@ -824,6 +830,13 @@ export function ManagerAddListingForm({
     }
     if (!roomsOk) {
       showToast("Add at least one room with a name and monthly rent.");
+      return;
+    }
+    const moveInIncomplete = submission.rooms.some(
+      (r) => r.name.trim() && r.monthlyRent > 0 && (!r.moveInAvailableDate.trim() || !r.moveInInstructions.trim()),
+    );
+    if (moveInIncomplete) {
+      showToast("Each listed room needs an earliest move-in date and move-in instructions.");
       return;
     }
     if (submission.bathrooms.length > 0 && submission.bathrooms.every((b) => !b.name.trim())) {
@@ -1736,6 +1749,29 @@ export function ManagerAddListingForm({
                             </p>
                           ) : null}
                         </div>
+                      </GridField>
+                      <GridField>
+                        <FieldLabel hint="Required for each room you price. Shown on the resident Move-in tab after placement.">
+                          Earliest move-in date *
+                        </FieldLabel>
+                        <Input
+                          type="date"
+                          value={room.moveInAvailableDate}
+                          onChange={(e) => setRoom(i, { moveInAvailableDate: e.target.value })}
+                          aria-label={`Earliest move-in for ${room.name || `room ${i + 1}`}`}
+                        />
+                      </GridField>
+                      <GridField className="sm:col-span-2">
+                        <FieldLabel hint="Keys, access, parking, utilities start, what to bring — required when this room has a monthly rent.">
+                          Move-in instructions *
+                        </FieldLabel>
+                        <Textarea
+                          className="min-h-[88px]"
+                          value={room.moveInInstructions}
+                          onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
+                          placeholder="e.g. Pick up keys at the leasing office. Visitor parking in lot B. Unit is unlocked with lockbox code sent separately."
+                          aria-label={`Move-in instructions for ${room.name || `room ${i + 1}`}`}
+                        />
                       </GridField>
                       <div className="sm:col-span-2">
                         <FieldLabel hint="Toggle specific items included in this room.">Furniture &amp; items</FieldLabel>

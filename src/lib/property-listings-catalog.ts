@@ -30,9 +30,9 @@ export function filterPropertiesForCatalog(
         if (!roomMatchesBathroomFilter(room, opts.bathroom)) continue;
         const rentNumeric = parseMonthlyRent(room.price.replace("/month", "/ mo"));
         const budgetOk =
-          opts.maxBudgetNum === null || !Number.isFinite(opts.maxBudgetNum) || rentNumeric === null
+          opts.maxBudgetNum === null || !Number.isFinite(opts.maxBudgetNum)
             ? true
-            : rentNumeric <= opts.maxBudgetNum;
+            : rentNumeric !== null && rentNumeric <= opts.maxBudgetNum;
         if (!budgetOk) continue;
         anyMatch = true;
         break outer;

@@ -43,6 +43,7 @@ import {
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import { buildResidentWelcomeMailtoHref } from "@/lib/resident-welcome-email";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
 import {
   recordApprovedApplicationCharges,
@@ -811,6 +812,23 @@ export function ManagerApplications() {
                                 Move to pending
                               </Button>
                             )}
+                            {row.bucket === "approved" && row.email?.trim() ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN_PRIMARY}
+                                onClick={() => {
+                                  window.location.href = buildResidentWelcomeMailtoHref({
+                                    residentEmail: row.email!.trim(),
+                                    residentName: row.name,
+                                    axisId: row.id,
+                                    origin: window.location.origin,
+                                  });
+                                }}
+                              >
+                                Email portal setup
+                              </Button>
+                            ) : null}
                             <Button
                               type="button"
                               variant="outline"

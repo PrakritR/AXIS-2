@@ -122,6 +122,16 @@ function roomHasPrivateBath(roomId: string, sub: ManagerListingSubmissionV1): bo
   });
 }
 
+/** Rooms on the same assigned bathroom row (incl. this room). Null when no bathroom row claims this room. */
+function bathroomShareCountForRoom(roomId: string, sub: ManagerListingSubmissionV1): number | null {
+  const direct = sub.bathrooms.find(
+    (b) => b.name.trim() && !b.allResidents && (b.assignedRoomIds ?? []).includes(roomId),
+  );
+  if (!direct) return null;
+  const n = (direct.assignedRoomIds ?? []).filter(Boolean).length;
+  return n > 0 ? n : null;
+}
+
 function roomSetupLine(room: ManagerRoomSubmission, sub: ManagerListingSubmissionV1): string {
   const wholeHouse = sub.bathrooms.filter((b) => b.name.trim() && b.allResidents);
   const direct = sub.bathrooms.filter((b) => b.name.trim() && !b.allResidents && (b.assignedRoomIds ?? []).includes(room.id));
@@ -235,6 +245,7 @@ function buildListingFloorCard(
       utilitiesEstimate: utilRaw || undefined,
       price: `$${r.monthlyRent}`,
       availability: r.availability.trim() || "Available now",
+      bathroomShareCount: bathroomShareCountForRoom(r.id, sub),
       modal: {
         setupLine: setup,
         tourEyebrow: "Room tour",

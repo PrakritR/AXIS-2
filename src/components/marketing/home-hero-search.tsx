@@ -11,10 +11,10 @@ import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 /** Slider min/max (max = “no cap” / Any in UI). Step keeps URLs tidy. */
-const BUDGET_MIN = 500;
+const BUDGET_MIN = 200;
 const BUDGET_MAX = 5000;
 const BUDGET_STEP = 50;
-const BUDGET_MARKERS = [500, 1500, 3000, 5000] as const;
+const BUDGET_MARKERS = [200, 750, 1500, 3000, 5000] as const;
 
 const BATHROOM_OPTIONS = [
   { id: "any", label: "Any" },
@@ -57,16 +57,14 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
 
   const safeRadius = parseRadiusParam(String(initialRadius));
 
-  const budgetFromUrl =
-    initialMaxBudget != null && Number.isFinite(initialMaxBudget) && initialMaxBudget < BUDGET_MAX;
-
   const [moveIn, setMoveIn] = useState(initialMoveIn);
   const [moveOut, setMoveOut] = useState(initialMoveOut);
   const [budget, setBudget] = useState(() =>
-    budgetFromUrl ? clampBudget(initialMaxBudget as number) : BUDGET_MIN,
+    initialMaxBudget != null && Number.isFinite(initialMaxBudget) && initialMaxBudget < BUDGET_MAX
+      ? clampBudget(initialMaxBudget)
+      : BUDGET_MAX,
   );
   const [bathroom, setBathroom] = useState(initialBathroom || "any");
-  const [budgetTouched, setBudgetTouched] = useState(budgetFromUrl);
   const [zip, setZip] = useState(() => initialZip.replace(/\D/g, "").slice(0, 5));
   const [radius, setRadius] = useState<number>(safeRadius);
   const [extras, setExtras] = useState<MockProperty[]>([]);
@@ -85,16 +83,15 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   const combinedProperties = useMemo(() => [...mockProperties, ...extras], [extras]);
 
   const budgetLabel = useMemo(() => {
-    if (!budgetTouched || budget >= BUDGET_MAX) return "Any";
+    if (budget >= BUDGET_MAX) return "Any";
     return `$${budget.toLocaleString()}`;
-  }, [budget, budgetTouched]);
+  }, [budget]);
 
   const zipDigits = zip.replace(/\D/g, "").slice(0, 5);
   const zipValid = zipDigits.length === 5;
   /** Hero search only runs once a concrete move-in date is chosen (YYYY-MM-DD from date input). */
   const moveInSelected = moveIn.trim().length > 0;
-  const hasOtherFilters =
-    zipValid || budgetTouched || bathroom !== "any" || moveOut.trim().length > 0;
+  const hasOtherFilters = zipValid || budget < BUDGET_MAX || bathroom !== "any" || moveOut.trim().length > 0;
   const pct = ((budget - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
   const filteredRooms = useMemo(
@@ -102,12 +99,12 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
       filterRoomListings(combinedProperties, {
         zipRaw: zipDigits,
         radiusMiles: radius,
-        maxBudgetNum: budgetTouched && budget < BUDGET_MAX ? budget : null,
+        maxBudgetNum: budget < BUDGET_MAX ? budget : null,
         bathroom,
         moveIn,
         moveOut,
       }),
-    [combinedProperties, zipDigits, radius, budget, budgetTouched, bathroom, moveIn, moveOut],
+    [combinedProperties, zipDigits, radius, budget, bathroom, moveIn, moveOut],
   );
 
   const listingsHref = useMemo(() => {
@@ -116,10 +113,10 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
     q.set("radius", String(radius));
     if (moveIn) q.set("moveIn", moveIn);
     if (moveOut) q.set("moveOut", moveOut);
-    if (budgetTouched && budget < BUDGET_MAX) q.set("maxBudget", String(budget));
+    if (budget < BUDGET_MAX) q.set("maxBudget", String(budget));
     q.set("bathroom", bathroom);
     return `/rent/listings?${q.toString()}`;
-  }, [zipValid, zipDigits, radius, moveIn, moveOut, budget, budgetTouched, bathroom]);
+  }, [zipValid, zipDigits, radius, moveIn, moveOut, budget, bathroom]);
 
   return (
     <div
@@ -146,7 +143,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         <div>
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6e6e73]">Max budget / mo</span>
-            <span className={`text-[13px] font-semibold transition-colors duration-200 ${budgetTouched && budget < BUDGET_MAX ? "text-[#007aff]" : "text-[#6e6e73]/60"}`}>
+            <span className={`text-[13px] font-semibold transition-colors duration-200 ${budget < BUDGET_MAX ? "text-[#007aff]" : "text-[#6e6e73]/60"}`}>
               {budgetLabel}
             </span>
           </div>
@@ -160,10 +157,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
               max={BUDGET_MAX}
               step={BUDGET_STEP}
               value={budget}
-              onChange={(e) => {
-                setBudget(Number(e.target.value));
-                setBudgetTouched(true);
-              }}
+              onChange={(e) => setBudget(Number(e.target.value))}
               className="budget-slider relative z-10 h-7 w-full cursor-pointer appearance-none bg-transparent"
             />
             <div className="mt-1 flex justify-between gap-1 text-[11px] font-medium text-[#6e6e73]/50">
@@ -225,7 +219,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         <div className="flex w-full flex-col items-center gap-3 text-center">
           <p className="text-[13px] text-[#6e6e73]">
             {zipValid
-              ? <>Listings within <strong className="font-semibold text-[#1d1d1f]">{radius} mi</strong> of <strong className="font-semibold text-[#1d1d1f]">{zipDigits}</strong>{moveIn || budgetTouched ? " · plus your filters" : ""}</>
+              ? <>Listings within <strong className="font-semibold text-[#1d1d1f]">{radius} mi</strong> of <strong className="font-semibold text-[#1d1d1f]">{zipDigits}</strong>{moveIn || budget < BUDGET_MAX || bathroom !== "any" ? " · plus your filters" : ""}</>
               : "Showing listings matching your filters"
             }
           </p>

@@ -33,6 +33,11 @@ export type ListingRoomRow = {
   price: string;
   availability: string;
   modal: ListingRoomModal;
+  /**
+   * From manager Bathrooms step: rooms assigned to this bathroom row, including this room (`1` = private).
+   * Omitted or `null` when baths are not wired in the listing — search uses text heuristics only.
+   */
+  bathroomShareCount?: number | null;
 };
 
 export type ListingFloorCard = {

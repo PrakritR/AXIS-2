@@ -20,6 +20,7 @@ import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
 import { OwnerInboxPanel } from "@/components/portal/owner-inbox-panel";
 import { OwnerProperties } from "@/components/portal/owner-properties";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
+import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
 import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
@@ -394,6 +395,11 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "payments") {
     if (tabParts?.length) notFound();
     return <ResidentPaymentsPanel />;
+  }
+
+  if (kind === "resident" && section === "move-in") {
+    if (tabParts?.length) notFound();
+    return <ResidentMoveInPanel />;
   }
 
   if (kind === "resident" && section === "inbox") {

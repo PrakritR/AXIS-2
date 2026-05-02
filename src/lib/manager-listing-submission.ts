@@ -26,6 +26,10 @@ export type ManagerRoomSubmission = {
   floor: string;
   monthlyRent: number;
   availability: string;
+  /** Earliest date this room can be occupied (YYYY-MM-DD). Required for new listings. */
+  moveInAvailableDate: string;
+  /** Keys, parking, access, what to bring — shown to placed residents. Required for new listings. */
+  moveInInstructions: string;
   detail: string;
   /** Furnishing level or what is included (shown on listing). */
   furnishing: string;
@@ -246,6 +250,14 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         typeof (legacyRoom as ManagerRoomSubmission & { roomAmenitiesText?: unknown }).roomAmenitiesText === "string"
           ? (legacyRoom as ManagerRoomSubmission & { roomAmenitiesText: string }).roomAmenitiesText
           : "",
+      moveInAvailableDate:
+        typeof (legacyRoom as ManagerRoomSubmission & { moveInAvailableDate?: unknown }).moveInAvailableDate === "string"
+          ? (legacyRoom as ManagerRoomSubmission & { moveInAvailableDate: string }).moveInAvailableDate.trim()
+          : "",
+      moveInInstructions:
+        typeof (legacyRoom as ManagerRoomSubmission & { moveInInstructions?: unknown }).moveInInstructions === "string"
+          ? (legacyRoom as ManagerRoomSubmission & { moveInInstructions: string }).moveInInstructions.trim()
+          : "",
     };
   });
 
@@ -411,6 +423,8 @@ export function emptyRoom(index: number): ManagerRoomSubmission {
     floor: "",
     monthlyRent: 0,
     availability: "Available now",
+    moveInAvailableDate: "",
+    moveInInstructions: "",
     detail: "",
     furnishing: "",
     roomAmenitiesText: "",
@@ -509,6 +523,8 @@ export function isRoomSlotRemovable(room: ManagerRoomSubmission): boolean {
     !room.detail.trim() &&
     !room.roomAmenitiesText.trim() &&
     !room.furnishing.trim() &&
+    !(room.moveInAvailableDate ?? "").trim() &&
+    !(room.moveInInstructions ?? "").trim() &&
     defaultAvail &&
     util.length === 0
   );
