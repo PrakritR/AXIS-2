@@ -19,6 +19,7 @@ import {
   syncPropertyPipelineFromServer,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
+import { readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
 import {
   BUSINESS_MAX_PROPERTIES,
   FREE_MAX_PROPERTIES,
@@ -57,7 +58,7 @@ function submissionForListedEdit(p: MockProperty): ManagerListingSubmissionV1 {
 
 type EditListingContext =
   | { mode: "pending"; id: string; submission: ManagerListingSubmissionV1 }
-  | { mode: "listed"; id: string; submission: ManagerListingSubmissionV1 };
+  | { mode: "listed"; id: string; submission: ManagerListingSubmissionV1; ownerUserId?: string };
 
 export function ManagerProperties() {
   const { showToast } = useAppUi();
@@ -71,15 +72,18 @@ export function ManagerProperties() {
   const [skuLoaded, setSkuLoaded] = useState(false);
   const [skuTier, setSkuTier] = useState<string | null>(null);
   const [propCount, setPropCount] = useState(0);
+  const [linkedListings, setLinkedListings] = useState<ReturnType<typeof readLinkedListingsForUser>>([]);
 
   const refreshPending = useCallback(() => {
     if (!userId) {
       setPendingCount(0);
       setPropCount(0);
+      setLinkedListings([]);
       return;
     }
     setPropCount(countManagerManagedPropertiesForUser(userId));
     setPendingCount(readPendingManagerPropertiesForUser(userId).length);
+    setLinkedListings(readLinkedListingsForUser(userId));
   }, [userId]);
 
   const loadSku = useCallback(async () => {
@@ -107,7 +111,11 @@ export function ManagerProperties() {
     });
     const on = () => refreshPending();
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
-    return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+    window.addEventListener("axis-pro-relationships", on);
+    return () => {
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+      window.removeEventListener("axis-pro-relationships", on);
+    };
   }, [refreshPending]);
 
   useEffect(() => {
@@ -133,6 +141,14 @@ export function ManagerProperties() {
       const hit = readExtraListingsForUser(userId).find((p) => p.id === editListing);
       if (hit) {
         setEditListingContext({ mode: "listed", id: editListing, submission: submissionForListedEdit(hit) });
+        setFormOpen(true);
+        router.replace(`${portalBase}/properties`, { scroll: false });
+        return;
+      }
+      // Check linked listings
+      const linked = readLinkedListingsForUser(userId).find((l) => l.listing.id === editListing);
+      if (linked?.canEdit) {
+        setEditListingContext({ mode: "listed", id: editListing, submission: submissionForListedEdit(linked.listing), ownerUserId: linked.ownerUserId });
         setFormOpen(true);
         router.replace(`${portalBase}/properties`, { scroll: false });
         return;
@@ -175,6 +191,7 @@ export function ManagerProperties() {
           propCountBeforeSubmit={propCount}
           editPendingId={editListingContext?.mode === "pending" ? editListingContext.id : null}
           editListingId={editListingContext?.mode === "listed" ? editListingContext.id : null}
+          editListingOwnerUserId={editListingContext?.mode === "listed" ? (editListingContext.ownerUserId ?? null) : null}
           initialSubmission={editListingContext?.submission ?? null}
           onClose={() => {
             setFormOpen(false);
@@ -233,6 +250,47 @@ export function ManagerProperties() {
           </p>
         ) : null}
         <ManagerHousePropertiesPanel showToast={showToast} />
+
+        {linkedListings.length > 0 ? (
+          <div className="mt-8">
+            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">Properties from linked accounts</p>
+            <ul className="mt-3 space-y-3">
+              {linkedListings.map(({ listing, canEdit, ownerUserId }) => (
+                <li
+                  key={listing.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-900 leading-snug">
+                      {listing.buildingName || listing.address}
+                    </p>
+                    {listing.unitLabel ? (
+                      <p className="text-xs text-slate-500">{listing.unitLabel}</p>
+                    ) : null}
+                    <p className="mt-1 text-xs text-slate-400">{listing.address}</p>
+                  </div>
+                  {canEdit ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0 rounded-full text-xs"
+                      onClick={() => {
+                        setEditListingContext({ mode: "listed", id: listing.id, submission: submissionForListedEdit(listing), ownerUserId });
+                        setFormOpen(true);
+                      }}
+                    >
+                      Edit listing
+                    </Button>
+                  ) : (
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-500">
+                      View only
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </ManagerPortalPageShell>
     </>
   );

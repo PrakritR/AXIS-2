@@ -16,6 +16,8 @@ export type ProRelationshipRecord = {
   /** Amount of managed revenue this manager receives on the linked properties (0–100). */
   payoutPercentForManager: number;
   assignedPropertyIds: string[];
+  /** Whether the linked account is allowed to edit the assigned listings. */
+  canEditListing?: boolean;
   createdAt: string;
 };
 
@@ -46,6 +48,7 @@ function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
     perspective,
     payoutPercentForManager: Number.isFinite(payout) ? payout : 15,
     assignedPropertyIds: assigned as string[],
+    canEditListing: r.canEditListing === true ? true : undefined,
     createdAt: typeof r.createdAt === "string" ? r.createdAt : new Date().toISOString(),
   };
 }

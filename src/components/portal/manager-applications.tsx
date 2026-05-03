@@ -114,6 +114,25 @@ async function syncResidentApproval(row: DemoApplicantRow, nextBucket: ManagerAp
   });
 }
 
+/** POST welcome email; does not open mailto (used for auto-send on approve). */
+async function requestResidentWelcomeEmail(row: DemoApplicantRow): Promise<{
+  status: "sent" | "failed" | "no_email";
+  mailtoHref?: string;
+  error?: string;
+}> {
+  const email = row.email?.trim();
+  if (!email) return { status: "no_email" };
+  const res = await fetch("/api/portal/send-resident-welcome", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ to: email, residentName: row.name, axisId: row.id }),
+  });
+  const data = (await res.json()) as { ok?: boolean; error?: string; mailtoHref?: string };
+  if (res.ok && data.ok) return { status: "sent" };
+  return { status: "failed", mailtoHref: typeof data.mailtoHref === "string" ? data.mailtoHref : undefined, error: data.error };
+}
+
 function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucket) {
   if (bucket === "approved") return "Approved";
   if (bucket === "rejected") return "Rejected";
@@ -610,35 +629,28 @@ function ManagerApplicationsContent() {
 
   const sendResidentWelcomeEmail = useCallback(
     async (row: DemoApplicantRow) => {
-      const email = row.email?.trim();
-      if (!email) return;
       setWelcomeEmailBusyFor(row.id);
       try {
-        const res = await fetch("/api/portal/send-resident-welcome", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ to: email, residentName: row.name, axisId: row.id }),
-        });
-        const data = (await res.json()) as {
-          ok?: boolean;
-          error?: string;
-          mailtoHref?: string;
-        };
-        if (res.ok && data.ok) {
+        const result = await requestResidentWelcomeEmail(row);
+        if (result.status === "sent") {
           showToast("Welcome email sent to the applicant.");
           return;
         }
-        if (typeof data.mailtoHref === "string" && data.mailtoHref) {
-          openMailtoHref(data.mailtoHref);
+        if (result.status === "no_email") {
+          showToast("No email on file for this applicant.");
+          return;
+        }
+        if (result.mailtoHref) {
+          openMailtoHref(result.mailtoHref);
+          const err = (result.error ?? "").toLowerCase();
           showToast(
-            res.status === 503
+            err.includes("not configured") || err.includes("resend_api_key")
               ? "Email provider not configured — opened a draft in your mail app. Set RESEND_API_KEY (and RESEND_FROM) to send automatically."
-              : `Could not send automatically (${data.error ?? "error"}). Opened a draft in your mail app.`,
+              : `Could not send automatically (${result.error ?? "error"}). Opened a draft in your mail app.`,
           );
           return;
         }
-        showToast(data.error ?? "Could not send welcome email.");
+        showToast(result.error ?? "Could not send welcome email.");
       } catch {
         showToast("Could not send welcome email.");
       } finally {
@@ -669,11 +681,20 @@ function ManagerApplicationsContent() {
         /* keep local workflow moving even if profile sync fails */
       }
     }
+
+    let welcomeSent = false;
+    if (nextBucket === "approved" && updatedRow.email?.trim()) {
+      const welcome = await requestResidentWelcomeEmail(updatedRow);
+      welcomeSent = welcome.status === "sent";
+    }
+
     setExpandedId(null);
     setBucket(nextBucket);
     const msg =
       nextBucket === "approved"
-        ? "Application approved."
+        ? welcomeSent
+          ? "Application approved. A welcome email with portal setup was sent to the applicant."
+          : "Application approved."
         : nextBucket === "rejected"
           ? "Application rejected."
           : "Moved to Pending.";

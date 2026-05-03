@@ -290,6 +290,7 @@ export function ManagerAddListingForm({
   propCountBeforeSubmit,
   editPendingId = null,
   editListingId = null,
+  editListingOwnerUserId = null,
   initialSubmission = null,
 }: {
   onClose: () => void;
@@ -299,6 +300,8 @@ export function ManagerAddListingForm({
   propCountBeforeSubmit: number;
   editPendingId?: string | null;
   editListingId?: string | null;
+  /** Owner's userId to use when saving edits to a linked listing (overrides the current user's id). */
+  editListingOwnerUserId?: string | null;
   initialSubmission?: ManagerListingSubmissionV1 | null;
 }) {
   const [sub, setSub] = useState<ManagerListingSubmissionV1>(() =>
@@ -368,8 +371,8 @@ export function ManagerAddListingForm({
         return false;
       }
       for (const r of sub.rooms) {
-        if (r.name.trim() && r.monthlyRent > 0 && (!r.moveInAvailableDate.trim() || !r.moveInInstructions.trim())) {
-          showToast("Each room with a name and monthly rent needs an earliest move-in date and move-in instructions.");
+        if (r.name.trim() && r.monthlyRent > 0 && !r.moveInInstructions.trim()) {
+          showToast("Each room with a name and monthly rent needs move-in instructions.");
           return false;
         }
       }
@@ -836,10 +839,10 @@ export function ManagerAddListingForm({
       return;
     }
     const moveInIncomplete = submission.rooms.some(
-      (r) => r.name.trim() && r.monthlyRent > 0 && (!r.moveInAvailableDate.trim() || !r.moveInInstructions.trim()),
+      (r) => r.name.trim() && r.monthlyRent > 0 && !r.moveInInstructions.trim(),
     );
     if (moveInIncomplete) {
-      showToast("Each listed room needs an earliest move-in date and move-in instructions.");
+      showToast("Each listed room needs move-in instructions.");
       return;
     }
     const blockedRangesInvalid = sub.rooms.some((r) =>
@@ -891,7 +894,8 @@ export function ManagerAddListingForm({
         return;
       }
       if (editListingId) {
-        const ok = await updateExtraListingFromSubmissionOnServer(editListingId, userId, submission);
+        const saveUserId = editListingOwnerUserId?.trim() || userId;
+        const ok = await updateExtraListingFromSubmissionOnServer(editListingId, saveUserId, submission);
         if (!ok) {
           showToast("Could not save changes.");
           return;
@@ -1766,17 +1770,7 @@ export function ManagerAddListingForm({
                           ) : null}
                         </div>
                       </GridField>
-                      <GridField>
-                        <FieldLabel hint="Required for each room you price. Shown on the resident Move-in tab after placement.">
-                          Earliest move-in date *
-                        </FieldLabel>
-                        <Input
-                          type="date"
-                          value={room.moveInAvailableDate}
-                          onChange={(e) => setRoom(i, { moveInAvailableDate: e.target.value })}
-                          aria-label={`Earliest move-in for ${room.name || `room ${i + 1}`}`}
-                        />
-                      </GridField>
+
                       <GridField className="sm:col-span-2">
                         <FieldLabel hint="Keys, access, parking, utilities start, what to bring — required when this room has a monthly rent.">
                           Move-in instructions *

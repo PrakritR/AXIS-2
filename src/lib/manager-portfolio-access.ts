@@ -3,6 +3,7 @@
  */
 
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import type { MockProperty } from "@/data/types";
 import {
   PROPERTY_PIPELINE_EVENT,
   readAllExtraListings,
@@ -69,6 +70,25 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
   return [...labelById.entries()]
     .map(([id, label]) => ({ id, label }))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+}
+
+/** Listings from linked accounts that this user has been given access to. */
+export function readLinkedListingsForUser(userId: string): { listing: MockProperty; canEdit: boolean; ownerUserId: string }[] {
+  const allListings = readAllExtraListings();
+  const seen = new Set<string>();
+  const result: { listing: MockProperty; canEdit: boolean; ownerUserId: string }[] = [];
+  for (const rel of readProRelationships(userId)) {
+    for (const pid of rel.assignedPropertyIds) {
+      if (seen.has(pid)) continue;
+      const listing = allListings.find((l) => l.id === pid);
+      if (!listing) continue;
+      const ownerUserId = listing.managerUserId?.trim() ?? "";
+      if (!ownerUserId || ownerUserId === userId) continue;
+      seen.add(pid);
+      result.push({ listing, canEdit: rel.canEditListing === true, ownerUserId });
+    }
+  }
+  return result;
 }
 
 export const MANAGER_PORTFOLIO_REFRESH_EVENTS = [

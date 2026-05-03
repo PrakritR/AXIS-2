@@ -130,6 +130,7 @@ export function ProAccountLinksPanel({
 
   const [selectedProps, setSelectedProps] = useState<Record<string, boolean>>({});
   const [payoutDraft, setPayoutDraft] = useState(15);
+  const [canEditListingDraft, setCanEditListingDraft] = useState(false);
   const [skuTier, setSkuTier] = useState<string | null>(null);
 
   useEffect(() => {
@@ -259,6 +260,7 @@ export function ProAccountLinksPanel({
         setDraftUserId(null);
         setSelectedProps({});
         setPayoutDraft(15);
+        setCanEditListingDraft(false);
         showToast("Invite sent — waiting for their approval.");
         return;
       } catch {
@@ -280,6 +282,7 @@ export function ProAccountLinksPanel({
       perspective: "manager_tab",
       payoutPercentForManager: payout,
       assignedPropertyIds: ids,
+      canEditListing: canEditListingDraft || undefined,
       createdAt: new Date().toISOString(),
     };
     writeProRelationships(userId, [...all, row]);
@@ -289,6 +292,7 @@ export function ProAccountLinksPanel({
     setDraftUserId(null);
     setSelectedProps({});
     setPayoutDraft(15);
+    setCanEditListingDraft(false);
     refreshLocal();
     showToast("Link saved locally (invite sync requires database migration).");
   };
@@ -354,6 +358,13 @@ export function ProAccountLinksPanel({
       else set.add(propId);
       return { ...r, assignedPropertyIds: [...set] };
     });
+    writeProRelationships(userId, next);
+    refreshLocal();
+  };
+
+  const toggleCanEditListing = (relId: string) => {
+    const all = readProRelationships(userId);
+    const next = all.map((r) => (r.id === relId ? { ...r, canEditListing: !r.canEditListing || undefined } : r));
     writeProRelationships(userId, next);
     refreshLocal();
   };
@@ -537,6 +548,21 @@ export function ProAccountLinksPanel({
                 </p>
               </div>
 
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={canEditListingDraft}
+                  onChange={(e) => setCanEditListingDraft(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+                />
+                <div>
+                  <p className="text-sm font-medium text-slate-800">Allow listing edits</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                    The linked account can edit the assigned listings (edits go back to admin review).
+                  </p>
+                </div>
+              </label>
+
               <Button type="button" className="rounded-full" onClick={() => void saveNewLink()}>
                 {useRemote ? "Send invite" : "Save link (local)"}
               </Button>
@@ -676,6 +702,25 @@ export function ProAccountLinksPanel({
                     )}
                   </div>
                 </div>
+
+                {r.direction !== "incoming" ? (
+                  <div className="mt-4">
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(localRows.find((lr) => lr.id === r.id)?.canEditListing)}
+                        onChange={() => toggleCanEditListing(r.id)}
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+                      />
+                      <div>
+                        <p className="text-xs font-semibold text-slate-700">Allow listing edits</p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                          Linked account can edit these listings (edits go to admin review).
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                ) : null}
               </div>
             ))
           ) : (
@@ -735,6 +780,23 @@ export function ProAccountLinksPanel({
                       })
                     )}
                   </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(r.canEditListing)}
+                      onChange={() => toggleCanEditListing(r.id)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+                    />
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">Allow listing edits</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                        Linked account can edit these listings (edits go to admin review).
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </div>
             ))
