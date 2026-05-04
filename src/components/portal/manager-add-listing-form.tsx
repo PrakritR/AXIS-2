@@ -169,7 +169,7 @@ const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
   home: "Property type, address, floors, baths, and how many bedrooms you’ll list.",
-  rooms: "Each rentable bedroom: name, floor, rent, availability, move-in date and instructions, furnishing, photos, and video.",
+  rooms: "Each rentable bedroom: name, floor, rent, availability, move-in instructions, furnishing, photos, and video.",
   bathrooms: "Bath rows and which bedrooms use each one — powers the public “Rooms by bathroom” layout.",
   spaces: "Kitchen, laundry, lounge, outdoor — equipment, rules, and which bedrooms have access.",
   lease: "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
