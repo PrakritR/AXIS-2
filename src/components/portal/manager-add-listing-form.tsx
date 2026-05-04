@@ -47,7 +47,6 @@ import {
   LISTING_STORIES_OPTIONS,
   LISTING_TOTAL_BATH_OPTIONS,
   ROOM_AMENITY_PRESETS,
-  ROOM_AVAILABILITY_OPTIONS,
   ROOM_FLOOR_LEVEL_CUSTOM,
   ROOM_FURNITURE_PRESETS,
   ROOM_FURNISHING_OPTIONS,
@@ -63,9 +62,6 @@ import { loadListingPresetConfig, type ListingPresetConfig } from "@/lib/site-co
 const selectInputCls =
   "min-h-[44px] w-full rounded-xl border border-black/[0.08] bg-black/[0.04] px-3.5 py-2.5 text-[14px] text-[#1d1d1f] outline-none transition focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/20";
 
-/** Sentinel value for room availability `<select>` when the saved string is not a preset. */
-const ROOM_AVAIL_CUSTOM = "__custom__";
-
 function dedupeByLabel<T extends { label: string }>(items: readonly T[]): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
@@ -74,19 +70,6 @@ function dedupeByLabel<T extends { label: string }>(items: readonly T[]): T[] {
     if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(item);
-  }
-  return out;
-}
-
-function dedupeTextOptions(items: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const item of items) {
-    const normalized = item.trim();
-    const key = normalized.toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(normalized);
   }
   return out;
 }
@@ -112,7 +95,6 @@ const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
   bathroom: [...BATHROOM_EXTRA_AMENITY_PRESETS],
   room: [...ROOM_AMENITY_PRESETS],
   furniture: [...ROOM_FURNITURE_PRESETS],
-  availability: ROOM_AVAILABILITY_OPTIONS,
   furnishing: ROOM_FURNISHING_OPTIONS,
 };
 
@@ -192,7 +174,7 @@ const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
   home: "Property type, address, floors, baths, and how many bedrooms you’ll list.",
-  rooms: "Each rentable bedroom: name, floor, rent, availability, move-in instructions, furnishing, photos, and video.",
+  rooms: "Each rentable bedroom: name, floor, rent, move-in instructions, furnishing, photos, and video.",
   bathrooms: "Bath rows and which bedrooms use each one — powers the public “Rooms by bathroom” layout.",
   spaces: "Kitchen, laundry, lounge, outdoor — equipment, rules, and which bedrooms have access.",
   lease: "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
@@ -339,7 +321,6 @@ export function ManagerAddListingForm({
   const { userId, ready: authReady } = useManagerUserId();
   const dedupedPresets = useMemo(
     () => ({
-      availability: dedupeTextOptions(listingPresets.availability),
       furniture: dedupeByLabel(listingPresets.furniture),
       room: dedupeByLabel(listingPresets.room),
       bathroom: dedupeByLabel(listingPresets.bathroom),
@@ -1616,11 +1597,6 @@ export function ManagerAddListingForm({
               {sub.rooms.map((room, i) => {
                 const isUnfurnished = room.furnishing.trim().toLowerCase() === "unfurnished";
                 const checkedFurniture = parseFurnitureSet(room.furnishing);
-                const rawAvailability = room.availability;
-                const rawTrim = rawAvailability.trim();
-                const presetOpts = dedupedPresets.availability;
-                const matchesPreset = presetOpts.some((p) => p === rawTrim);
-                const availabilitySelectValue = matchesPreset ? rawTrim : ROOM_AVAIL_CUSTOM;
                 return (
                   <div key={room.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1709,48 +1685,6 @@ export function ManagerAddListingForm({
                           />
                         </div>
                       </GridField>
-                      <GridField>
-                        <FieldLabel hint="Preset or custom wording. Public copy also reflects approved applications for this listing.">
-                          Availability
-                        </FieldLabel>
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <Select
-                              aria-label="Room availability preset"
-                              className="appearance-none pr-10"
-                              value={availabilitySelectValue}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (v === ROOM_AVAIL_CUSTOM) {
-                                  if (matchesPreset) setRoom(i, { availability: "" });
-                                  return;
-                                }
-                                setRoom(i, { availability: v });
-                              }}
-                            >
-                              {presetOpts.map((opt) => (
-                                <option key={opt} value={opt}>
-                                  {opt}
-                                </option>
-                              ))}
-                              <option value={ROOM_AVAIL_CUSTOM}>Custom…</option>
-                            </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
-                              <ChevronDownTiny />
-                            </span>
-                          </div>
-                          {availabilitySelectValue === ROOM_AVAIL_CUSTOM ? (
-                            <Input
-                              value={rawAvailability}
-                              onChange={(e) => setRoom(i, { availability: e.target.value })}
-                              placeholder="e.g. Available after June 1, 2026"
-                              aria-label="Custom availability text"
-                            />
-                          ) : null}
-                        </div>
-                      </GridField>
-
-
                       <GridField className="sm:col-span-2">
                         <FieldLabel hint="Applicants cannot choose lease dates that overlap these inclusive spans. Approved placements for this room are also blocked automatically.">
                           Blocked date ranges (optional)

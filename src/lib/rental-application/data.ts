@@ -54,6 +54,10 @@ function dateMinusOneDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
 }
 
+function datePlusOneDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+}
+
 function formatAvailabilityDate(date: Date): string {
   return date.toLocaleDateString("en-US", {
     month: "long",
@@ -98,40 +102,6 @@ function leaseBlockedByManualRanges(roomChoiceValue: string, targetStart: Date, 
   return false;
 }
 
-function availabilityTextAllowsDate(rawAvailability: string, targetDate: Date): boolean {
-  const raw = rawAvailability.trim();
-  if (!raw) return true;
-  const lower = raw.toLowerCase();
-
-  if (/\bunavailable\b|not available|signed.*not available|no longer available|not open\b/.test(lower)) {
-    return false;
-  }
-  if (/\bavailable now\b/.test(lower) || /^available\s*$/i.test(raw)) {
-    return true;
-  }
-
-  const rangeMatches = [...raw.matchAll(/([A-Za-z]+\s+\d{1,2},\s+\d{4})\s*[-–]\s*([A-Za-z]+\s+\d{1,2},\s+\d{4})/g)];
-  for (const match of rangeMatches) {
-    const start = parseFlexibleLocalDate(match[1]);
-    const end = parseFlexibleLocalDate(match[2]);
-    if (start && end && intervalsOverlap(targetDate, targetDate, start, end)) {
-      return true;
-    }
-  }
-
-  const afterMatches = [...raw.matchAll(/available\s+after\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})/gi)];
-  for (const match of afterMatches) {
-    const after = parseFlexibleLocalDate(match[1]);
-    if (after && targetDate.getTime() >= after.getTime()) {
-      return true;
-    }
-  }
-
-  if (/\bwaitlist\b|\bavailable soon\b/i.test(raw)) return false;
-  if (lower.includes("available") && !lower.includes("after")) return true;
-  return rangeMatches.length === 0 && afterMatches.length === 0;
-}
-
 type ApprovedRoomOccupancy = {
   rowId: string;
   leaseStart: Date | null;
@@ -164,12 +134,11 @@ function approvedOccupancyForRoom(roomChoiceValue: string, excludeApplicationId?
 
 export function isRoomChoiceAvailable(
   roomChoiceValue: string,
-  rawAvailability: string,
+  _rawAvailability: string,
   options: RoomAvailabilityOptions = {},
 ): boolean {
   const targetStart = parseFlexibleLocalDate(options.leaseStart) ?? startOfToday();
   const targetEnd = parseFlexibleLocalDate(options.leaseEnd);
-  if (!availabilityTextAllowsDate(rawAvailability, targetStart)) return false;
   const occupancies = approvedOccupancyForRoom(roomChoiceValue, options.excludeApplicationId);
   if (occupancies.some((occ) => intervalsOverlap(targetStart, targetEnd, occ.leaseStart, occ.leaseEnd))) {
     return false;
@@ -182,18 +151,66 @@ export function isRoomChoiceAvailable(
 
 export function effectiveRoomAvailabilityLabel(
   roomChoiceValue: string,
-  rawAvailability: string,
+  _rawAvailability: string,
   options: RoomAvailabilityOptions = {},
 ): string {
   const targetStart = parseFlexibleLocalDate(options.leaseStart) ?? startOfToday();
-  if (!availabilityTextAllowsDate(rawAvailability, targetStart)) return rawAvailability;
+  const targetEnd = parseFlexibleLocalDate(options.leaseEnd);
   const occupancies = approvedOccupancyForRoom(roomChoiceValue, options.excludeApplicationId);
-  const blocking = occupancies.find((occ) => intervalsOverlap(targetStart, parseFlexibleLocalDate(options.leaseEnd), occ.leaseStart, occ.leaseEnd));
-  if (!blocking) return rawAvailability;
-  if (blocking.leaseStart && blocking.leaseStart.getTime() > targetStart.getTime()) {
-    return `Available until ${formatAvailabilityDate(dateMinusOneDay(blocking.leaseStart))}`;
+
+  const currentBlocks = occupancies.filter((occ) => {
+    const startsOnOrBeforeTarget = !occ.leaseStart || occ.leaseStart.getTime() <= targetStart.getTime();
+    const endsOnOrAfterTarget = !occ.leaseEnd || occ.leaseEnd.getTime() >= targetStart.getTime();
+    return startsOnOrBeforeTarget && endsOnOrAfterTarget;
+  });
+
+  if (currentBlocks.length > 0) {
+    if (currentBlocks.some((occ) => !occ.leaseEnd)) return "Unavailable";
+
+    let latestEnd = currentBlocks.reduce<Date>((latest, occ) => {
+      const end = occ.leaseEnd as Date;
+      return end.getTime() > latest.getTime() ? end : latest;
+    }, currentBlocks[0].leaseEnd as Date);
+
+    while (true) {
+      const nextDate = datePlusOneDay(latestEnd);
+      const extension = occupancies.find((occ) => {
+        if (!occ.leaseStart) return false;
+        const startsBeforeOrOnNextDate = occ.leaseStart.getTime() <= nextDate.getTime();
+        const endsAfterOrOnNextDate = !occ.leaseEnd || occ.leaseEnd.getTime() >= nextDate.getTime();
+        return startsBeforeOrOnNextDate && endsAfterOrOnNextDate;
+      });
+      if (!extension) {
+        return `Available after ${formatAvailabilityDate(nextDate)}`;
+      }
+      if (!extension.leaseEnd) return "Unavailable";
+      if (extension.leaseEnd.getTime() <= latestEnd.getTime()) {
+        return `Available after ${formatAvailabilityDate(datePlusOneDay(latestEnd))}`;
+      }
+      latestEnd = extension.leaseEnd;
+    }
   }
-  return "Unavailable";
+
+  const futureBlockingStarts = occupancies
+    .filter((occ) => occ.leaseStart && occ.leaseStart.getTime() > targetStart.getTime())
+    .sort((a, b) => (a.leaseStart as Date).getTime() - (b.leaseStart as Date).getTime());
+
+  const firstFuture = futureBlockingStarts[0];
+  if (firstFuture?.leaseStart) {
+    const until = dateMinusOneDay(firstFuture.leaseStart);
+    if (until.getTime() >= targetStart.getTime()) {
+      return `Available until ${formatAvailabilityDate(until)}`;
+    }
+  }
+
+  if (leaseBlockedByManualRanges(roomChoiceValue, targetStart, targetEnd)) {
+    return "Unavailable";
+  }
+
+  const hasLeaseOverlap = occupancies.some((occ) => intervalsOverlap(targetStart, targetEnd, occ.leaseStart, occ.leaseEnd));
+  if (hasLeaseOverlap) return "Unavailable";
+
+  return "Available now";
 }
 
 /** Human-readable label for a 1st/2nd/3rd room choice (legacy property id or `mgr-*::roomId`). */
@@ -295,11 +312,7 @@ export function getDemoRoomAvailabilityMessage(
   const { propertyId, listingRoomId } = parseRoomChoiceValue(roomId);
   const room = getPropertyById(listingRoomId ? propertyId : roomId);
   if (!room) return null;
-  const rawAvailability =
-    listingRoomId && room.listingSubmission?.v === 1
-      ? normalizeManagerListingSubmissionV1(room.listingSubmission).rooms.find((r) => r.id === listingRoomId)?.availability ?? "Unavailable"
-      : room.available;
-  return isRoomChoiceAvailable(roomId, rawAvailability, { leaseStart, leaseEnd: endForCheck })
+  return isRoomChoiceAvailable(roomId, room.available, { leaseStart, leaseEnd: endForCheck })
     ? null
     : "This room is not available for the selected lease dates. Choose another room or adjust your dates.";
 }
