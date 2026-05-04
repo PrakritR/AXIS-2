@@ -60,6 +60,7 @@ export function ScopedInboxComposeModal({
   title = "New message",
   senderName = "Portal user",
   senderEmail = "portal-user@example.com",
+  liveContacts = [],
 }: {
   open: boolean;
   onClose: () => void;
@@ -68,9 +69,11 @@ export function ScopedInboxComposeModal({
   title?: string;
   senderName?: string;
   senderEmail?: string;
+  /** Live contacts derived from real data (residents, linked accounts). */
+  liveContacts?: InboxScopedContact[];
 }) {
   const { showToast } = useAppUi();
-  const contacts = useMemo(() => contactsForPortal(portal), [portal]);
+  const contacts = useMemo(() => contactsForPortal(portal, liveContacts), [portal, liveContacts]);
   const [broadcastCats, setBroadcastCats] = useState<Set<InboxRecipientCategory>>(new Set());
   const [contactIds, setContactIds] = useState<Set<string>>(new Set());
   const [subject, setSubject] = useState("");

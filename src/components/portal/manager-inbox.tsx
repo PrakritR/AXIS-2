@@ -16,6 +16,10 @@ import {
   syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
+import { readManagerApplicationRows, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
+import { readProRelationships } from "@/lib/pro-relationships";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 
 type InboxThread = {
   id: string;
@@ -60,14 +64,50 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
   const portalBase = usePaidPortalBasePath();
+  const { userId } = useManagerUserId();
   const [local, setLocal] = useState<InboxThread[]>(() => loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
   const [persistReady] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [contactTick, setContactTick] = useState(0);
 
   useEffect(() => {
     void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY).then((rows) => setLocal(rows as InboxThread[]));
   }, []);
+
+  useEffect(() => {
+    const bump = () => setContactTick((n) => n + 1);
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, bump);
+    window.addEventListener("axis-pro-relationships", bump);
+    return () => {
+      window.removeEventListener(MANAGER_APPLICATIONS_EVENT, bump);
+      window.removeEventListener("axis-pro-relationships", bump);
+    };
+  }, []);
+
+  const liveContacts = useMemo((): InboxScopedContact[] => {
+    void contactTick;
+    const out: InboxScopedContact[] = [];
+    const seen = new Set<string>();
+    // Approved residents
+    for (const row of readManagerApplicationRows()) {
+      if (row.bucket !== "approved" || !row.email?.trim()) continue;
+      const email = row.email.trim().toLowerCase();
+      if (seen.has(email)) continue;
+      seen.add(email);
+      out.push({ id: `res-${row.id}`, name: row.name || email, email: row.email.trim(), role: "resident" });
+    }
+    // Linked accounts
+    if (userId) {
+      for (const rel of readProRelationships(userId)) {
+        const email = rel.linkedAxisId.trim();
+        if (!email || seen.has(email.toLowerCase())) continue;
+        seen.add(email.toLowerCase());
+        out.push({ id: `rel-${rel.id}`, name: rel.linkedDisplayName || rel.linkedAxisId, email: rel.linkedAxisId, role: "owner" });
+      }
+    }
+    return out;
+  }, [userId, contactTick]);
 
   useEffect(() => {
     const sync = (evt?: Event) => {
@@ -169,6 +209,21 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       };
       setLocal((prev) => [row, ...prev]);
       setComposeOpen(false);
+
+      // Fire-and-forget real email delivery via Resend
+      void fetch("/api/portal/send-inbox-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          fromName: p.senderName,
+          fromEmail: p.senderEmail,
+          toEmails: p.toEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
+          subject: p.subject.trim(),
+          text: p.body.trim(),
+        }),
+      }).catch(() => undefined);
+
       showToast(
         p.includesAxisAdmin && !p.includesDirectoryRecipients
           ? "Message sent to Axis Housing admin."
@@ -226,6 +281,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         portal="manager"
         senderName="Property manager"
         senderEmail="manager@example.com"
+        liveContacts={liveContacts}
       />
 
       {rowsForTab.length === 0 ? (

@@ -63,22 +63,11 @@ function contactsVisibleInPortal(portal: "resident" | "manager" | "owner", list:
   return list.filter((c) => roles.has(c.role));
 }
 
-const SEED_CONTACTS: InboxScopedContact[] = [
-  { id: "contact-mgr-1", name: "Jordan Patel", email: "j.patel@propertyteam.example.com", role: "manager" },
-  { id: "contact-mgr-2", name: "Riley Chen", email: "r.chen@propertyteam.example.com", role: "manager" },
-  { id: "contact-res-1", name: "Arnav Shanbhag", email: "arnavjs78@gmail.com", role: "resident" },
-  { id: "contact-res-2", name: "Sam Rivera", email: "s.rivera@example.com", role: "resident" },
-  {
-    id: "contact-own-1",
-    name: "Northside Holdings LLC",
-    email: "leasing@northsideholdings.example.com",
-    role: "owner",
-  },
-  { id: "contact-own-2", name: "Eastview Property Group", email: "contact@eastviewpg.example.com", role: "owner" },
-];
-
-export function contactsForPortal(portal: "resident" | "manager" | "owner"): InboxScopedContact[] {
-  return contactsVisibleInPortal(portal, SEED_CONTACTS);
+export function contactsForPortal(
+  portal: "resident" | "manager" | "owner",
+  liveContacts: InboxScopedContact[] = [],
+): InboxScopedContact[] {
+  return contactsVisibleInPortal(portal, liveContacts);
 }
 
 export function broadcastStubForCategory(category: InboxRecipientCategory): { label: string; email: string } {

@@ -46,7 +46,8 @@ import {
   normalizeApplicationAxisId,
 } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
-import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
+import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   PROPERTY_PIPELINE_EVENT,
   readExtraListingsForUser,
@@ -257,6 +258,7 @@ export function ManagerResidents() {
   const [arName, setArName] = useState("");
   const [arEmail, setArEmail] = useState("");
   const [arPropertyId, setArPropertyId] = useState("");
+  const [arRoomId, setArRoomId] = useState("");
   const [arRoomNumber, setArRoomNumber] = useState("");
   const [arHouseNumber, setArHouseNumber] = useState("");
   const [arMoveInDate, setArMoveInDate] = useState("");
@@ -437,6 +439,14 @@ export function ManagerResidents() {
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
   }, [residents, userId, propertyTick]);
+
+  const arRoomOptions = useMemo(() => {
+    if (!arPropertyId || !userId) return [];
+    const listing = readExtraListingsForUser(userId).find((p) => p.id === arPropertyId);
+    if (!listing?.listingSubmission) return [];
+    const sub = normalizeManagerListingSubmissionV1(listing.listingSubmission);
+    return sub.rooms.map((r) => ({ id: r.id, name: r.name || r.id, monthlyRent: r.monthlyRent }));
+  }, [arPropertyId, userId, propertyTick]);
 
   const filtered = useMemo(() => {
     const base = propertyFilter
@@ -673,6 +683,7 @@ export function ManagerResidents() {
       bucket: "approved",
       detail: "",
       assignedPropertyId: arPropertyId || undefined,
+      assignedRoomChoice: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
       signedMonthlyRent: rent ?? undefined,
       managerUserId: userId ?? undefined,
       manuallyAdded: true,
@@ -687,7 +698,7 @@ export function ManagerResidents() {
         notes: arNotes.trim() || undefined,
       },
     });
-    setArName(""); setArEmail(""); setArPropertyId(""); setArRoomNumber(""); setArHouseNumber("");
+    setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArRoomNumber(""); setArHouseNumber("");
     setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
     setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
     setAddResidentOpen(false);
@@ -1475,7 +1486,7 @@ export function ManagerResidents() {
               <span className="font-medium text-slate-700">Property</span>
               <select
                 value={arPropertyId}
-                onChange={(e) => setArPropertyId(e.target.value)}
+                onChange={(e) => { setArPropertyId(e.target.value); setArRoomId(""); setArRoomNumber(""); }}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               >
                 <option value="">Select property…</option>
@@ -1487,8 +1498,31 @@ export function ManagerResidents() {
               <Input value={arHouseNumber} onChange={(e) => setArHouseNumber(e.target.value)} placeholder="e.g. 6255" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Room number</span>
-              <Input value={arRoomNumber} onChange={(e) => setArRoomNumber(e.target.value)} placeholder="e.g. Room 3" />
+              <span className="font-medium text-slate-700">Room</span>
+              {arRoomOptions.length > 0 ? (
+                <select
+                  value={arRoomId}
+                  onChange={(e) => {
+                    const roomId = e.target.value;
+                    setArRoomId(roomId);
+                    const room = arRoomOptions.find((r) => r.id === roomId);
+                    setArRoomNumber(room?.name ?? "");
+                    if (room?.monthlyRent && !arRent.trim()) {
+                      setArRent(String(room.monthlyRent));
+                    }
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                >
+                  <option value="">Select room…</option>
+                  {arRoomOptions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}{r.monthlyRent ? ` — $${r.monthlyRent}/mo` : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input value={arRoomNumber} onChange={(e) => setArRoomNumber(e.target.value)} placeholder="e.g. Room 3" />
+              )}
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-slate-700">Monthly rent ($)</span>
