@@ -40,6 +40,7 @@ import {
 } from "@/lib/household-charges";
 import {
   appendManagerApplicationRow,
+  deleteManagerApplicationFromServer,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
   writeManagerApplicationRows,
@@ -909,19 +910,27 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     showToast("Resident updated.");
   }
 
-  function deleteSelectedResident() {
+  async function deleteSelectedResident() {
     if (!selected) return;
-    if (!window.confirm(`Delete resident ${selected.name || selected.email}? This cannot be undone.`)) return;
+    const selectedResident = selected;
+    if (!window.confirm(`Delete resident ${selectedResident.name || selectedResident.email}? This cannot be undone.`)) return;
 
     const allRows = readManagerApplicationRows();
-    if (!allRows.some((row) => row.id === selected.id)) {
+    if (!allRows.some((row) => row.id === selectedResident.id)) {
       showToast("Resident not found.");
       return;
     }
-    writeManagerApplicationRows(allRows.filter((row) => row.id !== selected.id));
 
-    const residentEmail = selected.email.trim().toLowerCase();
-    const residentCharges = readChargesForManagerResident(selected.email, userId ?? null);
+    const serverResult = await deleteManagerApplicationFromServer(selectedResident.id);
+    if (!serverResult.ok) {
+      showToast(serverResult.error ?? "Could not delete resident.");
+      return;
+    }
+
+    writeManagerApplicationRows(allRows.filter((row) => row.id !== selectedResident.id));
+
+    const residentEmail = selectedResident.email.trim().toLowerCase();
+    const residentCharges = readChargesForManagerResident(selectedResident.email, userId ?? null);
     for (const charge of residentCharges) {
       deleteHouseholdCharge(charge.id, userId ?? null);
     }
@@ -945,6 +954,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     );
     persistInbox(MANAGER_INBOX_STORAGE_KEY, nextInbox);
 
+    await syncManagerApplicationsFromServer({ force: true });
     setSelectedId(null);
     setHcTick((n) => n + 1);
     setLeaseTick((n) => n + 1);
