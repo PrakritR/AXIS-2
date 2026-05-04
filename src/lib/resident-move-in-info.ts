@@ -49,6 +49,11 @@ export function resolveResidentMoveInFromApplications(
   let earliestMoveInDateLabel: string | null = null;
   let instructions: string | null = null;
 
+  // Row-level override (set from the Residents tab) takes priority.
+  if (row.moveInInstructions?.trim()) {
+    instructions = row.moveInInstructions.trim();
+  }
+
   if (sub && roomChoice) {
     const { listingRoomId } = parseRoomChoiceValue(roomChoice);
     const room = listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : undefined;
@@ -56,8 +61,10 @@ export function resolveResidentMoveInFromApplications(
       if (room.name.trim()) roomLabel = room.name.trim();
       const d = room.moveInAvailableDate?.trim();
       if (d) earliestMoveInDateLabel = formatMoveInDateLabel(d);
-      const ins = room.moveInInstructions?.trim();
-      if (ins) instructions = ins;
+      if (!instructions) {
+        const ins = room.moveInInstructions?.trim();
+        if (ins) instructions = ins;
+      }
     }
   }
 

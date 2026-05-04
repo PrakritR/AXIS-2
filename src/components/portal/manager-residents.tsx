@@ -38,6 +38,7 @@ import {
   type HouseholdCharge,
 } from "@/lib/household-charges";
 import {
+  appendManagerApplicationRow,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
   writeManagerApplicationRows,
@@ -96,6 +97,9 @@ type ActiveResident = {
   roomLabel: string;
   signedMonthlyRent: number | null;
   axisId: string;
+  manuallyAdded?: boolean;
+  moveInInstructions?: string;
+  manualResidentDetails?: NonNullable<import("@/data/demo-portal").DemoApplicantRow["manualResidentDetails"]>;
 };
 
 function statusPill(status: "pending" | "paid") {
@@ -248,6 +252,25 @@ export function ManagerResidents() {
   const [signingLease, setSigningLease] = useState<LeasePipelineRow | null>(null);
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
 
+  // Add resident manually
+  const [addResidentOpen, setAddResidentOpen] = useState(false);
+  const [arName, setArName] = useState("");
+  const [arEmail, setArEmail] = useState("");
+  const [arPropertyId, setArPropertyId] = useState("");
+  const [arRoomNumber, setArRoomNumber] = useState("");
+  const [arHouseNumber, setArHouseNumber] = useState("");
+  const [arMoveInDate, setArMoveInDate] = useState("");
+  const [arMoveOutDate, setArMoveOutDate] = useState("");
+  const [arRent, setArRent] = useState("");
+  const [arUtilities, setArUtilities] = useState("");
+  const [arMoveInFee, setArMoveInFee] = useState("");
+  const [arSecurityDeposit, setArSecurityDeposit] = useState("");
+  const [arNotes, setArNotes] = useState("");
+
+  // Per-resident move-in instructions editing
+  const [editMoveInId, setEditMoveInId] = useState<string | null>(null);
+  const [editMoveInText, setEditMoveInText] = useState("");
+
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
@@ -367,15 +390,16 @@ export function ManagerResidents() {
         (row) =>
           row.bucket === "approved" &&
           row.email?.trim() &&
-          residentAccountEmails.has(row.email.trim().toLowerCase()) &&
+          (row.manuallyAdded || residentAccountEmails.has(row.email.trim().toLowerCase())) &&
           applicationVisibleToPortalUser(row, userId),
       )
       .map((row) => {
         const propId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
         const prop = propId ? getPropertyById(propId) : null;
-        const roomLabel = getRoomChoiceLabel(
-          row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "",
-        ).split(" · ")[0]?.trim() || "";
+        const roomLabel =
+          row.manualResidentDetails?.roomNumber?.trim() ||
+          getRoomChoiceLabel(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "").split(" · ")[0]?.trim() ||
+          "";
         return {
           id: row.id,
           name: row.name,
@@ -385,6 +409,9 @@ export function ManagerResidents() {
           roomLabel,
           signedMonthlyRent: row.signedMonthlyRent ?? null,
           axisId: normalizeApplicationAxisId(row.id),
+          manuallyAdded: row.manuallyAdded,
+          moveInInstructions: row.moveInInstructions,
+          manualResidentDetails: row.manualResidentDetails,
         };
       });
   }, [userId, hcTick, residentAccountEmails]);
@@ -629,6 +656,56 @@ export function ManagerResidents() {
     showToast("Message saved to this resident thread.");
   }
 
+  function saveManualResident() {
+    if (!arName.trim()) { showToast("Enter the resident's name."); return; }
+    if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
+    const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
+    const axisId = `AXIS-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+    const propLabel = arPropertyId
+      ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
+      : arHouseNumber.trim() || "—";
+    appendManagerApplicationRow({
+      id: axisId,
+      name: arName.trim(),
+      email: arEmail.trim(),
+      property: propLabel,
+      stage: "Active",
+      bucket: "approved",
+      detail: "",
+      assignedPropertyId: arPropertyId || undefined,
+      signedMonthlyRent: rent ?? undefined,
+      managerUserId: userId ?? undefined,
+      manuallyAdded: true,
+      manualResidentDetails: {
+        moveInDate: arMoveInDate || undefined,
+        moveOutDate: arMoveOutDate || undefined,
+        monthlyUtilities: arUtilities ? Number(arUtilities.replace(/[^\d.]/g, "")) || undefined : undefined,
+        moveInFee: arMoveInFee ? Number(arMoveInFee.replace(/[^\d.]/g, "")) || undefined : undefined,
+        securityDeposit: arSecurityDeposit ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) || undefined : undefined,
+        houseNumber: arHouseNumber.trim() || undefined,
+        roomNumber: arRoomNumber.trim() || undefined,
+        notes: arNotes.trim() || undefined,
+      },
+    });
+    setArName(""); setArEmail(""); setArPropertyId(""); setArRoomNumber(""); setArHouseNumber("");
+    setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
+    setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
+    setAddResidentOpen(false);
+    setHcTick((n) => n + 1);
+    showToast(`Resident added — Axis ID: ${axisId}`);
+  }
+
+  function saveMoveInInstructions() {
+    if (!editMoveInId) return;
+    const rows = readManagerApplicationRows().map((row) =>
+      row.id === editMoveInId ? { ...row, moveInInstructions: editMoveInText.trim() || undefined } : row,
+    );
+    writeManagerApplicationRows(rows);
+    setEditMoveInId(null);
+    setHcTick((n) => n + 1);
+    showToast("Move-in instructions saved.");
+  }
+
   function markPaid(chargeId: string) {
     if (markHouseholdChargePaid(chargeId, userId ?? null)) {
       showToast("Marked as paid.");
@@ -702,11 +779,16 @@ export function ManagerResidents() {
       <ManagerPortalPageShell
         title="Residents"
         titleAside={
-          <PortalPropertyFilterPill
-            propertyOptions={propertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
-          />
+          <>
+            <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setAddResidentOpen(true)}>
+              + Add resident
+            </Button>
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={setPropertyFilter}
+            />
+          </>
         }
       >
       {filtered.length === 0 ? (
@@ -782,12 +864,53 @@ export function ManagerResidents() {
                                     <p className="font-semibold text-slate-900">${selected.signedMonthlyRent.toFixed(2)}/mo</p>
                                   </div>
                                 ) : null}
+                                {selected.manualResidentDetails?.moveInDate ? (
+                                  <div>
+                                    <span className="text-slate-500">Move-in date</span>
+                                    <p className="font-medium text-slate-900">{selected.manualResidentDetails.moveInDate}</p>
+                                  </div>
+                                ) : null}
+                                {selected.manualResidentDetails?.moveOutDate ? (
+                                  <div>
+                                    <span className="text-slate-500">Move-out date</span>
+                                    <p className="font-medium text-slate-900">{selected.manualResidentDetails.moveOutDate}</p>
+                                  </div>
+                                ) : null}
+                                {selected.manualResidentDetails?.monthlyUtilities ? (
+                                  <div>
+                                    <span className="text-slate-500">Monthly utilities</span>
+                                    <p className="font-medium text-slate-900">${selected.manualResidentDetails.monthlyUtilities}/mo</p>
+                                  </div>
+                                ) : null}
+                                {selected.manualResidentDetails?.moveInFee ? (
+                                  <div>
+                                    <span className="text-slate-500">Move-in fee</span>
+                                    <p className="font-medium text-slate-900">${selected.manualResidentDetails.moveInFee}</p>
+                                  </div>
+                                ) : null}
+                                {selected.manualResidentDetails?.securityDeposit ? (
+                                  <div>
+                                    <span className="text-slate-500">Security deposit</span>
+                                    <p className="font-medium text-slate-900">${selected.manualResidentDetails.securityDeposit}</p>
+                                  </div>
+                                ) : null}
+                                {selected.manualResidentDetails?.notes ? (
+                                  <div className="sm:col-span-2 lg:col-span-3">
+                                    <span className="text-slate-500">Notes</span>
+                                    <p className="whitespace-pre-wrap font-medium text-slate-900">{selected.manualResidentDetails.notes}</p>
+                                  </div>
+                                ) : null}
                                 <div>
                                   <span className="text-slate-500">Status</span>
                                   <div className="mt-1 flex flex-wrap gap-2">
                                     <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200/80">
                                       Active resident
                                     </span>
+                                    {selected.manuallyAdded ? (
+                                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                        Manually added
+                                      </span>
+                                    ) : null}
                                     {selected.signedMonthlyRent ? (
                                       <span className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-200/80">
                                         Rent set
@@ -800,6 +923,45 @@ export function ManagerResidents() {
                                   </div>
                                 </div>
                               </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Move-in instructions</p>
+                                  <p className="mt-1 text-sm text-slate-500">
+                                    Keys, access codes, parking, utilities start, what to bring — shown on the resident Move-in tab.
+                                  </p>
+                                </div>
+                                {editMoveInId !== selected.id ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="rounded-full px-3 py-1 text-xs"
+                                    onClick={() => { setEditMoveInId(selected.id); setEditMoveInText(selected.moveInInstructions ?? ""); }}
+                                  >
+                                    Edit
+                                  </Button>
+                                ) : null}
+                              </div>
+                              {editMoveInId === selected.id ? (
+                                <div className="mt-3 space-y-2">
+                                  <Textarea
+                                    className="min-h-[100px]"
+                                    value={editMoveInText}
+                                    onChange={(e) => setEditMoveInText(e.target.value)}
+                                    placeholder="e.g. Front gate code is 1234. Each room has a lockbox with key inside."
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button type="button" variant="primary" className="rounded-full text-xs" onClick={saveMoveInInstructions}>Save</Button>
+                                    <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setEditMoveInId(null)}>Cancel</Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">
+                                  {selected.moveInInstructions?.trim() || <span className="text-slate-400">No instructions set yet.</span>}
+                                </p>
+                              )}
                             </div>
 
                             <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1296,6 +1458,78 @@ export function ManagerResidents() {
           </div>
         </div>
       )}
+
+      <Modal open={addResidentOpen} title="Add resident" onClose={() => setAddResidentOpen(false)}>
+        <div className="space-y-3">
+          <p className="text-xs text-slate-500">Creates an active resident record with an Axis ID. No application or lease is generated.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Full name *</span>
+              <Input value={arName} onChange={(e) => setArName(e.target.value)} placeholder="Jane Smith" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Email *</span>
+              <Input type="email" value={arEmail} onChange={(e) => setArEmail(e.target.value)} placeholder="jane@example.com" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Property</span>
+              <select
+                value={arPropertyId}
+                onChange={(e) => setArPropertyId(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              >
+                <option value="">Select property…</option>
+                {propertyOptions.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">House / building number</span>
+              <Input value={arHouseNumber} onChange={(e) => setArHouseNumber(e.target.value)} placeholder="e.g. 6255" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Room number</span>
+              <Input value={arRoomNumber} onChange={(e) => setArRoomNumber(e.target.value)} placeholder="e.g. Room 3" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Monthly rent ($)</span>
+              <Input type="number" min={0} step={0.01} value={arRent} onChange={(e) => setArRent(e.target.value)} placeholder="875.00" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Monthly utilities ($)</span>
+              <Input type="number" min={0} step={0.01} value={arUtilities} onChange={(e) => setArUtilities(e.target.value)} placeholder="175.00" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Move-in fee ($)</span>
+              <Input type="number" min={0} step={0.01} value={arMoveInFee} onChange={(e) => setArMoveInFee(e.target.value)} placeholder="200.00" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Security deposit ($)</span>
+              <Input type="number" min={0} step={0.01} value={arSecurityDeposit} onChange={(e) => setArSecurityDeposit(e.target.value)} placeholder="875.00" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Move-in date</span>
+              <Input type="date" value={arMoveInDate} onChange={(e) => setArMoveInDate(e.target.value)} />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Move-out date</span>
+              <Input type="date" value={arMoveOutDate} onChange={(e) => setArMoveOutDate(e.target.value)} />
+            </label>
+            <label className="col-span-2 flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Notes</span>
+              <Textarea
+                className="min-h-[72px]"
+                value={arNotes}
+                onChange={(e) => setArNotes(e.target.value)}
+                placeholder="Any additional details about this resident…"
+              />
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)}>Cancel</Button>
+            <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident}>Add resident</Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={addChargeOpen} title={editChargeId ? "Edit charge" : "Add charge"} onClose={() => setAddChargeOpen(false)}>
         <div className="flex flex-col gap-3">

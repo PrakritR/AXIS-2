@@ -46,6 +46,21 @@ export type DemoApplicantRow = {
   signedMonthlyRent?: number | null;
   /** Listing owner scope — who should receive this application in the portal. */
   managerUserId?: string | null;
+  /** True for residents added directly by the manager (no rental application). */
+  manuallyAdded?: boolean;
+  /** Move-in instructions set by the manager from the Residents tab. */
+  moveInInstructions?: string;
+  /** Extra fields only present on manually-added residents. */
+  manualResidentDetails?: {
+    moveInDate?: string;
+    moveOutDate?: string;
+    monthlyUtilities?: number;
+    moveInFee?: number;
+    securityDeposit?: number;
+    houseNumber?: string;
+    roomNumber?: string;
+    notes?: string;
+  };
 };
 
 export const demoApplicantRows: DemoApplicantRow[] = [];

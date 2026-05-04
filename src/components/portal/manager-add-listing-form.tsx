@@ -60,7 +60,6 @@ import {
   furnishingSelectState,
 } from "@/data/manager-listing-presets";
 import { loadListingPresetConfig, type ListingPresetConfig } from "@/lib/site-content";
-import { effectiveRoomAvailabilityLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 
 const selectInputCls =
   "min-h-[44px] w-full rounded-xl border border-black/[0.08] bg-black/[0.04] px-3.5 py-2.5 text-[14px] text-[#1d1d1f] outline-none transition focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/20";
@@ -369,12 +368,6 @@ export function ManagerAddListingForm({
       if (!sub.rooms.some((r) => r.name.trim())) {
         showToast("Add at least one room with a name before continuing.");
         return false;
-      }
-      for (const r of sub.rooms) {
-        if (r.name.trim() && r.monthlyRent > 0 && !r.moveInInstructions.trim()) {
-          showToast("Each room with a name and monthly rent needs move-in instructions.");
-          return false;
-        }
       }
     }
     return true;
@@ -836,13 +829,6 @@ export function ManagerAddListingForm({
     }
     if (!roomsOk) {
       showToast("Add at least one room with a name and monthly rent.");
-      return;
-    }
-    const moveInIncomplete = submission.rooms.some(
-      (r) => r.name.trim() && r.monthlyRent > 0 && !r.moveInInstructions.trim(),
-    );
-    if (moveInIncomplete) {
-      showToast("Each listed room needs move-in instructions.");
       return;
     }
     const blockedRangesInvalid = sub.rooms.some((r) =>
@@ -1595,18 +1581,11 @@ export function ManagerAddListingForm({
               {sub.rooms.map((room, i) => {
                 const isUnfurnished = room.furnishing.trim().toLowerCase() === "unfurnished";
                 const checkedFurniture = parseFurnitureSet(room.furnishing);
-                const listingPropertyId = editListingId ?? editPendingId ?? null;
-                const roomChoiceKey = listingPropertyId ? `${listingPropertyId}${LISTING_ROOM_CHOICE_SEP}${room.id}` : null;
                 const rawAvailability = room.availability;
                 const rawTrim = rawAvailability.trim();
                 const presetOpts = listingPresets.availability;
                 const matchesPreset = presetOpts.some((p) => p === rawTrim);
                 const availabilitySelectValue = matchesPreset ? rawTrim : ROOM_AVAIL_CUSTOM;
-                let publicAvailabilityNote: string | null = null;
-                if (roomChoiceKey) {
-                  const effective = effectiveRoomAvailabilityLabel(roomChoiceKey, rawAvailability);
-                  if (effective.trim() !== rawTrim) publicAvailabilityNote = effective;
-                }
                 return (
                   <div key={room.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1761,28 +1740,10 @@ export function ManagerAddListingForm({
                               aria-label="Custom availability text"
                             />
                           ) : null}
-                          {publicAvailabilityNote ? (
-                            <p className="rounded-xl border border-amber-200/90 bg-amber-50/80 px-3 py-2 text-[11px] leading-snug text-amber-950">
-                              Renters currently see <span className="font-semibold">{publicAvailabilityNote}</span> on the public
-                              listing for this room because of an approved application overlapping those dates. The value you set
-                              above is still saved as your listing copy.
-                            </p>
-                          ) : null}
                         </div>
                       </GridField>
 
-                      <GridField className="sm:col-span-2">
-                        <FieldLabel hint="Keys, access, parking, utilities start, what to bring — required when this room has a monthly rent.">
-                          Move-in instructions *
-                        </FieldLabel>
-                        <Textarea
-                          className="min-h-[88px]"
-                          value={room.moveInInstructions}
-                          onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
-                          placeholder="e.g. Pick up keys at the leasing office. Visitor parking in lot B. Unit is unlocked with lockbox code sent separately."
-                          aria-label={`Move-in instructions for ${room.name || `room ${i + 1}`}`}
-                        />
-                      </GridField>
+
                       <GridField className="sm:col-span-2">
                         <FieldLabel hint="Applicants cannot choose lease dates that overlap these inclusive spans. Approved placements for this room are also blocked automatically.">
                           Blocked date ranges (optional)
