@@ -205,7 +205,7 @@ export const LISTING_TOTAL_BATH_OPTIONS = [
   { id: "4+", label: "4+ bathrooms" },
 ] as const;
 
-export const LISTING_BEDROOM_SLOT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+export const LISTING_BEDROOM_SLOT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20] as const;
 
 /** Sentinel for room floor `<select>` when value is custom text. */
 export const ROOM_FLOOR_LEVEL_CUSTOM = "__floor_custom__";

@@ -1107,7 +1107,7 @@ export function ManagerAddListingForm({
                     aria-label="Bedrooms for rent"
                     className={`${selectInputCls} appearance-none pr-10`}
                     value={String(sub.listingBedroomSlots ?? sub.rooms.length)}
-                    onChange={(e) => setSub((s) => ({ ...s, listingBedroomSlots: Math.max(1, Math.min(8, Number(e.target.value) || 1)) }))}
+                    onChange={(e) => setSub((s) => ({ ...s, listingBedroomSlots: Math.max(1, Math.min(20, Number(e.target.value) || 1)) }))}
                   >
                     {LISTING_BEDROOM_SLOT_OPTIONS.map((n) => (
                       <option key={n} value={n}>
