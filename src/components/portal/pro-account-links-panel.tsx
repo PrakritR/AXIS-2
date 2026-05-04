@@ -669,36 +669,43 @@ export function ProAccountLinksPanel({
 
                 <div className="mt-4">
                   <p className="text-xs font-semibold text-slate-500">Properties in this link</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2">
                     {r.assignedPropertyIds.length === 0 ? (
                       <span className="text-xs text-slate-400">No properties assigned</span>
                     ) : r.direction === "incoming" ? (
-                      r.assignedPropertyIds.map((pid) => (
-                        <span
-                          key={pid}
-                          className="rounded-full border border-primary bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
-                        >
-                          {resolvePropertyLabel(pid, pid)}
-                        </span>
-                      ))
-                    ) : (
-                      propertyOptions.map((p) => {
-                        const on = r.assignedPropertyIds.includes(p.id);
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => void toggleAssignedProp(r.id, p.id)}
-                            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                              on
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                            }`}
+                      <div className="flex flex-wrap gap-2">
+                        {r.assignedPropertyIds.map((pid) => (
+                          <span
+                            key={pid}
+                            className="rounded-full border border-primary bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
                           >
-                            {p.label}
-                          </button>
-                        );
-                      })
+                            {resolvePropertyLabel(pid, pid)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <ul className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                        {propertyOptions.length === 0 ? (
+                          <li className="text-xs text-slate-500">No properties available to assign.</li>
+                        ) : (
+                          propertyOptions.map((p) => {
+                            const on = r.assignedPropertyIds.includes(p.id);
+                            return (
+                              <li key={p.id}>
+                                <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-white/80">
+                                  <input
+                                    type="checkbox"
+                                    checked={on}
+                                    onChange={() => void toggleAssignedProp(r.id, p.id)}
+                                    className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                                  />
+                                  <span className="text-sm text-slate-800">{p.label}</span>
+                                </label>
+                              </li>
+                            );
+                          })
+                        )}
+                      </ul>
                     )}
                   </div>
                 </div>
@@ -757,27 +764,32 @@ export function ProAccountLinksPanel({
 
                 <div className="mt-4">
                   <p className="text-xs font-semibold text-slate-500">Properties in this link</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2">
                     {r.assignedPropertyIds.length === 0 ? (
                       <span className="text-xs text-slate-400">No properties assigned</span>
                     ) : (
-                      propertyOptions.map((p) => {
-                        const on = r.assignedPropertyIds.includes(p.id);
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => void toggleAssignedProp(r.id, p.id)}
-                            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                              on
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                            }`}
-                          >
-                            {p.label}
-                          </button>
-                        );
-                      })
+                      <ul className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                        {propertyOptions.length === 0 ? (
+                          <li className="text-xs text-slate-500">No properties available to assign.</li>
+                        ) : (
+                          propertyOptions.map((p) => {
+                            const on = r.assignedPropertyIds.includes(p.id);
+                            return (
+                              <li key={p.id}>
+                                <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-white/80">
+                                  <input
+                                    type="checkbox"
+                                    checked={on}
+                                    onChange={() => void toggleAssignedProp(r.id, p.id)}
+                                    className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                                  />
+                                  <span className="text-sm text-slate-800">{p.label}</span>
+                                </label>
+                              </li>
+                            );
+                          })
+                        )}
+                      </ul>
                     )}
                   </div>
                 </div>

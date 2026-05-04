@@ -13,6 +13,7 @@ import type {
   ListingSharedRow,
 } from "@/data/listing-rich-content";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
 
 function AvailabilityPill({ text, variant = "default" }: { text: string; variant?: "default" | "room" }) {
@@ -81,6 +82,103 @@ function DetailsButton({ onClick, className = "" }: { onClick: () => void; class
     >
       Details
     </button>
+  );
+}
+
+function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function addDays(base: Date, days: number): Date {
+  return new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
+}
+
+function dateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatRangeDate(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function rangeSummaryLabel(w: RoomUnavailabilityWindow): string {
+  if (w.start && w.end) return `Unavailable ${formatRangeDate(w.start)} to ${formatRangeDate(w.end)}`;
+  if (w.start) return `Unavailable from ${formatRangeDate(w.start)}`;
+  if (w.end) return `Unavailable until ${formatRangeDate(w.end)}`;
+  return "Unavailable dates set";
+}
+
+function unavailableDateSetFromWindows(windows: RoomUnavailabilityWindow[], horizonDays = 90): Set<string> {
+  const out = new Set<string>();
+  const today = startOfLocalDay(new Date());
+  const horizonEnd = addDays(today, horizonDays);
+
+  for (const w of windows) {
+    const start = w.start ? startOfLocalDay(w.start) : today;
+    const end = w.end ? startOfLocalDay(w.end) : horizonEnd;
+    const clippedStart = start.getTime() < today.getTime() ? today : start;
+    const clippedEnd = end.getTime() > horizonEnd.getTime() ? horizonEnd : end;
+    if (clippedEnd.getTime() < clippedStart.getTime()) continue;
+    for (let d = clippedStart; d.getTime() <= clippedEnd.getTime(); d = addDays(d, 1)) {
+      out.add(dateKey(d));
+    }
+  }
+
+  return out;
+}
+
+function MiniAvailabilityCalendar({ windows }: { windows: RoomUnavailabilityWindow[] }) {
+  const unavailableKeys = unavailableDateSetFromWindows(windows);
+  const today = startOfLocalDay(new Date());
+  const months = [
+    new Date(today.getFullYear(), today.getMonth(), 1),
+    new Date(today.getFullYear(), today.getMonth() + 1, 1),
+  ];
+
+  return (
+    <div className="space-y-3">
+      {months.map((monthStart) => {
+        const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+        const daysInMonth = monthEnd.getDate();
+        const leading = monthStart.getDay();
+        const cells: Array<Date | null> = [];
+        for (let i = 0; i < leading; i++) cells.push(null);
+        for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(monthStart.getFullYear(), monthStart.getMonth(), d));
+
+        return (
+          <div key={`${monthStart.getFullYear()}-${monthStart.getMonth()}`} className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-xs font-semibold text-slate-700">
+              {monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+            </p>
+            <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+            </div>
+            <div className="mt-1 grid grid-cols-7 gap-1">
+              {cells.map((cell, idx) => {
+                if (!cell) return <span key={`empty-${idx}`} className="h-7" />;
+                const unavailable = unavailableKeys.has(dateKey(cell));
+                const isToday = dateKey(cell) === dateKey(today);
+                return (
+                  <span
+                    key={dateKey(cell)}
+                    className={`flex h-7 items-center justify-center rounded-md text-[11px] font-medium ${
+                      unavailable
+                        ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                    } ${isToday ? "ring-2 ring-primary/40" : ""}`}
+                  >
+                    {cell.getDate()}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -184,6 +282,11 @@ function ListingDetailModal({
 
         {state.kind === "room" ? (
           <div className="p-6 pb-8 sm:p-8">
+            {(() => {
+              const roomChoiceValue = `${listingPropertyId}${LISTING_ROOM_CHOICE_SEP}${state.room.id}`;
+              const roomUnavailableWindows = getRoomUnavailabilityWindows(roomChoiceValue);
+              return (
+                <>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.floorLabel.toUpperCase()}</p>
             <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.room.name}</h2>
             <div className="mt-3 space-y-2 text-sm text-slate-600">
@@ -223,6 +326,27 @@ function ListingDetailModal({
                   <AvailabilityPill text={state.room.availability} variant="room" />
                 </div>
               </div>
+            </div>
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Availability timeline</p>
+              {roomUnavailableWindows.length > 0 ? (
+                <>
+                  <div className="mt-3 space-y-2">
+                    {roomUnavailableWindows.map((w) => (
+                      <div key={w.id} className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                        <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${w.source === "resident" ? "bg-rose-500" : "bg-amber-500"}`} />
+                        <span>{rangeSummaryLabel(w)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-500">Green dates are open and red dates are unavailable for this room.</p>
+                  <div className="mt-3">
+                    <MiniAvailabilityCalendar windows={roomUnavailableWindows} />
+                  </div>
+                </>
+              ) : (
+                <p className="mt-2 text-xs text-emerald-700">No blocked ranges or resident occupancy currently set for this room.</p>
+              )}
             </div>
             {(state.room.modal.photoUrls?.length ?? 0) > 0 ? (
               <div className="mt-6">
@@ -308,6 +432,9 @@ function ListingDetailModal({
                 </span>
               </Link>
             </div>
+                </>
+              );
+            })()}
           </div>
         ) : null}
 

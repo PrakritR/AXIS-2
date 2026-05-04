@@ -108,6 +108,14 @@ type ApprovedRoomOccupancy = {
   leaseEnd: Date | null;
 };
 
+export type RoomUnavailabilityWindow = {
+  id: string;
+  start: Date | null;
+  end: Date | null;
+  label: string;
+  source: "resident" | "manual_block";
+};
+
 function approvedOccupancyForRoom(roomChoiceValue: string, excludeApplicationId?: string | null): ApprovedRoomOccupancy[] {
   const parsedTarget = parseRoomChoiceValue(roomChoiceValue);
   const normalizedTarget = roomChoiceValue.trim();
@@ -123,13 +131,70 @@ function approvedOccupancyForRoom(roomChoiceValue: string, excludeApplicationId?
         (parsedAssigned.propertyId === parsedTarget.propertyId &&
           String(parsedAssigned.listingRoomId ?? "") === String(parsedTarget.listingRoomId ?? ""));
       if (!sameRoom) return null;
+
+      const manualStart = parseFlexibleLocalDate(row.manualResidentDetails?.moveInDate);
+      const manualEnd = parseFlexibleLocalDate(row.manualResidentDetails?.moveOutDate);
+      const appStart = parseFlexibleLocalDate(effective?.leaseStart);
+      const appEnd = parseFlexibleLocalDate(effective?.leaseEnd);
+      const leaseStart = manualStart ?? appStart;
+      const leaseEnd = manualEnd ?? appEnd;
+
+      // Resident timing is required for reliable occupancy windows.
+      if (!leaseStart && !leaseEnd) return null;
+
       return {
         rowId: row.id,
-        leaseStart: parseFlexibleLocalDate(effective?.leaseStart),
-        leaseEnd: parseFlexibleLocalDate(effective?.leaseEnd),
+        leaseStart,
+        leaseEnd,
       };
     })
     .filter((value): value is ApprovedRoomOccupancy => Boolean(value));
+}
+
+export function getRoomUnavailabilityWindows(
+  roomChoiceValue: string,
+  options: Pick<RoomAvailabilityOptions, "excludeApplicationId"> = {},
+): RoomUnavailabilityWindow[] {
+  const residentWindows = approvedOccupancyForRoom(roomChoiceValue, options.excludeApplicationId)
+    .map((occ) => {
+      const hasRange = Boolean(occ.leaseStart || occ.leaseEnd);
+      if (!hasRange) return null;
+      const label = occ.leaseStart && occ.leaseEnd
+        ? `Occupied ${formatAvailabilityDate(occ.leaseStart)} to ${formatAvailabilityDate(occ.leaseEnd)}`
+        : occ.leaseStart
+          ? `Occupied from ${formatAvailabilityDate(occ.leaseStart)}`
+          : `Occupied until ${formatAvailabilityDate(occ.leaseEnd as Date)}`;
+      return {
+        id: `resident-${occ.rowId}`,
+        start: occ.leaseStart,
+        end: occ.leaseEnd,
+        label,
+        source: "resident" as const,
+      };
+    })
+    .filter((w) => w !== null);
+
+  const manualWindows = manualUnavailableRangesForRoomChoice(roomChoiceValue)
+    .map((range) => {
+      const start = parseFlexibleLocalDate(range.start);
+      const end = parseFlexibleLocalDate(range.end);
+      if (!start || !end) return null;
+      if (end.getTime() < start.getTime()) return null;
+      return {
+        id: `manual-${range.id}`,
+        start,
+        end,
+        label: `Blocked ${formatAvailabilityDate(start)} to ${formatAvailabilityDate(end)}`,
+        source: "manual_block" as const,
+      };
+    })
+    .filter((w) => w !== null);
+
+  return [...residentWindows, ...manualWindows].sort((a, b) => {
+    const at = a.start?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const bt = b.start?.getTime() ?? Number.NEGATIVE_INFINITY;
+    return at - bt;
+  });
 }
 
 export function isRoomChoiceAvailable(
