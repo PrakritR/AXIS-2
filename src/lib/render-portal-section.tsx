@@ -192,6 +192,23 @@ export async function renderPortalSection(
     if (section === "leases" || section === "work-orders") {
       redirect(`${def.basePath}/residents`);
     }
+    if (section === "residents") {
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/current`);
+      }
+      if (tabParts.length > 1) notFound();
+      const residentsTab = tabParts[0]!;
+      if (![
+        "current",
+        "previous",
+      ].includes(residentsTab)) notFound();
+      return subscriptionGated(
+        <ManagerResidents tabId={residentsTab as "current" | "previous"} />,
+        kind,
+        "residents",
+        managerOwnerSubscriptionTier,
+      );
+    }
     if (section === "inbox") {
       if (!meta.tabs.length) notFound();
       if (!tabParts?.length) {
@@ -217,7 +234,7 @@ export async function renderPortalSection(
       return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);
     }
     if (section === "residents") {
-      return subscriptionGated(<ManagerResidents />, kind, "residents", managerOwnerSubscriptionTier);
+      return subscriptionGated(<ManagerResidents tabId="current" />, kind, "residents", managerOwnerSubscriptionTier);
     }
     if (section === "leases") {
       return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
@@ -281,6 +298,23 @@ export async function renderPortalSection(
         managerOwnerSubscriptionTier,
       );
     }
+    if (section === "residents") {
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/current`);
+      }
+      if (tabParts.length > 1) notFound();
+      const residentsTab = tabParts[0]!;
+      if (![
+        "current",
+        "previous",
+      ].includes(residentsTab)) notFound();
+      return subscriptionGated(
+        <ManagerResidents tabId={residentsTab as "current" | "previous"} />,
+        kind,
+        "residents",
+        managerOwnerSubscriptionTier,
+      );
+    }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
       return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
@@ -301,7 +335,7 @@ export async function renderPortalSection(
       return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);
     }
     if (section === "residents") {
-      return subscriptionGated(<ManagerResidents />, kind, "residents", managerOwnerSubscriptionTier);
+      return subscriptionGated(<ManagerResidents tabId="current" />, kind, "residents", managerOwnerSubscriptionTier);
     }
     if (section === "leases") {
       return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);

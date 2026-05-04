@@ -25,6 +25,7 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   createManagerCharge,
   chargeDueLabel,
+  deleteHouseholdCharge,
   HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
   HOUSEHOLD_CHARGES_EVENT,
   HOUSEHOLD_CHARGES_SESSION_KEY,
@@ -80,6 +81,7 @@ import {
   deleteManagerWorkOrderRow,
 } from "@/lib/manager-work-orders-storage";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
   loadPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
@@ -101,7 +103,27 @@ type ActiveResident = {
   manuallyAdded?: boolean;
   moveInInstructions?: string;
   manualResidentDetails?: NonNullable<import("@/data/demo-portal").DemoApplicantRow["manualResidentDetails"]>;
+  isPrevious: boolean;
 };
+
+type ResidentsTabId = "current" | "previous";
+
+const PREVIOUS_RESIDENT_STAGE_TOKENS = ["moved out", "previous", "past", "former", "inactive"];
+
+function isPreviousResidentRow(row: DemoApplicantRow): boolean {
+  const moveOut = row.manualResidentDetails?.moveOutDate?.trim();
+  if (moveOut) {
+    const moveOutDate = new Date(`${moveOut}T23:59:59`);
+    if (!Number.isNaN(moveOutDate.getTime()) && moveOutDate.getTime() < Date.now()) {
+      return true;
+    }
+  }
+  const stage = row.stage.trim().toLowerCase();
+  return PREVIOUS_RESIDENT_STAGE_TOKENS.some((token) => stage.includes(token));
+}
+
+const AR_LEASE_TERM_CUSTOM = "__custom__";
+const AR_LEASE_TERM_PRESETS = ["Month-to-month", "12 months", "6 months", "3 months"] as const;
 
 function statusPill(status: "pending" | "paid") {
   return status === "paid"
@@ -227,7 +249,7 @@ function chargeEditAmountValue(charge: HouseholdCharge): string {
   return String(centsFromLabel(charge.balanceLabel) / 100 || centsFromLabel(charge.amountLabel) / 100 || "").replace(/\.0+$/, "");
 }
 
-export function ManagerResidents() {
+export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId }) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const [hcTick, setHcTick] = useState(0);
@@ -236,6 +258,7 @@ export function ManagerResidents() {
   const [workOrderTick, setWorkOrderTick] = useState(0);
   const [inboxTick, setInboxTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addChargeOpen, setAddChargeOpen] = useState(false);
   const [editChargeId, setEditChargeId] = useState<string | null>(null);
@@ -271,6 +294,10 @@ export function ManagerResidents() {
   // Per-resident move-in instructions editing
   const [editMoveInId, setEditMoveInId] = useState<string | null>(null);
   const [editMoveInText, setEditMoveInText] = useState("");
+
+  useEffect(() => {
+    setResidentsTab(tabId);
+  }, [tabId]);
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -387,13 +414,11 @@ export function ManagerResidents() {
   const residents = useMemo<ActiveResident[]>(() => {
     void hcTick;
     return readManagerApplicationRows()
-      .filter(
-        (row) =>
-          row.bucket === "approved" &&
-          row.email?.trim() &&
-          (row.manuallyAdded || residentAccountEmails.has(row.email.trim().toLowerCase())) &&
-          applicationVisibleToPortalUser(row, userId),
-      )
+      .filter((row) => row.bucket === "approved" && row.email?.trim() && applicationVisibleToPortalUser(row, userId))
+      .filter((row) => {
+        if (isPreviousResidentRow(row)) return true;
+        return row.manuallyAdded || residentAccountEmails.has(row.email!.trim().toLowerCase());
+      })
       .map((row) => {
         const propId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
         const prop = propId ? getPropertyById(propId) : null;
@@ -413,6 +438,7 @@ export function ManagerResidents() {
           manuallyAdded: row.manuallyAdded,
           moveInInstructions: row.moveInInstructions,
           manualResidentDetails: row.manualResidentDetails,
+          isPrevious: isPreviousResidentRow(row),
         };
       });
   }, [userId, hcTick, residentAccountEmails]);
@@ -447,10 +473,26 @@ export function ManagerResidents() {
     return sub.rooms.map((r) => ({ id: r.id, name: r.name || r.id, monthlyRent: r.monthlyRent }));
   }, [arPropertyId, userId, propertyTick]);
 
+  const arLeaseTermSelectValue = useMemo(() => {
+    if (!arLeaseTerm.trim()) return "";
+    return AR_LEASE_TERM_PRESETS.includes(arLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])
+      ? arLeaseTerm
+      : AR_LEASE_TERM_CUSTOM;
+  }, [arLeaseTerm]);
+
+  const isMonthToMonthLease = arLeaseTerm === "Month-to-month";
+
+  useEffect(() => {
+    if (isMonthToMonthLease && arMoveOutDate) {
+      setArMoveOutDate("");
+    }
+  }, [isMonthToMonthLease, arMoveOutDate]);
+
   const filtered = useMemo(() => {
+    const inTab = residents.filter((resident) => (residentsTab === "current" ? !resident.isPrevious : resident.isPrevious));
     const base = propertyFilter
-      ? residents.filter((r) => r.propertyId === propertyFilter)
-      : residents;
+      ? inTab.filter((r) => r.propertyId === propertyFilter)
+      : inTab;
     return [...base].sort((a, b) => {
       const propCmp = a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" });
       if (propCmp !== 0) return propCmp;
@@ -458,13 +500,23 @@ export function ManagerResidents() {
       const bNum = parseInt(b.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
       return aNum - bNum;
     });
-  }, [residents, propertyFilter]);
+  }, [residents, residentsTab, propertyFilter]);
+
+  const currentResidentsCount = useMemo(() => residents.filter((resident) => !resident.isPrevious).length, [residents]);
+  const previousResidentsCount = useMemo(() => residents.filter((resident) => resident.isPrevious).length, [residents]);
 
   const selected = useMemo(() => residents.find((r) => r.id === selectedId) ?? null, [residents, selectedId]);
 
   useEffect(() => {
     if (selectedId) setChargeTab("pending");
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    if (!filtered.some((resident) => resident.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [filtered, selectedId]);
 
   const residentCharges = useMemo<HouseholdCharge[]>(() => {
     void hcTick;
@@ -739,6 +791,50 @@ export function ManagerResidents() {
     showToast("Move-in instructions saved.");
   }
 
+  function deleteSelectedResident() {
+    if (!selected) return;
+    if (!window.confirm(`Delete resident ${selected.name || selected.email}? This cannot be undone.`)) return;
+
+    const allRows = readManagerApplicationRows();
+    if (!allRows.some((row) => row.id === selected.id)) {
+      showToast("Resident not found.");
+      return;
+    }
+    writeManagerApplicationRows(allRows.filter((row) => row.id !== selected.id));
+
+    const residentEmail = selected.email.trim().toLowerCase();
+    const residentCharges = readChargesForManagerResident(selected.email, userId ?? null);
+    for (const charge of residentCharges) {
+      deleteHouseholdCharge(charge.id, userId ?? null);
+    }
+
+    const residentLeases = readLeasePipeline(userId).filter(
+      (row) => row.residentEmail.trim().toLowerCase() === residentEmail,
+    );
+    for (const leaseRow of residentLeases) {
+      deleteLeasePipelineRow(leaseRow.id);
+    }
+
+    const residentWorkOrders = readManagerWorkOrderRows().filter(
+      (row) => row.residentEmail?.trim().toLowerCase() === residentEmail,
+    );
+    for (const workOrder of residentWorkOrders) {
+      deleteManagerWorkOrderRow(workOrder.id);
+    }
+
+    const nextInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []).filter(
+      (thread) => thread.email.trim().toLowerCase() !== residentEmail,
+    );
+    persistInbox(MANAGER_INBOX_STORAGE_KEY, nextInbox);
+
+    setSelectedId(null);
+    setHcTick((n) => n + 1);
+    setLeaseTick((n) => n + 1);
+    setWorkOrderTick((n) => n + 1);
+    setInboxTick((n) => n + 1);
+    showToast("Resident deleted.");
+  }
+
   function markPaid(chargeId: string) {
     if (markHouseholdChargePaid(chargeId, userId ?? null)) {
       showToast("Marked as paid.");
@@ -813,6 +909,26 @@ export function ManagerResidents() {
         title="Residents"
         titleAside={
           <>
+            <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1">
+              <button
+                type="button"
+                onClick={() => setResidentsTab("current")}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  residentsTab === "current" ? "bg-slate-900 text-white" : "bg-transparent text-slate-600 hover:bg-white"
+                }`}
+              >
+                Current ({currentResidentsCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setResidentsTab("previous")}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  residentsTab === "previous" ? "bg-slate-900 text-white" : "bg-transparent text-slate-600 hover:bg-white"
+                }`}
+              >
+                Previous ({previousResidentsCount})
+              </button>
+            </div>
             <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setAddResidentOpen(true)}>
               + Add resident
             </Button>
@@ -828,8 +944,10 @@ export function ManagerResidents() {
         <PortalDataTableEmpty
           message={
             residents.length === 0
-              ? "No active residents yet. Residents appear here after approval and once they create an Axis resident account."
-              : "No residents match the current filter."
+              ? "No residents yet. Residents appear here after approval and once they create an Axis resident account."
+              : residentsTab === "current"
+                ? "No current residents match the current filter."
+                : "No previous residents match the current filter."
           }
         />
       ) : (
@@ -873,7 +991,17 @@ export function ManagerResidents() {
                         <td colSpan={6} className="bg-slate-50/60 px-4 py-5">
                           <div className="flex flex-col gap-4">
                             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Account</p>
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Account</p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-rose-50"
+                                  onClick={deleteSelectedResident}
+                                >
+                                  Delete resident
+                                </Button>
+                              </div>
                               <div className="mt-3 grid gap-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
                                 <div>
                                   <span className="text-slate-500">Axis ID</span>
@@ -1518,17 +1646,34 @@ export function ManagerResidents() {
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-slate-700">Lease term</span>
               <select
-                value={arLeaseTerm}
-                onChange={(e) => setArLeaseTerm(e.target.value)}
+                value={arLeaseTermSelectValue}
+                onChange={(e) => {
+                  const selected = e.target.value;
+                  if (selected === AR_LEASE_TERM_CUSTOM) {
+                    if (AR_LEASE_TERM_PRESETS.includes(arLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])) {
+                      setArLeaseTerm("");
+                    }
+                    return;
+                  }
+                  setArLeaseTerm(selected);
+                }}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               >
                 <option value="">Select…</option>
                 <option value="Month-to-month">Month-to-month</option>
-                <option value="Month to month">Month to month</option>
                 <option value="12 months">12 months</option>
                 <option value="6 months">6 months</option>
                 <option value="3 months">3 months</option>
+                <option value={AR_LEASE_TERM_CUSTOM}>Custom…</option>
               </select>
+              {arLeaseTermSelectValue === AR_LEASE_TERM_CUSTOM ? (
+                <Input
+                  className="mt-2"
+                  value={arLeaseTerm}
+                  onChange={(e) => setArLeaseTerm(e.target.value)}
+                  placeholder="e.g. 9 months"
+                />
+              ) : null}
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-slate-700">Room</span>
@@ -1578,10 +1723,12 @@ export function ManagerResidents() {
               <span className="font-medium text-slate-700">Move-in date</span>
               <Input type="date" value={arMoveInDate} onChange={(e) => setArMoveInDate(e.target.value)} />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Move-out date</span>
-              <Input type="date" value={arMoveOutDate} onChange={(e) => setArMoveOutDate(e.target.value)} />
-            </label>
+            {!isMonthToMonthLease ? (
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-slate-700">Move-out date</span>
+                <Input type="date" value={arMoveOutDate} onChange={(e) => setArMoveOutDate(e.target.value)} />
+              </label>
+            ) : null}
             <label className="col-span-2 flex flex-col gap-1 text-sm">
               <span className="font-medium text-slate-700">Notes</span>
               <Textarea
