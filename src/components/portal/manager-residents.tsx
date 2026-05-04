@@ -259,8 +259,7 @@ export function ManagerResidents() {
   const [arEmail, setArEmail] = useState("");
   const [arPropertyId, setArPropertyId] = useState("");
   const [arRoomId, setArRoomId] = useState("");
-  const [arRoomNumber, setArRoomNumber] = useState("");
-  const [arHouseNumber, setArHouseNumber] = useState("");
+  const [arLeaseTerm, setArLeaseTerm] = useState("");
   const [arMoveInDate, setArMoveInDate] = useState("");
   const [arMoveOutDate, setArMoveOutDate] = useState("");
   const [arRent, setArRent] = useState("");
@@ -462,6 +461,10 @@ export function ManagerResidents() {
   }, [residents, propertyFilter]);
 
   const selected = useMemo(() => residents.find((r) => r.id === selectedId) ?? null, [residents, selectedId]);
+
+  useEffect(() => {
+    if (selectedId) setChargeTab("pending");
+  }, [selectedId]);
 
   const residentCharges = useMemo<HouseholdCharge[]>(() => {
     void hcTick;
@@ -670,10 +673,15 @@ export function ManagerResidents() {
     if (!arName.trim()) { showToast("Enter the resident's name."); return; }
     if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
     const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
+    const utilities = arUtilities.trim() ? Number(arUtilities.replace(/[^\d.]/g, "")) : null;
+    const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
+    const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
     const axisId = `AXIS-${Date.now().toString(36).toUpperCase().slice(-8)}`;
     const propLabel = arPropertyId
       ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
-      : arHouseNumber.trim() || "—";
+      : "—";
+    const propId = arPropertyId || "manual";
+    const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
     appendManagerApplicationRow({
       id: axisId,
       name: arName.trim(),
@@ -690,15 +698,29 @@ export function ManagerResidents() {
       manualResidentDetails: {
         moveInDate: arMoveInDate || undefined,
         moveOutDate: arMoveOutDate || undefined,
-        monthlyUtilities: arUtilities ? Number(arUtilities.replace(/[^\d.]/g, "")) || undefined : undefined,
-        moveInFee: arMoveInFee ? Number(arMoveInFee.replace(/[^\d.]/g, "")) || undefined : undefined,
-        securityDeposit: arSecurityDeposit ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) || undefined : undefined,
-        houseNumber: arHouseNumber.trim() || undefined,
-        roomNumber: arRoomNumber.trim() || undefined,
+        monthlyUtilities: utilities ?? undefined,
+        moveInFee: moveInFee ?? undefined,
+        securityDeposit: secDeposit ?? undefined,
+        roomNumber: selectedRoomLabel || undefined,
+        leaseTerm: arLeaseTerm || undefined,
         notes: arNotes.trim() || undefined,
       },
     });
-    setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArRoomNumber(""); setArHouseNumber("");
+    // Auto-create pending charges for every monetary field filled in
+    const chargeBase = {
+      residentEmail: arEmail.trim(),
+      residentName: arName.trim(),
+      propertyId: propId,
+      propertyLabel: propLabel,
+      managerUserId: userId ?? null,
+    };
+    if (rent && rent > 0) createManagerCharge({ ...chargeBase, title: "First month rent", amount: rent, blocksLeaseUntilPaid: true });
+    if (secDeposit && secDeposit > 0) createManagerCharge({ ...chargeBase, title: "Security deposit", amount: secDeposit, blocksLeaseUntilPaid: true });
+    if (moveInFee && moveInFee > 0) createManagerCharge({ ...chargeBase, title: "Move-in fee", amount: moveInFee, blocksLeaseUntilPaid: true });
+    if (utilities && utilities > 0) createManagerCharge({ ...chargeBase, title: "First month utilities", amount: utilities });
+    void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
+    setChargeTab("pending");
+    setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm("");
     setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
     setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
     setAddResidentOpen(false);
@@ -1486,7 +1508,7 @@ export function ManagerResidents() {
               <span className="font-medium text-slate-700">Property</span>
               <select
                 value={arPropertyId}
-                onChange={(e) => { setArPropertyId(e.target.value); setArRoomId(""); setArRoomNumber(""); }}
+                onChange={(e) => { setArPropertyId(e.target.value); setArRoomId(""); }}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               >
                 <option value="">Select property…</option>
@@ -1494,8 +1516,19 @@ export function ManagerResidents() {
               </select>
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">House / building number</span>
-              <Input value={arHouseNumber} onChange={(e) => setArHouseNumber(e.target.value)} placeholder="e.g. 6255" />
+              <span className="font-medium text-slate-700">Lease term</span>
+              <select
+                value={arLeaseTerm}
+                onChange={(e) => setArLeaseTerm(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              >
+                <option value="">Select…</option>
+                <option value="Month-to-month">Month-to-month</option>
+                <option value="Month to month">Month to month</option>
+                <option value="12 months">12 months</option>
+                <option value="6 months">6 months</option>
+                <option value="3 months">3 months</option>
+              </select>
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-slate-700">Room</span>
@@ -1506,7 +1539,6 @@ export function ManagerResidents() {
                     const roomId = e.target.value;
                     setArRoomId(roomId);
                     const room = arRoomOptions.find((r) => r.id === roomId);
-                    setArRoomNumber(room?.name ?? "");
                     if (room?.monthlyRent && !arRent.trim()) {
                       setArRent(String(room.monthlyRent));
                     }
@@ -1521,7 +1553,9 @@ export function ManagerResidents() {
                   ))}
                 </select>
               ) : (
-                <Input value={arRoomNumber} onChange={(e) => setArRoomNumber(e.target.value)} placeholder="e.g. Room 3" />
+                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  Add rooms to this property in listing setup to assign a resident room here.
+                </p>
               )}
             </label>
             <label className="flex flex-col gap-1 text-sm">

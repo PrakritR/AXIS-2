@@ -50,21 +50,26 @@ function formatBathroomIncludes(r: ListingBathroomRow): string {
   return parts.length ? parts.join(", ") : "—";
 }
 
-/** True when furnishing is only a comma list of items already covered by room-amenity chips. */
-function furnishingDuplicatesAmenityPills(furnish: string, amenities: readonly string[]): boolean {
+/** Removes furnishing items that are already present in amenity chips. */
+function filteredFurnishingDetail(furnish: string, amenities: readonly string[]): string | null {
   const t = furnish.trim();
-  if (!t || amenities.length === 0) return false;
+  if (!t) return null;
+  if (amenities.length === 0) return t;
   const pool = amenities.join(" ").toLowerCase();
-  const segments = t.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
-  if (segments.length === 0) return false;
-  return segments.every((seg) => {
+  const segments = t
+    .split(/[\n,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (segments.length === 0) return null;
+  const kept = segments.filter((seg) => {
     const words = seg
       .toLowerCase()
       .split(/[^a-z0-9]+/)
       .filter((w) => w.length > 1 && w !== "and");
-    if (words.length === 0) return true;
-    return words.every((w) => pool.includes(w));
+    if (words.length === 0) return false;
+    return !words.every((w) => pool.includes(w));
   });
+  return kept.length ? kept.join(", ") : null;
 }
 
 function DetailsButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
@@ -258,13 +263,18 @@ function ListingDetailModal({
                 </div>
               </div>
             ) : null}
-            {state.room.modal.furnishingDetail &&
-            !furnishingDuplicatesAmenityPills(state.room.modal.furnishingDetail, state.room.modal.roomAmenityLabels ?? []) ? (
+            {(() => {
+              const furnishingDetail = filteredFurnishingDetail(
+                state.room.modal.furnishingDetail ?? "",
+                state.room.modal.roomAmenityLabels ?? [],
+              );
+              return furnishingDetail ? (
               <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/70 p-5">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-950/90">Furnishing</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{state.room.modal.furnishingDetail}</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{furnishingDetail}</p>
               </div>
-            ) : null}
+              ) : null;
+            })()}
             {state.room.modal.roomAmenityLabels?.length ? (
               <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/50 p-5">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-950/90">Room amenities</p>

@@ -57,7 +57,6 @@ import {
   parseFurnitureSet,
   sanitizeRoomAmenityText,
   splitLineList,
-  furnishingSelectState,
 } from "@/data/manager-listing-presets";
 import { loadListingPresetConfig, type ListingPresetConfig } from "@/lib/site-content";
 
@@ -66,6 +65,31 @@ const selectInputCls =
 
 /** Sentinel value for room availability `<select>` when the saved string is not a preset. */
 const ROOM_AVAIL_CUSTOM = "__custom__";
+
+function dedupeByLabel<T extends { label: string }>(items: readonly T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    const key = item.label.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function dedupeTextOptions(items: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const normalized = item.trim();
+    const key = normalized.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+  }
+  return out;
+}
 
 function roomFloorSelectValue(floor: string): string {
   const hit = LISTING_ROOM_FLOOR_LEVEL_OPTIONS.find((o) => o.label === floor);
@@ -313,6 +337,17 @@ export function ManagerAddListingForm({
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { userId, ready: authReady } = useManagerUserId();
+  const dedupedPresets = useMemo(
+    () => ({
+      availability: dedupeTextOptions(listingPresets.availability),
+      furniture: dedupeByLabel(listingPresets.furniture),
+      room: dedupeByLabel(listingPresets.room),
+      bathroom: dedupeByLabel(listingPresets.bathroom),
+      sharedSpace: dedupeByLabel(listingPresets.sharedSpace),
+      houseWide: dedupeByLabel(listingPresets.houseWide),
+    }),
+    [listingPresets],
+  );
 
   const isEditMode = Boolean(editPendingId ?? editListingId);
   const lastStepIndex = LISTING_STEP_COUNT - 1;
@@ -1583,7 +1618,7 @@ export function ManagerAddListingForm({
                 const checkedFurniture = parseFurnitureSet(room.furnishing);
                 const rawAvailability = room.availability;
                 const rawTrim = rawAvailability.trim();
-                const presetOpts = listingPresets.availability;
+                const presetOpts = dedupedPresets.availability;
                 const matchesPreset = presetOpts.some((p) => p === rawTrim);
                 const availabilitySelectValue = matchesPreset ? rawTrim : ROOM_AVAIL_CUSTOM;
                 return (
@@ -1660,34 +1695,6 @@ export function ManagerAddListingForm({
                             placeholder="800"
                           />
                         </div>
-                      </GridField>
-                      <GridField className="sm:col-span-2">
-                        <FieldLabel hint="Choose a preset or use the detailed checklist below.">Furnishing</FieldLabel>
-                        <div className="relative">
-                          <Select
-                            aria-label="Furnishing preset"
-                            className={`${selectInputCls} appearance-none pr-10`}
-                            value={furnishingSelectState(room.furnishing).select}
-                            onChange={(e) => setRoom(i, { furnishing: e.target.value })}
-                          >
-                            {ROOM_FURNISHING_OPTIONS.map((o) => (
-                              <option key={o.value || "empty"} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </Select>
-                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
-                            <ChevronDownTiny />
-                          </span>
-                        </div>
-                        {!furnishingSelectState(room.furnishing).select && furnishingSelectState(room.furnishing).custom ? (
-                          <Input
-                            className="mt-2"
-                            value={furnishingSelectState(room.furnishing).custom}
-                            onChange={(e) => setRoom(i, { furnishing: e.target.value })}
-                            placeholder="Describe furnishing"
-                          />
-                        ) : null}
                       </GridField>
                       <GridField>
                         <FieldLabel hint="Monthly estimate used in signing totals.">Utilities estimate</FieldLabel>
@@ -1814,7 +1821,7 @@ export function ManagerAddListingForm({
                         </div>
                       </GridField>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Toggle specific items included in this room.">Furniture &amp; items</FieldLabel>
+                        <FieldLabel hint="Toggle specific items included in this room.">Furnishing &amp; furniture</FieldLabel>
                         <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
                           <label className="mb-2 flex cursor-pointer items-center gap-2 border-b border-slate-100 pb-2 text-sm">
                             <input
@@ -1826,7 +1833,7 @@ export function ManagerAddListingForm({
                             <span className="font-semibold text-slate-700">Unfurnished</span>
                           </label>
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                            {listingPresets.furniture.map((p) => {
+                            {dedupedPresets.furniture.map((p) => {
                               const on = checkedFurniture.has(p.label);
                               return (
                                 <label key={p.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${on ? "border-primary/30 bg-primary/[0.05]" : "border-slate-200 bg-white"} ${isUnfurnished ? "pointer-events-none opacity-40" : ""}`}>
@@ -1845,9 +1852,9 @@ export function ManagerAddListingForm({
                         </div>
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Room features only. Furniture is selected above; bathroom is configured in the next step.">Room amenities</FieldLabel>
+                        <FieldLabel hint="Room features only (not furniture or bathroom — those are configured separately).">Room amenities</FieldLabel>
                         <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
-                          {listingPresets.room.map((p) => {
+                          {dedupedPresets.room.map((p) => {
                             const on = splitLineList(room.roomAmenitiesText).includes(p.label);
                             return (
                               <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -2097,7 +2104,7 @@ export function ManagerAddListingForm({
                           Bathroom amenities
                         </FieldLabel>
                         <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2">
-                          {listingPresets.bathroom.map((p) => {
+                          {dedupedPresets.bathroom.map((p) => {
                             const on = splitLineList(b.amenitiesText ?? "").includes(p.label);
                             return (
                               <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -2239,7 +2246,7 @@ export function ManagerAddListingForm({
                             Space amenities
                           </FieldLabel>
                           <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-3">
-                            {listingPresets.sharedSpace.map((p) => {
+                            {dedupedPresets.sharedSpace.map((p) => {
                               const on = splitLineList(sp.amenitiesText ?? "").includes(p.label);
                               return (
                                 <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -2432,7 +2439,7 @@ export function ManagerAddListingForm({
                 <div>
                   <FieldLabel hint="Tap all that apply.">Common amenities</FieldLabel>
                   <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {listingPresets.houseWide.map((p) => {
+                    {dedupedPresets.houseWide.map((p) => {
                       const on = splitLineList(sub.amenitiesText).includes(p.label);
                       return (
                         <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">

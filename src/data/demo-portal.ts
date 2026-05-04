@@ -57,8 +57,8 @@ export type DemoApplicantRow = {
     monthlyUtilities?: number;
     moveInFee?: number;
     securityDeposit?: number;
-    houseNumber?: string;
     roomNumber?: string;
+    leaseTerm?: string;
     notes?: string;
   };
 };

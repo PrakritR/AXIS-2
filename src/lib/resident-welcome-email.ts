@@ -58,16 +58,28 @@ export function buildResidentWelcomeEmailHtml(params: {
     : "Hi,";
   const id = escapeHtmlText(params.axisId.trim());
   const href = escapeHtmlAttr(params.signupUrl);
+  const urlPlain = escapeHtmlText(params.signupUrl);
+  /* Table-based CTA: best support across Gmail, Outlook, Apple Mail. */
+  const ctaButton = `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0 8px 0">
+<tr>
+<td style="border-radius:10px;background:#2563eb">
+<a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;line-height:1.2">Create your resident portal account</a>
+</td>
+</tr>
+</table>
+<p style="margin:0 0 16px 0;font-size:13px;color:#64748b">If the button does not work, copy this link into your browser:<br/><span style="word-break:break-all;color:#334155">${urlPlain}</span></p>`;
   return `<!DOCTYPE html>
 <html>
-<body style="font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;font-size:15px;max-width:36rem">
-<p>${greeting}</p>
-<p>Welcome to Axis Housing. Your rental application has been approved.</p>
-<p><strong>Your Axis ID:</strong> ${id}</p>
-<p><a href="${href}">Create your resident portal account</a></p>
-<p>You can use the portal for lease signing, payments, work orders, and move-in details your property shares with you.</p>
-<p>Use the same email address you used on your rental application when you create your account.</p>
-<p style="color:#64748b">— Axis Housing</p>
+<body style="margin:0;padding:24px;font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;font-size:15px;background:#f8fafc">
+<div style="max-width:36rem;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px 28px 32px;border:1px solid #e2e8f0">
+<p style="margin:0 0 12px 0">${greeting}</p>
+<p style="margin:0 0 12px 0">Welcome to Axis Housing. Your rental application has been approved.</p>
+<p style="margin:0 0 8px 0"><strong>Your Axis ID:</strong> ${id}</p>
+${ctaButton}
+<p style="margin:0 0 12px 0">You can use the portal for lease signing, payments, work orders, and move-in details your property shares with you.</p>
+<p style="margin:0 0 12px 0">Use the same email address you used on your rental application when you create your account.</p>
+<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— Axis Housing</p>
+</div>
 </body>
 </html>`;
 }
