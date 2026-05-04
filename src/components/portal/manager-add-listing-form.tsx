@@ -95,6 +95,7 @@ const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
   bathroom: [...BATHROOM_EXTRA_AMENITY_PRESETS],
   room: [...ROOM_AMENITY_PRESETS],
   furniture: [...ROOM_FURNITURE_PRESETS],
+  availability: [],
   furnishing: ROOM_FURNISHING_OPTIONS,
 };
 
