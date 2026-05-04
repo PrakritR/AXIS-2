@@ -291,6 +291,21 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [arSecurityDeposit, setArSecurityDeposit] = useState("");
   const [arNotes, setArNotes] = useState("");
 
+  // Edit resident
+  const [editResidentOpen, setEditResidentOpen] = useState(false);
+  const [erName, setErName] = useState("");
+  const [erEmail, setErEmail] = useState("");
+  const [erPropertyId, setErPropertyId] = useState("");
+  const [erRoomId, setErRoomId] = useState("");
+  const [erLeaseTerm, setErLeaseTerm] = useState("");
+  const [erMoveInDate, setErMoveInDate] = useState("");
+  const [erMoveOutDate, setErMoveOutDate] = useState("");
+  const [erRent, setErRent] = useState("");
+  const [erUtilities, setErUtilities] = useState("");
+  const [erMoveInFee, setErMoveInFee] = useState("");
+  const [erSecurityDeposit, setErSecurityDeposit] = useState("");
+  const [erNotes, setErNotes] = useState("");
+
   // Per-resident move-in instructions editing
   const [editMoveInId, setEditMoveInId] = useState<string | null>(null);
   const [editMoveInText, setEditMoveInText] = useState("");
@@ -473,6 +488,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     return sub.rooms.map((r) => ({ id: r.id, name: r.name || r.id, monthlyRent: r.monthlyRent }));
   }, [arPropertyId, userId, propertyTick]);
 
+  const erRoomOptions = useMemo(() => {
+    if (!erPropertyId || !userId) return [];
+    const listing = readExtraListingsForUser(userId).find((p) => p.id === erPropertyId);
+    if (!listing?.listingSubmission) return [];
+    const sub = normalizeManagerListingSubmissionV1(listing.listingSubmission);
+    return sub.rooms.map((r) => ({ id: r.id, name: r.name || r.id, monthlyRent: r.monthlyRent }));
+  }, [erPropertyId, userId, propertyTick]);
+
   const arLeaseTermSelectValue = useMemo(() => {
     if (!arLeaseTerm.trim()) return "";
     return AR_LEASE_TERM_PRESETS.includes(arLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])
@@ -482,11 +505,26 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   const isMonthToMonthLease = arLeaseTerm === "Month-to-month";
 
+  const erLeaseTermSelectValue = useMemo(() => {
+    if (!erLeaseTerm.trim()) return "";
+    return AR_LEASE_TERM_PRESETS.includes(erLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])
+      ? erLeaseTerm
+      : AR_LEASE_TERM_CUSTOM;
+  }, [erLeaseTerm]);
+
+  const isEditMonthToMonthLease = erLeaseTerm === "Month-to-month";
+
   useEffect(() => {
     if (isMonthToMonthLease && arMoveOutDate) {
       setArMoveOutDate("");
     }
   }, [isMonthToMonthLease, arMoveOutDate]);
+
+  useEffect(() => {
+    if (isEditMonthToMonthLease && erMoveOutDate) {
+      setErMoveOutDate("");
+    }
+  }, [isEditMonthToMonthLease, erMoveOutDate]);
 
   const filtered = useMemo(() => {
     const inTab = residents.filter((resident) => (residentsTab === "current" ? !resident.isPrevious : resident.isPrevious));
@@ -791,6 +829,86 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     showToast("Move-in instructions saved.");
   }
 
+  function openEditResidentModal() {
+    if (!selected) return;
+    const row = readManagerApplicationRows().find((r) => r.id === selected.id);
+    if (!row) {
+      showToast("Resident record not found.");
+      return;
+    }
+    const assignedPropId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
+    const assignedRoomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
+    const assignedRoomId =
+      assignedPropId && assignedRoomChoice.startsWith(`${assignedPropId}${LISTING_ROOM_CHOICE_SEP}`)
+        ? assignedRoomChoice.slice(`${assignedPropId}${LISTING_ROOM_CHOICE_SEP}`.length)
+        : "";
+    setErName(row.name || "");
+    setErEmail(row.email?.trim() || "");
+    setErPropertyId(assignedPropId);
+    setErRoomId(assignedRoomId);
+    setErLeaseTerm(row.manualResidentDetails?.leaseTerm || "");
+    setErMoveInDate(row.manualResidentDetails?.moveInDate || "");
+    setErMoveOutDate(row.manualResidentDetails?.moveOutDate || "");
+    setErRent(Number.isFinite(row.signedMonthlyRent ?? NaN) ? String(row.signedMonthlyRent ?? "") : "");
+    setErUtilities(row.manualResidentDetails?.monthlyUtilities != null ? String(row.manualResidentDetails.monthlyUtilities) : "");
+    setErMoveInFee(row.manualResidentDetails?.moveInFee != null ? String(row.manualResidentDetails.moveInFee) : "");
+    setErSecurityDeposit(
+      row.manualResidentDetails?.securityDeposit != null ? String(row.manualResidentDetails.securityDeposit) : "",
+    );
+    setErNotes(row.manualResidentDetails?.notes || "");
+    setEditResidentOpen(true);
+  }
+
+  function saveEditedResident() {
+    if (!selected) return;
+    if (!erName.trim()) {
+      showToast("Enter the resident's name.");
+      return;
+    }
+    const rows = readManagerApplicationRows();
+    const idx = rows.findIndex((r) => r.id === selected.id);
+    if (idx === -1) {
+      showToast("Resident record not found.");
+      return;
+    }
+    const rent = erRent.trim() ? Number(erRent.replace(/[^\d.]/g, "")) : null;
+    const utilities = erUtilities.trim() ? Number(erUtilities.replace(/[^\d.]/g, "")) : null;
+    const moveInFee = erMoveInFee.trim() ? Number(erMoveInFee.replace(/[^\d.]/g, "")) : null;
+    const secDeposit = erSecurityDeposit.trim() ? Number(erSecurityDeposit.replace(/[^\d.]/g, "")) : null;
+    const propId = erPropertyId.trim();
+    const propLabel = propId ? propertyOptions.find((p) => p.id === propId)?.label ?? rows[idx]!.property : rows[idx]!.property;
+    const selectedRoomLabel = erRoomId ? erRoomOptions.find((room) => room.id === erRoomId)?.name?.trim() ?? "" : "";
+
+    const existing = rows[idx]!;
+    const nextRow: DemoApplicantRow = {
+      ...existing,
+      name: erName.trim(),
+      email: erEmail.trim() || existing.email,
+      property: propLabel,
+      assignedPropertyId: propId || undefined,
+      assignedRoomChoice: propId && erRoomId ? `${propId}${LISTING_ROOM_CHOICE_SEP}${erRoomId}` : undefined,
+      signedMonthlyRent: rent ?? undefined,
+      manualResidentDetails: {
+        ...(existing.manualResidentDetails ?? {}),
+        moveInDate: erMoveInDate || undefined,
+        moveOutDate: erMoveOutDate || undefined,
+        monthlyUtilities: utilities ?? undefined,
+        moveInFee: moveInFee ?? undefined,
+        securityDeposit: secDeposit ?? undefined,
+        roomNumber: selectedRoomLabel || undefined,
+        leaseTerm: erLeaseTerm || undefined,
+        notes: erNotes.trim() || undefined,
+      },
+    };
+
+    const next = [...rows];
+    next[idx] = nextRow;
+    writeManagerApplicationRows(next);
+    setEditResidentOpen(false);
+    setHcTick((n) => n + 1);
+    showToast("Resident updated.");
+  }
+
   function deleteSelectedResident() {
     if (!selected) return;
     if (!window.confirm(`Delete resident ${selected.name || selected.email}? This cannot be undone.`)) return;
@@ -993,14 +1111,24 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             <div className="rounded-2xl border border-slate-200 bg-white p-4">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Account</p>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-rose-50"
-                                  onClick={deleteSelectedResident}
-                                >
-                                  Delete resident
-                                </Button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="rounded-full px-3 py-1 text-xs"
+                                    onClick={openEditResidentModal}
+                                  >
+                                    Edit resident
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-rose-50"
+                                    onClick={deleteSelectedResident}
+                                  >
+                                    Delete resident
+                                  </Button>
+                                </div>
                               </div>
                               <div className="mt-3 grid gap-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
                                 <div>
@@ -1742,6 +1870,151 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)}>Cancel</Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident}>Add resident</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={editResidentOpen} title="Edit resident" onClose={() => setEditResidentOpen(false)}>
+        <div className="space-y-3">
+          <p className="text-xs text-slate-500">Update resident profile fields and lease details.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Full name *</span>
+              <Input value={erName} onChange={(e) => setErName(e.target.value)} placeholder="Jane Smith" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Email</span>
+              <Input type="email" value={erEmail} disabled className="bg-slate-50 text-slate-500" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Property</span>
+              <select
+                value={erPropertyId}
+                onChange={(e) => {
+                  setErPropertyId(e.target.value);
+                  setErRoomId("");
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              >
+                <option value="">Select property…</option>
+                {propertyOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Lease term</span>
+              <select
+                value={erLeaseTermSelectValue}
+                onChange={(e) => {
+                  const selected = e.target.value;
+                  if (selected === AR_LEASE_TERM_CUSTOM) {
+                    if (AR_LEASE_TERM_PRESETS.includes(erLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])) {
+                      setErLeaseTerm("");
+                    }
+                    return;
+                  }
+                  setErLeaseTerm(selected);
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              >
+                <option value="">Select…</option>
+                <option value="Month-to-month">Month-to-month</option>
+                <option value="12 months">12 months</option>
+                <option value="6 months">6 months</option>
+                <option value="3 months">3 months</option>
+                <option value={AR_LEASE_TERM_CUSTOM}>Custom…</option>
+              </select>
+              {erLeaseTermSelectValue === AR_LEASE_TERM_CUSTOM ? (
+                <Input
+                  className="mt-2"
+                  value={erLeaseTerm}
+                  onChange={(e) => setErLeaseTerm(e.target.value)}
+                  placeholder="e.g. 9 months"
+                />
+              ) : null}
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Room</span>
+              {erRoomOptions.length > 0 ? (
+                <select
+                  value={erRoomId}
+                  onChange={(e) => {
+                    const roomId = e.target.value;
+                    setErRoomId(roomId);
+                    const room = erRoomOptions.find((r) => r.id === roomId);
+                    if (room?.monthlyRent && !erRent.trim()) {
+                      setErRent(String(room.monthlyRent));
+                    }
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                >
+                  <option value="">Select room…</option>
+                  {erRoomOptions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                      {r.monthlyRent ? ` — $${r.monthlyRent}/mo` : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  Add rooms to this property in listing setup to assign a resident room here.
+                </p>
+              )}
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Monthly rent ($)</span>
+              <Input type="number" min={0} step={0.01} value={erRent} onChange={(e) => setErRent(e.target.value)} placeholder="875.00" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Monthly utilities ($)</span>
+              <Input type="number" min={0} step={0.01} value={erUtilities} onChange={(e) => setErUtilities(e.target.value)} placeholder="175.00" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Move-in fee ($)</span>
+              <Input type="number" min={0} step={0.01} value={erMoveInFee} onChange={(e) => setErMoveInFee(e.target.value)} placeholder="200.00" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Security deposit ($)</span>
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                value={erSecurityDeposit}
+                onChange={(e) => setErSecurityDeposit(e.target.value)}
+                placeholder="875.00"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Move-in date</span>
+              <Input type="date" value={erMoveInDate} onChange={(e) => setErMoveInDate(e.target.value)} />
+            </label>
+            {!isEditMonthToMonthLease ? (
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-slate-700">Move-out date</span>
+                <Input type="date" value={erMoveOutDate} onChange={(e) => setErMoveOutDate(e.target.value)} />
+              </label>
+            ) : null}
+            <label className="col-span-2 flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Notes</span>
+              <Textarea
+                className="min-h-[72px]"
+                value={erNotes}
+                onChange={(e) => setErNotes(e.target.value)}
+                placeholder="Any additional details about this resident…"
+              />
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditResidentOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" className="rounded-full" onClick={saveEditedResident}>
+              Save resident
+            </Button>
           </div>
         </div>
       </Modal>
