@@ -18,7 +18,7 @@ function publicApprovedRow(raw: unknown): DemoApplicantRow | null {
   const leaseStart = text(row.manualResidentDetails?.moveInDate) || text(row.application?.leaseStart);
   const leaseEnd = text(row.manualResidentDetails?.moveOutDate) || text(row.application?.leaseEnd);
   if (!id || !propertyId || !roomChoice) return null;
-  if (!leaseStart && !leaseEnd) return null;
+  if (!leaseStart) return null;
 
   return {
     id,

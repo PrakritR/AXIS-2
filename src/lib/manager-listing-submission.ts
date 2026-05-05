@@ -384,13 +384,56 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     ];
   } else {
     sharedSpaces = sharedSpaces.map((ss) => ({
+      ...(function normalizeSharedSpaceRow() {
+        const rawLocation =
+          typeof (ss as ManagerSharedSpaceSubmission & { location?: unknown }).location === "string"
+            ? ((ss as ManagerSharedSpaceSubmission & { location: string }).location ?? "")
+            : "";
+        const rawDetail = typeof ss.detail === "string" ? ss.detail : "";
+        const lines = rawDetail.split(/\r?\n/);
+        const locationFromDetail = lines
+          .find((line) => /^\s*Location:\s*/i.test(line))
+          ?.replace(/^\s*Location:\s*/i, "")
+          .trim() ?? "";
+        const detailWithoutLocation = lines.filter((line) => !/^\s*Location:\s*/i.test(line)).join("\n").trim();
+        const boilerplate = new Set([
+          "Shared kitchen and dining area. Add appliances, storage, cleanup expectations, and how residents share the space.",
+          "Shared lounge or living area. Add seating, TV, quiet hours, guest expectations, and any usage rules.",
+          "Laundry area access, machines, scheduling expectations, and whether supplies are included.",
+          "Shared outdoor space, patio, deck, or yard. Add access, storage, guest rules, and maintenance expectations.",
+        ]);
+        return {
+          normalizedLocation: rawLocation.trim() || locationFromDetail,
+          normalizedDetail: boilerplate.has(detailWithoutLocation) ? "" : detailWithoutLocation,
+        };
+      })(),
       id: ss.id,
       name: ss.name ?? "",
-      location:
-        typeof (ss as ManagerSharedSpaceSubmission & { location?: unknown }).location === "string"
-          ? ((ss as ManagerSharedSpaceSubmission & { location: string }).location ?? "")
-          : "",
-      detail: ss.detail ?? "",
+      location: (function () {
+        const rawLocation =
+          typeof (ss as ManagerSharedSpaceSubmission & { location?: unknown }).location === "string"
+            ? ((ss as ManagerSharedSpaceSubmission & { location: string }).location ?? "")
+            : "";
+        const rawDetail = typeof ss.detail === "string" ? ss.detail : "";
+        const lines = rawDetail.split(/\r?\n/);
+        const locationFromDetail = lines
+          .find((line) => /^\s*Location:\s*/i.test(line))
+          ?.replace(/^\s*Location:\s*/i, "")
+          .trim() ?? "";
+        return rawLocation.trim() || locationFromDetail;
+      })(),
+      detail: (function () {
+        const rawDetail = typeof ss.detail === "string" ? ss.detail : "";
+        const lines = rawDetail.split(/\r?\n/);
+        const cleaned = lines.filter((line) => !/^\s*Location:\s*/i.test(line)).join("\n").trim();
+        const boilerplate = new Set([
+          "Shared kitchen and dining area. Add appliances, storage, cleanup expectations, and how residents share the space.",
+          "Shared lounge or living area. Add seating, TV, quiet hours, guest expectations, and any usage rules.",
+          "Laundry area access, machines, scheduling expectations, and whether supplies are included.",
+          "Shared outdoor space, patio, deck, or yard. Add access, storage, guest rules, and maintenance expectations.",
+        ]);
+        return boilerplate.has(cleaned) ? "" : cleaned;
+      })(),
       amenitiesText:
         typeof (ss as ManagerSharedSpaceSubmission & { amenitiesText?: string }).amenitiesText === "string"
           ? (ss as ManagerSharedSpaceSubmission & { amenitiesText: string }).amenitiesText

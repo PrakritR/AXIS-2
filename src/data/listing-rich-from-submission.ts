@@ -322,10 +322,24 @@ function formatUtilitiesEstimate(raw: string | undefined): string | undefined {
 function formatFurnishing(raw: string | undefined): string | undefined {
   const t = raw?.trim();
   if (!t) return undefined;
-  const items = t.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean);
-  if (items.length === 0) return undefined;
-  if (items.length === 1) return items[0];
-  return items.slice(0, -1).join(", ") + " & " + items[items.length - 1];
+  const items = t
+    .replace(/\b(and|&)\b/gi, ",")
+    .split(/[,\n]+/)
+    .map((s) => s.trim().replace(/^(and|&)\s+/i, ""))
+    .filter(Boolean);
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+  const cleanItems = deduped.filter((item) => item.toLowerCase() !== "unfurnished");
+  if (cleanItems.length === 0 && deduped.some((item) => item.toLowerCase() === "unfurnished")) return "Unfurnished";
+  if (cleanItems.length === 0) return undefined;
+  if (cleanItems.length === 1) return cleanItems[0];
+  return cleanItems.slice(0, -1).join(", ") + " & " + cleanItems[cleanItems.length - 1];
 }
 
 function perRoomBundleSummaryLine(r: ManagerRoomSubmission): string {

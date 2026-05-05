@@ -81,6 +81,65 @@ function roomFloorSelectValue(floor: string): string {
   return ROOM_FLOOR_LEVEL_CUSTOM;
 }
 
+function roomFloorOptionsFromStories(storiesId: string | undefined): { id: string; label: string }[] {
+  if (storiesId === "1") {
+    return [
+      { id: "1", label: "1st floor" },
+      { id: "basement", label: "Basement / garden level" },
+      { id: "loft", label: "Loft / attic" },
+      { id: "outdoor", label: "Outdoor / detached area" },
+    ];
+  }
+  if (storiesId === "2") {
+    return [
+      { id: "1", label: "1st floor" },
+      { id: "2", label: "2nd floor" },
+      { id: "basement", label: "Basement / garden level" },
+      { id: "loft", label: "Loft / attic" },
+      { id: "outdoor", label: "Outdoor / detached area" },
+    ];
+  }
+  if (storiesId === "3") {
+    return [
+      { id: "1", label: "1st floor" },
+      { id: "2", label: "2nd floor" },
+      { id: "3", label: "3rd floor" },
+      { id: "basement", label: "Basement / garden level" },
+      { id: "loft", label: "Loft / attic" },
+      { id: "outdoor", label: "Outdoor / detached area" },
+    ];
+  }
+  if (storiesId === "4") {
+    return [
+      { id: "1", label: "1st floor" },
+      { id: "2", label: "2nd floor" },
+      { id: "3", label: "3rd floor" },
+      { id: "4plus", label: "4th floor or higher" },
+      { id: "basement", label: "Basement / garden level" },
+      { id: "loft", label: "Loft / attic" },
+      { id: "outdoor", label: "Outdoor / detached area" },
+    ];
+  }
+  if (storiesId === "split") {
+    return [
+      { id: "split-main", label: "Main split level" },
+      { id: "split-upper", label: "Upper split level" },
+      { id: "split-lower", label: "Lower split level" },
+      { id: "basement", label: "Basement / garden level" },
+      { id: "loft", label: "Loft / attic" },
+      { id: "outdoor", label: "Outdoor / detached area" },
+    ];
+  }
+  return LISTING_ROOM_FLOOR_LEVEL_OPTIONS.map((o) => ({ id: o.id, label: o.label }));
+}
+
+function roomFloorSelectValueFromOptions(floor: string, options: readonly { id: string; label: string }[]): string {
+  const hit = options.find((o) => o.label === floor);
+  if (hit) return hit.id;
+  if (!floor.trim()) return "";
+  return ROOM_FLOOR_LEVEL_CUSTOM;
+}
+
 const LOCATION_LEVEL_CUSTOM = "__location_custom__";
 
 function locationOptionsFromStories(storiesId: string | undefined): string[] {
@@ -186,22 +245,22 @@ function mediaDropZoneClass(active: boolean) {
 const SHARED_SPACE_TEMPLATES = [
   {
     label: "Kitchen & dining",
-    detail: "Shared kitchen and dining area. Add appliances, storage, cleanup expectations, and how residents share the space.",
+    detail: "",
     amenities: ["Refrigerator", "Microwave", "Oven / range", "Dishwasher"],
   },
   {
     label: "Living room / lounge",
-    detail: "Shared lounge or living area. Add seating, TV, quiet hours, guest expectations, and any usage rules.",
-    amenities: ["Living / lounge seating", "TV in common area"],
+    detail: "",
+    amenities: ["Living / lounge seating", "Couch / sofa", "TV in common area"],
   },
   {
     label: "Laundry",
-    detail: "Laundry area access, machines, scheduling expectations, and whether supplies are included.",
-    amenities: ["In-unit laundry"],
+    detail: "",
+    amenities: ["Washer / dryer", "Laundry sink"],
   },
   {
     label: "Outdoor / yard",
-    detail: "Shared outdoor space, patio, deck, or yard. Add access, storage, guest rules, and maintenance expectations.",
+    detail: "",
     amenities: [],
   },
 ] as const;
@@ -377,6 +436,7 @@ export function ManagerAddListingForm({
     [listingPresets],
   );
   const locationLevelOptions = useMemo(() => locationOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
+  const roomFloorOptions = useMemo(() => roomFloorOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
 
   const isEditMode = Boolean(editPendingId ?? editListingId);
   const lastStepIndex = LISTING_STEP_COUNT - 1;
@@ -443,10 +503,16 @@ export function ManagerAddListingForm({
       const slots = sub.listingBedroomSlots ?? sub.rooms.length;
       const applied = applyListingBedroomSlots(sub, slots);
       if (!applied.ok) {
-        showToast(applied.message);
-        return;
+        if (isEditMode) {
+          setSub((s) => ({ ...s, listingBedroomSlots: s.rooms.length }));
+          showToast("Bedroom count was reset to match existing room rows so your layout updates can continue.");
+        } else {
+          showToast(applied.message);
+          return;
+        }
+      } else {
+        setSub(applied.sub);
       }
-      setSub(applied.sub);
     }
     setStepIndex((s) => Math.min(s + 1, lastStepIndex));
   };
@@ -1811,21 +1877,21 @@ export function ManagerAddListingForm({
                             <Select
                               aria-label={`Floor for ${room.name || `room ${i + 1}`}`}
                               className={`${selectInputCls} appearance-none pr-10`}
-                              value={roomFloorSelectValue(room.floor)}
+                              value={roomFloorSelectValueFromOptions(room.floor, roomFloorOptions)}
                               onChange={(e) => {
                                 const v = e.target.value;
                                 if (v === ROOM_FLOOR_LEVEL_CUSTOM) {
-                                  if (LISTING_ROOM_FLOOR_LEVEL_OPTIONS.some((o) => o.label === room.floor)) {
+                                  if (roomFloorOptions.some((o) => o.label === room.floor)) {
                                     setRoom(i, { floor: "" });
                                   }
                                   return;
                                 }
-                                const label = LISTING_ROOM_FLOOR_LEVEL_OPTIONS.find((o) => o.id === v)?.label ?? "";
+                                const label = roomFloorOptions.find((o) => o.id === v)?.label ?? "";
                                 setRoom(i, { floor: label });
                               }}
                             >
                               <option value="">Select floor</option>
-                              {LISTING_ROOM_FLOOR_LEVEL_OPTIONS.map((o) => (
+                              {roomFloorOptions.map((o) => (
                                 <option key={o.id} value={o.id}>
                                   {o.label}
                                 </option>
@@ -1836,7 +1902,7 @@ export function ManagerAddListingForm({
                               <ChevronDownTiny />
                             </span>
                           </div>
-                          {roomFloorSelectValue(room.floor) === ROOM_FLOOR_LEVEL_CUSTOM ? (
+                          {roomFloorSelectValueFromOptions(room.floor, roomFloorOptions) === ROOM_FLOOR_LEVEL_CUSTOM ? (
                             <Input
                               value={room.floor}
                               onChange={(e) => setRoom(i, { floor: e.target.value })}

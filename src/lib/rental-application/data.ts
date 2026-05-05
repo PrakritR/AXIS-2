@@ -104,7 +104,7 @@ function leaseBlockedByManualRanges(roomChoiceValue: string, targetStart: Date, 
 
 type ApprovedRoomOccupancy = {
   rowId: string;
-  leaseStart: Date | null;
+  leaseStart: Date;
   leaseEnd: Date | null;
 };
 
@@ -139,8 +139,8 @@ function approvedOccupancyForRoom(roomChoiceValue: string, excludeApplicationId?
       const leaseStart = manualStart ?? appStart;
       const leaseEnd = manualEnd ?? appEnd;
 
-      // Resident timing is required for reliable occupancy windows.
-      if (!leaseStart && !leaseEnd) return null;
+      // Reliable occupancy requires a known move-in/start date.
+      if (!leaseStart) return null;
 
       return {
         rowId: row.id,
@@ -148,7 +148,7 @@ function approvedOccupancyForRoom(roomChoiceValue: string, excludeApplicationId?
         leaseEnd,
       };
     })
-    .filter((value): value is ApprovedRoomOccupancy => Boolean(value));
+    .filter((value): value is NonNullable<typeof value> => value !== null);
 }
 
 export function getRoomUnavailabilityWindows(
@@ -236,10 +236,12 @@ export function effectiveRoomAvailabilityLabel(
     .sort((a, b) => (a.start as Date).getTime() - (b.start as Date).getTime())[0];
 
   if (nextBlock?.start) {
-    if (nextBlock.end) {
-      return `Available now · Unavailable ${formatAvailabilityDate(nextBlock.start)} to ${formatAvailabilityDate(nextBlock.end)}`;
+    const until = dateMinusOneDay(nextBlock.start);
+    if (until.getTime() >= targetStart.getTime()) {
+      return `Available until ${formatAvailabilityDate(until)}`;
     }
-    return `Available now · Unavailable from ${formatAvailabilityDate(nextBlock.start)}`;
+    if (nextBlock.end) return `Unavailable until ${formatAvailabilityDate(nextBlock.end)}`;
+    return "Unavailable";
   }
 
   return "Available now";

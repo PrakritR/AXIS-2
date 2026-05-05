@@ -32,9 +32,25 @@ export const SHARED_SPACE_AMENITY_PRESETS = [
   { id: "microwave", label: "Microwave" },
   { id: "oven-range", label: "Oven / range" },
   { id: "fridge", label: "Refrigerator" },
+  { id: "dining-table", label: "Dining table" },
+  { id: "dining-chairs", label: "Dining chairs" },
+  { id: "island", label: "Kitchen island" },
+  { id: "pantry", label: "Pantry storage" },
+  { id: "coffee-station", label: "Coffee station" },
+  { id: "sofa", label: "Couch / sofa" },
+  { id: "coffee-table", label: "Coffee table" },
+  { id: "media-console", label: "Media console" },
+  { id: "streaming-tv", label: "Smart TV / streaming" },
   { id: "desk", label: "Desk / workspace" },
+  { id: "office-chair", label: "Office chair" },
   { id: "tv-common", label: "TV in common area" },
   { id: "lounge-seating", label: "Living / lounge seating" },
+  { id: "bookshelf", label: "Bookshelf" },
+  { id: "storage-cabinet", label: "Storage cabinet" },
+  { id: "washer-dryer", label: "Washer / dryer" },
+  { id: "laundry-sink", label: "Laundry sink" },
+  { id: "bbq-grill", label: "BBQ grill" },
+  { id: "patio-seating", label: "Patio seating" },
   { id: "printer", label: "Shared printer" },
 ] as const;
 
@@ -86,6 +102,10 @@ export const ROOM_FURNITURE_PRESETS = [
   { id: "mirror", label: "Mirror" },
 ] as const;
 
+const FURNITURE_LABEL_BY_LOWER = new Map(
+  ROOM_FURNITURE_PRESETS.map((p) => [p.label.toLowerCase(), p.label] as const),
+);
+
 export const DISALLOWED_ROOM_AMENITY_LABELS = new Set(["Bed", "Desk", "Private bathroom"]);
 
 export function sanitizeRoomAmenityText(text: string): string {
@@ -133,16 +153,32 @@ export function mergeToggleLine(existing: string, label: string, on: boolean): s
 
 /** Toggle an individual furniture item; clears the "Unfurnished" sentinel. */
 export function mergeFurnitureToggle(existing: string, label: string, on: boolean): string {
-  const items = splitLineList(existing).filter((l) => l !== "Unfurnished");
-  const set = new Set(items);
+  const normalized = existing
+    .replace(/\b(and|&)\b/gi, ",")
+    .split(/[\n,]+/)
+    .map((s) => s.trim().replace(/^(and|&)\s+/i, ""))
+    .filter(Boolean)
+    .filter((s) => s.toLowerCase() !== "unfurnished");
+  const set = new Set<string>();
+  for (const token of normalized) {
+    const canonical = FURNITURE_LABEL_BY_LOWER.get(token.toLowerCase()) ?? token;
+    set.add(canonical);
+  }
   if (on) set.add(label);
   else set.delete(label);
-  return [...set].join(", ");
+  return ROOM_FURNITURE_PRESETS.map((p) => p.label)
+    .filter((item) => set.has(item))
+    .join(", ");
 }
 
 /** Case-insensitive: which furniture preset labels are present in the stored string. */
 export function parseFurnitureSet(furnishing: string): Set<string> {
-  const lower = new Set(splitLineList(furnishing).map((l) => l.toLowerCase()));
+  const normalized = furnishing
+    .replace(/\b(and|&)\b/gi, ",")
+    .split(/[\n,]+/)
+    .map((s) => s.trim().replace(/^(and|&)\s+/i, ""))
+    .filter(Boolean);
+  const lower = new Set(normalized.map((l) => l.toLowerCase()));
   const out = new Set<string>();
   for (const p of ROOM_FURNITURE_PRESETS) {
     if (lower.has(p.label.toLowerCase())) out.add(p.label);
