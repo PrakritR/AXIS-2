@@ -299,19 +299,37 @@ async function fileToDataUrl(file: File, maxBytes: number): Promise<string | nul
   });
 }
 
+async function uploadToBucket(input: File | string): Promise<string> {
+  const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
+  const db = createSupabaseBrowserClient();
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) throw new Error("Not signed in.");
+
+  const userId = session.user.id;
+  let body: Blob;
+  let ext: string;
+
+  if (typeof input === "string") {
+    // data URL — let the browser decode it natively, avoids manual base64 work
+    body = await fetch(input).then((r) => r.blob());
+    ext = body.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+  } else {
+    body = input;
+    ext = input.name.split(".").pop() ?? "mp4";
+  }
+
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await db.storage.from("listing-photos").upload(path, body, {
+    contentType: body.type || "application/octet-stream",
+    upsert: false,
+  });
+  if (error) throw new Error(error.message);
+  return db.storage.from("listing-photos").getPublicUrl(path).data.publicUrl;
+}
+
 async function uploadDataUrl(dataUrl: string): Promise<string> {
   if (!dataUrl.startsWith("data:")) return dataUrl;
-  const ext = dataUrl.startsWith("data:video/") ? "mp4" : "jpg";
-  const res = await fetch("/api/listing-photos", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ dataUrl, ext }),
-  });
-  if (!res.ok) throw new Error("Photo upload failed.");
-  const json = (await res.json()) as { url?: string };
-  if (!json.url) throw new Error("No URL returned from photo upload.");
-  return json.url;
+  return uploadToBucket(dataUrl);
 }
 
 async function uploadSubmissionMedia(
@@ -362,13 +380,7 @@ async function uploadSubmissionMedia(
 }
 
 async function uploadVideoFile(file: File): Promise<string> {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch("/api/listing-photos", { method: "POST", credentials: "include", body: form });
-  if (!res.ok) throw new Error("Video upload failed.");
-  const json = (await res.json()) as { url?: string };
-  if (!json.url) throw new Error("No URL returned from video upload.");
-  return json.url;
+  return uploadToBucket(file);
 }
 
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
