@@ -299,6 +299,59 @@ async function fileToDataUrl(file: File, maxBytes: number): Promise<string | nul
   });
 }
 
+const TUS_CHUNK = 6 * 1024 * 1024; // 6 MB per chunk
+
+async function uploadViaTus(file: File, path: string, mime: string, token: string, supabaseUrl: string): Promise<void> {
+  const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)));
+  const metadata = [
+    `bucketName ${b64("listing-photos")}`,
+    `objectName ${b64(path)}`,
+    `contentType ${b64(mime)}`,
+    `cacheControl ${b64("3600")}`,
+  ].join(",");
+
+  const createRes = await fetch(`${supabaseUrl}/storage/v1/upload/resumable`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Length": "0",
+      "Upload-Length": String(file.size),
+      "Upload-Metadata": metadata,
+      "Tus-Resumable": "1.0.0",
+      "x-upsert": "false",
+    },
+  });
+  if (!createRes.ok) {
+    const body = await createRes.text().catch(() => "");
+    throw new Error(`TUS session failed (${createRes.status}): ${body}`);
+  }
+  const rawLoc = createRes.headers.get("Location");
+  if (!rawLoc) throw new Error("TUS: no Location header in response");
+  const location = rawLoc.startsWith("http") ? rawLoc : `${supabaseUrl}${rawLoc}`;
+
+  let offset = 0;
+  while (offset < file.size) {
+    const end = Math.min(offset + TUS_CHUNK, file.size);
+    const chunk = file.slice(offset, end);
+    const patchRes = await fetch(location, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/offset+octet-stream",
+        "Content-Length": String(end - offset),
+        "Upload-Offset": String(offset),
+        "Tus-Resumable": "1.0.0",
+      },
+      body: chunk,
+    });
+    if (!patchRes.ok) {
+      const body = await patchRes.text().catch(() => "");
+      throw new Error(`TUS chunk failed at offset ${offset} (${patchRes.status}): ${body}`);
+    }
+    offset = end;
+  }
+}
+
 async function uploadToBucket(input: File | string): Promise<string> {
   const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
   const db = createSupabaseBrowserClient();
@@ -311,29 +364,34 @@ async function uploadToBucket(input: File | string): Promise<string> {
   let ext: string;
 
   if (typeof input === "string") {
-    // data URL — let the browser decode it natively
     body = await fetch(input).then((r) => r.blob());
     mime = body.type || "image/jpeg";
     ext = mime.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
   } else {
     body = input;
     ext = input.name.split(".").pop()?.toLowerCase() ?? "mp4";
-    // Derive MIME from extension when the browser leaves it blank
     mime = input.type || extToMime(ext);
   }
 
   const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  // Use TUS resumable upload for large files (videos) to avoid Supabase's single-request size limit
+  if (input instanceof File && input.size >= 10 * 1024 * 1024) {
+    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
+    const token = session.access_token;
+    await uploadViaTus(input, path, mime, token, supabaseUrl);
+    return db.storage.from("listing-photos").getPublicUrl(path).data.publicUrl;
+  }
+
   const { error } = await db.storage.from("listing-photos").upload(path, body, {
     contentType: mime,
     upsert: false,
-    // duplex: 'half' enables streaming so the browser doesn't buffer the entire
-    // file in memory before sending — required for large video files.
     duplex: "half",
   });
   if (error) {
     const msg = error.message ?? "";
     if (msg.includes("Payload too large") || msg.includes("413") || msg.includes("exceeded")) {
-      throw new Error("Video is too large for your Supabase plan. Increase the file size limit in Supabase Dashboard → Project Settings → Storage.");
+      throw new Error("File is too large. Try splitting the video into shorter clips.");
     }
     throw new Error(msg || "Upload failed.");
   }
