@@ -361,6 +361,16 @@ async function uploadSubmissionMedia(
   };
 }
 
+async function uploadVideoFile(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/listing-photos", { method: "POST", credentials: "include", body: form });
+  if (!res.ok) throw new Error("Video upload failed.");
+  const json = (await res.json()) as { url?: string };
+  if (!json.url) throw new Error("No URL returned from video upload.");
+  return json.url;
+}
+
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
     <div className="mb-1.5">
@@ -509,6 +519,8 @@ export function ManagerAddListingForm({
     if (old) { URL.revokeObjectURL(old); videoPreviewUrls.current.delete(key); }
     setVideoTick((n) => n + 1);
   };
+
+  const [videoUploadingKeys, setVideoUploadingKeys] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
@@ -888,20 +900,21 @@ export function ManagerAddListingForm({
 
   const onPickRoomVideo = async (roomIndex: number, file: File | null) => {
     if (!file) return;
-    try {
-    if (!file.type.startsWith("video/")) {
-      showToast("Please choose a video file.");
-      return;
-    }
-    const url = await fileToDataUrl(file, MAX_VID_BYTES);
-    if (!url) {
-      showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
-      return;
-    }
+    if (!file.type.startsWith("video/")) { showToast("Please choose a video file."); return; }
     const roomId = sub.rooms[roomIndex]?.id;
-    if (roomId) setVideoPreview(`room-${roomId}`, file);
-    setRoom(roomIndex, { videoDataUrl: url });
-    } catch { showToast("Could not process video. Please try a different file."); }
+    if (!roomId) return;
+    const key = `room-${roomId}`;
+    setVideoPreview(key, file);
+    setVideoUploadingKeys((s) => new Set([...s, key]));
+    try {
+      const url = await uploadVideoFile(file);
+      setRoom(roomIndex, { videoDataUrl: url });
+    } catch {
+      showToast("Could not upload video. Check your connection and try again.");
+      clearVideoPreview(key);
+    } finally {
+      setVideoUploadingKeys((s) => { const n = new Set(s); n.delete(key); return n; });
+    }
   };
 
   const removeRoomPhoto = (roomIndex: number, photoIndex: number) => {
@@ -949,20 +962,21 @@ export function ManagerAddListingForm({
 
   const onPickBathroomVideo = async (bathIndex: number, file: File | null) => {
     if (!file) return;
-    try {
-    if (!file.type.startsWith("video/")) {
-      showToast("Please choose a video file.");
-      return;
-    }
-    const url = await fileToDataUrl(file, MAX_VID_BYTES);
-    if (!url) {
-      showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
-      return;
-    }
+    if (!file.type.startsWith("video/")) { showToast("Please choose a video file."); return; }
     const bathId = sub.bathrooms[bathIndex]?.id;
-    if (bathId) setVideoPreview(`bath-${bathId}`, file);
-    setBath(bathIndex, { videoDataUrl: url });
-    } catch { showToast("Could not process video. Please try a different file."); }
+    if (!bathId) return;
+    const key = `bath-${bathId}`;
+    setVideoPreview(key, file);
+    setVideoUploadingKeys((s) => new Set([...s, key]));
+    try {
+      const url = await uploadVideoFile(file);
+      setBath(bathIndex, { videoDataUrl: url });
+    } catch {
+      showToast("Could not upload video. Check your connection and try again.");
+      clearVideoPreview(key);
+    } finally {
+      setVideoUploadingKeys((s) => { const n = new Set(s); n.delete(key); return n; });
+    }
   };
 
   const removeBathroomPhoto = (bathIndex: number, photoIndex: number) => {
@@ -1017,20 +1031,21 @@ export function ManagerAddListingForm({
 
   const onPickSharedSpaceVideo = async (spaceIndex: number, file: File | null) => {
     if (!file) return;
-    try {
-    if (!file.type.startsWith("video/")) {
-      showToast("Please choose a video file.");
-      return;
-    }
-    const url = await fileToDataUrl(file, MAX_VID_BYTES);
-    if (!url) {
-      showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
-      return;
-    }
+    if (!file.type.startsWith("video/")) { showToast("Please choose a video file."); return; }
     const spaceId = sub.sharedSpaces[spaceIndex]?.id;
-    if (spaceId) setVideoPreview(`space-${spaceId}`, file);
-    setSharedSpace(spaceIndex, { videoDataUrl: url });
-    } catch { showToast("Could not process video. Please try a different file."); }
+    if (!spaceId) return;
+    const key = `space-${spaceId}`;
+    setVideoPreview(key, file);
+    setVideoUploadingKeys((s) => new Set([...s, key]));
+    try {
+      const url = await uploadVideoFile(file);
+      setSharedSpace(spaceIndex, { videoDataUrl: url });
+    } catch {
+      showToast("Could not upload video. Check your connection and try again.");
+      clearVideoPreview(key);
+    } finally {
+      setVideoUploadingKeys((s) => { const n = new Set(s); n.delete(key); return n; });
+    }
   };
 
   const removeSharedSpacePhoto = (spaceIndex: number, photoIndex: number) => {
@@ -1098,19 +1113,18 @@ export function ManagerAddListingForm({
 
   const onPickHouseVideo = async (file: File | null) => {
     if (!file) return;
-    try {
-    if (!file.type.startsWith("video/")) {
-      showToast("Please choose a video file.");
-      return;
-    }
-    const url = await fileToDataUrl(file, MAX_VID_BYTES);
-    if (!url) {
-      showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
-      return;
-    }
+    if (!file.type.startsWith("video/")) { showToast("Please choose a video file."); return; }
     setVideoPreview("house", file);
-    setSub((s) => ({ ...s, houseVideoDataUrl: url }));
-    } catch { showToast("Could not process video. Please try a different file."); }
+    setVideoUploadingKeys((s) => new Set([...s, "house"]));
+    try {
+      const url = await uploadVideoFile(file);
+      setSub((s) => ({ ...s, houseVideoDataUrl: url }));
+    } catch {
+      showToast("Could not upload video. Check your connection and try again.");
+      clearVideoPreview("house");
+    } finally {
+      setVideoUploadingKeys((s) => { const n = new Set(s); n.delete("house"); return n; });
+    }
   };
 
   const clearHouseVideo = () => {
@@ -1295,12 +1309,13 @@ export function ManagerAddListingForm({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-slate-900/50 px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4">
-      <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Close" />
+    <div
+      className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-slate-900/50 px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <form
         id="manager-add-listing-form"
         onSubmit={(e) => e.preventDefault()}
-        onClick={(e) => e.stopPropagation()}
         className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
       >
         <div className="shrink-0 border-b border-slate-100 p-3 pb-2 sm:p-4 sm:pb-3">
@@ -2265,9 +2280,13 @@ export function ManagerAddListingForm({
                             htmlFor={`room-video-${room.id}`}
                             className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
                           >
-                            {room.videoDataUrl ? "Replace video" : "Add video"}
+                            {videoUploadingKeys.has(`room-${room.id}`) ? "Uploading…" : room.videoDataUrl ? "Replace video" : "Add video"}
                           </label>
+                          {videoUploadingKeys.has(`room-${room.id}`) ? (
+                            <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                          ) : (
                           <p className="mt-3 text-sm text-slate-600">Drag and drop one room video here, or use the button above.</p>
+                          )}
                           {room.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
                               <video
@@ -2554,9 +2573,13 @@ export function ManagerAddListingForm({
                             htmlFor={`bath-video-${b.id}`}
                             className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
                           >
-                            {b.videoDataUrl ? "Replace video" : "Add video"}
+                            {videoUploadingKeys.has(`bath-${b.id}`) ? "Uploading…" : b.videoDataUrl ? "Replace video" : "Add video"}
                           </label>
+                          {videoUploadingKeys.has(`bath-${b.id}`) ? (
+                            <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                          ) : (
                           <p className="mt-3 text-sm text-slate-600">Drag and drop one bathroom video here, or use the button above.</p>
+                          )}
                           {b.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
                               <video
@@ -2782,8 +2805,11 @@ export function ManagerAddListingForm({
                               htmlFor={`shared-video-${sp.id}`}
                               className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
                             >
-                              {sp.videoDataUrl ? "Replace video" : "Add video"}
+                              {videoUploadingKeys.has(`space-${sp.id}`) ? "Uploading…" : sp.videoDataUrl ? "Replace video" : "Add video"}
                             </label>
+                            {videoUploadingKeys.has(`space-${sp.id}`) ? (
+                              <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                            ) : null}
                             {sp.videoDataUrl ? (
                               <div className="mt-4 space-y-2">
                                 <video
@@ -2910,9 +2936,13 @@ export function ManagerAddListingForm({
                   htmlFor="house-video-input"
                   className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
                 >
-                  {sub.houseVideoDataUrl ? "Replace video" : "Add house video"}
+                  {videoUploadingKeys.has("house") ? "Uploading…" : sub.houseVideoDataUrl ? "Replace video" : "Add house video"}
                 </label>
+                {videoUploadingKeys.has("house") ? (
+                  <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                ) : (
                 <p className="mt-3 text-sm text-slate-600">Drag and drop a video here, or use the button above.</p>
+                )}
                 {sub.houseVideoDataUrl ? (
                   <div className="mt-3 space-y-2">
                     <video
