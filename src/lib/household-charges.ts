@@ -424,6 +424,37 @@ function recurringRentDueDate(month: string | undefined, dueDay: number | undefi
   return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
+function parseDueDateLabelToDate(label: string | undefined): Date | null {
+  const raw = label?.trim();
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 12, 0, 0, 0);
+}
+
+function startOfTodayLocal(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+}
+
+export function householdChargeDueDate(charge: HouseholdCharge): Date | null {
+  if (
+    (charge.kind === "rent" || (charge.kind === "utilities" && charge.recurringRentProfileId)) &&
+    charge.rentMonth
+  ) {
+    return recurringRentDueDate(charge.rentMonth, charge.dueDay ?? 1);
+  }
+  return parseDueDateLabelToDate(charge.dueDateLabel);
+}
+
+export function isHouseholdChargeOverdue(charge: HouseholdCharge, now = new Date()): boolean {
+  if (charge.status === "paid") return false;
+  const due = householdChargeDueDate(charge);
+  if (!due) return false;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  return due.getTime() < today.getTime();
+}
+
 function dueLabelForLeaseStart(leaseStart?: string | null): string {
   const raw = leaseStart?.trim();
   if (!raw) return "Before move-in";
@@ -1658,7 +1689,8 @@ export function residentLeaseBlockedReasons(email: string, userId: string | null
 }
 
 export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPaymentLedgerRow {
-  const bucket: ManagerPaymentBucket = c.status === "paid" ? "paid" : "pending";
+  const overdue = c.status !== "paid" && isHouseholdChargeOverdue(c, startOfTodayLocal());
+  const bucket: ManagerPaymentBucket = c.status === "paid" ? "paid" : overdue ? "overdue" : "pending";
   return {
     id: c.id,
     householdChargeId: c.id,
@@ -1671,7 +1703,7 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     balanceDue: c.status === "paid" ? "$0.00" : c.balanceLabel,
     dueDate: chargeDueLabel(c),
     bucket,
-    statusLabel: c.status === "paid" ? "Paid" : "Pending",
+    statusLabel: c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Pending",
     notes:
       c.kind === "rent"
         ? `Recurring tenant rent. Current cycle: ${c.rentMonth ?? currentRentMonth()}. Due ${formatRecurringRentDueLabel(c.rentMonth ?? currentRentMonth(), c.dueDay ?? 1)}.`

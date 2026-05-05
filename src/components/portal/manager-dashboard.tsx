@@ -15,6 +15,7 @@ import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import {
   HOUSEHOLD_CHARGES_EVENT,
+  isHouseholdChargeOverdue,
   readChargesForManager,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
@@ -184,8 +185,8 @@ export function ManagerDashboard() {
     const openWorkOrders = allWorkOrders.filter((r) => r.bucket === "open" || r.bucket === "scheduled");
 
     const charges = readChargesForManager(userId);
-    const pendingCharges = charges.filter((c) => c.status === "pending");
-    const pendingTotal = pendingCharges.reduce((s, c) => {
+    const overdueCharges = charges.filter((c) => isHouseholdChargeOverdue(c));
+    const overdueTotal = overdueCharges.reduce((s, c) => {
       const n = Number(c.balanceLabel.replace(/[^\d.]/g, ""));
       return s + (Number.isFinite(n) ? Math.round(n * 100) : 0);
     }, 0);
@@ -229,8 +230,8 @@ export function ManagerDashboard() {
       pendingApps,
       activeResidents,
       openWorkOrders,
-      pendingCharges,
-      pendingTotal,
+      overdueCharges,
+      overdueTotal,
       inbox,
       totalLeases,
       needsManagerSig,
@@ -246,8 +247,8 @@ export function ManagerDashboard() {
     pendingApps,
     activeResidents,
     openWorkOrders,
-    pendingCharges,
-    pendingTotal,
+    overdueCharges,
+    overdueTotal,
     inbox,
     totalLeases,
     needsManagerSig,
@@ -268,7 +269,7 @@ export function ManagerDashboard() {
           inbox > 0 ||
           nextTour ||
           pendingProperties > 0 ||
-          pendingCharges.length > 0) && (
+          overdueCharges.length > 0) && (
           <div className="space-y-2">
             {pendingApps.length > 0 && (
               <NotifBanner tone="amber">
@@ -321,10 +322,10 @@ export function ManagerDashboard() {
                 </Link>
               </NotifBanner>
             )}
-            {pendingCharges.length > 0 && (
+            {overdueCharges.length > 0 && (
               <NotifBanner tone="amber">
                 <span>
-                  <span className="font-semibold">{pendingCharges.length}</span> outstanding charge{pendingCharges.length === 1 ? "" : "s"} totalling <span className="font-semibold">{dollars(pendingTotal)}</span> across residents
+                  <span className="font-semibold">{overdueCharges.length}</span> overdue charge{overdueCharges.length === 1 ? "" : "s"} totalling <span className="font-semibold">{dollars(overdueTotal)}</span> across residents
                 </span>
                 <Link href={`${BASE}/residents`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
                   View →
