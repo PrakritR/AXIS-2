@@ -299,6 +299,68 @@ async function fileToDataUrl(file: File, maxBytes: number): Promise<string | nul
   });
 }
 
+async function uploadDataUrl(dataUrl: string): Promise<string> {
+  if (!dataUrl.startsWith("data:")) return dataUrl;
+  const ext = dataUrl.startsWith("data:video/") ? "mp4" : "jpg";
+  const res = await fetch("/api/listing-photos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ dataUrl, ext }),
+  });
+  if (!res.ok) throw new Error("Photo upload failed.");
+  const json = (await res.json()) as { url?: string };
+  if (!json.url) throw new Error("No URL returned from photo upload.");
+  return json.url;
+}
+
+async function uploadSubmissionMedia(
+  sub: import("@/lib/manager-listing-submission").ManagerListingSubmissionV1,
+): Promise<import("@/lib/manager-listing-submission").ManagerListingSubmissionV1> {
+  async function uploadAll(urls: string[]): Promise<string[]> {
+    return Promise.all(urls.map((u) => uploadDataUrl(u)));
+  }
+  async function uploadOne(url: string | null | undefined): Promise<string | null> {
+    if (!url) return url ?? null;
+    return uploadDataUrl(url);
+  }
+
+  const [housePhotos, houseVideo, rooms, bathrooms, sharedSpaces] = await Promise.all([
+    uploadAll(sub.housePhotoDataUrls ?? []),
+    uploadOne(sub.houseVideoDataUrl),
+    Promise.all(
+      sub.rooms.map(async (r) => ({
+        ...r,
+        photoDataUrls: await uploadAll(r.photoDataUrls),
+        videoDataUrl: await uploadOne(r.videoDataUrl),
+      })),
+    ),
+    Promise.all(
+      sub.bathrooms.map(async (b) => ({
+        ...b,
+        photoDataUrls: await uploadAll(b.photoDataUrls ?? []),
+        videoDataUrl: await uploadOne(b.videoDataUrl),
+      })),
+    ),
+    Promise.all(
+      sub.sharedSpaces.map(async (s) => ({
+        ...s,
+        photoDataUrls: await uploadAll(s.photoDataUrls ?? []),
+        videoDataUrl: await uploadOne(s.videoDataUrl),
+      })),
+    ),
+  ]);
+
+  return {
+    ...sub,
+    housePhotoDataUrls: housePhotos,
+    houseVideoDataUrl: houseVideo,
+    rooms,
+    bathrooms,
+    sharedSpaces,
+  };
+}
+
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
     <div className="mb-1.5">
@@ -1193,8 +1255,16 @@ export function ManagerAddListingForm({
         );
         return;
       }
+      let uploadedSubmission: typeof submission;
+      try {
+        uploadedSubmission = await uploadSubmissionMedia(submission);
+      } catch {
+        showToast("Could not upload photos. Check your connection and try again.");
+        return;
+      }
+
       if (editPendingId) {
-        const ok = await updatePendingManagerPropertyOnServer(editPendingId, submission, userId);
+        const ok = await updatePendingManagerPropertyOnServer(editPendingId, uploadedSubmission, userId);
         if (!ok) {
           showToast("Could not save changes.");
           return;
@@ -1204,7 +1274,7 @@ export function ManagerAddListingForm({
       }
       if (editListingId) {
         const saveUserId = editListingOwnerUserId?.trim() || userId;
-        const ok = await updateExtraListingFromSubmissionOnServer(editListingId, saveUserId, submission);
+        const ok = await updateExtraListingFromSubmissionOnServer(editListingId, saveUserId, uploadedSubmission);
         if (!ok) {
           showToast("Could not save changes.");
           return;
@@ -1213,7 +1283,7 @@ export function ManagerAddListingForm({
         onSubmitted();
         return;
       }
-      const id = await submitManagerPendingPropertyToServer(submission, userId);
+      const id = await submitManagerPendingPropertyToServer(uploadedSubmission, userId);
       if (!id) {
         showToast("Could not submit listing.");
         return;
@@ -1230,6 +1300,7 @@ export function ManagerAddListingForm({
       <form
         id="manager-add-listing-form"
         onSubmit={(e) => e.preventDefault()}
+        onClick={(e) => e.stopPropagation()}
         className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
       >
         <div className="shrink-0 border-b border-slate-100 p-3 pb-2 sm:p-4 sm:pb-3">
