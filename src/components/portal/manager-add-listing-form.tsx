@@ -1,7 +1,7 @@
 "use client";
 
 import type { DragEvent, FormEvent, ReactNode } from "react";
-import { Children, useEffect, useMemo, useRef, useState } from "react";
+import { Children, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -261,6 +261,11 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
 };
 
 /** Reads a file and returns a compressed JPEG data URL. Falls back to raw data URL for non-image files. */
+/** Yields control back to the browser so it can paint/handle input before heavy work. */
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 async function fileToDataUrl(file: File, maxBytes: number): Promise<string | null> {
   if (file.size > maxBytes) return null;
   if (!file.type.startsWith("image/")) {
@@ -274,8 +279,9 @@ async function fileToDataUrl(file: File, maxBytes: number): Promise<string | nul
   return new Promise((resolve) => {
     const img = new window.Image();
     const objectUrl = URL.createObjectURL(file);
-    img.onload = () => {
+    img.onload = async () => {
       URL.revokeObjectURL(objectUrl);
+      await yieldToMain(); // let browser paint before blocking canvas work
       try {
         const scale = Math.min(1, IMG_MAX_WIDTH / img.width);
         const canvas = document.createElement("canvas");
@@ -794,6 +800,7 @@ export function ManagerAddListingForm({
     try {
     const next: string[] = [];
     for (let i = 0; i < Math.min(files.length, 6); i++) {
+      await yieldToMain();
       const f = files[i]!;
       if (!f.type.startsWith("image/")) {
         showToast("Images only for room photos.");
@@ -806,11 +813,13 @@ export function ManagerAddListingForm({
       }
       next.push(url);
     }
+    startTransition(() => {
     setSub((s) => {
       const rooms = [...s.rooms];
       const cur = rooms[roomIndex]!;
       rooms[roomIndex] = { ...cur, photoDataUrls: [...cur.photoDataUrls, ...next].slice(0, 8) };
       return { ...s, rooms };
+    });
     });
     } catch { showToast("Could not process image. Please try a different file."); }
   };
@@ -850,6 +859,7 @@ export function ManagerAddListingForm({
     try {
     const next: string[] = [];
     for (let i = 0; i < Math.min(files.length, 6); i++) {
+      await yieldToMain();
       const f = files[i]!;
       if (!f.type.startsWith("image/")) {
         showToast("Images only for bathroom photos.");
@@ -862,12 +872,14 @@ export function ManagerAddListingForm({
       }
       next.push(url);
     }
+    startTransition(() => {
     setSub((s) => {
       const bathrooms = [...s.bathrooms];
       const cur = bathrooms[bathIndex];
       if (!cur) return s;
       bathrooms[bathIndex] = { ...cur, photoDataUrls: [...(cur.photoDataUrls ?? []), ...next].slice(0, 8) };
       return { ...s, bathrooms };
+    });
     });
     } catch { showToast("Could not process image. Please try a different file."); }
   };
@@ -914,6 +926,7 @@ export function ManagerAddListingForm({
     try {
     const next: string[] = [];
     for (let i = 0; i < Math.min(files.length, 6); i++) {
+      await yieldToMain();
       const f = files[i]!;
       if (!f.type.startsWith("image/")) {
         showToast("Images only for shared-space photos.");
@@ -926,12 +939,14 @@ export function ManagerAddListingForm({
       }
       next.push(url);
     }
+    startTransition(() => {
     setSub((s) => {
       const sharedSpaces = [...s.sharedSpaces];
       const cur = sharedSpaces[spaceIndex];
       if (!cur) return s;
       sharedSpaces[spaceIndex] = { ...cur, photoDataUrls: [...(cur.photoDataUrls ?? []), ...next].slice(0, 8) };
       return { ...s, sharedSpaces };
+    });
     });
     } catch { showToast("Could not process image. Please try a different file."); }
   };
@@ -984,6 +999,7 @@ export function ManagerAddListingForm({
     }
     const next: string[] = [...cur];
     for (let i = 0; i < Math.min(files.length, remaining); i++) {
+      await yieldToMain();
       const f = files[i]!;
       if (!f.type.startsWith("image/")) {
         showToast("Images only for house photos.");
@@ -996,7 +1012,9 @@ export function ManagerAddListingForm({
       }
       next.push(url);
     }
-    setSub((s) => ({ ...s, housePhotoDataUrls: next }));
+    startTransition(() => {
+      setSub((s) => ({ ...s, housePhotoDataUrls: next }));
+    });
     } catch { showToast("Could not process image. Please try a different file."); }
   };
 
