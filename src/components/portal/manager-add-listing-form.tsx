@@ -143,41 +143,13 @@ function roomFloorSelectValueFromOptions(floor: string, options: readonly { id: 
 const LOCATION_LEVEL_CUSTOM = "__location_custom__";
 
 function locationOptionsFromStories(storiesId: string | undefined): string[] {
-  const base = ["1st / main floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  if (storiesId === "1") return base;
+  if (storiesId === "1") return ["1st / main floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
   if (storiesId === "2") return ["1st / main floor", "2nd floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  if (storiesId === "3") {
-    return [
-      "1st / main floor",
-      "2nd floor",
-      "3rd floor",
-      "Basement / garden level",
-      "Loft / attic",
-      "Outdoor / detached area",
-    ];
-  }
-  if (storiesId === "4") {
-    return [
-      "1st / main floor",
-      "2nd floor",
-      "3rd floor",
-      "4th floor or higher",
-      "Basement / garden level",
-      "Loft / attic",
-      "Outdoor / detached area",
-    ];
-  }
-  if (storiesId === "split") {
-    return [
-      "Main split level",
-      "Upper split level",
-      "Lower split level",
-      "Basement / garden level",
-      "Loft / attic",
-      "Outdoor / detached area",
-    ];
-  }
-  return base;
+  if (storiesId === "3") return ["1st / main floor", "2nd floor", "3rd floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+  if (storiesId === "4") return ["1st / main floor", "2nd floor", "3rd floor", "4th floor or higher", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+  if (storiesId === "split") return ["Main split level", "Upper split level", "Lower split level", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+  // Default: all standard floors (stories not yet set)
+  return ["1st / main floor", "2nd floor", "3rd floor", "4th floor or higher", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
 }
 
 function locationSelectValue(location: string, options: readonly string[]): string {
@@ -2526,13 +2498,9 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-shared"
             title="Shared spaces"
-            description="Add every common area residents can use: kitchen, dining, living room, laundry, yard, storage, parking, office, roof deck, and any other shared feature. Each row can have its own details, equipment, rules, and room access."
           >
               <div className="mb-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-                <p className="text-sm font-semibold text-blue-950">Quick add common shared spaces</p>
-                <p className="mt-1 text-xs leading-5 text-blue-900/75">
-                  These create fully editable rows with all current rooms selected. Use them for common spaces, then adjust details, amenities, and room access.
-                </p>
+                <p className="text-sm font-semibold text-blue-950">Quick add</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {SHARED_SPACE_TEMPLATES.map((template) => (
                     <Button
@@ -2552,27 +2520,9 @@ export function ManagerAddListingForm({
                 </div>
               </div>
 
-              <div className="mb-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-2xl font-bold tabular-nums text-slate-950">{sub.sharedSpaces.length}</p>
-                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Spaces</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-2xl font-bold tabular-nums text-slate-950">{sub.rooms.length}</p>
-                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Rooms to assign</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-sm font-semibold text-slate-900">Put equipment here</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">Dishwasher, fridge, desk, TV, laundry, storage, and parking belong to the specific space.</p>
-                </div>
-              </div>
-
               {sub.sharedSpaces.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-8 text-center">
                   <p className="text-sm font-semibold text-slate-800">No shared spaces added yet.</p>
-                  <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
-                    Add at least the kitchen/common area so applicants understand what rooms share. Add laundry, living room, outdoor areas, parking, storage, or study spaces if they exist.
-                  </p>
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -2605,7 +2555,7 @@ export function ManagerAddListingForm({
                           />
                         </div>
                         <div>
-                          <FieldLabel hint="Optional label for where it is.">Location / level</FieldLabel>
+                          <FieldLabel>Location / level</FieldLabel>
                           <div className="space-y-2">
                             <div className="relative">
                               <Select
@@ -2648,20 +2598,7 @@ export function ManagerAddListingForm({
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel hint="Use this for rules, hours, storage, cleaning expectations, guest policy, scheduling, and anything applicants should know.">
-                            Details and use rules
-                          </FieldLabel>
-                          <Textarea
-                            className="min-h-[96px]"
-                            value={sp.detail}
-                            onChange={(e) => setSharedSpace(i, { detail: e.target.value })}
-                            placeholder="Example: Shared kitchen with assigned pantry shelves. Residents clean after use; quiet hours after 10pm. Dining area seats six."
-                          />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <FieldLabel hint="Kitchen appliances, shared desk, TV, etc. — only for this space.">
-                            Space amenities
-                          </FieldLabel>
+                          <FieldLabel>Amenities</FieldLabel>
                           <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-3">
                             {dedupedPresets.sharedSpace.map((p) => {
                               const on = splitLineList(sp.amenitiesText ?? "").includes(p.label);
@@ -2682,15 +2619,9 @@ export function ManagerAddListingForm({
                               );
                             })}
                           </div>
-                          <Textarea
-                            className="mt-2 min-h-[80px]"
-                            value={sp.amenitiesText ?? ""}
-                            onChange={(e) => setSharedSpace(i, { amenitiesText: e.target.value })}
-                            placeholder="Add custom amenities not listed above (one per line)."
-                          />
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel hint="Upload up to 8 shared-space photos.">Shared-space photos</FieldLabel>
+                          <FieldLabel>Photos</FieldLabel>
                           <div
                             className={`mt-2 ${mediaDropZoneClass(activeDropZone === `shared-photos-${sp.id}`)}`}
                             onDragOver={(e) => handleDragOver(e, `shared-photos-${sp.id}`)}
@@ -2716,7 +2647,6 @@ export function ManagerAddListingForm({
                             >
                               Add photos
                             </label>
-                            <p className="mt-3 text-sm text-slate-600">Drag and drop shared-space photos here, or use the button above.</p>
                             {(sp.photoDataUrls?.length ?? 0) > 0 ? (
                               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                                 {sp.photoDataUrls.map((src, pi) => (
@@ -2733,13 +2663,11 @@ export function ManagerAddListingForm({
                                   </div>
                                 ))}
                               </div>
-                            ) : (
-                              <p className="mt-2 text-[11px] text-slate-500">No photos yet.</p>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel hint="Optional short clip (~14 MB max).">Shared-space video</FieldLabel>
+                          <FieldLabel>Video</FieldLabel>
                           <div
                             className={`mt-2 ${mediaDropZoneClass(activeDropZone === `shared-video-${sp.id}`)}`}
                             onDragOver={(e) => handleDragOver(e, `shared-video-${sp.id}`)}
@@ -2764,7 +2692,6 @@ export function ManagerAddListingForm({
                             >
                               {sp.videoDataUrl ? "Replace video" : "Add video"}
                             </label>
-                            <p className="mt-3 text-sm text-slate-600">Drag and drop one shared-space video here, or use the button above.</p>
                             {sp.videoDataUrl ? (
                               <div className="mt-4 space-y-2">
                                 <video
@@ -2781,13 +2708,11 @@ export function ManagerAddListingForm({
                                   Remove video
                                 </button>
                               </div>
-                            ) : (
-                              <p className="mt-2 text-[11px] text-slate-500">Optional — MP4, MOV, or WebM.</p>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel hint="Rooms that may use this space (same room can be checked on multiple spaces).">Room access</FieldLabel>
+                          <FieldLabel>Room access</FieldLabel>
                           <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 lg:grid-cols-3">
                             {sub.rooms.map((room) => (
                               <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-sm">
