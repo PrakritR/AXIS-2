@@ -15,9 +15,10 @@ function publicApprovedRow(raw: unknown): DemoApplicantRow | null {
   const id = text(row.id);
   const propertyId = text(row.assignedPropertyId) || text(row.propertyId) || text(row.application?.propertyId);
   const roomChoice = text(row.assignedRoomChoice) || text(row.application?.roomChoice1);
-  const leaseStart = text(row.application?.leaseStart);
-  const leaseEnd = text(row.application?.leaseEnd);
-  if (!id || !propertyId || !roomChoice || !leaseStart) return null;
+  const leaseStart = text(row.manualResidentDetails?.moveInDate) || text(row.application?.leaseStart);
+  const leaseEnd = text(row.manualResidentDetails?.moveOutDate) || text(row.application?.leaseEnd);
+  if (!id || !propertyId || !roomChoice) return null;
+  if (!leaseStart && !leaseEnd) return null;
 
   return {
     id,
@@ -29,11 +30,16 @@ function publicApprovedRow(raw: unknown): DemoApplicantRow | null {
     assignedPropertyId: text(row.assignedPropertyId) || undefined,
     assignedRoomChoice: roomChoice,
     managerUserId: text(row.managerUserId) || undefined,
+    manuallyAdded: Boolean(row.manuallyAdded),
+    manualResidentDetails: {
+      moveInDate: leaseStart || undefined,
+      moveOutDate: leaseEnd || undefined,
+    },
     application: {
       propertyId,
       roomChoice1: roomChoice,
-      leaseStart,
-      leaseEnd,
+      leaseStart: leaseStart || undefined,
+      leaseEnd: leaseEnd || undefined,
     },
   } as DemoApplicantRow;
 }

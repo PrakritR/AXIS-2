@@ -81,6 +81,52 @@ function roomFloorSelectValue(floor: string): string {
   return ROOM_FLOOR_LEVEL_CUSTOM;
 }
 
+const LOCATION_LEVEL_CUSTOM = "__location_custom__";
+
+function locationOptionsFromStories(storiesId: string | undefined): string[] {
+  const base = ["1st / main floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+  if (storiesId === "1") return base;
+  if (storiesId === "2") return ["1st / main floor", "2nd floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+  if (storiesId === "3") {
+    return [
+      "1st / main floor",
+      "2nd floor",
+      "3rd floor",
+      "Basement / garden level",
+      "Loft / attic",
+      "Outdoor / detached area",
+    ];
+  }
+  if (storiesId === "4") {
+    return [
+      "1st / main floor",
+      "2nd floor",
+      "3rd floor",
+      "4th floor or higher",
+      "Basement / garden level",
+      "Loft / attic",
+      "Outdoor / detached area",
+    ];
+  }
+  if (storiesId === "split") {
+    return [
+      "Main split level",
+      "Upper split level",
+      "Lower split level",
+      "Basement / garden level",
+      "Loft / attic",
+      "Outdoor / detached area",
+    ];
+  }
+  return base;
+}
+
+function locationSelectValue(location: string, options: readonly string[]): string {
+  const t = location.trim();
+  if (!t) return "";
+  return options.includes(t) ? t : LOCATION_LEVEL_CUSTOM;
+}
+
 function ChevronDownTiny({ className = "" }: { className?: string }) {
   return (
     <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -176,8 +222,8 @@ const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
   home: "Property type, address, floors, baths, and how many bedrooms you’ll list.",
   rooms: "Each rentable bedroom: name, floor, rent, move-in instructions, furnishing, photos, and video.",
-  bathrooms: "Bath rows and which bedrooms use each one — powers the public “Rooms by bathroom” layout.",
-  spaces: "Kitchen, laundry, lounge, outdoor — equipment, rules, and which bedrooms have access.",
+  bathrooms: "Bath rows, bathroom amenities, and optional bathroom photos/video for listing details.",
+  spaces: "Kitchen, laundry, lounge, outdoor — location, amenities, room access, plus optional photos/video.",
   lease: "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
   media: "Hero images and optional full-house walkthrough video at the top of your public listing.",
   finish: "Sidebar quick facts, building amenities, and final submit.",
@@ -330,6 +376,7 @@ export function ManagerAddListingForm({
     }),
     [listingPresets],
   );
+  const locationLevelOptions = useMemo(() => locationOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
 
   const isEditMode = Boolean(editPendingId ?? editListingId);
   const lastStepIndex = LISTING_STEP_COUNT - 1;
@@ -725,6 +772,118 @@ export function ManagerAddListingForm({
     });
   };
 
+  const onPickBathroomPhotos = async (bathIndex: number, files: FileList | null) => {
+    if (!files?.length) return;
+    const next: string[] = [];
+    for (let i = 0; i < Math.min(files.length, 6); i++) {
+      const f = files[i]!;
+      if (!f.type.startsWith("image/")) {
+        showToast("Images only for bathroom photos.");
+        return;
+      }
+      const url = await fileToDataUrl(f, MAX_IMG_BYTES);
+      if (!url) {
+        showToast(`Image too large (max ${Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB): ${f.name}`);
+        return;
+      }
+      next.push(url);
+    }
+    setSub((s) => {
+      const bathrooms = [...s.bathrooms];
+      const cur = bathrooms[bathIndex];
+      if (!cur) return s;
+      bathrooms[bathIndex] = { ...cur, photoDataUrls: [...(cur.photoDataUrls ?? []), ...next].slice(0, 8) };
+      return { ...s, bathrooms };
+    });
+  };
+
+  const onPickBathroomVideo = async (bathIndex: number, file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("video/")) {
+      showToast("Please choose a video file.");
+      return;
+    }
+    const url = await fileToDataUrl(file, MAX_VID_BYTES);
+    if (!url) {
+      showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
+      return;
+    }
+    setBath(bathIndex, { videoDataUrl: url });
+  };
+
+  const removeBathroomPhoto = (bathIndex: number, photoIndex: number) => {
+    setSub((s) => {
+      const bathrooms = [...s.bathrooms];
+      const cur = bathrooms[bathIndex];
+      if (!cur) return s;
+      bathrooms[bathIndex] = {
+        ...cur,
+        photoDataUrls: (cur.photoDataUrls ?? []).filter((_, j) => j !== photoIndex),
+      };
+      return { ...s, bathrooms };
+    });
+  };
+
+  const clearBathroomVideo = (bathIndex: number) => {
+    setBath(bathIndex, { videoDataUrl: null });
+  };
+
+  const onPickSharedSpacePhotos = async (spaceIndex: number, files: FileList | null) => {
+    if (!files?.length) return;
+    const next: string[] = [];
+    for (let i = 0; i < Math.min(files.length, 6); i++) {
+      const f = files[i]!;
+      if (!f.type.startsWith("image/")) {
+        showToast("Images only for shared-space photos.");
+        return;
+      }
+      const url = await fileToDataUrl(f, MAX_IMG_BYTES);
+      if (!url) {
+        showToast(`Image too large (max ${Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB): ${f.name}`);
+        return;
+      }
+      next.push(url);
+    }
+    setSub((s) => {
+      const sharedSpaces = [...s.sharedSpaces];
+      const cur = sharedSpaces[spaceIndex];
+      if (!cur) return s;
+      sharedSpaces[spaceIndex] = { ...cur, photoDataUrls: [...(cur.photoDataUrls ?? []), ...next].slice(0, 8) };
+      return { ...s, sharedSpaces };
+    });
+  };
+
+  const onPickSharedSpaceVideo = async (spaceIndex: number, file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("video/")) {
+      showToast("Please choose a video file.");
+      return;
+    }
+    const url = await fileToDataUrl(file, MAX_VID_BYTES);
+    if (!url) {
+      showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
+      return;
+    }
+    setSharedSpace(spaceIndex, { videoDataUrl: url });
+  };
+
+  const removeSharedSpacePhoto = (spaceIndex: number, photoIndex: number) => {
+    setSub((s) => {
+      const sharedSpaces = [...s.sharedSpaces];
+      const cur = sharedSpaces[spaceIndex];
+      if (!cur) return s;
+      sharedSpaces[spaceIndex] = {
+        ...cur,
+        photoDataUrls: (cur.photoDataUrls ?? []).filter((_, j) => j !== photoIndex),
+      };
+      return { ...s, sharedSpaces };
+    });
+  };
+
+  const clearSharedSpaceVideo = (spaceIndex: number) => {
+    setSharedSpace(spaceIndex, { videoDataUrl: null });
+  };
+
   const onPickHousePhotos = async (files: FileList | null) => {
     if (!files?.length) return;
     const cur = sub.housePhotoDataUrls ?? [];
@@ -827,8 +986,35 @@ export function ManagerAddListingForm({
     void onPickRoomVideo(roomIndex, event.dataTransfer.files?.[0] ?? null);
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const onDropBathroomPhotos = (bathIndex: number, bathId: string, event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deactivateDropZone(`bath-photos-${bathId}`);
+    void onPickBathroomPhotos(bathIndex, event.dataTransfer.files);
+  };
+
+  const onDropBathroomVideo = (bathIndex: number, bathId: string, event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deactivateDropZone(`bath-video-${bathId}`);
+    void onPickBathroomVideo(bathIndex, event.dataTransfer.files?.[0] ?? null);
+  };
+
+  const onDropSharedSpacePhotos = (spaceIndex: number, spaceId: string, event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deactivateDropZone(`shared-photos-${spaceId}`);
+    void onPickSharedSpacePhotos(spaceIndex, event.dataTransfer.files);
+  };
+
+  const onDropSharedSpaceVideo = (spaceIndex: number, spaceId: string, event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deactivateDropZone(`shared-video-${spaceId}`);
+    void onPickSharedSpaceVideo(spaceIndex, event.dataTransfer.files?.[0] ?? null);
+  };
+
+  const submitListing = async () => {
     const submission: ManagerListingSubmissionV1 = {
       ...sub,
       rooms: sub.rooms.map((room) => ({
@@ -923,7 +1109,7 @@ export function ManagerAddListingForm({
       <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Close" />
       <form
         id="manager-add-listing-form"
-        onSubmit={handleSubmit}
+        onSubmit={(e) => e.preventDefault()}
         className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
       >
         <div className="shrink-0 border-b border-slate-100 p-3 pb-2 sm:p-4 sm:pb-3">
@@ -1954,7 +2140,46 @@ export function ManagerAddListingForm({
                       </div>
                       <div className="sm:col-span-2">
                         <FieldLabel>Location in building</FieldLabel>
-                        <Input value={b.location} onChange={(e) => setBath(i, { location: e.target.value })} />
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <Select
+                              aria-label={`Bathroom ${i + 1} location`}
+                              className={`${selectInputCls} appearance-none pr-10`}
+                              value={locationSelectValue(b.location ?? "", locationLevelOptions)}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (!v) {
+                                  setBath(i, { location: "" });
+                                  return;
+                                }
+                                if (v === LOCATION_LEVEL_CUSTOM) {
+                                  if (locationLevelOptions.includes((b.location ?? "").trim())) setBath(i, { location: "" });
+                                  return;
+                                }
+                                setBath(i, { location: v });
+                              }}
+                            >
+                              <option value="">Select location</option>
+                              {locationLevelOptions.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                              <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
+                            </Select>
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                              <ChevronDownTiny />
+                            </span>
+                          </div>
+                          {locationSelectValue(b.location ?? "", locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
+                            <Input
+                              value={b.location ?? ""}
+                              onChange={(e) => setBath(i, { location: e.target.value })}
+                              placeholder="Custom location"
+                              aria-label={`Bathroom ${i + 1} custom location`}
+                            />
+                          ) : null}
+                        </div>
                       </div>
                       <label className="flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={b.shower} onChange={(e) => setBath(i, { shower: e.target.checked })} />
@@ -2058,6 +2283,109 @@ export function ManagerAddListingForm({
                             );
                           })}
                         </div>
+                        <Textarea
+                          className="mt-2 min-h-[80px]"
+                          value={b.amenitiesText ?? ""}
+                          onChange={(e) => setBath(i, { amenitiesText: e.target.value })}
+                          placeholder="Add custom amenities not listed above (one per line)."
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="Upload up to 8 bathroom photos.">Bathroom photos</FieldLabel>
+                        <div
+                          className={`mt-2 ${mediaDropZoneClass(activeDropZone === `bath-photos-${b.id}`)}`}
+                          onDragOver={(e) => handleDragOver(e, `bath-photos-${b.id}`)}
+                          onDragEnter={(e) => handleDragOver(e, `bath-photos-${b.id}`)}
+                          onDragLeave={(e) => handleDragLeave(e, `bath-photos-${b.id}`)}
+                          onDrop={(e) => onDropBathroomPhotos(i, b.id, e)}
+                        >
+                          <input
+                            key={`bath-photos-in-${b.id}`}
+                            id={`bath-photos-${b.id}`}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="sr-only"
+                            onChange={(e) => {
+                              void onPickBathroomPhotos(i, e.target.files);
+                              e.target.value = "";
+                            }}
+                          />
+                          <label
+                            htmlFor={`bath-photos-${b.id}`}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                          >
+                            Add photos
+                          </label>
+                          <p className="mt-3 text-sm text-slate-600">Drag and drop bathroom photos here, or use the button above.</p>
+                          {(b.photoDataUrls?.length ?? 0) > 0 ? (
+                            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                              {b.photoDataUrls.map((src, pi) => (
+                                <div key={`${src.slice(0, 32)}-${pi}`} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={src} alt="Bathroom" className="h-28 w-full object-cover" />
+                                  <button
+                                    type="button"
+                                    className="absolute right-1 top-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-rose-600 shadow-sm opacity-0 transition group-hover:opacity-100"
+                                    onClick={() => removeBathroomPhoto(i, pi)}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-[11px] text-slate-500">No photos yet.</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="Optional short clip (~14 MB max).">Bathroom video</FieldLabel>
+                        <div
+                          className={`mt-2 ${mediaDropZoneClass(activeDropZone === `bath-video-${b.id}`)}`}
+                          onDragOver={(e) => handleDragOver(e, `bath-video-${b.id}`)}
+                          onDragEnter={(e) => handleDragOver(e, `bath-video-${b.id}`)}
+                          onDragLeave={(e) => handleDragLeave(e, `bath-video-${b.id}`)}
+                          onDrop={(e) => onDropBathroomVideo(i, b.id, e)}
+                        >
+                          <input
+                            key={`bath-video-in-${b.id}`}
+                            id={`bath-video-${b.id}`}
+                            type="file"
+                            accept="video/*"
+                            className="sr-only"
+                            onChange={(e) => {
+                              void onPickBathroomVideo(i, e.target.files?.[0] ?? null);
+                              e.target.value = "";
+                            }}
+                          />
+                          <label
+                            htmlFor={`bath-video-${b.id}`}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                          >
+                            {b.videoDataUrl ? "Replace video" : "Add video"}
+                          </label>
+                          <p className="mt-3 text-sm text-slate-600">Drag and drop one bathroom video here, or use the button above.</p>
+                          {b.videoDataUrl ? (
+                            <div className="mt-4 space-y-2">
+                              <video
+                                src={b.videoDataUrl}
+                                controls
+                                playsInline
+                                className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
+                              />
+                              <button
+                                type="button"
+                                className="text-xs font-semibold text-rose-600 hover:underline"
+                                onClick={() => clearBathroomVideo(i)}
+                              >
+                                Remove video
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-[11px] text-slate-500">Optional — MP4, MOV, or WebM.</p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2151,19 +2479,46 @@ export function ManagerAddListingForm({
                         </div>
                         <div>
                           <FieldLabel hint="Optional label for where it is.">Location / level</FieldLabel>
-                          <Input
-                            value={sp.detail.split("\n").find((line) => line.startsWith("Location: "))?.replace("Location: ", "") ?? ""}
-                            onChange={(e) => {
-                              const rest = sp.detail
-                                .split("\n")
-                                .filter((line) => !line.startsWith("Location: "))
-                                .join("\n")
-                                .trim();
-                              const loc = e.target.value.trim();
-                              setSharedSpace(i, { detail: [loc ? `Location: ${loc}` : "", rest].filter(Boolean).join("\n\n") });
-                            }}
-                            placeholder="Main floor, basement, backyard"
-                          />
+                          <div className="space-y-2">
+                            <div className="relative">
+                              <Select
+                                aria-label={`Shared space ${i + 1} location`}
+                                className={`${selectInputCls} appearance-none pr-10`}
+                                value={locationSelectValue(sp.location ?? "", locationLevelOptions)}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (!v) {
+                                    setSharedSpace(i, { location: "" });
+                                    return;
+                                  }
+                                  if (v === LOCATION_LEVEL_CUSTOM) {
+                                    if (locationLevelOptions.includes((sp.location ?? "").trim())) setSharedSpace(i, { location: "" });
+                                    return;
+                                  }
+                                  setSharedSpace(i, { location: v });
+                                }}
+                              >
+                                <option value="">Select location</option>
+                                {locationLevelOptions.map((opt) => (
+                                  <option key={opt} value={opt}>
+                                    {opt}
+                                  </option>
+                                ))}
+                                <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
+                              </Select>
+                              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                                <ChevronDownTiny />
+                              </span>
+                            </div>
+                            {locationSelectValue(sp.location ?? "", locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
+                              <Input
+                                value={sp.location ?? ""}
+                                onChange={(e) => setSharedSpace(i, { location: e.target.value })}
+                                placeholder="Custom location"
+                                aria-label={`Shared space ${i + 1} custom location`}
+                              />
+                            ) : null}
+                          </div>
                         </div>
                         <div className="sm:col-span-2">
                           <FieldLabel hint="Use this for rules, hours, storage, cleaning expectations, guest policy, scheduling, and anything applicants should know.">
@@ -2199,6 +2554,109 @@ export function ManagerAddListingForm({
                                 </label>
                               );
                             })}
+                          </div>
+                          <Textarea
+                            className="mt-2 min-h-[80px]"
+                            value={sp.amenitiesText ?? ""}
+                            onChange={(e) => setSharedSpace(i, { amenitiesText: e.target.value })}
+                            placeholder="Add custom amenities not listed above (one per line)."
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <FieldLabel hint="Upload up to 8 shared-space photos.">Shared-space photos</FieldLabel>
+                          <div
+                            className={`mt-2 ${mediaDropZoneClass(activeDropZone === `shared-photos-${sp.id}`)}`}
+                            onDragOver={(e) => handleDragOver(e, `shared-photos-${sp.id}`)}
+                            onDragEnter={(e) => handleDragOver(e, `shared-photos-${sp.id}`)}
+                            onDragLeave={(e) => handleDragLeave(e, `shared-photos-${sp.id}`)}
+                            onDrop={(e) => onDropSharedSpacePhotos(i, sp.id, e)}
+                          >
+                            <input
+                              key={`shared-photos-in-${sp.id}`}
+                              id={`shared-photos-${sp.id}`}
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="sr-only"
+                              onChange={(e) => {
+                                void onPickSharedSpacePhotos(i, e.target.files);
+                                e.target.value = "";
+                              }}
+                            />
+                            <label
+                              htmlFor={`shared-photos-${sp.id}`}
+                              className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                            >
+                              Add photos
+                            </label>
+                            <p className="mt-3 text-sm text-slate-600">Drag and drop shared-space photos here, or use the button above.</p>
+                            {(sp.photoDataUrls?.length ?? 0) > 0 ? (
+                              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {sp.photoDataUrls.map((src, pi) => (
+                                  <div key={`${src.slice(0, 32)}-${pi}`} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={src} alt="Shared space" className="h-28 w-full object-cover" />
+                                    <button
+                                      type="button"
+                                      className="absolute right-1 top-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-rose-600 shadow-sm opacity-0 transition group-hover:opacity-100"
+                                      onClick={() => removeSharedSpacePhoto(i, pi)}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-[11px] text-slate-500">No photos yet.</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <FieldLabel hint="Optional short clip (~14 MB max).">Shared-space video</FieldLabel>
+                          <div
+                            className={`mt-2 ${mediaDropZoneClass(activeDropZone === `shared-video-${sp.id}`)}`}
+                            onDragOver={(e) => handleDragOver(e, `shared-video-${sp.id}`)}
+                            onDragEnter={(e) => handleDragOver(e, `shared-video-${sp.id}`)}
+                            onDragLeave={(e) => handleDragLeave(e, `shared-video-${sp.id}`)}
+                            onDrop={(e) => onDropSharedSpaceVideo(i, sp.id, e)}
+                          >
+                            <input
+                              key={`shared-video-in-${sp.id}`}
+                              id={`shared-video-${sp.id}`}
+                              type="file"
+                              accept="video/*"
+                              className="sr-only"
+                              onChange={(e) => {
+                                void onPickSharedSpaceVideo(i, e.target.files?.[0] ?? null);
+                                e.target.value = "";
+                              }}
+                            />
+                            <label
+                              htmlFor={`shared-video-${sp.id}`}
+                              className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                            >
+                              {sp.videoDataUrl ? "Replace video" : "Add video"}
+                            </label>
+                            <p className="mt-3 text-sm text-slate-600">Drag and drop one shared-space video here, or use the button above.</p>
+                            {sp.videoDataUrl ? (
+                              <div className="mt-4 space-y-2">
+                                <video
+                                  src={sp.videoDataUrl}
+                                  controls
+                                  playsInline
+                                  className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
+                                />
+                                <button
+                                  type="button"
+                                  className="text-xs font-semibold text-rose-600 hover:underline"
+                                  onClick={() => clearSharedSpaceVideo(i)}
+                                >
+                                  Remove video
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-[11px] text-slate-500">Optional — MP4, MOV, or WebM.</p>
+                            )}
                           </div>
                         </div>
                         <div className="sm:col-span-2">
@@ -2404,11 +2862,6 @@ export function ManagerAddListingForm({
                     ? "Review each step, then submit your changes when the listing is ready for review."
                     : "This form does not auto-save or auto-submit. Click Submit listing below when the listing is complete and ready for admin approval."}
                 </p>
-                <div className="mt-4">
-                  <Button type="submit" form="manager-add-listing-form" className="rounded-full" disabled={busy}>
-                    {busy ? (isEditMode ? "Submitting changes…" : "Submitting listing…") : isEditMode ? "Submit changes" : "Submit listing"}
-                  </Button>
-                </div>
               </div>
             </div>
           </FormSection>
@@ -2433,7 +2886,7 @@ export function ManagerAddListingForm({
                   {stepIndex === lastStepIndex - 1 ? "Highlights →" : "Continue"}
                 </Button>
               ) : (
-                <Button type="submit" form="manager-add-listing-form" className="rounded-full" disabled={busy}>
+                <Button type="button" className="rounded-full" onClick={() => void submitListing()} disabled={busy}>
                   {busy ? (isEditMode ? "Submitting changes…" : "Submitting listing…") : isEditMode ? "Submit changes" : "Submit listing"}
                 </Button>
               )}

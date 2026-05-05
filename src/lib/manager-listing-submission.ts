@@ -82,6 +82,10 @@ export type ManagerBathroomSubmission = {
   location: string;
   /** Extra finishes & fixtures for this bathroom (preset lines + free text). */
   amenitiesText: string;
+  /** Uploaded bathroom photos shown in listing details. */
+  photoDataUrls: string[];
+  /** Optional bathroom video shown in listing details. */
+  videoDataUrl?: string | null;
   shower: boolean;
   toilet: boolean;
   bathtub: boolean;
@@ -103,10 +107,16 @@ export type ManagerSharedSpaceSubmission = {
   id: string;
   /** Short label on the listing (e.g. Kitchen, Laundry room). */
   name: string;
+  /** Where this shared space is in the home. */
+  location: string;
   /** Longer description / rules / hours. */
   detail: string;
   /** Equipment & finishes for this space only (e.g. kitchen appliances). Preset lines + free text. */
   amenitiesText: string;
+  /** Uploaded shared-space photos shown in listing details. */
+  photoDataUrls: string[];
+  /** Optional shared-space video shown in listing details. */
+  videoDataUrl?: string | null;
   /** Rooms with access (same room may have access to multiple shared spaces). */
   roomAccessIds: string[];
 };
@@ -337,6 +347,16 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         typeof (legacyBath as ManagerBathroomSubmission & { amenitiesText?: string }).amenitiesText === "string"
           ? (legacyBath as ManagerBathroomSubmission & { amenitiesText: string }).amenitiesText
           : "",
+      photoDataUrls:
+        Array.isArray((legacyBath as ManagerBathroomSubmission & { photoDataUrls?: unknown }).photoDataUrls)
+          ? ((legacyBath as ManagerBathroomSubmission & { photoDataUrls?: unknown }).photoDataUrls as unknown[])
+              .filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+              .slice(0, 8)
+          : [],
+      videoDataUrl:
+        typeof (legacyBath as ManagerBathroomSubmission & { videoDataUrl?: unknown }).videoDataUrl === "string"
+          ? ((legacyBath as ManagerBathroomSubmission & { videoDataUrl?: string }).videoDataUrl || null)
+          : null,
       shower: legacyBath.shower ?? true,
       toilet: legacyBath.toilet ?? true,
       bathtub: legacyBath.bathtub ?? false,
@@ -354,8 +374,11 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       {
         id: rid("sspace"),
         name: "Shared areas",
+        location: "",
         detail: legacySharedText,
         amenitiesText: "",
+        photoDataUrls: [],
+        videoDataUrl: null,
         roomAccessIds: rooms.map((r) => r.id),
       },
     ];
@@ -363,11 +386,25 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     sharedSpaces = sharedSpaces.map((ss) => ({
       id: ss.id,
       name: ss.name ?? "",
+      location:
+        typeof (ss as ManagerSharedSpaceSubmission & { location?: unknown }).location === "string"
+          ? ((ss as ManagerSharedSpaceSubmission & { location: string }).location ?? "")
+          : "",
       detail: ss.detail ?? "",
       amenitiesText:
         typeof (ss as ManagerSharedSpaceSubmission & { amenitiesText?: string }).amenitiesText === "string"
           ? (ss as ManagerSharedSpaceSubmission & { amenitiesText: string }).amenitiesText
           : "",
+      photoDataUrls:
+        Array.isArray((ss as ManagerSharedSpaceSubmission & { photoDataUrls?: unknown }).photoDataUrls)
+          ? ((ss as ManagerSharedSpaceSubmission & { photoDataUrls?: unknown }).photoDataUrls as unknown[])
+              .filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+              .slice(0, 8)
+          : [],
+      videoDataUrl:
+        typeof (ss as ManagerSharedSpaceSubmission & { videoDataUrl?: unknown }).videoDataUrl === "string"
+          ? ((ss as ManagerSharedSpaceSubmission & { videoDataUrl?: string }).videoDataUrl || null)
+          : null,
       roomAccessIds: Array.isArray(ss.roomAccessIds) ? [...ss.roomAccessIds] : [],
     }));
   }
@@ -508,6 +545,8 @@ export function emptyBathroom(index: number): ManagerBathroomSubmission {
     name: index === 0 ? "Full bath (hall)" : `Bathroom ${index + 1}`,
     location: "",
     amenitiesText: "",
+    photoDataUrls: [],
+    videoDataUrl: null,
     shower: true,
     toilet: true,
     bathtub: index === 0,
@@ -521,8 +560,11 @@ export function emptySharedSpace(index: number): ManagerSharedSpaceSubmission {
   return {
     id: rid("sspace"),
     name: index === 0 ? "Kitchen & dining" : `Shared space ${index + 1}`,
+    location: "",
     detail: "",
     amenitiesText: "",
+    photoDataUrls: [],
+    videoDataUrl: null,
     roomAccessIds: [],
   };
 }

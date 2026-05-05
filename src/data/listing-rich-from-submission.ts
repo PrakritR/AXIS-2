@@ -519,6 +519,8 @@ export function listingRichFromManagerSubmission(
               : "Select which rooms use this bathroom in the manager form.",
           includedTags: mergedTags.length ? mergedTags : ["Restroom"],
           photoCaptions: ["Photo 1", "Photo 2", "Photo 3"],
+          photoUrls: b.photoDataUrls.length ? b.photoDataUrls : undefined,
+          videoSrc: b.videoDataUrl ?? null,
         },
       };
     });
@@ -538,6 +540,7 @@ export function listingRichFromManagerSubmission(
           setupCard: "Add fixture and room assignments in the listing editor.",
           includedTags: ["Shower", "Toilet"],
           photoCaptions: ["Placeholder"],
+          videoSrc: null,
         },
       },
     ];
@@ -552,10 +555,11 @@ export function listingRichFromManagerSubmission(
           const legacyFromHouse = legacySharedLabelsFromHouseAmenities(sub, s.name);
           const merged = [...new Set([...spaceAmenities, ...legacyFromHouse])];
           const includedTags = merged.length > 0 ? ["Common area", ...merged] : ["Common area"];
+          const location = s.location?.trim() || "";
           return {
             id: s.id,
             name: s.name.trim(),
-            detail: access ? `Room access: ${access}` : "Select room access in manager form",
+            detail: location || (access ? `Room access: ${access}` : "Select room access in manager form"),
             useNote: s.detail.trim() || "Details from manager submission.",
             availability: (s.roomAccessIds?.length ?? 0) > 0 ? "Shared" : "—",
             modal: {
@@ -565,6 +569,8 @@ export function listingRichFromManagerSubmission(
               tourSubtitle: s.detail.trim() || "Shared area for residents.",
               includedTags,
               photoCaptions: ["Common area"],
+              photoUrls: s.photoDataUrls.length ? s.photoDataUrls : undefined,
+              videoSrc: s.videoDataUrl ?? null,
             },
           };
         })
@@ -582,6 +588,7 @@ export function listingRichFromManagerSubmission(
               tourSubtitle: "Add shared spaces when editing the listing.",
               includedTags: ["Common areas"],
               photoCaptions: ["Placeholder"],
+              videoSrc: null,
             },
           },
         ];

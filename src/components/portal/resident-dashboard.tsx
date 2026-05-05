@@ -22,6 +22,7 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
+import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   MANAGER_WORK_ORDERS_EVENT,
   readManagerWorkOrderRows,
@@ -127,6 +128,7 @@ export function ResidentDashboard({
   const [appStatus, setAppStatus] = useState<AppStatus>(applicationApproved ? "approved" : "pending");
   const [appStage, setAppStage] = useState(applicationApproved ? "Approved" : "Submitted");
   const [appProperty, setAppProperty] = useState<string | null>(null);
+  const [appRoom, setAppRoom] = useState<string | null>(null);
   const [appId, setAppId] = useState<string | null>(initialApplicationId);
 
   const [tick, setTick] = useState(0);
@@ -165,14 +167,38 @@ export function ResidentDashboard({
       const row = email ? rows.find((r) => r.email?.trim().toLowerCase() === email) : undefined;
       if (!alive) return;
       if (row?.bucket === "approved" || row?.bucket === "rejected" || row?.bucket === "pending") {
+        const resolvedProperty = (() => {
+          const assignedPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim();
+          if (assignedPropertyId) {
+            const p = getPropertyById(assignedPropertyId);
+            if (p) {
+              const street = p.address.split(",")[0]?.trim();
+              return street || p.buildingName || p.title || null;
+            }
+          }
+          const fallback = row.property?.trim() || null;
+          if (!fallback) return null;
+          return fallback.split("·")[0]?.trim() || fallback;
+        })();
+
+        const resolvedRoom = (() => {
+          const roomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
+          if (!roomChoice) return null;
+          const roomLabel = getRoomChoiceLabel(roomChoice).trim();
+          if (!roomLabel) return null;
+          return roomLabel.split(" · ")[0]?.trim() || roomLabel;
+        })();
+
         setAppStatus(row.bucket);
         setAppStage(row.stage?.trim() || row.bucket);
-        setAppProperty(row.property?.trim() || null);
+        setAppProperty(resolvedProperty);
+        setAppRoom(resolvedRoom);
         setAppId(row.id?.trim() || null);
       } else {
         setAppStatus(applicationApproved ? "approved" : "pending");
         setAppStage(applicationApproved ? "Approved" : "Submitted");
         setAppProperty(null);
+        setAppRoom(null);
         setAppId(initialApplicationId);
       }
     };
@@ -221,7 +247,9 @@ export function ResidentDashboard({
     statusCopy = "Test access active — resident portal is fully unlocked for this email.";
   } else if (appStatus === "approved") {
     statusTone = "border-emerald-200/70 bg-emerald-50/80 text-emerald-950";
-    statusCopy = appProperty
+    statusCopy = appProperty && appRoom
+      ? `Approved for ${appProperty} - ${appRoom}.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`
+      : appProperty
       ? `Approved for ${appProperty}.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`
       : `Approved and active.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`;
   } else if (appStatus === "rejected") {

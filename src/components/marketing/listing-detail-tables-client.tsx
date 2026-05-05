@@ -93,6 +93,10 @@ function addDays(base: Date, days: number): Date {
   return new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
 }
 
+function addMonths(base: Date, months: number): Date {
+  return new Date(base.getFullYear(), base.getMonth() + months, 1);
+}
+
 function dateKey(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -130,54 +134,90 @@ function unavailableDateSetFromWindows(windows: RoomUnavailabilityWindow[], hori
   return out;
 }
 
+function dayIsUnavailable(day: Date, windows: RoomUnavailabilityWindow[]): boolean {
+  const t = startOfLocalDay(day).getTime();
+  return windows.some((w) => {
+    const start = w.start ? startOfLocalDay(w.start).getTime() : Number.NEGATIVE_INFINITY;
+    const end = w.end ? startOfLocalDay(w.end).getTime() : Number.POSITIVE_INFINITY;
+    return t >= start && t <= end;
+  });
+}
+
 function MiniAvailabilityCalendar({ windows }: { windows: RoomUnavailabilityWindow[] }) {
-  const unavailableKeys = unavailableDateSetFromWindows(windows);
   const today = startOfLocalDay(new Date());
-  const months = [
-    new Date(today.getFullYear(), today.getMonth(), 1),
-    new Date(today.getFullYear(), today.getMonth() + 1, 1),
-  ];
+  const startMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const defaultEndMonth = addMonths(startMonth, 11);
+  const maxWindowMonth = windows.reduce((latest, w) => {
+    const d = w.end ?? w.start;
+    if (!d) return latest;
+    const m = new Date(d.getFullYear(), d.getMonth(), 1);
+    return m.getTime() > latest.getTime() ? m : latest;
+  }, startMonth);
+  const endMonth = maxWindowMonth.getTime() > defaultEndMonth.getTime() ? maxWindowMonth : defaultEndMonth;
+  const monthCount =
+    (endMonth.getFullYear() - startMonth.getFullYear()) * 12 + (endMonth.getMonth() - startMonth.getMonth()) + 1;
+  const [monthOffset, setMonthOffset] = useState(0);
+
+  useEffect(() => {
+    setMonthOffset(0);
+  }, [windows]);
+
+  const clampedOffset = Math.min(Math.max(monthOffset, 0), Math.max(monthCount - 1, 0));
+  const monthStart = addMonths(startMonth, clampedOffset);
+  const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+  const daysInMonth = monthEnd.getDate();
+  const leading = monthStart.getDay();
+  const cells: Array<Date | null> = [];
+  for (let i = 0; i < leading; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(monthStart.getFullYear(), monthStart.getMonth(), d));
 
   return (
     <div className="space-y-3">
-      {months.map((monthStart) => {
-        const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-        const daysInMonth = monthEnd.getDate();
-        const leading = monthStart.getDay();
-        const cells: Array<Date | null> = [];
-        for (let i = 0; i < leading; i++) cells.push(null);
-        for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(monthStart.getFullYear(), monthStart.getMonth(), d));
-
-        return (
-          <div key={`${monthStart.getFullYear()}-${monthStart.getMonth()}`} className="rounded-xl border border-slate-200 bg-white p-3">
-            <p className="text-xs font-semibold text-slate-700">
-              {monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-            </p>
-            <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-            </div>
-            <div className="mt-1 grid grid-cols-7 gap-1">
-              {cells.map((cell, idx) => {
-                if (!cell) return <span key={`empty-${idx}`} className="h-7" />;
-                const unavailable = unavailableKeys.has(dateKey(cell));
-                const isToday = dateKey(cell) === dateKey(today);
-                return (
-                  <span
-                    key={dateKey(cell)}
-                    className={`flex h-7 items-center justify-center rounded-md text-[11px] font-medium ${
-                      unavailable
-                        ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
-                        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                    } ${isToday ? "ring-2 ring-primary/40" : ""}`}
-                  >
-                    {cell.getDate()}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+          disabled={clampedOffset <= 0}
+          onClick={() => setMonthOffset((v) => Math.max(v - 1, 0))}
+        >
+          Previous month
+        </button>
+        <p className="text-xs font-semibold text-slate-700">
+          {monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+        </p>
+        <button
+          type="button"
+          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+          disabled={clampedOffset >= monthCount - 1}
+          onClick={() => setMonthOffset((v) => Math.min(v + 1, monthCount - 1))}
+        >
+          Next month
+        </button>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+        </div>
+        <div className="mt-1 grid grid-cols-7 gap-1">
+          {cells.map((cell, idx) => {
+            if (!cell) return <span key={`empty-${idx}`} className="h-7" />;
+            const unavailable = dayIsUnavailable(cell, windows);
+            const isToday = dateKey(cell) === dateKey(today);
+            return (
+              <span
+                key={dateKey(cell)}
+                className={`flex h-7 items-center justify-center rounded-md text-[11px] font-medium ${
+                  unavailable
+                    ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                    : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                } ${isToday ? "ring-2 ring-primary/40" : ""}`}
+              >
+                {cell.getDate()}
+              </span>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -460,8 +500,26 @@ function ListingDetailModal({
             <div className="mt-6">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Photos</p>
               <div className="mt-3">
-                <PhotoStrip captions={state.row.modal.photoCaptions} />
+                <PhotoStrip captions={state.row.modal.photoCaptions} imageUrls={state.row.modal.photoUrls} />
               </div>
+            </div>
+            <div className="mt-6">
+              {state.row.modal.videoSrc ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-black shadow-sm">
+                  <video
+                    src={state.row.modal.videoSrc}
+                    controls
+                    playsInline
+                    className="max-h-[min(55vh,420px)] w-full"
+                  />
+                </div>
+              ) : (
+                <ModalVideoBlock
+                  eyebrow="Bathroom tour"
+                  title="Video tour"
+                  subtitle="Add a bathroom video in the manager form to replace this placeholder."
+                />
+              )}
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
               <Link href="/rent/tours-contact" className="flex-1">
@@ -485,11 +543,22 @@ function ListingDetailModal({
             <p className="mt-2 text-sm text-slate-600">{state.row.detail}</p>
             <p className="mt-1 text-sm text-slate-500">{state.row.useNote}</p>
             <div className="mt-6">
-              <ModalVideoBlock
-                eyebrow={state.row.modal.tourEyebrow}
-                title={state.row.modal.tourTitle}
-                subtitle={state.row.modal.tourSubtitle}
-              />
+              {state.row.modal.videoSrc ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-black shadow-sm">
+                  <video
+                    src={state.row.modal.videoSrc}
+                    controls
+                    playsInline
+                    className="max-h-[min(55vh,420px)] w-full"
+                  />
+                </div>
+              ) : (
+                <ModalVideoBlock
+                  eyebrow={state.row.modal.tourEyebrow}
+                  title={state.row.modal.tourTitle}
+                  subtitle={state.row.modal.tourSubtitle}
+                />
+              )}
             </div>
             <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>
@@ -504,7 +573,7 @@ function ListingDetailModal({
             <div className="mt-6">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Photos</p>
               <div className="mt-3">
-                <PhotoStrip captions={state.row.modal.photoCaptions} />
+                <PhotoStrip captions={state.row.modal.photoCaptions} imageUrls={state.row.modal.photoUrls} />
               </div>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">

@@ -57,6 +57,7 @@ export type ListingBathroomModal = {
   /** Placeholder “photos” for the gallery strip (no separate video). */
   photoCaptions: string[];
   photoUrls?: string[];
+  videoSrc?: string | null;
 };
 
 export type ListingBathroomRow = {
@@ -77,6 +78,8 @@ export type ListingSharedModal = {
   tourSubtitle: string;
   includedTags: string[];
   photoCaptions: string[];
+  photoUrls?: string[];
+  videoSrc?: string | null;
 };
 
 export type ListingSharedRow = {
