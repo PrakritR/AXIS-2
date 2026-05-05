@@ -70,11 +70,13 @@ export function ManagerLeasesPipelinePanel({
   bucket,
   refreshKey,
   residentAccountEmails,
+  onEmailAccountSetup,
 }: {
   rows: LeasePipelineRow[];
   bucket: ManagerLeaseBucket;
   refreshKey: number;
   residentAccountEmails: Set<string>;
+  onEmailAccountSetup?: (email: string, name: string, axisId?: string) => void;
 }) {
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -83,6 +85,37 @@ export function ManagerLeasesPipelinePanel({
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
   const [generatingRowId, setGeneratingRowId] = useState<string | null>(null);
   const [signingRow, setSigningRow] = useState<LeasePipelineRow | null>(null);
+  const [emailBusyForRow, setEmailBusyForRow] = useState<string | null>(null);
+
+  async function sendAccountEmail(row: LeasePipelineRow) {
+    if (emailBusyForRow) return;
+    setEmailBusyForRow(row.id);
+    try {
+      const res = await fetch("/api/portal/send-resident-welcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ to: row.residentEmail, residentName: row.residentName, axisId: row.axisId }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string; mailtoHref?: string };
+      if (res.ok && data.ok) {
+        showToast("Account setup email sent.");
+        onEmailAccountSetup?.(row.residentEmail, row.residentName, row.axisId);
+        return;
+      }
+      if (typeof data.mailtoHref === "string") {
+        const { openMailtoHref } = await import("@/lib/resident-welcome-email");
+        openMailtoHref(data.mailtoHref);
+        showToast("Email provider not configured — opened a draft in your mail app.");
+        return;
+      }
+      showToast(data.error ?? "Could not send account setup email.");
+    } catch {
+      showToast("Could not send account setup email.");
+    } finally {
+      setEmailBusyForRow(null);
+    }
+  }
 
   void refreshKey;
   const bucketRows = useMemo(() => rows.filter((r) => r.bucket === bucket), [rows, bucket]);
@@ -417,10 +450,21 @@ export function ManagerLeasesPipelinePanel({
                             {row.status === "Manager Review" || row.status === "Draft" ? (
                               <>
                                 {!residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ? (
-                                  <p className="max-w-xl text-xs leading-relaxed text-amber-800">
-                                    This lease cannot be sent yet. The resident must first create their Axis resident account using their
-                                    application ID and matching email.
-                                  </p>
+                                  <div className="flex flex-wrap items-start gap-2">
+                                    <p className="max-w-xl text-xs leading-relaxed text-amber-800">
+                                      This lease cannot be sent yet. The resident must first create their Axis resident account using their
+                                      application ID and matching email.
+                                    </p>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
+                                      disabled={emailBusyForRow === row.id}
+                                      onClick={() => void sendAccountEmail(row)}
+                                    >
+                                      {emailBusyForRow === row.id ? "Sending…" : "Email account setup"}
+                                    </Button>
+                                  </div>
                                 ) : null}
                                 <Button
                                   type="button"

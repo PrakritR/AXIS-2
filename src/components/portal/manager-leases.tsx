@@ -183,6 +183,9 @@ export function ManagerLeases() {
         bucket={bucket}
         refreshKey={tick}
         residentAccountEmails={residentAccountEmails}
+        onEmailAccountSetup={(email) => {
+          setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
+        }}
       />
     </ManagerPortalPageShell>
   );
