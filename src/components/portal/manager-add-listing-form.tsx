@@ -292,14 +292,14 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
 async function fileToDataUrl(file: File, maxBytes: number): Promise<string | null> {
   if (file.size > maxBytes) return null;
   if (!file.type.startsWith("image/")) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const r = new FileReader();
       r.onload = () => resolve(r.result as string);
-      r.onerror = reject;
+      r.onerror = () => resolve(null);
       r.readAsDataURL(file);
     });
   }
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const img = new window.Image();
     const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
@@ -317,7 +317,7 @@ async function fileToDataUrl(file: File, maxBytes: number): Promise<string | nul
         resolve(null);
       }
     };
-    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("Image load failed")); };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(null); };
     img.src = objectUrl;
   });
 }
@@ -420,10 +420,15 @@ export function ManagerAddListingForm({
   );
   const [busy, setBusy] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  // Incremented whenever a video preview URL changes, to trigger re-render.
+  const [, setVideoTick] = useState(0);
   const [listingPresets, setListingPresets] = useState<ListingPresetConfig>(DEFAULT_LISTING_PRESETS);
   const [showQuickFacts, setShowQuickFacts] = useState(() => Boolean(initialSubmission?.quickFacts?.length));
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Object URLs for video preview (avoids putting huge base64 strings in <video src>).
+  // Keyed by a stable id like "room-<id>", "bath-<id>", "space-<id>", "house".
+  const videoPreviewUrls = useRef<Map<string, string>>(new Map());
   const { userId, ready: authReady } = useManagerUserId();
   const dedupedPresets = useMemo(
     () => ({
@@ -441,6 +446,30 @@ export function ManagerAddListingForm({
   const isEditMode = Boolean(editPendingId ?? editListingId);
   const lastStepIndex = LISTING_STEP_COUNT - 1;
   const isFinalStep = stepIndex === lastStepIndex;
+
+  // Revoke all object URLs on unmount.
+  useEffect(() => {
+    const map = videoPreviewUrls.current;
+    return () => {
+      map.forEach((url) => URL.revokeObjectURL(url));
+      map.clear();
+    };
+  }, []);
+
+  /** Set or replace the preview object URL for a video key, revoking the old one. */
+  const setVideoPreview = (key: string, file: File) => {
+    const old = videoPreviewUrls.current.get(key);
+    if (old) URL.revokeObjectURL(old);
+    videoPreviewUrls.current.set(key, URL.createObjectURL(file));
+    setVideoTick((n) => n + 1);
+  };
+
+  /** Remove the preview object URL for a video key, revoking it. */
+  const clearVideoPreview = (key: string) => {
+    const old = videoPreviewUrls.current.get(key);
+    if (old) { URL.revokeObjectURL(old); videoPreviewUrls.current.delete(key); }
+    setVideoTick((n) => n + 1);
+  };
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
@@ -790,6 +819,7 @@ export function ManagerAddListingForm({
 
   const onPickRoomPhotos = async (roomIndex: number, files: FileList | null) => {
     if (!files?.length) return;
+    try {
     const next: string[] = [];
     for (let i = 0; i < Math.min(files.length, 6); i++) {
       const f = files[i]!;
@@ -810,10 +840,12 @@ export function ManagerAddListingForm({
       rooms[roomIndex] = { ...cur, photoDataUrls: [...cur.photoDataUrls, ...next].slice(0, 8) };
       return { ...s, rooms };
     });
+    } catch { showToast("Could not process image. Please try a different file."); }
   };
 
   const onPickRoomVideo = async (roomIndex: number, file: File | null) => {
     if (!file) return;
+    try {
     if (!file.type.startsWith("video/")) {
       showToast("Please choose a video file.");
       return;
@@ -823,7 +855,10 @@ export function ManagerAddListingForm({
       showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
       return;
     }
+    const roomId = sub.rooms[roomIndex]?.id;
+    if (roomId) setVideoPreview(`room-${roomId}`, file);
     setRoom(roomIndex, { videoDataUrl: url });
+    } catch { showToast("Could not process video. Please try a different file."); }
   };
 
   const removeRoomPhoto = (roomIndex: number, photoIndex: number) => {
@@ -840,6 +875,7 @@ export function ManagerAddListingForm({
 
   const onPickBathroomPhotos = async (bathIndex: number, files: FileList | null) => {
     if (!files?.length) return;
+    try {
     const next: string[] = [];
     for (let i = 0; i < Math.min(files.length, 6); i++) {
       const f = files[i]!;
@@ -861,10 +897,12 @@ export function ManagerAddListingForm({
       bathrooms[bathIndex] = { ...cur, photoDataUrls: [...(cur.photoDataUrls ?? []), ...next].slice(0, 8) };
       return { ...s, bathrooms };
     });
+    } catch { showToast("Could not process image. Please try a different file."); }
   };
 
   const onPickBathroomVideo = async (bathIndex: number, file: File | null) => {
     if (!file) return;
+    try {
     if (!file.type.startsWith("video/")) {
       showToast("Please choose a video file.");
       return;
@@ -874,7 +912,10 @@ export function ManagerAddListingForm({
       showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
       return;
     }
+    const bathId = sub.bathrooms[bathIndex]?.id;
+    if (bathId) setVideoPreview(`bath-${bathId}`, file);
     setBath(bathIndex, { videoDataUrl: url });
+    } catch { showToast("Could not process video. Please try a different file."); }
   };
 
   const removeBathroomPhoto = (bathIndex: number, photoIndex: number) => {
@@ -891,11 +932,14 @@ export function ManagerAddListingForm({
   };
 
   const clearBathroomVideo = (bathIndex: number) => {
+    const bathId = sub.bathrooms[bathIndex]?.id;
+    if (bathId) clearVideoPreview(`bath-${bathId}`);
     setBath(bathIndex, { videoDataUrl: null });
   };
 
   const onPickSharedSpacePhotos = async (spaceIndex: number, files: FileList | null) => {
     if (!files?.length) return;
+    try {
     const next: string[] = [];
     for (let i = 0; i < Math.min(files.length, 6); i++) {
       const f = files[i]!;
@@ -917,10 +961,12 @@ export function ManagerAddListingForm({
       sharedSpaces[spaceIndex] = { ...cur, photoDataUrls: [...(cur.photoDataUrls ?? []), ...next].slice(0, 8) };
       return { ...s, sharedSpaces };
     });
+    } catch { showToast("Could not process image. Please try a different file."); }
   };
 
   const onPickSharedSpaceVideo = async (spaceIndex: number, file: File | null) => {
     if (!file) return;
+    try {
     if (!file.type.startsWith("video/")) {
       showToast("Please choose a video file.");
       return;
@@ -930,7 +976,10 @@ export function ManagerAddListingForm({
       showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
       return;
     }
+    const spaceId = sub.sharedSpaces[spaceIndex]?.id;
+    if (spaceId) setVideoPreview(`space-${spaceId}`, file);
     setSharedSpace(spaceIndex, { videoDataUrl: url });
+    } catch { showToast("Could not process video. Please try a different file."); }
   };
 
   const removeSharedSpacePhoto = (spaceIndex: number, photoIndex: number) => {
@@ -947,11 +996,14 @@ export function ManagerAddListingForm({
   };
 
   const clearSharedSpaceVideo = (spaceIndex: number) => {
+    const spaceId = sub.sharedSpaces[spaceIndex]?.id;
+    if (spaceId) clearVideoPreview(`space-${spaceId}`);
     setSharedSpace(spaceIndex, { videoDataUrl: null });
   };
 
   const onPickHousePhotos = async (files: FileList | null) => {
     if (!files?.length) return;
+    try {
     const cur = sub.housePhotoDataUrls ?? [];
     const remaining = MAX_HOUSE_PHOTOS - cur.length;
     if (remaining <= 0) {
@@ -973,6 +1025,7 @@ export function ManagerAddListingForm({
       next.push(url);
     }
     setSub((s) => ({ ...s, housePhotoDataUrls: next }));
+    } catch { showToast("Could not process image. Please try a different file."); }
   };
 
   const removeHousePhoto = (photoIndex: number) => {
@@ -983,11 +1036,14 @@ export function ManagerAddListingForm({
   };
 
   const clearRoomVideo = (roomIndex: number) => {
+    const roomId = sub.rooms[roomIndex]?.id;
+    if (roomId) clearVideoPreview(`room-${roomId}`);
     setRoom(roomIndex, { videoDataUrl: null });
   };
 
   const onPickHouseVideo = async (file: File | null) => {
     if (!file) return;
+    try {
     if (!file.type.startsWith("video/")) {
       showToast("Please choose a video file.");
       return;
@@ -997,10 +1053,15 @@ export function ManagerAddListingForm({
       showToast(`Video too large (max ${Math.round(MAX_VID_BYTES / 1024 / 1024)} MB).`);
       return;
     }
+    setVideoPreview("house", file);
     setSub((s) => ({ ...s, houseVideoDataUrl: url }));
+    } catch { showToast("Could not process video. Please try a different file."); }
   };
 
-  const clearHouseVideo = () => setSub((s) => ({ ...s, houseVideoDataUrl: null }));
+  const clearHouseVideo = () => {
+    clearVideoPreview("house");
+    setSub((s) => ({ ...s, houseVideoDataUrl: null }));
+  };
 
   const onDropHouseVideo = (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
@@ -2146,7 +2207,7 @@ export function ManagerAddListingForm({
                           {room.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
                               <video
-                                src={room.videoDataUrl}
+                                src={videoPreviewUrls.current.get(`room-${room.id}`) ?? room.videoDataUrl}
                                 controls
                                 playsInline
                                 className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
@@ -2435,7 +2496,7 @@ export function ManagerAddListingForm({
                           {b.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
                               <video
-                                src={b.videoDataUrl}
+                                src={videoPreviewUrls.current.get(`bath-${b.id}`) ?? b.videoDataUrl}
                                 controls
                                 playsInline
                                 className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
@@ -2707,7 +2768,7 @@ export function ManagerAddListingForm({
                             {sp.videoDataUrl ? (
                               <div className="mt-4 space-y-2">
                                 <video
-                                  src={sp.videoDataUrl}
+                                  src={videoPreviewUrls.current.get(`space-${sp.id}`) ?? sp.videoDataUrl}
                                   controls
                                   playsInline
                                   className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
@@ -2838,7 +2899,7 @@ export function ManagerAddListingForm({
                 {sub.houseVideoDataUrl ? (
                   <div className="mt-3 space-y-2">
                     <video
-                      src={sub.houseVideoDataUrl}
+                      src={videoPreviewUrls.current.get("house") ?? sub.houseVideoDataUrl}
                       controls
                       className="max-h-48 w-full rounded-xl border border-slate-200 bg-black object-contain"
                     />
