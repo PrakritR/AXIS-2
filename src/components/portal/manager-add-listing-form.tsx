@@ -307,24 +307,39 @@ async function uploadToBucket(input: File | string): Promise<string> {
 
   const userId = session.user.id;
   let body: Blob;
+  let mime: string;
   let ext: string;
 
   if (typeof input === "string") {
-    // data URL — let the browser decode it natively, avoids manual base64 work
+    // data URL — let the browser decode it natively
     body = await fetch(input).then((r) => r.blob());
-    ext = body.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+    mime = body.type || "image/jpeg";
+    ext = mime.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
   } else {
     body = input;
-    ext = input.name.split(".").pop() ?? "mp4";
+    ext = input.name.split(".").pop()?.toLowerCase() ?? "mp4";
+    // Derive MIME from extension when the browser leaves it blank
+    mime = input.type || extToMime(ext);
   }
 
   const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const { error } = await db.storage.from("listing-photos").upload(path, body, {
-    contentType: body.type || "application/octet-stream",
+    contentType: mime,
     upsert: false,
   });
   if (error) throw new Error(error.message);
   return db.storage.from("listing-photos").getPublicUrl(path).data.publicUrl;
+}
+
+function extToMime(ext: string): string {
+  const map: Record<string, string> = {
+    mp4: "video/mp4", mov: "video/quicktime", m4v: "video/x-m4v",
+    webm: "video/webm", avi: "video/x-msvideo", mkv: "video/x-matroska",
+    wmv: "video/x-ms-wmv", flv: "video/x-flv",
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+    webp: "image/webp", gif: "image/gif", heic: "image/heic",
+  };
+  return map[ext] ?? "application/octet-stream";
 }
 
 async function uploadDataUrl(dataUrl: string): Promise<string> {
