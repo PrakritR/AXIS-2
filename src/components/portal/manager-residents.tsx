@@ -276,6 +276,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [messageBody, setMessageBody] = useState("");
   const [signingLease, setSigningLease] = useState<LeasePipelineRow | null>(null);
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
+  const [welcomeEmailBusyForResident, setWelcomeEmailBusyForResident] = useState<string | null>(null);
 
   // Add resident manually
   const [addResidentOpen, setAddResidentOpen] = useState(false);
@@ -760,6 +761,39 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     showToast("Message saved to this resident thread.");
   }
 
+  async function sendResidentAccountEmail(res: ActiveResident) {
+    setWelcomeEmailBusyForResident(res.id);
+    try {
+      const response = await fetch("/api/portal/send-resident-welcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ to: res.email, residentName: res.name, axisId: res.axisId }),
+      });
+      const data = (await response.json()) as { ok?: boolean; error?: string; mailtoHref?: string };
+      if (response.ok && data.ok) {
+        showToast("Account setup email sent.");
+        return;
+      }
+      if (typeof data.mailtoHref === "string") {
+        const { openMailtoHref } = await import("@/lib/resident-welcome-email");
+        openMailtoHref(data.mailtoHref);
+        const err = (data.error ?? "").toLowerCase();
+        showToast(
+          err.includes("not configured") || err.includes("resend_api_key")
+            ? "Email provider not configured — opened a draft in your mail app."
+            : `Could not send automatically — opened a draft in your mail app.`,
+        );
+        return;
+      }
+      showToast(data.error ?? "Could not send account setup email.");
+    } catch {
+      showToast("Could not send account setup email.");
+    } finally {
+      setWelcomeEmailBusyForResident(null);
+    }
+  }
+
   function saveManualResident() {
     if (!arName.trim()) { showToast("Enter the resident's name."); return; }
     if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
@@ -1122,6 +1156,17 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Account</p>
                                 <div className="flex flex-wrap items-center gap-2">
+                                  {!residentAccountEmails.has(selected.email.trim().toLowerCase()) ? (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
+                                      disabled={welcomeEmailBusyForResident === selected.id}
+                                      onClick={() => void sendResidentAccountEmail(selected)}
+                                    >
+                                      {welcomeEmailBusyForResident === selected.id ? "Sending…" : "Email account setup"}
+                                    </Button>
+                                  ) : null}
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -1210,6 +1255,15 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         Manually added
                                       </span>
                                     ) : null}
+                                    {residentAccountEmails.has(selected.email.trim().toLowerCase()) ? (
+                                      <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200/80">
+                                        Portal account active
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200/80">
+                                        No portal account
+                                      </span>
+                                    )}
                                     {selected.signedMonthlyRent ? (
                                       <span className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-200/80">
                                         Rent set
