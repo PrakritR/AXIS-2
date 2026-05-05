@@ -279,9 +279,8 @@ async function fileToDataUrl(file: File, maxBytes: number): Promise<string | nul
   return new Promise((resolve) => {
     const img = new window.Image();
     const objectUrl = URL.createObjectURL(file);
-    img.onload = async () => {
+    img.onload = () => {
       URL.revokeObjectURL(objectUrl);
-      await yieldToMain(); // let browser paint before blocking canvas work
       try {
         const scale = Math.min(1, IMG_MAX_WIDTH / img.width);
         const canvas = document.createElement("canvas");
@@ -797,11 +796,12 @@ export function ManagerAddListingForm({
 
   const onPickRoomPhotos = async (roomIndex: number, files: FileList | null) => {
     if (!files?.length) return;
+    const fileArray = Array.from(files);
     try {
     const next: string[] = [];
-    for (let i = 0; i < Math.min(files.length, 6); i++) {
+    for (let i = 0; i < Math.min(fileArray.length, 6); i++) {
       await yieldToMain();
-      const f = files[i]!;
+      const f = fileArray[i]!;
       if (!f.type.startsWith("image/")) {
         showToast("Images only for room photos.");
         return;
@@ -856,11 +856,12 @@ export function ManagerAddListingForm({
 
   const onPickBathroomPhotos = async (bathIndex: number, files: FileList | null) => {
     if (!files?.length) return;
+    const fileArray = Array.from(files);
     try {
     const next: string[] = [];
-    for (let i = 0; i < Math.min(files.length, 6); i++) {
+    for (let i = 0; i < Math.min(fileArray.length, 6); i++) {
       await yieldToMain();
-      const f = files[i]!;
+      const f = fileArray[i]!;
       if (!f.type.startsWith("image/")) {
         showToast("Images only for bathroom photos.");
         return;
@@ -923,11 +924,12 @@ export function ManagerAddListingForm({
 
   const onPickSharedSpacePhotos = async (spaceIndex: number, files: FileList | null) => {
     if (!files?.length) return;
+    const fileArray = Array.from(files);
     try {
     const next: string[] = [];
-    for (let i = 0; i < Math.min(files.length, 6); i++) {
+    for (let i = 0; i < Math.min(fileArray.length, 6); i++) {
       await yieldToMain();
-      const f = files[i]!;
+      const f = fileArray[i]!;
       if (!f.type.startsWith("image/")) {
         showToast("Images only for shared-space photos.");
         return;
@@ -990,6 +992,7 @@ export function ManagerAddListingForm({
 
   const onPickHousePhotos = async (files: FileList | null) => {
     if (!files?.length) return;
+    const fileArray = Array.from(files);
     try {
     const cur = sub.housePhotoDataUrls ?? [];
     const remaining = MAX_HOUSE_PHOTOS - cur.length;
@@ -998,9 +1001,9 @@ export function ManagerAddListingForm({
       return;
     }
     const next: string[] = [...cur];
-    for (let i = 0; i < Math.min(files.length, remaining); i++) {
+    for (let i = 0; i < Math.min(fileArray.length, remaining); i++) {
       await yieldToMain();
-      const f = files[i]!;
+      const f = fileArray[i]!;
       if (!f.type.startsWith("image/")) {
         showToast("Images only for house photos.");
         return;
