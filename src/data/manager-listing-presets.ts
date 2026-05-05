@@ -28,30 +28,40 @@ export const HOUSE_WIDE_AMENITY_PRESETS = [
  * Labels here are stripped from legacy `amenitiesText` on the public listing so they appear under the right space.
  */
 export const SHARED_SPACE_AMENITY_PRESETS = [
-  { id: "dishwasher", label: "Dishwasher" },
-  { id: "microwave", label: "Microwave" },
-  { id: "oven-range", label: "Oven / range" },
+  // Kitchen
   { id: "fridge", label: "Refrigerator" },
-  { id: "dining-table", label: "Dining table" },
-  { id: "dining-chairs", label: "Dining chairs" },
+  { id: "freezer", label: "Freezer" },
+  { id: "oven-range", label: "Oven / range" },
+  { id: "microwave", label: "Microwave" },
+  { id: "dishwasher", label: "Dishwasher" },
+  { id: "coffee-station", label: "Coffee station" },
+  { id: "toaster-oven", label: "Toaster / toaster oven" },
   { id: "island", label: "Kitchen island" },
   { id: "pantry", label: "Pantry storage" },
-  { id: "coffee-station", label: "Coffee station" },
+  // Dining & living
+  { id: "dining-table", label: "Dining table & chairs" },
   { id: "sofa", label: "Couch / sofa" },
+  { id: "smart-tv", label: "Smart TV" },
   { id: "coffee-table", label: "Coffee table" },
-  { id: "media-console", label: "Media console" },
-  { id: "streaming-tv", label: "Smart TV / streaming" },
-  { id: "desk", label: "Desk / workspace" },
-  { id: "office-chair", label: "Office chair" },
-  { id: "tv-common", label: "TV in common area" },
-  { id: "lounge-seating", label: "Living / lounge seating" },
-  { id: "bookshelf", label: "Bookshelf" },
-  { id: "storage-cabinet", label: "Storage cabinet" },
+  // Laundry
   { id: "washer-dryer", label: "Washer / dryer" },
   { id: "laundry-sink", label: "Laundry sink" },
-  { id: "bbq-grill", label: "BBQ grill" },
-  { id: "patio-seating", label: "Patio seating" },
+  // Work
+  { id: "desk", label: "Desk / workspace" },
+  { id: "office-chair", label: "Office chair" },
   { id: "printer", label: "Shared printer" },
+  // Outdoor
+  { id: "patio-seating", label: "Patio / deck seating" },
+  { id: "bbq-grill", label: "BBQ grill" },
+  { id: "fire-pit", label: "Fire pit" },
+  // Storage & extras
+  { id: "storage-locker", label: "Personal storage locker" },
+  { id: "bike-storage", label: "Bike storage" },
+  { id: "gym-equipment", label: "Gym / exercise equipment" },
+  { id: "pool", label: "Pool" },
+  { id: "hot-tub", label: "Hot tub / jacuzzi" },
+  { id: "pool-table", label: "Pool / billiards table" },
+  { id: "parking-spot", label: "Parking spot" },
 ] as const;
 
 /** Fixtures & finishes specific to a bathroom row. */
