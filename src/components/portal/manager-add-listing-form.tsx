@@ -326,8 +326,17 @@ async function uploadToBucket(input: File | string): Promise<string> {
   const { error } = await db.storage.from("listing-photos").upload(path, body, {
     contentType: mime,
     upsert: false,
+    // duplex: 'half' enables streaming so the browser doesn't buffer the entire
+    // file in memory before sending — required for large video files.
+    duplex: "half",
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const msg = error.message ?? "";
+    if (msg.includes("Payload too large") || msg.includes("413") || msg.includes("exceeded")) {
+      throw new Error("Video is too large for your Supabase plan. Increase the file size limit in Supabase Dashboard → Project Settings → Storage.");
+    }
+    throw new Error(msg || "Upload failed.");
+  }
   return db.storage.from("listing-photos").getPublicUrl(path).data.publicUrl;
 }
 
