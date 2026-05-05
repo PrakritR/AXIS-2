@@ -219,11 +219,16 @@ export function effectiveRoomAvailabilityLabel(
   _rawAvailability: string,
   options: RoomAvailabilityOptions = {},
 ): string {
-  const targetStart = parseFlexibleLocalDate(options.leaseStart) ?? startOfToday();
-  const targetEnd = parseFlexibleLocalDate(options.leaseEnd);
+  const today = startOfToday();
   const windows = getRoomUnavailabilityWindows(roomChoiceValue, { excludeApplicationId: options.excludeApplicationId });
 
-  const currentBlock = windows.find((w) => intervalsOverlap(targetStart, targetEnd, w.start, w.end));
+  // Check if today is within any unavailability window (point-in-time check).
+  const currentBlock = windows.find((w) => {
+    const wStart = w.start?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const wEnd = w.end?.getTime() ?? Number.POSITIVE_INFINITY;
+    return today.getTime() >= wStart && today.getTime() <= wEnd;
+  });
+
   if (currentBlock) {
     if (!currentBlock.end) {
       return currentBlock.source === "resident" ? "Unavailable (occupied)" : "Unavailable (blocked)";
@@ -231,17 +236,16 @@ export function effectiveRoomAvailabilityLabel(
     return `Unavailable until ${formatAvailabilityDate(currentBlock.end)}`;
   }
 
+  // Room is available now — find the next upcoming block.
   const nextBlock = windows
-    .filter((w) => w.start && w.start.getTime() > targetStart.getTime())
+    .filter((w) => w.start && w.start.getTime() > today.getTime())
     .sort((a, b) => (a.start as Date).getTime() - (b.start as Date).getTime())[0];
 
   if (nextBlock?.start) {
     const until = dateMinusOneDay(nextBlock.start);
-    if (until.getTime() >= targetStart.getTime()) {
-      return `Available until ${formatAvailabilityDate(until)}`;
+    if (until.getTime() >= today.getTime()) {
+      return `Available now until ${formatAvailabilityDate(until)}`;
     }
-    if (nextBlock.end) return `Unavailable until ${formatAvailabilityDate(nextBlock.end)}`;
-    return "Unavailable";
   }
 
   return "Available now";
