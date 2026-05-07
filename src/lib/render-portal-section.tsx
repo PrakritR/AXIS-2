@@ -17,6 +17,7 @@ import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
 import { ManagerProperties } from "@/components/portal/manager-properties";
 import { ManagerResidents } from "@/components/portal/manager-residents";
 import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
+import { ManagerServicesPanel } from "@/components/portal/manager-services-panel";
 import { OwnerInboxPanel } from "@/components/portal/owner-inbox-panel";
 import { OwnerProperties } from "@/components/portal/owner-properties";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
@@ -26,6 +27,7 @@ import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-orders-panel";
+import { ResidentServicesPanel } from "@/components/portal/resident-services-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
@@ -239,8 +241,8 @@ export async function renderPortalSection(
     if (section === "leases") {
       return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
     }
-    if (section === "work-orders") {
-      return subscriptionGated(<ManagerWorkOrders />, kind, "work-orders", managerOwnerSubscriptionTier);
+    if (section === "work-orders" || section === "services") {
+      return subscriptionGated(<ManagerServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
     if (section === "calendar") {
       return subscriptionGated(
@@ -340,8 +342,8 @@ export async function renderPortalSection(
     if (section === "leases") {
       return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
     }
-    if (section === "work-orders") {
-      return subscriptionGated(<ManagerWorkOrders />, kind, "work-orders", managerOwnerSubscriptionTier);
+    if (section === "work-orders" || section === "services") {
+      return subscriptionGated(<ManagerServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
     if (section === "calendar") {
       return subscriptionGated(
@@ -387,8 +389,8 @@ export async function renderPortalSection(
     if (section === "leases") {
       return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
     }
-    if (section === "work-orders") {
-      return subscriptionGated(<ManagerWorkOrders />, kind, "work-orders", managerOwnerSubscriptionTier);
+    if (section === "work-orders" || section === "services") {
+      return subscriptionGated(<ManagerServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
     if (section === "calendar") {
       return subscriptionGated(
@@ -450,12 +452,12 @@ export async function renderPortalSection(
     if (residentWorkspaceUnlocked) {
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentLeasePanel />;
-      if (section === "work-orders") return <ResidentWorkOrdersPanel />;
+      if (section === "work-orders" || section === "services") return <ResidentServicesPanel />;
     }
     if ((residentAccess?.leaseAccessUnlocked ?? false) && residentManagerTier === "free") {
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentFreeTierFeatureNotice title="Lease" />;
-      if (section === "work-orders") return <ResidentFreeTierFeatureNotice title="Work orders" />;
+      if (section === "work-orders" || section === "services") return <ResidentFreeTierFeatureNotice title="Requests" />;
     }
   }
 
