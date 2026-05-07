@@ -124,12 +124,29 @@ function approvedOccupancyForRoom(roomChoiceValue: string, excludeApplicationId?
     .map((row) => {
       const effective = effectiveApplicationForRow(row);
       const assignedChoice = row.assignedRoomChoice?.trim() || effective?.roomChoice1?.trim() || "";
-      if (!assignedChoice) return null;
-      const parsedAssigned = parseRoomChoiceValue(assignedChoice);
-      const sameRoom =
-        assignedChoice === normalizedTarget ||
-        (parsedAssigned.propertyId === parsedTarget.propertyId &&
-          String(parsedAssigned.listingRoomId ?? "") === String(parsedTarget.listingRoomId ?? ""));
+
+      let sameRoom = false;
+      if (assignedChoice) {
+        const parsedAssigned = parseRoomChoiceValue(assignedChoice);
+        sameRoom =
+          assignedChoice === normalizedTarget ||
+          (parsedAssigned.propertyId === parsedTarget.propertyId &&
+            String(parsedAssigned.listingRoomId ?? "") === String(parsedTarget.listingRoomId ?? ""));
+      } else if (parsedTarget.listingRoomId && row.assignedPropertyId?.trim() === parsedTarget.propertyId) {
+        // Fallback for residents added without a structured room choice:
+        // match by property + room display name stored in manualResidentDetails.
+        const residentRoomName = row.manualResidentDetails?.roomNumber?.trim().toLowerCase();
+        if (residentRoomName) {
+          const prop = getPropertyById(parsedTarget.propertyId);
+          if (prop?.listingSubmission?.v === 1) {
+            const sub = normalizeManagerListingSubmissionV1(prop.listingSubmission);
+            const matchRoom = sub.rooms.find((r) => r.id === parsedTarget.listingRoomId);
+            if (matchRoom && matchRoom.name.trim().toLowerCase() === residentRoomName) {
+              sameRoom = true;
+            }
+          }
+        }
+      }
       if (!sameRoom) return null;
 
       const manualStart = parseFlexibleLocalDate(row.manualResidentDetails?.moveInDate);
