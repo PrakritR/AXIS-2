@@ -257,7 +257,8 @@ export function ManagerDashboard() {
     tours,
   } = data;
 
-  const nextTour = tours[0] ?? null;
+  const pendingTours = tours.filter((t) => t.status === "pending");
+  const nextTour = tours.find((t) => t.status === "confirmed") ?? null;
 
   return (
     <ManagerPortalPageShell title="Dashboard">
@@ -267,6 +268,7 @@ export function ManagerDashboard() {
         {(pendingApps.length > 0 ||
           needsManagerSig > 0 ||
           inbox > 0 ||
+          pendingTours.length > 0 ||
           nextTour ||
           pendingProperties > 0 ||
           overdueCharges.length > 0) && (
@@ -301,11 +303,20 @@ export function ManagerDashboard() {
                 </Link>
               </NotifBanner>
             )}
+            {pendingTours.length > 0 && (
+              <NotifBanner tone="amber">
+                <span>
+                  <span className="font-semibold">{pendingTours.length}</span> pending tour request{pendingTours.length === 1 ? "" : "s"} awaiting your approval
+                </span>
+                <Link href={`${BASE}/calendar`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
+                  Review →
+                </Link>
+              </NotifBanner>
+            )}
             {nextTour && (
               <NotifBanner tone="yellow">
                 <span>
-                  Next tour{tours.length > 1 ? ` (${tours.length} total)` : ""}: <span className="font-semibold">{nextTour.label}</span>{nextTour.propertyTitle ? ` · ${nextTour.propertyTitle}` : ""} at <span className="font-semibold">{fmt(nextTour.start)}</span>
-                  {nextTour.status === "pending" ? <span className="ml-1 text-xs opacity-70">(pending confirmation)</span> : null}
+                  Next confirmed tour{tours.filter((t) => t.status === "confirmed").length > 1 ? ` (${tours.filter((t) => t.status === "confirmed").length} total)` : ""}: <span className="font-semibold">{nextTour.label}</span>{nextTour.propertyTitle ? ` · ${nextTour.propertyTitle}` : ""} at <span className="font-semibold">{fmt(nextTour.start)}</span>
                 </span>
                 <Link href={`${BASE}/calendar`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
                   Calendar →
@@ -367,8 +378,8 @@ export function ManagerDashboard() {
           />
         </div>
 
-        {/* ── Bottom two-column section ── */}
-        <div className="grid gap-4 lg:grid-cols-2">
+        {/* ── Bottom three-column section ── */}
+        <div className="grid gap-4 lg:grid-cols-3">
 
           {/* Pending applications */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
@@ -419,6 +430,32 @@ export function ManagerDashboard() {
                         : "bg-sky-100 text-sky-800"
                     }`}>
                       {wo.bucket === "open" ? "Open" : "Scheduled"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Pending tours */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+            <SectionHeader
+              title="Pending tour requests"
+              href={`${BASE}/calendar`}
+              linkLabel="Calendar →"
+            />
+            {pendingTours.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-400">No pending tour requests right now.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {pendingTours.slice(0, 5).map((tour) => (
+                  <li key={tour.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{tour.label}</p>
+                      <p className="truncate text-xs text-slate-500">{tour.propertyTitle || "—"} · {fmt(tour.start)}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                      Pending
                     </span>
                   </li>
                 ))}

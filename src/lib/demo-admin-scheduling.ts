@@ -639,6 +639,15 @@ export async function acceptPartnerInquiryFromServer(
       }),
     });
     if (!res.ok) return false;
+    const start = opts?.start ?? row.proposedStart;
+    const end = opts?.end ?? row.proposedEnd;
+    const when = formatRangeLabel(start, end);
+    const extra = opts?.instructions?.trim() ? `\n\nDetails from the host:\n${opts.instructions.trim()}` : "";
+    logDemoOutboundEmail(
+      row.email,
+      "Your Axis tour is scheduled",
+      `Hi ${row.name},\n\nYour tour is confirmed for:\n${when}.${extra}\n\n— Axis Housing (outbound mail is logged for review).`,
+    );
     await syncScheduleRecordsFromServer({ force: true });
     return true;
   }

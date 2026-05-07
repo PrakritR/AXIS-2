@@ -187,6 +187,24 @@ function ManagerPropertyInlineDetails({
   const [listingEditorOpen, setListingEditorOpen] = useState(false);
   const [skuTier, setSkuTier] = useState<string | null>(null);
 
+  const rooms = useMemo(() => {
+    if (!managerUserId || !row) return [];
+    let sub: ManagerListingSubmissionV1 | null = null;
+    if (bucket === 0) {
+      if (row.adminRefId.startsWith("mgr-")) {
+        const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.adminRefId);
+        sub = p ? submissionForListedEdit(p) : null;
+      } else {
+        const p = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
+        sub = p ? submissionForPendingEdit(p) : null;
+      }
+    } else if (bucket === 2 && row.listingId) {
+      const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.listingId);
+      sub = p ? submissionForListedEdit(p) : null;
+    }
+    return sub?.rooms ?? [];
+  }, [managerUserId, row, bucket]);
+
   useEffect(() => {
     if (!row) {
       const timer = window.setTimeout(() => setListingEditorOpen(false), 0);
@@ -454,6 +472,71 @@ function ManagerPropertyInlineDetails({
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">{footer}</div>
         </div>
+
+        {rooms.length > 0 ? (
+          <div className="mt-5 overflow-hidden rounded-2xl border border-indigo-100 bg-white">
+            <div className="flex items-center gap-2 border-b border-indigo-100 bg-indigo-50/60 px-4 py-2.5">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-700">
+                Room details
+              </p>
+              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">
+                Portal only
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/60">
+                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">#</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Room</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Floor</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Rent / mo</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Availability</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Est. utilities</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Move-in date</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Furnishing</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rooms.map((room, index) => (
+                    <tr
+                      key={room.id}
+                      className={`border-b border-slate-100 last:border-0 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
+                    >
+                      <td className="px-4 py-3 text-xs font-semibold text-slate-400">{index + 1}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-slate-900">{room.name || `Room ${index + 1}`}</p>
+                        {room.detail?.trim() ? (
+                          <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{room.detail}</p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">{room.floor || "—"}</td>
+                      <td className="px-4 py-3">
+                        {room.monthlyRent > 0 ? (
+                          <span className="font-semibold text-slate-900">
+                            ${room.monthlyRent.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">{room.availability || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        {room.utilitiesEstimate
+                          ? room.utilitiesEstimate.startsWith("$")
+                            ? room.utilitiesEstimate
+                            : `$${room.utilitiesEstimate}`
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">{room.moveInAvailableDate || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600">{room.furnishing || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
       </div>
       {listingEditorOpen && editorInitial && managerUserId ? (
         <ManagerAddListingForm

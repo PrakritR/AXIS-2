@@ -238,7 +238,7 @@ export function PortalCalendarPanels({
     void meetingRefresh;
     const showAdminMeetings =
       storageKey === ADMIN_AVAILABILITY_STORAGE_KEY || Boolean(storageKey?.startsWith("axis_admin_avail_slots_v2_admin_"));
-    const showManagerTours = Boolean(scheduledTourFilter?.managerUserId && scheduledTourFilter.propertyId);
+    const showManagerTours = Boolean(scheduledTourFilter?.managerUserId);
 
     const planned = (showAdminMeetings || showManagerTours) ? readPlannedEvents()
       .filter((event) => {
@@ -246,7 +246,7 @@ export function PortalCalendarPanels({
         return (
           event.kind === "tour" &&
           event.managerUserId === scheduledTourFilter?.managerUserId &&
-          samePropertyId(event.propertyId, scheduledTourFilter?.propertyId)
+          (!scheduledTourFilter?.propertyId || samePropertyId(event.propertyId, scheduledTourFilter.propertyId))
         );
       })
       .map((event) => {
@@ -284,7 +284,7 @@ export function PortalCalendarPanels({
         return (
           row.kind === "tour" &&
           row.managerUserId === scheduledTourFilter?.managerUserId &&
-          samePropertyId(row.propertyId, scheduledTourFilter?.propertyId)
+          (!scheduledTourFilter?.propertyId || samePropertyId(row.propertyId, scheduledTourFilter.propertyId))
         );
       })
       .flatMap((row) =>
