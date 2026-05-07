@@ -157,6 +157,37 @@ function StatusPill({
   );
 }
 
+/** Deduplicate and humanise furnishing string (e.g. "Bed, desk, and chair, Chair" → "Bed, desk & Chair"). */
+function normFurnishing(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "—";
+  const items = t
+    .replace(/\b(and|&)\b/gi, ",")
+    .split(/[,\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const item of items) {
+    if (!seen.has(item.toLowerCase())) {
+      seen.add(item.toLowerCase());
+      deduped.push(item);
+    }
+  }
+  if (deduped.length === 0) return "—";
+  if (deduped.length === 1) return deduped[0]!;
+  return deduped.slice(0, -1).join(", ") + " & " + deduped[deduped.length - 1];
+}
+
+/** Normalise utilities to "$175" — strip /month, /mo suffixes and ensure $ prefix. */
+function normUtility(raw: string): string {
+  const t = raw.trim().replace(/\/mo(nth)?\.?$/i, "").trim();
+  if (!t) return "—";
+  const num = parseFloat(t.replace(/[^0-9.]/g, ""));
+  if (Number.isFinite(num) && num > 0) return `$${num}`;
+  return t;
+}
+
 function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: "green" | "amber" | "slate" | "rose" } {
   switch (bucket) {
     case 0:
@@ -192,24 +223,28 @@ function ManagerPropertyInlineDetails({
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
   const [roomDraft, setRoomDraft] = useState<Partial<ManagerRoomSubmission>>({});
   const [savingRoom, setSavingRoom] = useState(false);
+  const [houseEditing, setHouseEditing] = useState(false);
+  const [houseDraft, setHouseDraft] = useState({ tagline: "", houseOverview: "", amenitiesText: "", houseRulesText: "" });
+  const [savingHouse, setSavingHouse] = useState(false);
 
-  const rooms = useMemo(() => {
-    if (!managerUserId || !row) return [];
-    let sub: ManagerListingSubmissionV1 | null = null;
+  const portalSub = useMemo<{ sub: ManagerListingSubmissionV1; saveMode: "pending" | "listing"; saveId: string } | null>(() => {
+    if (!managerUserId || !row) return null;
     if (bucket === 0) {
       if (row.adminRefId.startsWith("mgr-")) {
         const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.adminRefId);
-        sub = p ? submissionForListedEdit(p) : null;
-      } else {
-        const p = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
-        sub = p ? submissionForPendingEdit(p) : null;
+        return p ? { sub: submissionForListedEdit(p), saveMode: "listing", saveId: row.adminRefId } : null;
       }
-    } else if (bucket === 2 && row.listingId) {
-      const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.listingId);
-      sub = p ? submissionForListedEdit(p) : null;
+      const p = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
+      return p ? { sub: submissionForPendingEdit(p), saveMode: "pending", saveId: row.adminRefId } : null;
     }
-    return sub?.rooms ?? [];
+    if (bucket === 2 && row.listingId) {
+      const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.listingId);
+      return p ? { sub: submissionForListedEdit(p), saveMode: "listing", saveId: row.listingId } : null;
+    }
+    return null;
   }, [managerUserId, row, bucket]);
+
+  const rooms = portalSub?.sub.rooms ?? [];
 
   useEffect(() => {
     if (!row) {
@@ -232,21 +267,9 @@ function ManagerPropertyInlineDetails({
   }, [row]);
 
   const editorInitial = useMemo(() => {
-    if (!listingEditorOpen || !managerUserId || !row) return null;
-    if (bucket === 0) {
-      if (row.adminRefId.startsWith("mgr-")) {
-        const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.adminRefId);
-        return p ? submissionForListedEdit(p) : null;
-      }
-      const p = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
-      return p ? submissionForPendingEdit(p) : null;
-    }
-    if (bucket === 2 && row.listingId) {
-      const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.listingId);
-      return p ? submissionForListedEdit(p) : null;
-    }
-    return null;
-  }, [listingEditorOpen, managerUserId, row, bucket]);
+    if (!listingEditorOpen || !portalSub) return null;
+    return portalSub.sub;
+  }, [listingEditorOpen, portalSub]);
 
   const openRoomEdit = useCallback((room: ManagerRoomSubmission) => {
     setEditingRoomId(room.id);
@@ -263,41 +286,25 @@ function ManagerPropertyInlineDetails({
     });
   }, []);
 
+  const commitSub = useCallback(
+    (updatedSub: ManagerListingSubmissionV1) => {
+      if (!managerUserId || !portalSub) return false;
+      return portalSub.saveMode === "pending"
+        ? updatePendingManagerProperty(portalSub.saveId, updatedSub, managerUserId)
+        : updateExtraListingFromSubmission(portalSub.saveId, managerUserId, updatedSub);
+    },
+    [managerUserId, portalSub],
+  );
+
   const saveRoomEdits = useCallback(() => {
-    if (!managerUserId || !row || !editingRoomId) return;
+    if (!managerUserId || !portalSub || !editingRoomId) return;
     setSavingRoom(true);
-    let sub: ManagerListingSubmissionV1 | null = null;
-    let saveMode: "pending" | "listing" = "listing";
-    let saveId = "";
-    if (bucket === 0) {
-      if (row.adminRefId.startsWith("mgr-")) {
-        const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.adminRefId);
-        sub = p ? submissionForListedEdit(p) : null;
-        saveMode = "listing";
-        saveId = row.adminRefId;
-      } else {
-        const p = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
-        sub = p ? submissionForPendingEdit(p) : null;
-        saveMode = "pending";
-        saveId = row.adminRefId;
-      }
-    } else if (bucket === 2 && row.listingId) {
-      const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.listingId);
-      sub = p ? submissionForListedEdit(p) : null;
-      saveMode = "listing";
-      saveId = row.listingId;
-    }
-    if (!sub) {
-      showToast("Could not load submission to save.");
-      setSavingRoom(false);
-      return;
-    }
-    const updatedRooms = sub.rooms.map((r) => (r.id === editingRoomId ? { ...r, ...roomDraft } : r));
-    const updatedSub: ManagerListingSubmissionV1 = { ...sub, rooms: updatedRooms };
-    const ok =
-      saveMode === "pending"
-        ? updatePendingManagerProperty(saveId, updatedSub, managerUserId)
-        : updateExtraListingFromSubmission(saveId, managerUserId, updatedSub);
+    const normalizedDraft = {
+      ...roomDraft,
+      utilitiesEstimate: (roomDraft.utilitiesEstimate ?? "").replace(/\/mo(nth)?\.?$/i, "").trim(),
+    };
+    const updatedRooms = portalSub.sub.rooms.map((r) => (r.id === editingRoomId ? { ...r, ...normalizedDraft } : r));
+    const ok = commitSub({ ...portalSub.sub, rooms: updatedRooms });
     setSavingRoom(false);
     if (ok) {
       showToast("Room details saved.");
@@ -306,7 +313,21 @@ function ManagerPropertyInlineDetails({
     } else {
       showToast("Could not save room details.");
     }
-  }, [managerUserId, row, bucket, editingRoomId, roomDraft, showToast, onUpdated]);
+  }, [managerUserId, portalSub, editingRoomId, roomDraft, commitSub, showToast, onUpdated]);
+
+  const saveHouseEdits = useCallback(() => {
+    if (!managerUserId || !portalSub) return;
+    setSavingHouse(true);
+    const ok = commitSub({ ...portalSub.sub, ...houseDraft });
+    setSavingHouse(false);
+    if (ok) {
+      showToast("House details saved.");
+      setHouseEditing(false);
+      onUpdated();
+    } else {
+      showToast("Could not save house details.");
+    }
+  }, [managerUserId, portalSub, houseDraft, commitSub, showToast, onUpdated]);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
@@ -539,6 +560,122 @@ function ManagerPropertyInlineDetails({
           <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">{footer}</div>
         </div>
 
+        {portalSub ? (
+          <div className="mt-5 overflow-hidden rounded-2xl border border-emerald-100 bg-white">
+            <div className="flex items-center justify-between gap-2 border-b border-emerald-100 bg-emerald-50/60 px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">House details</p>
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Portal only</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (houseEditing) {
+                    setHouseEditing(false);
+                  } else {
+                    setHouseDraft({
+                      tagline: portalSub.sub.tagline,
+                      houseOverview: portalSub.sub.houseOverview,
+                      amenitiesText: portalSub.sub.amenitiesText,
+                      houseRulesText: portalSub.sub.houseRulesText,
+                    });
+                    setHouseEditing(true);
+                  }
+                }}
+                className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+                  houseEditing
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {houseEditing ? "Cancel" : "Edit"}
+              </button>
+            </div>
+            {houseEditing ? (
+              <div className="p-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1 sm:col-span-2">
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Tagline</label>
+                    <input
+                      type="text"
+                      value={houseDraft.tagline}
+                      onChange={(e) => setHouseDraft((d) => ({ ...d, tagline: e.target.value }))}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                      placeholder="One-line hook shown on the listing card…"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1 sm:col-span-2">
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">House overview</label>
+                    <textarea
+                      rows={4}
+                      value={houseDraft.houseOverview}
+                      onChange={(e) => setHouseDraft((d) => ({ ...d, houseOverview: e.target.value }))}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                      placeholder="Describe the house, vibe, location, ideal tenant…"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">House amenities</label>
+                    <textarea
+                      rows={3}
+                      value={houseDraft.amenitiesText}
+                      onChange={(e) => setHouseDraft((d) => ({ ...d, amenitiesText: e.target.value }))}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                      placeholder="One per line or comma-separated — e.g. Washer/dryer, Backyard, Parking"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">House rules</label>
+                    <textarea
+                      rows={3}
+                      value={houseDraft.houseRulesText}
+                      onChange={(e) => setHouseDraft((d) => ({ ...d, houseRulesText: e.target.value }))}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                      placeholder="Quiet hours, guests, smoking, pets…"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={savingHouse}
+                    onClick={saveHouseEdits}
+                    className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    {savingHouse ? "Saving…" : "Save house details"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHouseEditing(false)}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {[
+                  { label: "Tagline", value: portalSub.sub.tagline },
+                  { label: "Overview", value: portalSub.sub.houseOverview },
+                  { label: "Amenities", value: portalSub.sub.amenitiesText },
+                  { label: "Rules", value: portalSub.sub.houseRulesText },
+                ]
+                  .filter(({ value }) => value?.trim())
+                  .map(({ label, value }) => (
+                    <div key={label} className="flex gap-4 px-4 py-3">
+                      <p className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                      <p className="line-clamp-2 text-sm text-slate-700">{value}</p>
+                    </div>
+                  ))}
+                {!portalSub.sub.tagline?.trim() && !portalSub.sub.houseOverview?.trim() && !portalSub.sub.amenitiesText?.trim() && !portalSub.sub.houseRulesText?.trim() ? (
+                  <p className="px-4 py-3 text-sm text-slate-400">No house details yet — click Edit to add.</p>
+                ) : null}
+              </div>
+            )}
+          </div>
+        ) : null}
+
         {rooms.length > 0 ? (
           <div className="mt-5 overflow-hidden rounded-2xl border border-indigo-100 bg-white">
             <div className="flex items-center gap-2 border-b border-indigo-100 bg-indigo-50/60 px-4 py-2.5">
@@ -585,15 +722,9 @@ function ManagerPropertyInlineDetails({
                             )}
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-600">{room.availability || "—"}</td>
-                          <td className="px-4 py-3 text-xs text-slate-600">
-                            {room.utilitiesEstimate
-                              ? room.utilitiesEstimate.startsWith("$")
-                                ? room.utilitiesEstimate
-                                : `$${room.utilitiesEstimate}`
-                              : "—"}
-                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{normUtility(room.utilitiesEstimate)}</td>
                           <td className="px-4 py-3 text-xs text-slate-600">{room.moveInAvailableDate || "—"}</td>
-                          <td className="px-4 py-3 text-xs text-slate-600">{room.furnishing || "—"}</td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{normFurnishing(room.furnishing)}</td>
                           <td className="px-4 py-3 text-right">
                             <button
                               type="button"
