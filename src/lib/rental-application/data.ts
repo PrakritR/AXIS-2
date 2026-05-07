@@ -203,7 +203,9 @@ export function isRoomChoiceAvailable(
   options: RoomAvailabilityOptions = {},
 ): boolean {
   const targetStart = parseFlexibleLocalDate(options.leaseStart) ?? startOfToday();
-  const targetEnd = parseFlexibleLocalDate(options.leaseEnd);
+  // When no end date is given (e.g. search with only move-in), treat as a point-in-time
+  // check so we don't falsely conflict with occupancy windows outside the search date.
+  const targetEnd = parseFlexibleLocalDate(options.leaseEnd) ?? targetStart;
   const occupancies = approvedOccupancyForRoom(roomChoiceValue, options.excludeApplicationId);
   if (occupancies.some((occ) => intervalsOverlap(targetStart, targetEnd, occ.leaseStart, occ.leaseEnd))) {
     return false;
@@ -212,6 +214,57 @@ export function isRoomChoiceAvailable(
     return false;
   }
   return true;
+}
+
+function pendingConflictForRoom(
+  roomChoiceValue: string,
+  leaseStart: string | null | undefined,
+  leaseEnd: string | null | undefined,
+  excludeApplicationId?: string | null,
+): boolean {
+  const parsedTarget = parseRoomChoiceValue(roomChoiceValue);
+  const normalizedTarget = roomChoiceValue.trim();
+  const targetStart = parseFlexibleLocalDate(leaseStart) ?? startOfToday();
+  const targetEnd = parseFlexibleLocalDate(leaseEnd) ?? targetStart;
+  return readManagerApplicationRows()
+    .filter((row) => row.bucket === "pending" && row.id !== excludeApplicationId)
+    .some((row) => {
+      const effective = effectiveApplicationForRow(row);
+      const assignedChoice = row.assignedRoomChoice?.trim() || effective?.roomChoice1?.trim() || "";
+      if (!assignedChoice) return false;
+      const parsedAssigned = parseRoomChoiceValue(assignedChoice);
+      const sameRoom =
+        assignedChoice === normalizedTarget ||
+        (parsedAssigned.propertyId === parsedTarget.propertyId &&
+          String(parsedAssigned.listingRoomId ?? "") === String(parsedTarget.listingRoomId ?? ""));
+      if (!sameRoom) return false;
+      const appStart = parseFlexibleLocalDate(effective?.leaseStart);
+      const appEnd = parseFlexibleLocalDate(effective?.leaseEnd);
+      if (!appStart) return false;
+      return intervalsOverlap(targetStart, targetEnd, appStart, appEnd ?? appStart);
+    });
+}
+
+export function isRoomApprovedConflict(
+  roomChoiceValue: string,
+  leaseStart: string | null | undefined,
+  leaseEnd: string | null | undefined,
+): boolean {
+  const targetStart = parseFlexibleLocalDate(leaseStart) ?? startOfToday();
+  const targetEnd = parseFlexibleLocalDate(leaseEnd) ?? targetStart;
+  const occupancies = approvedOccupancyForRoom(roomChoiceValue);
+  return (
+    occupancies.some((occ) => intervalsOverlap(targetStart, targetEnd, occ.leaseStart, occ.leaseEnd)) ||
+    leaseBlockedByManualRanges(roomChoiceValue, targetStart, targetEnd)
+  );
+}
+
+export function isRoomPendingConflict(
+  roomChoiceValue: string,
+  leaseStart: string | null | undefined,
+  leaseEnd: string | null | undefined,
+): boolean {
+  return pendingConflictForRoom(roomChoiceValue, leaseStart, leaseEnd);
 }
 
 export function effectiveRoomAvailabilityLabel(
@@ -303,16 +356,12 @@ export function getRoomOptionsForProperty(propertyId: string, options: RoomAvail
     const sub = normalizeManagerListingSubmissionV1(selected.listingSubmission);
     const roomRows = sub.rooms.filter((r) => r.name.trim());
     if (roomRows.length > 0) {
-      return roomRows
-        .filter((r) =>
-          isRoomChoiceAvailable(`${selected.id}${LISTING_ROOM_CHOICE_SEP}${r.id}`, r.availability, options),
-        )
-        .map((r) => {
+      return roomRows.map((r) => {
         const rent = r.monthlyRent > 0 ? `$${r.monthlyRent}/mo` : "Rent TBD";
         const floor = r.floor.trim();
         const label = [r.name.trim(), floor, rent].filter(Boolean).join(" · ");
         return { value: `${selected.id}${LISTING_ROOM_CHOICE_SEP}${r.id}`, label };
-        });
+      });
     }
   }
 
@@ -322,7 +371,6 @@ export function getRoomOptionsForProperty(propertyId: string, options: RoomAvail
   for (const p of catalog) {
     if (p.buildingId !== selected.buildingId) continue;
     if (seen.has(p.id)) continue;
-    if (!isRoomChoiceAvailable(p.id, p.available, options)) continue;
     seen.add(p.id);
     out.push({
       value: p.id,

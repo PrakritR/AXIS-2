@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel } from "@/lib/rental-application/application-fee-channel";
-import { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, getPropertyById, getRoomChoiceLabel, propertyAllowsShortTermRental, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
+import { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, getPropertyById, getRoomChoiceLabel, isRoomApprovedConflict, isRoomPendingConflict, propertyAllowsShortTermRental, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
 import {
   applicantFirstChoiceRentLabel,
   formatListingFeeDisplay,
@@ -265,6 +265,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const shortTermAllowed = propertyAllowsShortTermRental(form.propertyId);
     const rooms = roomSelectOptionsWithNone(form.propertyId, roomOptionParams).filter((o) => o.value !== "");
     const roomsWithNone = roomSelectOptionsWithNone(form.propertyId, roomOptionParams);
+    const room1ApprovedConflict = form.roomChoice1
+      ? isRoomApprovedConflict(form.roomChoice1, form.leaseStart, form.leaseEnd)
+      : false;
+    const room1PendingConflict = !room1ApprovedConflict && form.roomChoice1
+      ? isRoomPendingConflict(form.roomChoice1, form.leaseStart, form.leaseEnd)
+      : false;
     return (
       <div className="space-y-8">
         <div>
@@ -310,7 +316,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 value={form.roomChoice1}
                 disabled={!form.propertyId}
                 onChange={(e) => patch({ roomChoice1: e.target.value })}
-                className={errors.roomChoice1 ? "border-red-400 ring-2 ring-red-100" : ""}
+                className={errors.roomChoice1 || room1ApprovedConflict ? "border-red-400 ring-2 ring-red-100" : ""}
               >
                 <option value="">{form.propertyId ? "Select a room" : "Select a property first"}</option>
                 {rooms.map((o) => (
@@ -319,6 +325,15 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   </option>
                 ))}
               </Select>
+              {room1ApprovedConflict ? (
+                <p className="mt-1 text-xs font-medium text-rose-600">
+                  This move-in date is already taken for this room. Choose different dates or another room.
+                </p>
+              ) : room1PendingConflict ? (
+                <p className="mt-1 text-xs font-medium text-amber-600">
+                  Someone else has also applied for these dates — you may not get first choice.
+                </p>
+              ) : null}
               <FieldError msg={errors.roomChoice1} />
             </div>
             <div>
