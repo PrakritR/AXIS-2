@@ -39,8 +39,6 @@ import {
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
   syncPropertyPipelineFromServer,
-  updateExtraListingFromSubmission,
-  updatePendingManagerProperty,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import {
@@ -49,6 +47,48 @@ import {
   type ManagerListingSubmissionV1,
   type ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
+
+// ---------- Portal-only notes store ----------
+// Completely decoupled from the listing submission / approval flow.
+// Keyed by "<managerUserId>:<listingId|pendingId>" → per-listing note blob.
+const PORTAL_NOTES_KEY = "axis_portal_notes_v1";
+type PortalRoomNote = {
+  name?: string;
+  detail?: string;
+  amenitiesText?: string;
+  furnishing?: string;
+  availability?: string;
+  utilitiesEstimate?: string;
+  moveInAvailableDate?: string;
+  moveInInstructions?: string;
+  monthlyRent?: number;
+};
+type PortalListingNote = {
+  tagline?: string;
+  houseOverview?: string;
+  amenitiesText?: string;
+  houseRulesText?: string;
+  rooms?: Record<string, PortalRoomNote>;
+};
+type PortalNotesStore = Record<string, PortalListingNote>;
+function readPortalNotesStore(): PortalNotesStore {
+  try { return JSON.parse(localStorage.getItem(PORTAL_NOTES_KEY) ?? "{}") as PortalNotesStore; } catch { return {}; }
+}
+function getPortalListingNote(noteKey: string): PortalListingNote {
+  return readPortalNotesStore()[noteKey] ?? {};
+}
+function savePortalListingNote(noteKey: string, patch: Partial<PortalListingNote>): void {
+  const store = readPortalNotesStore();
+  store[noteKey] = { ...(store[noteKey] ?? {}), ...patch };
+  localStorage.setItem(PORTAL_NOTES_KEY, JSON.stringify(store));
+}
+function savePortalRoomNote(noteKey: string, roomId: string, patch: PortalRoomNote): void {
+  const store = readPortalNotesStore();
+  const listing = store[noteKey] ?? {};
+  listing.rooms = { ...(listing.rooms ?? {}), [roomId]: { ...(listing.rooms?.[roomId] ?? {}), ...patch } };
+  store[noteKey] = listing;
+  localStorage.setItem(PORTAL_NOTES_KEY, JSON.stringify(store));
+}
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
@@ -221,11 +261,12 @@ function ManagerPropertyInlineDetails({
   const [listingEditorOpen, setListingEditorOpen] = useState(false);
   const [skuTier, setSkuTier] = useState<string | null>(null);
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
-  const [roomDraft, setRoomDraft] = useState<Partial<ManagerRoomSubmission>>({});
+  const [roomDraft, setRoomDraft] = useState<PortalRoomNote>({});
   const [savingRoom, setSavingRoom] = useState(false);
   const [houseEditing, setHouseEditing] = useState(false);
-  const [houseDraft, setHouseDraft] = useState({ tagline: "", houseOverview: "", amenitiesText: "", houseRulesText: "" });
+  const [houseDraft, setHouseDraft] = useState<PortalListingNote>({});
   const [savingHouse, setSavingHouse] = useState(false);
+  const [notesTick, setNotesTick] = useState(0);
 
   const portalSub = useMemo<{ sub: ManagerListingSubmissionV1; saveMode: "pending" | "listing"; saveId: string } | null>(() => {
     if (!managerUserId || !row) return null;
@@ -244,7 +285,39 @@ function ManagerPropertyInlineDetails({
     return null;
   }, [managerUserId, row, bucket]);
 
-  const rooms = portalSub?.sub.rooms ?? [];
+  const baseRooms = portalSub?.sub.rooms ?? [];
+
+  // noteKey is stable per listing — used as the portal notes store key.
+  const noteKey = useMemo(
+    () => (managerUserId && portalSub ? `${managerUserId}:${portalSub.saveId}` : null),
+    [managerUserId, portalSub],
+  );
+  const portalNote = useMemo(
+    () => (noteKey ? getPortalListingNote(noteKey) : ({} as PortalListingNote)),
+    // notesTick triggers a re-read after each save
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [noteKey, notesTick],
+  );
+
+  // Merge portal room notes (description, amenities, etc.) on top of submission rooms for display.
+  const rooms = useMemo(() => {
+    const roomNotes = portalNote.rooms ?? {};
+    return baseRooms.map((r) => {
+      const note = roomNotes[r.id];
+      if (!note) return r;
+      const patch: Partial<ManagerRoomSubmission> = {};
+      if (note.name !== undefined) patch.name = note.name;
+      if (note.detail !== undefined) patch.detail = note.detail;
+      if (note.amenitiesText !== undefined) patch.roomAmenitiesText = note.amenitiesText;
+      if (note.furnishing !== undefined) patch.furnishing = note.furnishing;
+      if (note.availability !== undefined) patch.availability = note.availability;
+      if (note.utilitiesEstimate !== undefined) patch.utilitiesEstimate = note.utilitiesEstimate;
+      if (note.moveInAvailableDate !== undefined) patch.moveInAvailableDate = note.moveInAvailableDate;
+      if (note.moveInInstructions !== undefined) patch.moveInInstructions = note.moveInInstructions;
+      if (note.monthlyRent !== undefined) patch.monthlyRent = note.monthlyRent;
+      return { ...r, ...patch };
+    });
+  }, [baseRooms, portalNote]);
 
   useEffect(() => {
     if (!row) {
@@ -271,63 +344,48 @@ function ManagerPropertyInlineDetails({
     return portalSub.sub;
   }, [listingEditorOpen, portalSub]);
 
-  const openRoomEdit = useCallback((room: ManagerRoomSubmission) => {
-    setEditingRoomId(room.id);
-    setRoomDraft({
-      name: room.name,
-      detail: room.detail,
-      roomAmenitiesText: room.roomAmenitiesText,
-      furnishing: room.furnishing,
-      monthlyRent: room.monthlyRent,
-      availability: room.availability,
-      utilitiesEstimate: room.utilitiesEstimate,
-      moveInAvailableDate: room.moveInAvailableDate,
-      moveInInstructions: room.moveInInstructions,
-    });
-  }, []);
-
-  const commitSub = useCallback(
-    (updatedSub: ManagerListingSubmissionV1) => {
-      if (!managerUserId || !portalSub) return false;
-      return portalSub.saveMode === "pending"
-        ? updatePendingManagerProperty(portalSub.saveId, updatedSub, managerUserId)
-        : updateExtraListingFromSubmission(portalSub.saveId, managerUserId, updatedSub);
+  const openRoomEdit = useCallback(
+    (room: ManagerRoomSubmission) => {
+      const existingNote = noteKey ? (getPortalListingNote(noteKey).rooms?.[room.id] ?? {}) : {};
+      setEditingRoomId(room.id);
+      setRoomDraft({
+        name: existingNote.name ?? room.name,
+        detail: existingNote.detail ?? room.detail,
+        amenitiesText: existingNote.amenitiesText ?? room.roomAmenitiesText,
+        furnishing: existingNote.furnishing ?? room.furnishing,
+        monthlyRent: existingNote.monthlyRent ?? room.monthlyRent,
+        availability: existingNote.availability ?? room.availability,
+        utilitiesEstimate: existingNote.utilitiesEstimate ?? room.utilitiesEstimate,
+        moveInAvailableDate: existingNote.moveInAvailableDate ?? room.moveInAvailableDate,
+        moveInInstructions: existingNote.moveInInstructions ?? room.moveInInstructions,
+      });
     },
-    [managerUserId, portalSub],
+    [noteKey],
   );
 
   const saveRoomEdits = useCallback(() => {
-    if (!managerUserId || !portalSub || !editingRoomId) return;
+    if (!noteKey || !editingRoomId) return;
     setSavingRoom(true);
-    const normalizedDraft = {
+    const patch: PortalRoomNote = {
       ...roomDraft,
       utilitiesEstimate: (roomDraft.utilitiesEstimate ?? "").replace(/\/mo(nth)?\.?$/i, "").trim(),
     };
-    const updatedRooms = portalSub.sub.rooms.map((r) => (r.id === editingRoomId ? { ...r, ...normalizedDraft } : r));
-    const ok = commitSub({ ...portalSub.sub, rooms: updatedRooms });
+    savePortalRoomNote(noteKey, editingRoomId, patch);
     setSavingRoom(false);
-    if (ok) {
-      showToast("Room details saved.");
-      setEditingRoomId(null);
-      onUpdated();
-    } else {
-      showToast("Could not save room details.");
-    }
-  }, [managerUserId, portalSub, editingRoomId, roomDraft, commitSub, showToast, onUpdated]);
+    showToast("Room details saved.");
+    setEditingRoomId(null);
+    setNotesTick((t) => t + 1);
+  }, [noteKey, editingRoomId, roomDraft, showToast]);
 
   const saveHouseEdits = useCallback(() => {
-    if (!managerUserId || !portalSub) return;
+    if (!noteKey) return;
     setSavingHouse(true);
-    const ok = commitSub({ ...portalSub.sub, ...houseDraft });
+    savePortalListingNote(noteKey, houseDraft);
     setSavingHouse(false);
-    if (ok) {
-      showToast("House details saved.");
-      setHouseEditing(false);
-      onUpdated();
-    } else {
-      showToast("Could not save house details.");
-    }
-  }, [managerUserId, portalSub, houseDraft, commitSub, showToast, onUpdated]);
+    showToast("House details saved.");
+    setHouseEditing(false);
+    setNotesTick((t) => t + 1);
+  }, [noteKey, houseDraft, showToast]);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
@@ -574,10 +632,10 @@ function ManagerPropertyInlineDetails({
                     setHouseEditing(false);
                   } else {
                     setHouseDraft({
-                      tagline: portalSub.sub.tagline,
-                      houseOverview: portalSub.sub.houseOverview,
-                      amenitiesText: portalSub.sub.amenitiesText,
-                      houseRulesText: portalSub.sub.houseRulesText,
+                      tagline: portalNote.tagline ?? "",
+                      houseOverview: portalNote.houseOverview ?? "",
+                      amenitiesText: portalNote.amenitiesText ?? "",
+                      houseRulesText: portalNote.houseRulesText ?? "",
                     });
                     setHouseEditing(true);
                   }
@@ -656,19 +714,19 @@ function ManagerPropertyInlineDetails({
             ) : (
               <div className="divide-y divide-slate-100">
                 {[
-                  { label: "Tagline", value: portalSub.sub.tagline },
-                  { label: "Overview", value: portalSub.sub.houseOverview },
-                  { label: "Amenities", value: portalSub.sub.amenitiesText },
-                  { label: "Rules", value: portalSub.sub.houseRulesText },
+                  { label: "Tagline", value: portalNote.tagline },
+                  { label: "Overview", value: portalNote.houseOverview },
+                  { label: "Amenities", value: portalNote.amenitiesText },
+                  { label: "Rules", value: portalNote.houseRulesText },
                 ]
                   .filter(({ value }) => value?.trim())
                   .map(({ label, value }) => (
                     <div key={label} className="flex gap-4 px-4 py-3">
                       <p className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-                      <p className="line-clamp-2 text-sm text-slate-700">{value}</p>
+                      <p className="whitespace-pre-wrap text-sm text-slate-700">{value}</p>
                     </div>
                   ))}
-                {!portalSub.sub.tagline?.trim() && !portalSub.sub.houseOverview?.trim() && !portalSub.sub.amenitiesText?.trim() && !portalSub.sub.houseRulesText?.trim() ? (
+                {!portalNote.tagline?.trim() && !portalNote.houseOverview?.trim() && !portalNote.amenitiesText?.trim() && !portalNote.houseRulesText?.trim() ? (
                   <p className="px-4 py-3 text-sm text-slate-400">No house details yet — click Edit to add.</p>
                 ) : null}
               </div>
@@ -783,8 +841,8 @@ function ManagerPropertyInlineDetails({
                                   <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Amenities</label>
                                   <textarea
                                     rows={2}
-                                    value={roomDraft.roomAmenitiesText ?? ""}
-                                    onChange={(e) => setRoomDraft((d) => ({ ...d, roomAmenitiesText: e.target.value }))}
+                                    value={roomDraft.amenitiesText ?? ""}
+                                    onChange={(e) => setRoomDraft((d) => ({ ...d, amenitiesText: e.target.value }))}
                                     className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
                                     placeholder="Comma-separated or one per line — e.g. Ensuite bath, Walk-in closet, AC"
                                   />
