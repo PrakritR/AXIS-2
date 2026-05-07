@@ -43,6 +43,7 @@ import {
   deleteManagerApplicationFromServer,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
+  upsertApplicationRowToServer,
   writeManagerApplicationRows,
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
@@ -939,6 +940,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     const next = [...rows];
     next[idx] = nextRow;
     writeManagerApplicationRows(next);
+    upsertApplicationRowToServer(nextRow);
     setEditResidentOpen(false);
     setHcTick((n) => n + 1);
     showToast("Resident updated.");
@@ -1948,7 +1950,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-slate-700">Email</span>
-              <Input type="email" value={erEmail} disabled className="bg-slate-50 text-slate-500" />
+              <Input type="email" value={erEmail} onChange={(e) => setErEmail(e.target.value)} placeholder="resident@email.com" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-slate-700">Property</span>

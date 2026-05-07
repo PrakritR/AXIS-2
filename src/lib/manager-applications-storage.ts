@@ -111,6 +111,10 @@ function mirrorApplicationRowToServer(row: DemoApplicantRow) {
   }).catch(() => undefined);
 }
 
+export function upsertApplicationRowToServer(row: DemoApplicantRow): void {
+  mirrorApplicationRowToServer(row);
+}
+
 export async function deleteManagerApplicationFromServer(id: string): Promise<{ ok: boolean; error?: string }> {
   if (typeof window === "undefined" || !id.trim()) return { ok: false, error: "Application ID is required." };
   try {

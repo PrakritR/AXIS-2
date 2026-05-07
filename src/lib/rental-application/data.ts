@@ -136,10 +136,11 @@ function approvedOccupancyForRoom(roomChoiceValue: string, excludeApplicationId?
       const manualEnd = parseFlexibleLocalDate(row.manualResidentDetails?.moveOutDate);
       const appStart = parseFlexibleLocalDate(effective?.leaseStart);
       const appEnd = parseFlexibleLocalDate(effective?.leaseEnd);
-      const leaseStart = manualStart ?? appStart;
+      // When no explicit start date exists but the resident has a definitive room assignment,
+      // treat them as currently occupying from today with no known end date.
+      const leaseStart = manualStart ?? appStart ?? (row.assignedRoomChoice?.trim() ? startOfToday() : null);
       const leaseEnd = manualEnd ?? appEnd;
 
-      // Reliable occupancy requires a known move-in/start date.
       if (!leaseStart) return null;
 
       return {
