@@ -39,12 +39,15 @@ import {
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
   syncPropertyPipelineFromServer,
+  updateExtraListingFromSubmission,
+  updatePendingManagerProperty,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import {
   legacyAdminFieldsToSubmission,
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
+  type ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
@@ -186,6 +189,9 @@ function ManagerPropertyInlineDetails({
   const listingId = row?.listingId;
   const [listingEditorOpen, setListingEditorOpen] = useState(false);
   const [skuTier, setSkuTier] = useState<string | null>(null);
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [roomDraft, setRoomDraft] = useState<Partial<ManagerRoomSubmission>>({});
+  const [savingRoom, setSavingRoom] = useState(false);
 
   const rooms = useMemo(() => {
     if (!managerUserId || !row) return [];
@@ -241,6 +247,66 @@ function ManagerPropertyInlineDetails({
     }
     return null;
   }, [listingEditorOpen, managerUserId, row, bucket]);
+
+  const openRoomEdit = useCallback((room: ManagerRoomSubmission) => {
+    setEditingRoomId(room.id);
+    setRoomDraft({
+      name: room.name,
+      detail: room.detail,
+      roomAmenitiesText: room.roomAmenitiesText,
+      furnishing: room.furnishing,
+      monthlyRent: room.monthlyRent,
+      availability: room.availability,
+      utilitiesEstimate: room.utilitiesEstimate,
+      moveInAvailableDate: room.moveInAvailableDate,
+      moveInInstructions: room.moveInInstructions,
+    });
+  }, []);
+
+  const saveRoomEdits = useCallback(() => {
+    if (!managerUserId || !row || !editingRoomId) return;
+    setSavingRoom(true);
+    let sub: ManagerListingSubmissionV1 | null = null;
+    let saveMode: "pending" | "listing" = "listing";
+    let saveId = "";
+    if (bucket === 0) {
+      if (row.adminRefId.startsWith("mgr-")) {
+        const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.adminRefId);
+        sub = p ? submissionForListedEdit(p) : null;
+        saveMode = "listing";
+        saveId = row.adminRefId;
+      } else {
+        const p = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
+        sub = p ? submissionForPendingEdit(p) : null;
+        saveMode = "pending";
+        saveId = row.adminRefId;
+      }
+    } else if (bucket === 2 && row.listingId) {
+      const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.listingId);
+      sub = p ? submissionForListedEdit(p) : null;
+      saveMode = "listing";
+      saveId = row.listingId;
+    }
+    if (!sub) {
+      showToast("Could not load submission to save.");
+      setSavingRoom(false);
+      return;
+    }
+    const updatedRooms = sub.rooms.map((r) => (r.id === editingRoomId ? { ...r, ...roomDraft } : r));
+    const updatedSub: ManagerListingSubmissionV1 = { ...sub, rooms: updatedRooms };
+    const ok =
+      saveMode === "pending"
+        ? updatePendingManagerProperty(saveId, updatedSub, managerUserId)
+        : updateExtraListingFromSubmission(saveId, managerUserId, updatedSub);
+    setSavingRoom(false);
+    if (ok) {
+      showToast("Room details saved.");
+      setEditingRoomId(null);
+      onUpdated();
+    } else {
+      showToast("Could not save room details.");
+    }
+  }, [managerUserId, row, bucket, editingRoomId, roomDraft, showToast, onUpdated]);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
@@ -476,9 +542,7 @@ function ManagerPropertyInlineDetails({
         {rooms.length > 0 ? (
           <div className="mt-5 overflow-hidden rounded-2xl border border-indigo-100 bg-white">
             <div className="flex items-center gap-2 border-b border-indigo-100 bg-indigo-50/60 px-4 py-2.5">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-700">
-                Room details
-              </p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-700">Room details</p>
               <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">
                 Portal only
               </span>
@@ -495,43 +559,179 @@ function ManagerPropertyInlineDetails({
                     <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Est. utilities</th>
                     <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Move-in date</th>
                     <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Furnishing</th>
+                    <th className="px-4 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">Edit</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rooms.map((room, index) => (
-                    <tr
-                      key={room.id}
-                      className={`border-b border-slate-100 last:border-0 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
-                    >
-                      <td className="px-4 py-3 text-xs font-semibold text-slate-400">{index + 1}</td>
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-slate-900">{room.name || `Room ${index + 1}`}</p>
-                        {room.detail?.trim() ? (
-                          <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{room.detail}</p>
+                  {rooms.map((room, index) => {
+                    const isEditing = editingRoomId === room.id;
+                    const rowBg = index % 2 === 0 ? "bg-white" : "bg-slate-50/40";
+                    return (
+                      <Fragment key={room.id}>
+                        <tr className={`border-b border-slate-100 ${isEditing ? "bg-indigo-50/40" : rowBg}`}>
+                          <td className="px-4 py-3 text-xs font-semibold text-slate-400">{index + 1}</td>
+                          <td className="px-4 py-3">
+                            <p className="font-semibold text-slate-900">{room.name || `Room ${index + 1}`}</p>
+                            {room.detail?.trim() ? (
+                              <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{room.detail}</p>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{room.floor || "—"}</td>
+                          <td className="px-4 py-3">
+                            {room.monthlyRent > 0 ? (
+                              <span className="font-semibold text-slate-900">${room.monthlyRent.toLocaleString()}</span>
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{room.availability || "—"}</td>
+                          <td className="px-4 py-3 text-xs text-slate-600">
+                            {room.utilitiesEstimate
+                              ? room.utilitiesEstimate.startsWith("$")
+                                ? room.utilitiesEstimate
+                                : `$${room.utilitiesEstimate}`
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{room.moveInAvailableDate || "—"}</td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{room.furnishing || "—"}</td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isEditing) {
+                                  setEditingRoomId(null);
+                                } else {
+                                  openRoomEdit(room);
+                                }
+                              }}
+                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+                                isEditing
+                                  ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                              }`}
+                            >
+                              {isEditing ? "Cancel" : "Edit"}
+                            </button>
+                          </td>
+                        </tr>
+                        {isEditing ? (
+                          <tr className="border-b border-indigo-100">
+                            <td colSpan={9} className="bg-indigo-50/30 px-4 py-4">
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Room name</label>
+                                  <input
+                                    type="text"
+                                    value={roomDraft.name ?? ""}
+                                    onChange={(e) => setRoomDraft((d) => ({ ...d, name: e.target.value }))}
+                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                    placeholder="e.g. Master bedroom"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Furnishing</label>
+                                  <input
+                                    type="text"
+                                    value={roomDraft.furnishing ?? ""}
+                                    onChange={(e) => setRoomDraft((d) => ({ ...d, furnishing: e.target.value }))}
+                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                    placeholder="e.g. Fully furnished"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1 sm:col-span-2">
+                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Description</label>
+                                  <textarea
+                                    rows={3}
+                                    value={roomDraft.detail ?? ""}
+                                    onChange={(e) => setRoomDraft((d) => ({ ...d, detail: e.target.value }))}
+                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                    placeholder="Describe this room's features, layout, or notes…"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1 sm:col-span-2">
+                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Amenities</label>
+                                  <textarea
+                                    rows={2}
+                                    value={roomDraft.roomAmenitiesText ?? ""}
+                                    onChange={(e) => setRoomDraft((d) => ({ ...d, roomAmenitiesText: e.target.value }))}
+                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                    placeholder="Comma-separated or one per line — e.g. Ensuite bath, Walk-in closet, AC"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Monthly rent ($)</label>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={roomDraft.monthlyRent ?? ""}
+                                    onChange={(e) => setRoomDraft((d) => ({ ...d, monthlyRent: Number(e.target.value) }))}
+                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                    placeholder="1500"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Availability</label>
+                                  <input
+                                    type="text"
+                                    value={roomDraft.availability ?? ""}
+                                    onChange={(e) => setRoomDraft((d) => ({ ...d, availability: e.target.value }))}
+                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                    placeholder="e.g. Available now"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Est. utilities / mo</label>
+                                  <input
+                                    type="text"
+                                    value={roomDraft.utilitiesEstimate ?? ""}
+                                    onChange={(e) => setRoomDraft((d) => ({ ...d, utilitiesEstimate: e.target.value }))}
+                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                    placeholder="e.g. 120"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Move-in date</label>
+                                  <input
+                                    type="date"
+                                    value={roomDraft.moveInAvailableDate ?? ""}
+                                    onChange={(e) => setRoomDraft((d) => ({ ...d, moveInAvailableDate: e.target.value }))}
+                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1 sm:col-span-2">
+                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Move-in instructions</label>
+                                  <textarea
+                                    rows={2}
+                                    value={roomDraft.moveInInstructions ?? ""}
+                                    onChange={(e) => setRoomDraft((d) => ({ ...d, moveInInstructions: e.target.value }))}
+                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                    placeholder="Keys, parking, access codes, what to bring…"
+                                  />
+                                </div>
+                              </div>
+                              <div className="mt-3 flex gap-2">
+                                <button
+                                  type="button"
+                                  disabled={savingRoom}
+                                  onClick={saveRoomEdits}
+                                  className="rounded-full bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
+                                >
+                                  {savingRoom ? "Saving…" : "Save room"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRoomId(null)}
+                                  className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
                         ) : null}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{room.floor || "—"}</td>
-                      <td className="px-4 py-3">
-                        {room.monthlyRent > 0 ? (
-                          <span className="font-semibold text-slate-900">
-                            ${room.monthlyRent.toLocaleString()}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{room.availability || "—"}</td>
-                      <td className="px-4 py-3 text-xs text-slate-600">
-                        {room.utilitiesEstimate
-                          ? room.utilitiesEstimate.startsWith("$")
-                            ? room.utilitiesEstimate
-                            : `$${room.utilitiesEstimate}`
-                          : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{room.moveInAvailableDate || "—"}</td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{room.furnishing || "—"}</td>
-                    </tr>
-                  ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
