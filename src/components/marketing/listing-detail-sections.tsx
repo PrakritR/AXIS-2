@@ -185,6 +185,40 @@ function Sidebar({
   );
 }
 
+function HouseRulesSection({ rulesBody }: { rulesBody: string | null }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section id="house-rules" className={sectionScroll}>
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">House rules</h2>
+          {rulesBody ? (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 active:bg-slate-200"
+            >
+              {open ? "Hide rules" : "View rules"}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`h-4 w-4 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
+                <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+              </svg>
+            </button>
+          ) : null}
+        </div>
+        {!rulesBody ? (
+          <p className="mt-4 text-sm leading-relaxed text-slate-500">
+            No house rules were added to this listing yet. Ask the property manager during your tour or application.
+          </p>
+        ) : open ? (
+          <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{rulesBody}</p>
+        ) : (
+          <p className="mt-3 text-sm text-slate-500">Click "View rules" to see the community guidelines.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function ListingDetailSections({
   property,
   rich,
@@ -376,21 +410,7 @@ export function ListingDetailSections({
                 </div>
               </section>
 
-              <section id="house-rules" className={sectionScroll}>
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                  <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">House rules</h2>
-                  <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Community guidelines
-                  </p>
-                  {houseRulesDisplay ? (
-                    <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{houseRulesDisplay}</p>
-                  ) : (
-                    <p className="mt-4 text-sm leading-relaxed text-slate-500">
-                      No house rules were added to this listing yet. Ask the property manager during your tour or application.
-                    </p>
-                  )}
-                </div>
-              </section>
+              <HouseRulesSection rulesBody={houseRulesDisplay} />
 
               <section id="location" className={sectionScroll}>
                 <ListingLocationBlock
