@@ -234,7 +234,7 @@ export async function renderPortalSection(
       );
     }
     if (section === "work-orders" || section === "services") {
-      if (!tabParts?.length) redirect(`${def.basePath}/services/catalog`);
+      if (!tabParts?.length || tabParts[0] === "requests") redirect(`${def.basePath}/services/catalog`);
       if (!["catalog"].includes(tabParts[0]!)) notFound();
       return subscriptionGated(<ManagerServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
@@ -328,7 +328,7 @@ export async function renderPortalSection(
       );
     }
     if (section === "work-orders" || section === "services") {
-      if (!tabParts?.length) redirect(`${def.basePath}/services/catalog`);
+      if (!tabParts?.length || tabParts[0] === "requests") redirect(`${def.basePath}/services/catalog`);
       if (!["catalog"].includes(tabParts[0]!)) notFound();
       return subscriptionGated(<ManagerServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
@@ -389,7 +389,7 @@ export async function renderPortalSection(
       );
     }
     if (section === "work-orders" || section === "services") {
-      if (!tabParts?.length) redirect(`${def.basePath}/services/catalog`);
+      if (!tabParts?.length || tabParts[0] === "requests") redirect(`${def.basePath}/services/catalog`);
       if (!["catalog"].includes(tabParts[0]!)) notFound();
       return subscriptionGated(<ManagerServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
