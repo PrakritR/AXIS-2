@@ -7,6 +7,7 @@ export type ManagerAmenityOffer = {
   category: string;
   available: boolean;
   managerUserId: string;
+  propertyId?: string;
   createdAt: string;
 };
 
@@ -26,6 +27,12 @@ function write(store: Store): void {
 
 export function readAmenityOffersForManager(managerUserId: string): ManagerAmenityOffer[] {
   return read()[managerUserId] ?? [];
+}
+
+export function readAmenityOffersForProperty(managerUserId: string, propertyId: string): ManagerAmenityOffer[] {
+  const all = read()[managerUserId] ?? [];
+  if (!propertyId.trim()) return all;
+  return all.filter((o) => (o.propertyId ?? "") === propertyId.trim());
 }
 
 export function saveAmenityOffer(offer: ManagerAmenityOffer): void {

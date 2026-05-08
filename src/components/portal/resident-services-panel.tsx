@@ -35,29 +35,21 @@ import {
   writeManagerWorkOrderRows,
 } from "@/lib/manager-work-orders-storage";
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
-import { readAmenityOffersForManager, type ManagerAmenityOffer } from "@/lib/manager-amenity-catalog-storage";
+import { readAmenityOffersForProperty, type ManagerAmenityOffer } from "@/lib/manager-amenity-catalog-storage";
+import {
+  SERVICE_REQUESTS_EVENT,
+  createServiceRequest,
+  readServiceRequestsForResident,
+  submitReturnPhoto,
+  hasDeposit,
+  type ServiceRequest,
+} from "@/lib/service-requests-storage";
 
 const STATUS_TABS: { id: ResidentWorkBucket; label: string }[] = [
   { id: "open", label: "Open" },
   { id: "scheduled", label: "Scheduled" },
   { id: "completed", label: "Completed" },
 ];
-
-type RequestType = "maintenance" | "service";
-
-function TypeBadge({ type }: { type: RequestType }) {
-  if (type === "service")
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold ring-1 ring-violet-200/80 text-violet-700">
-        Service
-      </span>
-    );
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold ring-1 ring-slate-200/80 text-slate-600">
-      Maintenance
-    </span>
-  );
-}
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
@@ -66,10 +58,201 @@ function priorityClass(p: string) {
   return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
 }
 
-function rowType(row: DemoManagerWorkOrderRow): RequestType {
-  return (row as DemoManagerWorkOrderRow & { requestType?: string }).requestType === "service"
-    ? "service"
-    : "maintenance";
+function formatDate(iso: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
+  if (status === "pending")
+    return (
+      <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
+        Awaiting approval
+      </span>
+    );
+  if (status === "approved")
+    return (
+      <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-violet-200">
+        Approved
+      </span>
+    );
+  if (status === "denied")
+    return (
+      <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-[10px] font-semibold text-rose-700 ring-1 ring-rose-200">
+        Denied
+      </span>
+    );
+  if (status === "returned")
+    return (
+      <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+        Return submitted
+      </span>
+    );
+  return null;
+}
+
+function ServiceRequestCard({
+  req,
+  onReturnPhotoUploaded,
+}: {
+  req: ServiceRequest;
+  onReturnPhotoUploaded: () => void;
+}) {
+  const { showToast } = useAppUi();
+  const returnPhotoRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const needsReturn = hasDeposit(req.deposit);
+  // Show checkout procedure once service charge is paid (and item has deposit, so needs return)
+  const showCheckout = req.status === "approved" && req.servicePaid && needsReturn && !req.returnPhotoDataUrl;
+
+  async function handleReturnPhoto(files: FileList | null) {
+    if (!files?.[0]) return;
+    const file = files[0];
+    if (!file.type.startsWith("image/")) { showToast("Images only."); return; }
+    setUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("Read error"));
+        reader.readAsDataURL(file);
+      });
+      submitReturnPhoto(req.id, dataUrl);
+      onReturnPhotoUploaded();
+      showToast("Return photo submitted! Your manager will review it.");
+    } catch {
+      showToast("Could not upload photo.");
+    } finally {
+      setUploading(false);
+      if (returnPhotoRef.current) returnPhotoRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.06)]">
+      <input
+        ref={returnPhotoRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(e) => { void handleReturnPhoto(e.target.files); }}
+      />
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold text-slate-900">{req.offerName}</p>
+          {req.offerDescription ? (
+            <p className="mt-0.5 text-xs text-slate-500">{req.offerDescription}</p>
+          ) : null}
+        </div>
+        <ServiceStatusBadge status={req.status} />
+      </div>
+
+      {/* Price / deposit / return date */}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {req.price ? (
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-700">
+            {req.price}
+          </span>
+        ) : null}
+        {needsReturn ? (
+          <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
+            Deposit {req.deposit}
+          </span>
+        ) : null}
+        {req.returnByDate ? (
+          <span className="rounded-full bg-slate-50 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200">
+            Return by {formatDate(req.returnByDate)}
+          </span>
+        ) : null}
+      </div>
+
+      {req.notes ? (
+        <p className="mt-2 text-xs text-slate-500 italic">&ldquo;{req.notes}&rdquo;</p>
+      ) : null}
+
+      {/* Charges section (approved) */}
+      {req.status === "approved" || req.status === "returned" ? (
+        <div className="mt-3 rounded-xl bg-slate-50 p-3">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Charges</p>
+          <div className="space-y-1.5">
+            {req.price ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-700">Service fee</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.servicePaid ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
+                  {req.servicePaid ? `Paid · ${req.price}` : `Pending · ${req.price}`}
+                </span>
+              </div>
+            ) : null}
+            {needsReturn ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-700">Deposit (refundable)</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.depositPaid ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
+                  {req.depositPaid ? `Paid · ${req.deposit}` : `Pending · ${req.deposit}`}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Checkout procedure */}
+      {showCheckout ? (
+        <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3">
+          <p className="text-xs font-bold text-violet-800">Return checklist</p>
+          <ol className="mt-2 space-y-1 pl-4 text-xs text-violet-700 list-decimal">
+            <li>Clean and prepare the item for return{req.returnByDate ? ` by ${formatDate(req.returnByDate)}` : ""}.</li>
+            <li>Take a clear photo showing the item&apos;s current condition.</li>
+            <li>Upload the photo below — your manager will review it.</li>
+            <li>Your deposit will be refunded once the return is confirmed.</li>
+          </ol>
+          <Button
+            type="button"
+            className="mt-3 rounded-full bg-violet-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+            onClick={() => returnPhotoRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? "Uploading…" : "Upload return photo"}
+          </Button>
+        </div>
+      ) : null}
+
+      {/* Return photo submitted */}
+      {req.status === "returned" && req.returnPhotoDataUrl ? (
+        <div className="mt-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Return photo</p>
+          <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-32 overflow-hidden rounded-xl border border-slate-200">
+            <Image
+              src={req.returnPhotoDataUrl}
+              alt="Return photo"
+              width={128}
+              height={96}
+              className="h-24 w-full object-cover"
+              unoptimized
+            />
+          </a>
+          <p className="mt-1.5 text-xs text-slate-500">
+            {req.depositPaid
+              ? "Deposit refunded — return complete."
+              : "Awaiting manager review to refund deposit."}
+          </p>
+        </div>
+      ) : null}
+
+      {/* Denied */}
+      {req.status === "denied" ? (
+        <div className="mt-3 rounded-xl bg-rose-50 p-3 text-xs text-rose-700">
+          {req.managerNote ? (
+            <p>Manager note: <span className="font-medium">{req.managerNote}</span></p>
+          ) : (
+            <p>This request was not approved. Contact your property manager for details.</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function ResidentServicesPanel() {
@@ -93,11 +276,18 @@ export function ResidentServicesPanel() {
   // service request form
   const [selectedOffer, setSelectedOffer] = useState<ManagerAmenityOffer | null>(null);
   const [sNotes, setSNotes] = useState("");
+  const [sReturnBy, setSReturnBy] = useState("");
 
   const [allRows, setAllRows] = useState<DemoManagerWorkOrderRow[]>([]);
   const [availableOffers, setAvailableOffers] = useState<ManagerAmenityOffer[]>([]);
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
+  const [srTick, setSrTick] = useState(0);
 
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
+
+  function reloadServiceRequests() {
+    if (residentEmail) setServiceRequests(readServiceRequestsForResident(residentEmail));
+  }
 
   useEffect(() => {
     const sync = () => setAllRows(readManagerWorkOrderRows());
@@ -108,8 +298,13 @@ export function ResidentServicesPanel() {
         (r) => r.email?.trim().toLowerCase() === residentEmail,
       );
       if (application?.managerUserId) {
+        const propertyId =
+          application.assignedPropertyId?.trim() ||
+          application.propertyId?.trim() ||
+          application.application?.propertyId?.trim() ||
+          "";
         setAvailableOffers(
-          readAmenityOffersForManager(application.managerUserId).filter((o) => o.available),
+          readAmenityOffersForProperty(application.managerUserId, propertyId).filter((o) => o.available),
         );
       }
     });
@@ -121,9 +316,31 @@ export function ResidentServicesPanel() {
     };
   }, [residentEmail]);
 
+  useEffect(() => {
+    reloadServiceRequests();
+    const onSr = () => setSrTick((t) => t + 1);
+    window.addEventListener(SERVICE_REQUESTS_EVENT, onSr);
+    window.addEventListener("storage", onSr);
+    return () => {
+      window.removeEventListener(SERVICE_REQUESTS_EVENT, onSr);
+      window.removeEventListener("storage", onSr);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [residentEmail]);
+
+  useEffect(() => {
+    reloadServiceRequests();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [srTick]);
+
+  // Only show maintenance work orders (not old service type rows)
   const myRows = useMemo(() => {
     if (!residentEmail) return [];
-    return allRows.filter((r) => r.residentEmail?.trim().toLowerCase() === residentEmail);
+    return allRows.filter(
+      (r) =>
+        r.residentEmail?.trim().toLowerCase() === residentEmail &&
+        (r as DemoManagerWorkOrderRow & { requestType?: string }).requestType !== "service",
+    );
   }, [allRows, residentEmail]);
 
   const rows = useMemo(() => myRows.filter((r) => r.bucket === bucket), [myRows, bucket]);
@@ -137,6 +354,16 @@ export function ResidentServicesPanel() {
   const statusTabs = useMemo(
     () => STATUS_TABS.map(({ id, label }) => ({ id, label, count: counts[id] })),
     [counts],
+  );
+
+  // Active service requests (not denied)
+  const activeServiceRequests = useMemo(
+    () => serviceRequests.filter((r) => r.status !== "denied"),
+    [serviceRequests],
+  );
+  const deniedServiceRequests = useMemo(
+    () => serviceRequests.filter((r) => r.status === "denied"),
+    [serviceRequests],
   );
 
   const fileToDataUrl = (file: File) =>
@@ -161,8 +388,11 @@ export function ResidentServicesPanel() {
     setMPhotos(next);
   };
 
-  const resetMaintenance = () => { setMTitle(""); setMCategory("Plumbing"); setMPriority("Medium"); setMArrival(""); setMPhotos([]); if (photoInputRef.current) photoInputRef.current.value = ""; };
-  const resetService = () => { setSelectedOffer(null); setSNotes(""); };
+  const resetMaintenance = () => {
+    setMTitle(""); setMCategory("Plumbing"); setMPriority("Medium"); setMArrival(""); setMPhotos([]);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  };
+  const resetService = () => { setSelectedOffer(null); setSNotes(""); setSReturnBy(""); };
 
   function getApplication() {
     return readManagerApplicationRows().find((r) => r.email?.trim().toLowerCase() === residentEmail);
@@ -204,34 +434,34 @@ export function ResidentServicesPanel() {
   const submitService = () => {
     if (!selectedOffer) { showToast("Select a service first."); return; }
     if (!residentEmail) { showToast("Sign in to submit."); return; }
+    if (hasDeposit(selectedOffer.deposit) && !sReturnBy.trim()) {
+      showToast("Please enter a return-by date.");
+      return;
+    }
     const application = getApplication();
-    const row: DemoManagerWorkOrderRow & { requestType: string } = {
-      id: `SVC-${Date.now()}`,
-      requestType: "service",
-      propertyName: application?.property || "Assigned house",
-      propertyId: application?.assignedPropertyId || application?.propertyId || application?.application?.propertyId,
-      assignedPropertyId: application?.assignedPropertyId,
-      assignedRoomChoice: application?.assignedRoomChoice || application?.application?.roomChoice1,
-      managerUserId: application?.managerUserId ?? null,
-      unit: application?.assignedRoomChoice || application?.application?.roomChoice1 || "—",
-      title: selectedOffer.name,
-      priority: "Low",
-      status: "Requested",
-      bucket: "open",
-      description: `${selectedOffer.category}: ${selectedOffer.description}${sNotes.trim() ? `\n\nResident note: ${sNotes.trim()}` : ""}`,
-      scheduled: "—",
-      cost: selectedOffer.price || "—",
-      preferredArrival: "Anytime",
-      residentName: application?.name,
+    if (!application?.managerUserId) { showToast("Could not find your property information."); return; }
+    const propertyId =
+      application.assignedPropertyId?.trim() ||
+      application.propertyId?.trim() ||
+      application.application?.propertyId?.trim() ||
+      "";
+    createServiceRequest({
+      offerId: selectedOffer.id,
+      offerName: selectedOffer.name,
+      offerDescription: selectedOffer.description,
+      price: selectedOffer.price,
+      deposit: selectedOffer.deposit,
       residentEmail,
-      photoDataUrls: [],
-    };
-    writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
-    setAllRows(readManagerWorkOrderRows());
-    setExpandedId(row.id);
-    showToast(`${selectedOffer.name} requested.`);
+      residentName: application.name || residentEmail,
+      managerUserId: application.managerUserId,
+      propertyId,
+      returnByDate: sReturnBy.trim(),
+      notes: sNotes.trim(),
+    });
+    showToast(`${selectedOffer.name} requested — awaiting manager approval.`);
     resetService();
     setModalMode("none");
+    reloadServiceRequests();
   };
 
   return (
@@ -247,113 +477,150 @@ export function ResidentServicesPanel() {
           </Button>
         </div>
       }
-      filterRow={
-        <ManagerPortalStatusPills tabs={statusTabs} activeId={bucket} onChange={(id) => setBucket(id as ResidentWorkBucket)} />
-      }
+      filterRow={null}
     >
       <input ref={photoInputRef} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void onPickPhotos(e.target.files); }} />
 
-      <div className={PORTAL_DATA_TABLE_WRAP}>
-        {rows.length === 0 ? (
-          <PortalDataTableEmpty
-            message={
-              myRows.length === 0
-                ? "No requests yet. Use Report maintenance or Request a service to get started."
-                : "No requests in this status."
-            }
-          />
-        ) : (
-          <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="min-w-[740px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
-                  <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <Fragment key={row.id}>
-                    <tr className={PORTAL_TABLE_TR}>
-                      <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-slate-500`}>{row.id}</td>
-                      <td className={PORTAL_TABLE_TD}><TypeBadge type={rowType(row)} /></td>
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
-                      <td className={PORTAL_TABLE_TD}>{row.status}</td>
-                      <td className={PORTAL_TABLE_TD}>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</td>
-                      <td className={`${PORTAL_TABLE_TD} text-right`}>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                          onClick={() => setExpandedId((c) => (c === row.id ? null : row.id))}
-                        >
-                          {expandedId === row.id ? "Hide" : "Details"}
-                        </Button>
-                      </td>
-                    </tr>
-                    {expandedId === row.id ? (
-                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={6} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
-                          {rowType(row) === "maintenance" ? (
-                            <>
-                              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Priority</p>
-                              <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>{row.priority}</span>
-                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Preferred arrival</p>
-                              <p className="mt-1 font-medium text-slate-800">{row.preferredArrival ?? "Anytime"}</p>
-                            </>
-                          ) : (
-                            <>
-                              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Service</p>
-                              <p className="mt-1 font-medium text-slate-800">{row.title}</p>
-                            </>
-                          )}
-                          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Estimated cost</p>
-                          <p className="mt-1">{row.cost !== "—" && row.cost.trim() ? row.cost : "Not set yet"}</p>
-                          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Details</p>
-                          <p className="mt-1.5 whitespace-pre-wrap leading-relaxed">{row.description}</p>
-                          {row.photoDataUrls?.length ? (
-                            <>
-                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Photos</p>
-                              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                {row.photoDataUrls.map((src, i) => (
-                                  <a key={i} href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-                                    <Image src={src} alt={`Photo ${i + 1}`} width={240} height={180} className="h-28 w-full object-cover" unoptimized />
-                                  </a>
-                                ))}
-                              </div>
-                            </>
-                          ) : null}
-                          {bucket === "open" ? (
-                            <PortalTableDetailActions>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => {
-                                  deleteManagerWorkOrderRow(row.id);
-                                  setAllRows(readManagerWorkOrderRows());
-                                  setExpandedId(null);
-                                  showToast("Request removed.");
-                                }}
-                              >
-                                Cancel request
-                              </Button>
-                            </PortalTableDetailActions>
-                          ) : null}
+      {/* Active service requests */}
+      {activeServiceRequests.length > 0 ? (
+        <div className="mb-6">
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Active Services</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {activeServiceRequests.map((req) => (
+              <ServiceRequestCard
+                key={req.id}
+                req={req}
+                onReturnPhotoUploaded={reloadServiceRequests}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Maintenance requests */}
+      <div>
+        <div className="mb-3 flex items-center gap-3">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Maintenance</p>
+          <div className="flex gap-1">
+            {statusTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setBucket(tab.id)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  bucket === tab.id
+                    ? "bg-slate-900 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {tab.label}
+                {tab.count > 0 ? ` · ${tab.count}` : ""}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={PORTAL_DATA_TABLE_WRAP}>
+          {rows.length === 0 ? (
+            <PortalDataTableEmpty
+              message={
+                myRows.length === 0
+                  ? "No maintenance requests yet. Use Report maintenance to get started."
+                  : "No requests in this status."
+              }
+            />
+          ) : (
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="min-w-[700px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                    <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <Fragment key={row.id}>
+                      <tr className={PORTAL_TABLE_TR}>
+                        <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-slate-500`}>{row.id}</td>
+                        <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
+                        <td className={PORTAL_TABLE_TD}>{row.status}</td>
+                        <td className={`${PORTAL_TABLE_TD} text-right`}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                            onClick={() => setExpandedId((c) => (c === row.id ? null : row.id))}
+                          >
+                            {expandedId === row.id ? "Hide" : "Details"}
+                          </Button>
                         </td>
                       </tr>
-                    ) : null}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                      {expandedId === row.id ? (
+                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                          <td colSpan={4} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Priority</p>
+                            <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>{row.priority}</span>
+                            <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Preferred arrival</p>
+                            <p className="mt-1 font-medium text-slate-800">{row.preferredArrival ?? "Anytime"}</p>
+                            <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Details</p>
+                            <p className="mt-1.5 whitespace-pre-wrap leading-relaxed">{row.description}</p>
+                            {row.photoDataUrls?.length ? (
+                              <>
+                                <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Photos</p>
+                                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                  {row.photoDataUrls.map((src, i) => (
+                                    <a key={i} href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                                      <Image src={src} alt={`Photo ${i + 1}`} width={240} height={180} className="h-28 w-full object-cover" unoptimized />
+                                    </a>
+                                  ))}
+                                </div>
+                              </>
+                            ) : null}
+                            {bucket === "open" ? (
+                              <PortalTableDetailActions>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={PORTAL_DETAIL_BTN}
+                                  onClick={() => {
+                                    deleteManagerWorkOrderRow(row.id);
+                                    setAllRows(readManagerWorkOrderRows());
+                                    setExpandedId(null);
+                                    showToast("Request removed.");
+                                  }}
+                                >
+                                  Cancel request
+                                </Button>
+                              </PortalTableDetailActions>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Denied service requests (collapsed at bottom) */}
+      {deniedServiceRequests.length > 0 ? (
+        <details className="mt-6">
+          <summary className="cursor-pointer text-xs font-semibold text-slate-400 hover:text-slate-600">
+            {deniedServiceRequests.length} denied request{deniedServiceRequests.length !== 1 ? "s" : ""}
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {deniedServiceRequests.map((req) => (
+              <ServiceRequestCard key={req.id} req={req} onReturnPhotoUploaded={reloadServiceRequests} />
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       {/* Maintenance modal */}
       <Modal
@@ -434,13 +701,13 @@ export function ResidentServicesPanel() {
           </div>
         ) : (
           <>
-            <p className="text-xs text-slate-500">Select a service from your manager&apos;s catalog and we&apos;ll send them the request.</p>
+            <p className="text-xs text-slate-500">Select a service from your manager&apos;s catalog. If a deposit is required, you&apos;ll also need to set a return date.</p>
             <div className="mt-4 space-y-2">
               {availableOffers.map((offer) => (
                 <button
                   key={offer.id}
                   type="button"
-                  onClick={() => setSelectedOffer((cur) => (cur?.id === offer.id ? null : offer))}
+                  onClick={() => { setSelectedOffer((cur) => (cur?.id === offer.id ? null : offer)); setSReturnBy(""); }}
                   className={`w-full rounded-xl border px-4 py-3 text-left transition ${
                     selectedOffer?.id === offer.id
                       ? "border-violet-300 bg-violet-50 ring-1 ring-violet-200"
@@ -450,28 +717,42 @@ export function ResidentServicesPanel() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-semibold text-slate-900">{offer.name}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{offer.category}</p>
                       {offer.description ? <p className="mt-1 text-xs leading-relaxed text-slate-600">{offer.description}</p> : null}
                     </div>
-                    {offer.price ? (
-                      <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                        {offer.price}
-                      </span>
-                    ) : null}
-                  </div>
-                  {selectedOffer?.id === offer.id ? (
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-                      <span className="text-[11px] font-semibold text-violet-700">Selected</span>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      {offer.price ? (
+                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{offer.price}</span>
+                      ) : null}
+                      {hasDeposit(offer.deposit) ? (
+                        <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {offer.deposit}</span>
+                      ) : null}
                     </div>
-                  ) : null}
+                  </div>
                 </button>
               ))}
             </div>
+
             {selectedOffer ? (
-              <div className="mt-3">
-                <p className="mb-1 text-[11px] font-medium text-slate-600">Additional notes (optional)</p>
-                <Input value={sNotes} onChange={(e) => setSNotes(e.target.value)} placeholder="Preferred timing, special instructions…" className="bg-white" />
+              <div className="mt-4 space-y-3">
+                {hasDeposit(selectedOffer.deposit) ? (
+                  <div>
+                    <p className="mb-1 text-[11px] font-medium text-slate-600">
+                      Return by date <span className="text-rose-500">*</span>
+                    </p>
+                    <Input
+                      type="date"
+                      value={sReturnBy}
+                      onChange={(e) => setSReturnBy(e.target.value)}
+                      min={new Date().toISOString().slice(0, 10)}
+                      className="bg-white"
+                    />
+                    <p className="mt-1 text-[10px] text-slate-400">Required — your deposit is held until the item is returned.</p>
+                  </div>
+                ) : null}
+                <div>
+                  <p className="mb-1 text-[11px] font-medium text-slate-600">Additional notes (optional)</p>
+                  <Input value={sNotes} onChange={(e) => setSNotes(e.target.value)} placeholder="Preferred timing, special instructions…" className="bg-white" />
+                </div>
               </div>
             ) : null}
           </>

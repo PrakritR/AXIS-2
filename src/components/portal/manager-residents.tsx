@@ -82,6 +82,14 @@ import {
   updateManagerWorkOrder,
   deleteManagerWorkOrderRow,
 } from "@/lib/manager-work-orders-storage";
+import {
+  SERVICE_REQUESTS_EVENT,
+  readServiceRequestsForResident,
+  markServiceRequestServicePaid,
+  markServiceRequestDepositPaid,
+  hasDeposit,
+  type ServiceRequest,
+} from "@/lib/service-requests-storage";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
@@ -258,6 +266,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [propertyTick, setPropertyTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
   const [workOrderTick, setWorkOrderTick] = useState(0);
+  const [srTick, setSrTick] = useState(0);
   const [inboxTick, setInboxTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
@@ -335,6 +344,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   useEffect(() => {
     const onLease = () => setLeaseTick((n) => n + 1);
     const onWorkOrder = () => setWorkOrderTick((n) => n + 1);
+    const onSr = () => setSrTick((n) => n + 1);
     const onInbox = (evt?: Event) => {
       if (evt && evt.type === PORTAL_INBOX_CHANGED_EVENT) {
         const detail = (evt as CustomEvent<{ key?: string }>).detail;
@@ -344,10 +354,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     };
     window.addEventListener(LEASE_PIPELINE_EVENT, onLease);
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, onWorkOrder);
+    window.addEventListener(SERVICE_REQUESTS_EVENT, onSr);
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, onInbox as EventListener);
     return () => {
       window.removeEventListener(LEASE_PIPELINE_EVENT, onLease);
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, onWorkOrder);
+      window.removeEventListener(SERVICE_REQUESTS_EVENT, onSr);
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, onInbox as EventListener);
     };
   }, []);
@@ -611,6 +623,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         return a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
       });
   }, [selected, workOrderTick]);
+
+  const residentServiceRequests = useMemo<ServiceRequest[]>(() => {
+    void srTick;
+    if (!selected?.email) return [];
+    return readServiceRequestsForResident(selected.email).filter(
+      (r) => r.status === "approved" || r.status === "returned",
+    );
+  }, [selected, srTick]);
 
   const residentInboxThreads = useMemo<PersistedInboxThread[]>(() => {
     void inboxTick;
@@ -1603,6 +1623,84 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 </div>
                               )}
                             </div>
+
+                            {residentServiceRequests.length > 0 ? (
+                              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Service requests</p>
+                                <p className="mt-1 mb-4 text-sm text-slate-500">Active catalog service charges for this resident.</p>
+                                <div className="space-y-3">
+                                  {residentServiceRequests.map((req) => {
+                                    const needsReturn = hasDeposit(req.deposit);
+                                    return (
+                                      <div key={req.id} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                                        <div className="flex flex-wrap items-start justify-between gap-2">
+                                          <div>
+                                            <p className="font-semibold text-slate-900">{req.offerName}</p>
+                                            {req.returnByDate ? (
+                                              <p className="text-xs text-slate-500">
+                                                Return by {new Date(req.returnByDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                                              </p>
+                                            ) : null}
+                                          </div>
+                                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${req.status === "returned" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
+                                            {req.status === "returned" ? "Return submitted" : "Approved"}
+                                          </span>
+                                        </div>
+                                        <div className="mt-3 space-y-2">
+                                          {req.price ? (
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-xs text-slate-700">Service fee · {req.price}</span>
+                                              {req.servicePaid ? (
+                                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Paid</span>
+                                              ) : (
+                                                <Button
+                                                  type="button"
+                                                  className="h-6 rounded-full px-2.5 text-[10px] font-semibold"
+                                                  onClick={() => { markServiceRequestServicePaid(req.id); setSrTick((t) => t + 1); showToast("Service charge marked paid."); }}
+                                                >
+                                                  Mark paid
+                                                </Button>
+                                              )}
+                                            </div>
+                                          ) : null}
+                                          {needsReturn ? (
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-xs text-slate-700">Deposit · {req.deposit}</span>
+                                              {req.depositPaid ? (
+                                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Refunded</span>
+                                              ) : (
+                                                <Button
+                                                  type="button"
+                                                  className="h-6 rounded-full px-2.5 text-[10px] font-semibold"
+                                                  onClick={() => { markServiceRequestDepositPaid(req.id); setSrTick((t) => t + 1); showToast("Deposit marked refunded."); }}
+                                                >
+                                                  Mark refunded
+                                                </Button>
+                                              )}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                        {req.returnPhotoDataUrl ? (
+                                          <div className="mt-3">
+                                            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Return photo</p>
+                                            <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-28 overflow-hidden rounded-xl border border-slate-200">
+                                              <Image
+                                                src={req.returnPhotoDataUrl}
+                                                alt="Return"
+                                                width={112}
+                                                height={84}
+                                                className="h-20 w-full object-cover"
+                                                unoptimized
+                                              />
+                                            </a>
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : null}
 
                             <div className="rounded-2xl border border-slate-200 bg-white p-4">
                               <div className="flex items-center justify-between gap-3">

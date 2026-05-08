@@ -9,15 +9,17 @@ import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
 } from "@/components/portal/portal-metrics";
-import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
+import { ManagerServiceRequests } from "@/components/portal/manager-service-requests";
 import {
   deleteAmenityOffer,
-  readAmenityOffersForManager,
+  readAmenityOffersForProperty,
   saveAmenityOffer,
   toggleAmenityOfferAvailability,
   type ManagerAmenityOffer,
 } from "@/lib/manager-amenity-catalog-storage";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
+import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 
 type Tab = "requests" | "catalog";
 const TABS: { id: Tab; label: string }[] = [
@@ -29,18 +31,41 @@ const EMPTY_FORM = { name: "", description: "", price: "", deposit: "" };
 
 export function ManagerServicesPanel() {
   const { showToast } = useAppUi();
-  const { userId: managerUserId } = useManagerUserId();
+  const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const [tab, setTab] = useState<Tab>("requests");
   const [offers, setOffers] = useState<ManagerAmenityOffer[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<ManagerAmenityOffer | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const [propertyTick, setPropertyTick] = useState(0);
+
+  const propertyOptions = useMemo(() => {
+    void propertyTick;
+    return buildManagerPropertyFilterOptions(managerUserId ?? null);
+  }, [managerUserId, propertyTick]);
+
+  useEffect(() => {
+    if (!authReady || !managerUserId) return;
+    void syncPropertyPipelineFromServer().then(() => setPropertyTick((t) => t + 1));
+  }, [authReady, managerUserId]);
+
+  // Auto-select first property when options load
+  useEffect(() => {
+    if (!selectedPropertyId && propertyOptions.length > 0) {
+      setSelectedPropertyId(propertyOptions[0]!.id);
+    }
+  }, [propertyOptions, selectedPropertyId]);
 
   const reload = () => {
-    if (managerUserId) setOffers(readAmenityOffersForManager(managerUserId));
+    if (managerUserId && selectedPropertyId) {
+      setOffers(readAmenityOffersForProperty(managerUserId, selectedPropertyId));
+    } else {
+      setOffers([]);
+    }
   };
 
-  useEffect(() => { reload(); }, [managerUserId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { reload(); }, [managerUserId, selectedPropertyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabItems = useMemo(
     () => TABS.map(({ id, label }) => ({ id, label, count: 0 })),
@@ -71,6 +96,7 @@ export function ManagerServicesPanel() {
       category: "",
       available: editingOffer?.available ?? true,
       managerUserId,
+      propertyId: selectedPropertyId || undefined,
       createdAt: editingOffer?.createdAt ?? new Date().toISOString(),
     };
     saveAmenityOffer(offer);
@@ -114,10 +140,26 @@ export function ManagerServicesPanel() {
         }
       >
         {tab === "requests" ? (
-          <ManagerWorkOrders />
+          <ManagerServiceRequests />
         ) : (
           <div className="mt-1">
-            {offers.length === 0 ? (
+            {propertyOptions.length > 1 && (
+              <div className="mb-4 flex items-center gap-2">
+                <label className="text-xs font-semibold text-slate-500">Property</label>
+                <select
+                  value={selectedPropertyId}
+                  onChange={(e) => setSelectedPropertyId(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                >
+                  {propertyOptions.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {!selectedPropertyId ? (
+              <p className="py-8 text-center text-sm text-slate-400">Select a property to manage its service catalog.</p>
+            ) : offers.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
                 <p className="text-sm font-medium text-slate-600">No services yet</p>
                 <p className="mt-1 max-w-xs text-xs text-slate-400">
