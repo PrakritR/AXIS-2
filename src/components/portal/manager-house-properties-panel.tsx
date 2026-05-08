@@ -68,6 +68,7 @@ type PortalListingNote = {
   houseOverview?: string;
   amenitiesText?: string;
   houseRulesText?: string;
+  houseDescription?: string;
   rooms?: Record<string, PortalRoomNote>;
 };
 type PortalNotesStore = Record<string, PortalListingNote>;
@@ -632,9 +633,7 @@ function ManagerPropertyInlineDetails({
                     setHouseEditing(false);
                   } else {
                     setHouseDraft({
-                      tagline: portalNote.tagline ?? "",
-                      houseOverview: portalNote.houseOverview ?? "",
-                      amenitiesText: portalNote.amenitiesText ?? "",
+                      houseDescription: portalNote.houseDescription ?? "",
                       houseRulesText: portalNote.houseRulesText ?? "",
                     });
                     setHouseEditing(true);
@@ -651,35 +650,18 @@ function ManagerPropertyInlineDetails({
             </div>
             {houseEditing ? (
               <div className="p-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1 sm:col-span-2">
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Tagline</label>
-                    <input
-                      type="text"
-                      value={houseDraft.tagline}
-                      onChange={(e) => setHouseDraft((d) => ({ ...d, tagline: e.target.value }))}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-200"
-                      placeholder="One-line hook shown on the listing card…"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1 sm:col-span-2">
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">House overview</label>
+                <div className="grid gap-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">House description</label>
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold text-emerald-600">Manager only</span>
+                    </div>
                     <textarea
                       rows={4}
-                      value={houseDraft.houseOverview}
-                      onChange={(e) => setHouseDraft((d) => ({ ...d, houseOverview: e.target.value }))}
+                      value={houseDraft.houseDescription}
+                      onChange={(e) => setHouseDraft((d) => ({ ...d, houseDescription: e.target.value }))}
                       className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-200"
-                      placeholder="Describe the house, vibe, location, ideal tenant…"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">House amenities</label>
-                    <textarea
-                      rows={3}
-                      value={houseDraft.amenitiesText}
-                      onChange={(e) => setHouseDraft((d) => ({ ...d, amenitiesText: e.target.value }))}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-200"
-                      placeholder="One per line or comma-separated — e.g. Washer/dryer, Backyard, Parking"
+                      placeholder="Internal notes about the house — not visible to residents or admin…"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -714,19 +696,20 @@ function ManagerPropertyInlineDetails({
             ) : (
               <div className="divide-y divide-slate-100">
                 {[
-                  { label: "Tagline", value: portalNote.tagline },
-                  { label: "Overview", value: portalNote.houseOverview },
-                  { label: "Amenities", value: portalNote.amenitiesText },
-                  { label: "Rules", value: portalNote.houseRulesText },
+                  { label: "Description", value: portalNote.houseDescription, badge: "Manager only" },
+                  { label: "Rules", value: portalNote.houseRulesText, badge: null },
                 ]
                   .filter(({ value }) => value?.trim())
-                  .map(({ label, value }) => (
+                  .map(({ label, value, badge }) => (
                     <div key={label} className="flex gap-4 px-4 py-3">
-                      <p className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                      <div className="w-24 shrink-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                        {badge ? <span className="mt-0.5 inline-block rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">{badge}</span> : null}
+                      </div>
                       <p className="whitespace-pre-wrap text-sm text-slate-700">{value}</p>
                     </div>
                   ))}
-                {!portalNote.tagline?.trim() && !portalNote.houseOverview?.trim() && !portalNote.amenitiesText?.trim() && !portalNote.houseRulesText?.trim() ? (
+                {!portalNote.houseDescription?.trim() && !portalNote.houseRulesText?.trim() ? (
                   <p className="px-4 py-3 text-sm text-slate-400">No house details yet — click Edit to add.</p>
                 ) : null}
               </div>
