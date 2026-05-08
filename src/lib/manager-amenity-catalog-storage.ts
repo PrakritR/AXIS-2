@@ -3,6 +3,7 @@ export type ManagerAmenityOffer = {
   name: string;
   description: string;
   price: string;
+  deposit: string;
   category: string;
   available: boolean;
   managerUserId: string;

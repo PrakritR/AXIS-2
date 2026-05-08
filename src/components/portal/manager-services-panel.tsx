@@ -25,7 +25,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "catalog", label: "Service catalog" },
 ];
 
-const EMPTY_FORM = { name: "", description: "", price: "" };
+const EMPTY_FORM = { name: "", description: "", price: "", deposit: "" };
 
 export function ManagerServicesPanel() {
   const { showToast } = useAppUi();
@@ -55,7 +55,7 @@ export function ManagerServicesPanel() {
 
   const openEdit = (offer: ManagerAmenityOffer) => {
     setEditingOffer(offer);
-    setForm({ name: offer.name, description: offer.description, price: offer.price });
+    setForm({ name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "" });
     setModalOpen(true);
   };
 
@@ -67,6 +67,7 @@ export function ManagerServicesPanel() {
       name: form.name.trim(),
       description: form.description.trim(),
       price: form.price.trim(),
+      deposit: form.deposit.trim(),
       category: "",
       available: editingOffer?.available ?? true,
       managerUserId,
@@ -145,6 +146,11 @@ export function ManagerServicesPanel() {
                             {offer.price}
                           </span>
                         ) : null}
+                        {offer.deposit ? (
+                          <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200/80">
+                            Deposit {offer.deposit}
+                          </span>
+                        ) : null}
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
                             offer.available
@@ -206,14 +212,25 @@ export function ManagerServicesPanel() {
               className="bg-white"
             />
           </div>
-          <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Price</p>
-            <Input
-              value={form.price}
-              onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-              placeholder="e.g. $25, $80/month, Free"
-              className="bg-white"
-            />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-slate-600">Price</p>
+              <Input
+                value={form.price}
+                onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                placeholder="e.g. $25, $80/month, Free"
+                className="bg-white"
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-slate-600">Deposit</p>
+              <Input
+                value={form.deposit}
+                onChange={(e) => setForm((f) => ({ ...f, deposit: e.target.value }))}
+                placeholder="e.g. $50"
+                className="bg-white"
+              />
+            </div>
           </div>
           <div>
             <p className="mb-1 text-[11px] font-medium text-slate-600">Description</p>
