@@ -68,17 +68,17 @@ export function resolveResidentMoveInFromApplications(
     }
   }
 
-  // Portal note room instructions override listing submission (manager edits in Properties panel)
+  // Per-resident override (set in Residents panel) — second priority, overrides submission
+  if (row.moveInInstructions?.trim()) {
+    instructions = row.moveInInstructions.trim();
+  }
+
+  // Portal note room instructions take highest priority (manager edits Room Details in Properties panel)
   if (managerUserId && pid && listingRoomId) {
     const noteKey = `${managerUserId}:${pid}`;
     const portalNote = getPortalListingNote(noteKey);
     const noteIns = portalNote.rooms?.[listingRoomId]?.moveInInstructions?.trim();
     if (noteIns) instructions = noteIns;
-  }
-
-  // Per-resident override (set in Residents panel) takes highest priority
-  if (row.moveInInstructions?.trim()) {
-    instructions = row.moveInInstructions.trim();
   }
 
   return {
