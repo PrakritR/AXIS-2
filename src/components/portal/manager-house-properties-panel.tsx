@@ -48,48 +48,13 @@ import {
   type ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
 
-// ---------- Portal-only notes store ----------
-// Completely decoupled from the listing submission / approval flow.
-// Keyed by "<managerUserId>:<listingId|pendingId>" → per-listing note blob.
-const PORTAL_NOTES_KEY = "axis_portal_notes_v1";
-type PortalRoomNote = {
-  name?: string;
-  detail?: string;
-  amenitiesText?: string;
-  furnishing?: string;
-  availability?: string;
-  utilitiesEstimate?: string;
-  moveInAvailableDate?: string;
-  moveInInstructions?: string;
-  monthlyRent?: number;
-};
-type PortalListingNote = {
-  tagline?: string;
-  houseOverview?: string;
-  amenitiesText?: string;
-  houseRulesText?: string;
-  houseDescription?: string;
-  rooms?: Record<string, PortalRoomNote>;
-};
-type PortalNotesStore = Record<string, PortalListingNote>;
-function readPortalNotesStore(): PortalNotesStore {
-  try { return JSON.parse(localStorage.getItem(PORTAL_NOTES_KEY) ?? "{}") as PortalNotesStore; } catch { return {}; }
-}
-function getPortalListingNote(noteKey: string): PortalListingNote {
-  return readPortalNotesStore()[noteKey] ?? {};
-}
-function savePortalListingNote(noteKey: string, patch: Partial<PortalListingNote>): void {
-  const store = readPortalNotesStore();
-  store[noteKey] = { ...(store[noteKey] ?? {}), ...patch };
-  localStorage.setItem(PORTAL_NOTES_KEY, JSON.stringify(store));
-}
-function savePortalRoomNote(noteKey: string, roomId: string, patch: PortalRoomNote): void {
-  const store = readPortalNotesStore();
-  const listing = store[noteKey] ?? {};
-  listing.rooms = { ...(listing.rooms ?? {}), [roomId]: { ...(listing.rooms?.[roomId] ?? {}), ...patch } };
-  store[noteKey] = listing;
-  localStorage.setItem(PORTAL_NOTES_KEY, JSON.stringify(store));
-}
+import {
+  type PortalRoomNote,
+  type PortalListingNote,
+  getPortalListingNote,
+  savePortalListingNote,
+  savePortalRoomNote,
+} from "@/lib/portal-listing-notes";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);

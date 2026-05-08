@@ -2,6 +2,7 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import { effectiveApplicationForRow } from "@/lib/manager-applications-storage";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { getPropertyById, getRoomChoiceLabel, parseRoomChoiceValue } from "@/lib/rental-application/data";
+import { getPortalListingNote } from "@/lib/portal-listing-notes";
 
 export type ResidentMoveInResolved = {
   propertyLabel: string;
@@ -45,27 +46,39 @@ export function resolveResidentMoveInFromApplications(
   const sub =
     property?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(property.listingSubmission) : null;
 
+  // Resolve managerUserId for portal notes lookup
+  const managerUserId = row.managerUserId?.trim() || property?.managerUserId?.trim() || "";
+
   let roomLabel = roomChoice ? getRoomChoiceLabel(roomChoice) : row.property?.trim() || "Your room";
   let earliestMoveInDateLabel: string | null = null;
   let instructions: string | null = null;
-
-  // Row-level override (set from the Residents tab) takes priority.
-  if (row.moveInInstructions?.trim()) {
-    instructions = row.moveInInstructions.trim();
-  }
+  let listingRoomId: string | null = null;
 
   if (sub && roomChoice) {
-    const { listingRoomId } = parseRoomChoiceValue(roomChoice);
+    const parsed = parseRoomChoiceValue(roomChoice);
+    listingRoomId = parsed.listingRoomId ?? null;
     const room = listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : undefined;
     if (room) {
       if (room.name.trim()) roomLabel = room.name.trim();
       const d = room.moveInAvailableDate?.trim();
       if (d) earliestMoveInDateLabel = formatMoveInDateLabel(d);
-      if (!instructions) {
-        const ins = room.moveInInstructions?.trim();
-        if (ins) instructions = ins;
-      }
+      // Listing submission instructions as lowest-priority fallback
+      const subIns = room.moveInInstructions?.trim();
+      if (subIns) instructions = subIns;
     }
+  }
+
+  // Portal note room instructions override listing submission (manager edits in Properties panel)
+  if (managerUserId && pid && listingRoomId) {
+    const noteKey = `${managerUserId}:${pid}`;
+    const portalNote = getPortalListingNote(noteKey);
+    const noteIns = portalNote.rooms?.[listingRoomId]?.moveInInstructions?.trim();
+    if (noteIns) instructions = noteIns;
+  }
+
+  // Per-resident override (set in Residents panel) takes highest priority
+  if (row.moveInInstructions?.trim()) {
+    instructions = row.moveInInstructions.trim();
   }
 
   return {

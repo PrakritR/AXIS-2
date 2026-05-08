@@ -1337,46 +1337,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             <div className="rounded-2xl border border-slate-200 bg-white p-4">
                               <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Move-in instructions</p>
-                                  <p className="mt-1 text-sm text-slate-500">
-                                    Keys, access codes, parking, utilities start, what to bring — shown on the resident Move-in tab.
-                                  </p>
-                                </div>
-                                {editMoveInId !== selected.id ? (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="rounded-full px-3 py-1 text-xs"
-                                    onClick={() => { setEditMoveInId(selected.id); setEditMoveInText(selected.moveInInstructions ?? ""); }}
-                                  >
-                                    Edit
-                                  </Button>
-                                ) : null}
-                              </div>
-                              {editMoveInId === selected.id ? (
-                                <div className="mt-3 space-y-2">
-                                  <Textarea
-                                    className="min-h-[100px]"
-                                    value={editMoveInText}
-                                    onChange={(e) => setEditMoveInText(e.target.value)}
-                                    placeholder="e.g. Front gate code is 1234. Each room has a lockbox with key inside."
-                                  />
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button type="button" variant="primary" className="rounded-full text-xs" onClick={saveMoveInInstructions}>Save</Button>
-                                    <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setEditMoveInId(null)}>Cancel</Button>
-                                    <Button type="button" variant="outline" className="rounded-full text-xs" onClick={autoGenerateMoveIn}>Auto-generate from listing</Button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">
-                                  {selected.moveInInstructions?.trim() || <span className="text-slate-400">No instructions set yet.</span>}
-                                </p>
-                              )}
-                            </div>
-
-                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
                                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Lease</p>
                                   <p className="mt-1 text-sm text-slate-600">
                                     {residentLease
