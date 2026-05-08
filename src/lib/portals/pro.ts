@@ -34,14 +34,7 @@ export const proPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
-    {
-      section: "services",
-      label: "Services",
-      tabs: [
-        { id: "requests", label: "Requests" },
-        { id: "catalog", label: "Service catalog" },
-      ],
-    },
+    { section: "services", label: "Services", tabs: [] },
     { section: "plan", label: "Plan", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
   ],
