@@ -58,6 +58,14 @@ import {
   splitLineList,
 } from "@/data/manager-listing-presets";
 import { loadListingPresetConfig, type ListingPresetConfig } from "@/lib/site-content";
+import { Modal } from "@/components/ui/modal";
+import {
+  readAmenityOffersForProperty,
+  saveAmenityOffer,
+  deleteAmenityOffer,
+  toggleAmenityOfferAvailability,
+  type ManagerAmenityOffer,
+} from "@/lib/manager-amenity-catalog-storage";
 
 const selectInputCls =
   "min-h-[44px] w-full rounded-xl border border-black/[0.08] bg-black/[0.04] px-3.5 py-2.5 text-[14px] text-[#1d1d1f] outline-none transition focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/20";
@@ -176,14 +184,14 @@ const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
   furnishing: ROOM_FURNISHING_OPTIONS,
 };
 
-function FormSection({ id, title, description, children }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode }) {
+function FormSection({ id, title, description, children, accent }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode; accent?: string }) {
   return (
-    <section id={id} className="mb-6 overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-sm">
-      <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-4 sm:px-6">
-        <h3 className="text-base font-bold tracking-tight text-slate-950">{title}</h3>
-        {description ? <div className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{description}</div> : null}
+    <section id={id} className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_6px_rgba(15,23,42,0.06)]">
+      <div className={`border-b border-slate-100 px-5 py-4 sm:px-6 ${accent ?? "bg-gradient-to-r from-slate-50 to-white"}`}>
+        <h3 className="text-[15px] font-bold tracking-tight text-slate-900">{title}</h3>
+        {description ? <div className="mt-1 max-w-3xl text-[13px] leading-relaxed text-slate-500">{description}</div> : null}
       </div>
-      <div className="p-4 sm:p-6">{children}</div>
+      <div className="p-5 sm:p-6">{children}</div>
     </section>
   );
 }
@@ -237,27 +245,28 @@ const SHARED_SPACE_TEMPLATES = [
   },
 ] as const;
 
-/** Multi-step flow: home & layout first, then rooms → shared layout → money → media → highlights. */
 const LISTING_FORM_STEPS = [
-  { id: "home", label: "Home & layout" },
-  { id: "rooms", label: "Rooms" },
-  { id: "bathrooms", label: "Bathrooms" },
-  { id: "spaces", label: "Shared spaces" },
-  { id: "lease", label: "Lease & pricing" },
-  { id: "media", label: "Media" },
-  { id: "finish", label: "Highlights" },
+  { id: "home",      label: "Home & layout",  icon: "🏠" },
+  { id: "rooms",     label: "Rooms",          icon: "🛏" },
+  { id: "bathrooms", label: "Bathrooms",      icon: "🚿" },
+  { id: "spaces",    label: "Shared spaces",  icon: "🪑" },
+  { id: "lease",     label: "Lease & pricing",icon: "💰" },
+  { id: "media",     label: "Media",          icon: "📷" },
+  { id: "services",  label: "Services",       icon: "🛎" },
+  { id: "finish",    label: "Submit",         icon: "✅" },
 ] as const;
 
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
-  home: "Property type, address, floors, baths, and how many bedrooms you’ll list.",
-  rooms: "Each rentable bedroom: name, floor, rent, move-in instructions, furnishing, photos, and video.",
+  home:      "Property type, address, floors, baths, and how many bedrooms you’ll list.",
+  rooms:     "Each rentable bedroom: name, floor, rent, move-in instructions, furnishing, photos, and video.",
   bathrooms: "Bath rows, bathroom amenities, and optional bathroom photos/video for listing details.",
-  spaces: "Kitchen, laundry, lounge, outdoor — location, amenities, room access, plus optional photos/video.",
-  lease: "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
-  media: "Hero images and optional full-house walkthrough video at the top of your public listing.",
-  finish: "Sidebar quick facts, building amenities, and final submit.",
+  spaces:    "Kitchen, laundry, lounge, outdoor — location, amenities, room access, plus optional photos/video.",
+  lease:     "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
+  media:     "Hero images and optional full-house walkthrough video at the top of your public listing.",
+  services:  "Add the services residents can request directly from their portal — cleaning, linens, and more.",
+  finish:    "Sidebar quick facts, building amenities, and final submit.",
 };
 
 /** Reads a file and returns a compressed JPEG data URL. Falls back to raw data URL for non-image files. */
@@ -568,6 +577,10 @@ export function ManagerAddListingForm({
   const [listingPresets, setListingPresets] = useState<ListingPresetConfig>(DEFAULT_LISTING_PRESETS);
   const [showQuickFacts, setShowQuickFacts] = useState(() => Boolean(initialSubmission?.quickFacts?.length));
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
+  const [serviceOffers, setServiceOffers] = useState<ManagerAmenityOffer[]>([]);
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
+  const [editingOffer, setEditingOffer] = useState<ManagerAmenityOffer | null>(null);
+  const [serviceForm, setServiceForm] = useState({ name: "", description: "", price: "", deposit: "" });
   const scrollRef = useRef<HTMLDivElement>(null);
   // Object URLs for video preview (avoids putting huge base64 strings in <video src>).
   // Keyed by a stable id like "room-<id>", "bath-<id>", "space-<id>", "house".
@@ -598,6 +611,47 @@ export function ManagerAddListingForm({
       map.clear();
     };
   }, []);
+
+  // Load service offers for existing listing
+  useEffect(() => {
+    if (userId && editListingId) {
+      setServiceOffers(readAmenityOffersForProperty(userId, editListingId));
+    }
+  }, [userId, editListingId]);
+
+  const reloadOffers = () => {
+    if (userId && editListingId) setServiceOffers(readAmenityOffersForProperty(userId, editListingId));
+  };
+
+  const handleSaveService = () => {
+    if (!serviceForm.name.trim() || !userId) return;
+    const propertyId = editListingId ?? undefined;
+    const offer: ManagerAmenityOffer = {
+      id: editingOffer?.id ?? `offer-${Date.now()}`,
+      name: serviceForm.name.trim(),
+      description: serviceForm.description.trim(),
+      price: serviceForm.price.trim(),
+      deposit: serviceForm.deposit.trim(),
+      category: "",
+      available: editingOffer?.available ?? true,
+      managerUserId: userId,
+      propertyId,
+      createdAt: editingOffer?.createdAt ?? new Date().toISOString(),
+    };
+    saveAmenityOffer(offer);
+    if (editListingId) {
+      reloadOffers();
+    } else {
+      setServiceOffers((prev) => {
+        const idx = prev.findIndex((o) => o.id === offer.id);
+        if (idx === -1) return [offer, ...prev];
+        const next = [...prev]; next[idx] = offer; return next;
+      });
+    }
+    setServiceModalOpen(false);
+    setEditingOffer(null);
+    setServiceForm({ name: "", description: "", price: "", deposit: "" });
+  };
 
   /** Set or replace the preview object URL for a video key, revoking the old one. */
   const setVideoPreview = (key: string, file: File) => {
@@ -1396,6 +1450,10 @@ export function ManagerAddListingForm({
         showToast("Could not submit listing.");
         return;
       }
+      // Persist any service drafts to the catalog using the new listing id
+      for (const offer of serviceOffers) {
+        saveAmenityOffer({ ...offer, managerUserId: userId, propertyId: id });
+      }
       onSubmitted();
     } finally {
       setBusy(false);
@@ -1412,63 +1470,65 @@ export function ManagerAddListingForm({
         onSubmit={(e) => e.preventDefault()}
         className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
       >
-        <div className="shrink-0 border-b border-slate-100 p-3 pb-2 sm:p-4 sm:pb-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "Create listing"}</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                {isEditMode
-                  ? "Steps follow how renters experience the listing — home and layout first, then rooms, shared areas, lease packages, photos, and highlights."
-                  : "Begin with the property story and layout, define each room, then bathrooms and common areas. Add lease bundles and pricing when rents are set, then hero photos and amenities."}
-              </p>
+        {/* ── Header ── */}
+        <div className="shrink-0 border-b border-slate-100 bg-white">
+          <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                <span className="text-base">{LISTING_FORM_STEPS[stepIndex]?.icon}</span>
+              </div>
+              <div>
+                <h2 className="text-[15px] font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "New listing"}</h2>
+                <p className="text-xs text-slate-400">Step {stepIndex + 1} of {LISTING_STEP_COUNT} · {LISTING_FORM_STEPS[stepIndex]?.label}</p>
+              </div>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-lg text-slate-600 hover:bg-slate-200"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
               aria-label="Close"
             >
-              ×
+              <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
             </button>
           </div>
-          <div className="mt-3 -mx-1 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
-            <div className="flex min-w-max gap-2 px-1">
+
+          {/* Step nav */}
+          <div className="-mx-0 overflow-x-auto px-5 pb-0 sm:px-6 [-webkit-overflow-scrolling:touch]">
+            <div className="flex min-w-max gap-1 border-b border-slate-100">
               {LISTING_FORM_STEPS.map((step, i) => (
                 <button
                   key={step.id}
                   type="button"
-                  onClick={() => {
-                    if (i < stepIndex || canContinueFromStep(stepIndex)) setStepIndex(i);
-                  }}
-                  className={`flex min-h-10 shrink-0 items-center justify-center rounded-2xl border px-3 py-2 text-center text-[11px] font-semibold transition sm:min-w-[118px] ${
+                  onClick={() => { if (i < stepIndex || canContinueFromStep(stepIndex)) setStepIndex(i); }}
+                  className={`relative flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-xs font-semibold transition ${
                     i === stepIndex
-                      ? "border-primary bg-primary text-white shadow-sm"
+                      ? "text-primary after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-full after:rounded-full after:bg-primary"
                       : i < stepIndex
-                        ? "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200"
-                        : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                        ? "text-slate-600 hover:text-slate-900"
+                        : "text-slate-400 hover:text-slate-600"
                   }`}
                 >
-                  <span
-                    className={`mr-1.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] ${
-                      i === stepIndex ? "bg-white/20 text-white" : "bg-slate-200/70 text-slate-600"
-                    }`}
-                  >
-                    {i + 1}
+                  <span className={`inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+                    i < stepIndex ? "bg-emerald-100 text-emerald-700" : i === stepIndex ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-400"
+                  }`}>
+                    {i < stepIndex ? "✓" : i + 1}
                   </span>
                   {step.label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+
+          {/* Progress bar */}
+          <div className="h-0.5 bg-slate-100">
             <div
-              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+              className="h-full bg-primary transition-[width] duration-300 ease-out"
               style={{ width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%` }}
             />
           </div>
-          <p className="mt-3 rounded-2xl bg-slate-50/90 px-3 py-2.5 text-sm leading-snug text-slate-600">
-            <span className="font-semibold text-slate-900">{LISTING_FORM_STEPS[stepIndex]?.label}</span>
-            <span className="text-slate-400"> · </span>
+
+          {/* Step blurb */}
+          <p className="px-5 py-2.5 text-[12px] leading-relaxed text-slate-500 sm:px-6">
             {LISTING_STEP_BLURBS[LISTING_FORM_STEPS[stepIndex]!.id]}
           </p>
         </div>
@@ -3051,7 +3111,60 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
+          {/* ── Step 6: Services ── */}
           {stepIndex === 6 ? (
+          <FormSection
+            id="edit-services"
+            title="Services"
+            description="Add services residents can request directly from their portal — cleaning, linen sets, parking, and more. You can edit these any time from the Services tab."
+          >
+            <div className="space-y-4">
+              {serviceOffers.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {serviceOffers.map((offer) => (
+                    <div
+                      key={offer.id}
+                      className={`flex flex-col rounded-2xl border bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.05)] transition ${offer.available ? "border-slate-200" : "border-slate-200 opacity-60"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-semibold text-slate-900">{offer.name}</p>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${offer.available ? "bg-emerald-50 text-emerald-700 ring-emerald-200/80" : "bg-slate-100 text-slate-500 ring-slate-200/80"}`}>
+                          {offer.available ? "Active" : "Paused"}
+                        </span>
+                      </div>
+                      {offer.price ? <span className="mt-1 text-xs font-medium text-slate-500">{offer.price}</span> : null}
+                      {offer.description ? <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{offer.description}</p> : null}
+                      <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
+                        <button type="button" onClick={() => { setEditingOffer(offer); setServiceForm({ name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "" }); setServiceModalOpen(true); }} className="rounded-full border border-slate-200 bg-white px-3 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">Edit</button>
+                        <button type="button" onClick={() => {
+                          if (userId && editListingId) { toggleAmenityOfferAvailability(offer.id, userId); reloadOffers(); }
+                          else setServiceOffers((prev) => prev.map((o) => o.id === offer.id ? { ...o, available: !o.available } : o));
+                        }} className="rounded-full border border-slate-200 bg-white px-3 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">{offer.available ? "Pause" : "Resume"}</button>
+                        <button type="button" onClick={() => {
+                          if (userId && editListingId) { deleteAmenityOffer(offer.id, userId); reloadOffers(); }
+                          else setServiceOffers((prev) => prev.filter((o) => o.id !== offer.id));
+                        }} className="rounded-full border border-rose-200 bg-white px-3 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">Remove</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-12 text-center">
+                  <p className="text-sm font-medium text-slate-600">No services yet</p>
+                  <p className="mt-1 max-w-xs text-xs text-slate-400">Add optional paid or free services that residents can request — like weekly cleaning, linen sets, or storage.</p>
+                </div>
+              )}
+              <div>
+                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => { setEditingOffer(null); setServiceForm({ name: "", description: "", price: "", deposit: "" }); setServiceModalOpen(true); }}>
+                  + Add service
+                </Button>
+              </div>
+            </div>
+          </FormSection>
+          ) : null}
+
+          {/* ── Step 7: Highlights ── */}
+          {stepIndex === 7 ? (
           <FormSection
             id="edit-highlights"
             title="Highlights & submit"
@@ -3142,7 +3255,7 @@ export function ManagerAddListingForm({
             <div className="flex flex-wrap justify-end gap-2">
               {!isFinalStep ? (
                 <Button type="button" className="rounded-full" onClick={goNext} disabled={busy}>
-                  {stepIndex === lastStepIndex - 1 ? "Highlights →" : "Continue"}
+                  {stepIndex === lastStepIndex - 1 ? "Review & submit →" : "Continue"}
                 </Button>
               ) : (
                 <Button type="button" className="rounded-full" onClick={() => void submitListing()} disabled={busy}>
@@ -3153,6 +3266,39 @@ export function ManagerAddListingForm({
           </div>
         </div>
       </form>
+
+      {/* Service add/edit modal */}
+      <Modal
+        open={serviceModalOpen}
+        title={editingOffer ? "Edit service" : "Add service"}
+        onClose={() => setServiceModalOpen(false)}
+        panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+      >
+        <div className="grid gap-3">
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-slate-600">Service name *</p>
+            <Input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Weekly cleaning, Linen set" className="bg-white" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-slate-600">Price</p>
+              <Input value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: e.target.value }))} placeholder="e.g. $25, Free" className="bg-white" />
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-slate-600">Deposit (optional)</p>
+              <Input value={serviceForm.deposit} onChange={(e) => setServiceForm((f) => ({ ...f, deposit: e.target.value }))} placeholder="e.g. $50" className="bg-white" />
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-slate-600">Description</p>
+            <textarea rows={3} value={serviceForm.description} onChange={(e) => setServiceForm((f) => ({ ...f, description: e.target.value }))} placeholder="What's included, how it works…" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button type="button" variant="outline" className="rounded-full" onClick={() => setServiceModalOpen(false)}>Cancel</Button>
+          <Button type="button" className="rounded-full" onClick={handleSaveService} disabled={!serviceForm.name.trim()}>{editingOffer ? "Save changes" : "Add service"}</Button>
+        </div>
+      </Modal>
     </div>
   );
 }
