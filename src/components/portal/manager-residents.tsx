@@ -874,6 +874,40 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     showToast(`Resident added — Axis ID: ${axisId}`);
   }
 
+  function autoGenerateMoveIn() {
+    if (!selected || !userId) return;
+    const row = readManagerApplicationRows().find((r) => r.id === selected.id);
+    const propId = row?.assignedPropertyId?.trim() || row?.propertyId?.trim() || selected.propertyId;
+    const parts: string[] = [];
+    // Read portal note (house description contains gate codes, etc.)
+    try {
+      const notesRaw = typeof window !== "undefined" ? localStorage.getItem("axis_portal_notes_v1") : null;
+      if (notesRaw) {
+        const notesStore = JSON.parse(notesRaw) as Record<string, { houseDescription?: string }>;
+        const noteKey = `${userId}:${propId}`;
+        const houseDesc = notesStore[noteKey]?.houseDescription?.trim();
+        if (houseDesc) parts.push(houseDesc);
+      }
+    } catch { /* ignore */ }
+    // Get room description from listing submission
+    if (propId) {
+      const property = getPropertyById(propId);
+      if (property?.listingSubmission?.v === 1) {
+        const sub = normalizeManagerListingSubmissionV1(property.listingSubmission);
+        const roomChoice = row?.assignedRoomChoice?.trim() || row?.application?.roomChoice1?.trim() || "";
+        if (roomChoice) {
+          const sep = LISTING_ROOM_CHOICE_SEP;
+          const roomId = roomChoice.includes(sep) ? roomChoice.split(sep)[1] : null;
+          const room = roomId ? sub.rooms.find((r) => r.id === roomId) : null;
+          if (room?.detail?.trim()) parts.push(room.detail.trim());
+        }
+      }
+    }
+    const generated = parts.join("\n\n").trim();
+    if (generated) setEditMoveInText(generated);
+    else showToast("No description data found — add a house description or room description first.");
+  }
+
   function saveMoveInInstructions() {
     if (!editMoveInId) return;
     const rows = readManagerApplicationRows().map((row) =>
@@ -1327,9 +1361,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     onChange={(e) => setEditMoveInText(e.target.value)}
                                     placeholder="e.g. Front gate code is 1234. Each room has a lockbox with key inside."
                                   />
-                                  <div className="flex gap-2">
+                                  <div className="flex flex-wrap gap-2">
                                     <Button type="button" variant="primary" className="rounded-full text-xs" onClick={saveMoveInInstructions}>Save</Button>
                                     <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setEditMoveInId(null)}>Cancel</Button>
+                                    <Button type="button" variant="outline" className="rounded-full text-xs" onClick={autoGenerateMoveIn}>Auto-generate from listing</Button>
                                   </div>
                                 </div>
                               ) : (

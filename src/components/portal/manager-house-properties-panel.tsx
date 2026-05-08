@@ -789,97 +789,38 @@ function ManagerPropertyInlineDetails({
                         {isEditing ? (
                           <tr className="border-b border-indigo-100">
                             <td colSpan={9} className="bg-indigo-50/30 px-4 py-4">
-                              <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Room name</label>
-                                  <input
-                                    type="text"
-                                    value={roomDraft.name ?? ""}
-                                    onChange={(e) => setRoomDraft((d) => ({ ...d, name: e.target.value }))}
-                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                    placeholder="e.g. Master bedroom"
-                                  />
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                    Move-in instructions
+                                    <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500 normal-case tracking-normal">Shown to resident</span>
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const parts: string[] = [];
+                                      const houseDesc = portalNote.houseDescription?.trim();
+                                      if (houseDesc) parts.push(houseDesc);
+                                      const roomDesc = roomDraft.detail?.trim();
+                                      if (roomDesc) parts.push(roomDesc);
+                                      const generated = parts.join("\n\n").trim();
+                                      if (generated) setRoomDraft((d) => ({ ...d, moveInInstructions: generated }));
+                                    }}
+                                    className="rounded-full border border-indigo-200 bg-white px-3 py-0.5 text-[10px] font-semibold text-indigo-600 hover:bg-indigo-50"
+                                  >
+                                    Auto-generate from listing
+                                  </button>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Furnishing</label>
-                                  <input
-                                    type="text"
-                                    value={roomDraft.furnishing ?? ""}
-                                    onChange={(e) => setRoomDraft((d) => ({ ...d, furnishing: e.target.value }))}
-                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                    placeholder="e.g. Fully furnished"
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1 sm:col-span-2">
-                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Description</label>
-                                  <textarea
-                                    rows={3}
-                                    value={roomDraft.detail ?? ""}
-                                    onChange={(e) => setRoomDraft((d) => ({ ...d, detail: e.target.value }))}
-                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                    placeholder="Describe this room's features, layout, or notes…"
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1 sm:col-span-2">
-                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Amenities</label>
-                                  <textarea
-                                    rows={2}
-                                    value={roomDraft.amenitiesText ?? ""}
-                                    onChange={(e) => setRoomDraft((d) => ({ ...d, amenitiesText: e.target.value }))}
-                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                    placeholder="Comma-separated or one per line — e.g. Ensuite bath, Walk-in closet, AC"
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Monthly rent ($)</label>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={roomDraft.monthlyRent ?? ""}
-                                    onChange={(e) => setRoomDraft((d) => ({ ...d, monthlyRent: Number(e.target.value) }))}
-                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                    placeholder="1500"
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Availability</label>
-                                  <input
-                                    type="text"
-                                    value={roomDraft.availability ?? ""}
-                                    onChange={(e) => setRoomDraft((d) => ({ ...d, availability: e.target.value }))}
-                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                    placeholder="e.g. Available now"
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Est. utilities / mo</label>
-                                  <input
-                                    type="text"
-                                    value={roomDraft.utilitiesEstimate ?? ""}
-                                    onChange={(e) => setRoomDraft((d) => ({ ...d, utilitiesEstimate: e.target.value }))}
-                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                    placeholder="e.g. 120"
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Move-in date</label>
-                                  <input
-                                    type="date"
-                                    value={roomDraft.moveInAvailableDate ?? ""}
-                                    onChange={(e) => setRoomDraft((d) => ({ ...d, moveInAvailableDate: e.target.value }))}
-                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1 sm:col-span-2">
-                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Move-in instructions</label>
-                                  <textarea
-                                    rows={2}
-                                    value={roomDraft.moveInInstructions ?? ""}
-                                    onChange={(e) => setRoomDraft((d) => ({ ...d, moveInInstructions: e.target.value }))}
-                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                    placeholder="Keys, parking, access codes, what to bring…"
-                                  />
-                                </div>
+                                <textarea
+                                  rows={4}
+                                  value={roomDraft.moveInInstructions ?? ""}
+                                  onChange={(e) => setRoomDraft((d) => ({ ...d, moveInInstructions: e.target.value }))}
+                                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                  placeholder="Keys, parking, access codes, what to bring…"
+                                />
+                                {!roomDraft.detail?.trim() && !portalNote.houseDescription?.trim() ? (
+                                  <p className="text-[10px] text-slate-400">Add a room description or house description to use auto-generate.</p>
+                                ) : null}
                               </div>
                               <div className="mt-3 flex gap-2">
                                 <button
