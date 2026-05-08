@@ -6,7 +6,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import type { MockProperty } from "@/data/types";
-import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
+import { ManagerListingInlineEditor } from "@/components/portal/manager-listing-inline-editor";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
@@ -33,28 +33,20 @@ import {
 } from "@/lib/demo-admin-property-inventory";
 import {
   PROPERTY_PIPELINE_EVENT,
-  countManagerManagedPropertiesForUser,
   deletePendingSubmissionForManager,
   mirrorLocalPropertyPipelineToServer,
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
   syncPropertyPipelineFromServer,
+  updateExtraListingFromSubmission,
+  updatePendingManagerProperty,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import {
   legacyAdminFieldsToSubmission,
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
-  type ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
-
-import {
-  type PortalRoomNote,
-  type PortalListingNote,
-  getPortalListingNote,
-  savePortalListingNote,
-  savePortalRoomNote,
-} from "@/lib/portal-listing-notes";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
@@ -163,36 +155,6 @@ function StatusPill({
   );
 }
 
-/** Deduplicate and humanise furnishing string (e.g. "Bed, desk, and chair, Chair" → "Bed, desk & Chair"). */
-function normFurnishing(raw: string): string {
-  const t = raw.trim();
-  if (!t) return "—";
-  const items = t
-    .replace(/\b(and|&)\b/gi, ",")
-    .split(/[,\n]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const seen = new Set<string>();
-  const deduped: string[] = [];
-  for (const item of items) {
-    if (!seen.has(item.toLowerCase())) {
-      seen.add(item.toLowerCase());
-      deduped.push(item);
-    }
-  }
-  if (deduped.length === 0) return "—";
-  if (deduped.length === 1) return deduped[0]!;
-  return deduped.slice(0, -1).join(", ") + " & " + deduped[deduped.length - 1];
-}
-
-/** Normalise utilities to "$175" — strip /month, /mo suffixes and ensure $ prefix. */
-function normUtility(raw: string): string {
-  const t = raw.trim().replace(/\/mo(nth)?\.?$/i, "").trim();
-  if (!t) return "—";
-  const num = parseFloat(t.replace(/[^0-9.]/g, ""));
-  if (Number.isFinite(num) && num > 0) return `$${num}`;
-  return t;
-}
 
 function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: "green" | "amber" | "slate" | "rose" } {
   switch (bucket) {
@@ -224,15 +186,6 @@ function ManagerPropertyInlineDetails({
 }) {
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
   const listingId = row?.listingId;
-  const [listingEditorOpen, setListingEditorOpen] = useState(false);
-  const [skuTier, setSkuTier] = useState<string | null>(null);
-  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
-  const [roomDraft, setRoomDraft] = useState<PortalRoomNote>({});
-  const [savingRoom, setSavingRoom] = useState(false);
-  const [houseEditing, setHouseEditing] = useState(false);
-  const [houseDraft, setHouseDraft] = useState<PortalListingNote>({});
-  const [savingHouse, setSavingHouse] = useState(false);
-  const [notesTick, setNotesTick] = useState(0);
 
   const portalSub = useMemo<{ sub: ManagerListingSubmissionV1; saveMode: "pending" | "listing"; saveId: string } | null>(() => {
     if (!managerUserId || !row) return null;
@@ -251,107 +204,34 @@ function ManagerPropertyInlineDetails({
     return null;
   }, [managerUserId, row, bucket]);
 
-  const baseRooms = portalSub?.sub.rooms ?? [];
-
   // noteKey is stable per listing — used as the portal notes store key.
   const noteKey = useMemo(
     () => (managerUserId && portalSub ? `${managerUserId}:${portalSub.saveId}` : null),
     [managerUserId, portalSub],
   );
-  const portalNote = useMemo(
-    () => (noteKey ? getPortalListingNote(noteKey) : ({} as PortalListingNote)),
-    // notesTick triggers a re-read after each save
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [noteKey, notesTick],
-  );
 
-  // Merge portal room notes (description, amenities, etc.) on top of submission rooms for display.
-  const rooms = useMemo(() => {
-    const roomNotes = portalNote.rooms ?? {};
-    return baseRooms.map((r) => {
-      const note = roomNotes[r.id];
-      if (!note) return r;
-      const patch: Partial<ManagerRoomSubmission> = {};
-      if (note.name !== undefined) patch.name = note.name;
-      if (note.detail !== undefined) patch.detail = note.detail;
-      if (note.amenitiesText !== undefined) patch.roomAmenitiesText = note.amenitiesText;
-      if (note.furnishing !== undefined) patch.furnishing = note.furnishing;
-      if (note.availability !== undefined) patch.availability = note.availability;
-      if (note.utilitiesEstimate !== undefined) patch.utilitiesEstimate = note.utilitiesEstimate;
-      if (note.moveInAvailableDate !== undefined) patch.moveInAvailableDate = note.moveInAvailableDate;
-      if (note.moveInInstructions !== undefined) patch.moveInInstructions = note.moveInInstructions;
-      if (note.monthlyRent !== undefined) patch.monthlyRent = note.monthlyRent;
-      return { ...r, ...patch };
-    });
-  }, [baseRooms, portalNote]);
+  // Keep a local copy of the submission so inline edits show immediately.
+  const [localSub, setLocalSub] = useState<ManagerListingSubmissionV1 | null>(null);
+  const displaySub = localSub ?? portalSub?.sub ?? null;
 
+  // Reset local copy when the underlying row changes.
   useEffect(() => {
-    if (!row) {
-      const timer = window.setTimeout(() => setListingEditorOpen(false), 0);
-      return () => window.clearTimeout(timer);
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/manager/subscription", { credentials: "include" });
-        const body = (await res.json()) as { tier?: string | null };
-        if (!cancelled && res.ok) setSkuTier(body.tier ?? null);
-      } catch {
-        /* ignore */
+    setLocalSub(null);
+  }, [row?.adminRefId, row?.listingId]);
+
+  const handleSaveSub = useCallback(
+    (updated: ManagerListingSubmissionV1) => {
+      if (!managerUserId || !portalSub) return;
+      if (portalSub.saveMode === "pending") {
+        updatePendingManagerProperty(portalSub.saveId, updated, managerUserId);
+      } else {
+        updateExtraListingFromSubmission(portalSub.saveId, managerUserId, updated);
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [row]);
-
-  const editorInitial = useMemo(() => {
-    if (!listingEditorOpen || !portalSub) return null;
-    return portalSub.sub;
-  }, [listingEditorOpen, portalSub]);
-
-  const openRoomEdit = useCallback(
-    (room: ManagerRoomSubmission) => {
-      const existingNote = noteKey ? (getPortalListingNote(noteKey).rooms?.[room.id] ?? {}) : {};
-      setEditingRoomId(room.id);
-      setRoomDraft({
-        name: existingNote.name ?? room.name,
-        detail: existingNote.detail ?? room.detail,
-        amenitiesText: existingNote.amenitiesText ?? room.roomAmenitiesText,
-        furnishing: existingNote.furnishing ?? room.furnishing,
-        monthlyRent: existingNote.monthlyRent ?? room.monthlyRent,
-        availability: existingNote.availability ?? room.availability,
-        utilitiesEstimate: existingNote.utilitiesEstimate ?? room.utilitiesEstimate,
-        moveInAvailableDate: existingNote.moveInAvailableDate ?? room.moveInAvailableDate,
-        moveInInstructions: existingNote.moveInInstructions ?? room.moveInInstructions,
-      });
+      setLocalSub(updated);
+      onUpdated();
     },
-    [noteKey],
+    [managerUserId, portalSub, onUpdated],
   );
-
-  const saveRoomEdits = useCallback(() => {
-    if (!noteKey || !editingRoomId) return;
-    setSavingRoom(true);
-    const patch: PortalRoomNote = {
-      ...roomDraft,
-      utilitiesEstimate: (roomDraft.utilitiesEstimate ?? "").replace(/\/mo(nth)?\.?$/i, "").trim(),
-    };
-    savePortalRoomNote(noteKey, editingRoomId, patch);
-    setSavingRoom(false);
-    showToast("Room details saved.");
-    setEditingRoomId(null);
-    setNotesTick((t) => t + 1);
-  }, [noteKey, editingRoomId, roomDraft, showToast]);
-
-  const saveHouseEdits = useCallback(() => {
-    if (!noteKey) return;
-    setSavingHouse(true);
-    savePortalListingNote(noteKey, houseDraft);
-    setSavingHouse(false);
-    showToast("House details saved.");
-    setHouseEditing(false);
-    setNotesTick((t) => t + 1);
-  }, [noteKey, houseDraft, showToast]);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
@@ -364,36 +244,6 @@ function ManagerPropertyInlineDetails({
 
   if (!row || !mock) return null;
   const publicHref = publicListingHrefForPropertyRow(row);
-
-  const openInlineEditor = () => {
-    if (!managerUserId) {
-      showToast("Sign in to edit.");
-      return;
-    }
-    if (bucket === 0) {
-      if (row.adminRefId.startsWith("mgr-")) {
-        const hit = readExtraListingsForUser(managerUserId).find((x) => x.id === row.adminRefId);
-        if (!hit) {
-          showToast("Could not load this listing.");
-          return;
-        }
-      } else {
-        const hit = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
-        if (!hit) {
-          showToast("Could not load this submission.");
-          return;
-        }
-      }
-    }
-    if (bucket === 2 && row.listingId) {
-      const hit = readExtraListingsForUser(managerUserId).find((x) => x.id === row.listingId);
-      if (!hit) {
-        showToast("Could not load this listing.");
-        return;
-      }
-    }
-    setListingEditorOpen(true);
-  };
 
   const footer = (
     <div className="flex flex-col gap-2">
@@ -410,13 +260,10 @@ function ManagerPropertyInlineDetails({
         <>
           <p className="text-xs text-slate-500">
             {row.adminRefId.startsWith("mgr-")
-              ? "This listing was edited and is off the public site until prakritramachandran@gmail.com approves it again. You can keep editing here."
-              : "Listing approval is handled by prakritramachandran@gmail.com. Edit below without leaving this preview; only that admin can approve, request changes, or reject a listing."}
+              ? "This listing was edited and is pending admin re-approval. Edit sections below."
+              : "Listing approval is handled by prakritramachandran@gmail.com. Edit sections below while your submission is reviewed."}
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={openInlineEditor}>
-              {row.adminRefId.startsWith("mgr-") ? "Edit listing" : "Edit submission"}
-            </Button>
             <Button
               type="button"
               variant="outline"
@@ -481,9 +328,6 @@ function ManagerPropertyInlineDetails({
             }}
           >
             Delete listing
-          </Button>
-          <Button type="button" variant="outline" className="rounded-full" onClick={openInlineEditor}>
-            Edit listing
           </Button>
           {publicHref ? (
             <Link
@@ -564,281 +408,37 @@ function ManagerPropertyInlineDetails({
   );
 
   return (
-    <>
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_14px_38px_-32px_rgba(15,23,42,0.45)] sm:p-5">
-        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Details</p>
-            <h3 className="mt-2 text-base font-semibold text-slate-950">{mock.title}</h3>
-            <p className="mt-1 text-sm text-slate-600">{mock.address}</p>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">{mock.tagline}</p>
-            <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.rentLabel}</span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                {mock.beds} bd / {mock.baths} ba
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.available}</span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.neighborhood}</span>
-            </div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_14px_38px_-32px_rgba(15,23,42,0.45)] sm:p-5">
+      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Details</p>
+          <h3 className="mt-2 text-base font-semibold text-slate-950">{mock.title}</h3>
+          <p className="mt-1 text-sm text-slate-600">{mock.address}</p>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">{mock.tagline}</p>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.rentLabel}</span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+              {mock.beds} bd / {mock.baths} ba
+            </span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.available}</span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.neighborhood}</span>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">{footer}</div>
         </div>
-
-        {portalSub ? (
-          <div className="mt-5 overflow-hidden rounded-2xl border border-emerald-100 bg-white">
-            <div className="flex items-center justify-between gap-2 border-b border-emerald-100 bg-emerald-50/60 px-4 py-2.5">
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">House details</p>
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Portal only</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (houseEditing) {
-                    setHouseEditing(false);
-                  } else {
-                    setHouseDraft({
-                      houseDescription: portalNote.houseDescription ?? "",
-                      houseRulesText: portalNote.houseRulesText ?? "",
-                    });
-                    setHouseEditing(true);
-                  }
-                }}
-                className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
-                  houseEditing
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {houseEditing ? "Cancel" : "Edit"}
-              </button>
-            </div>
-            {houseEditing ? (
-              <div className="p-4">
-                <div className="grid gap-4">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">House description</label>
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold text-emerald-600">Manager only</span>
-                    </div>
-                    <textarea
-                      rows={4}
-                      value={houseDraft.houseDescription}
-                      onChange={(e) => setHouseDraft((d) => ({ ...d, houseDescription: e.target.value }))}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-200"
-                      placeholder="Internal notes about the house — not visible to residents or admin…"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">House rules</label>
-                    <textarea
-                      rows={3}
-                      value={houseDraft.houseRulesText}
-                      onChange={(e) => setHouseDraft((d) => ({ ...d, houseRulesText: e.target.value }))}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-200"
-                      placeholder="Quiet hours, guests, smoking, pets…"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    disabled={savingHouse}
-                    onClick={saveHouseEdits}
-                    className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
-                  >
-                    {savingHouse ? "Saving…" : "Save house details"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setHouseEditing(false)}
-                    className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {[
-                  { label: "Description", value: portalNote.houseDescription, badge: "Manager only" },
-                  { label: "Rules", value: portalNote.houseRulesText, badge: null },
-                ]
-                  .filter(({ value }) => value?.trim())
-                  .map(({ label, value, badge }) => (
-                    <div key={label} className="flex gap-4 px-4 py-3">
-                      <div className="w-24 shrink-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-                        {badge ? <span className="mt-0.5 inline-block rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">{badge}</span> : null}
-                      </div>
-                      <p className="whitespace-pre-wrap text-sm text-slate-700">{value}</p>
-                    </div>
-                  ))}
-                {!portalNote.houseDescription?.trim() && !portalNote.houseRulesText?.trim() ? (
-                  <p className="px-4 py-3 text-sm text-slate-400">No house details yet — click Edit to add.</p>
-                ) : null}
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {rooms.length > 0 ? (
-          <div className="mt-5 overflow-hidden rounded-2xl border border-indigo-100 bg-white">
-            <div className="flex items-center gap-2 border-b border-indigo-100 bg-indigo-50/60 px-4 py-2.5">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-700">Room details</p>
-              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">
-                Portal only
-              </span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/60">
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">#</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Room</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Floor</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Rent / mo</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Availability</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Est. utilities</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Move-in date</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">Furnishing</th>
-                    <th className="px-4 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">Edit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rooms.map((room, index) => {
-                    const isEditing = editingRoomId === room.id;
-                    const rowBg = index % 2 === 0 ? "bg-white" : "bg-slate-50/40";
-                    return (
-                      <Fragment key={room.id}>
-                        <tr className={`border-b border-slate-100 ${isEditing ? "bg-indigo-50/40" : rowBg}`}>
-                          <td className="px-4 py-3 text-xs font-semibold text-slate-400">{index + 1}</td>
-                          <td className="px-4 py-3">
-                            <p className="font-semibold text-slate-900">{room.name || `Room ${index + 1}`}</p>
-                            {room.detail?.trim() ? (
-                              <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{room.detail}</p>
-                            ) : null}
-                          </td>
-                          <td className="px-4 py-3 text-xs text-slate-600">{room.floor || "—"}</td>
-                          <td className="px-4 py-3">
-                            {room.monthlyRent > 0 ? (
-                              <span className="font-semibold text-slate-900">${room.monthlyRent.toLocaleString()}</span>
-                            ) : (
-                              <span className="text-xs text-slate-400">—</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-xs text-slate-600">{room.availability || "—"}</td>
-                          <td className="px-4 py-3 text-xs text-slate-600">{normUtility(room.utilitiesEstimate)}</td>
-                          <td className="px-4 py-3 text-xs text-slate-600">{room.moveInAvailableDate || "—"}</td>
-                          <td className="px-4 py-3 text-xs text-slate-600">{normFurnishing(room.furnishing)}</td>
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isEditing) {
-                                  setEditingRoomId(null);
-                                } else {
-                                  openRoomEdit(room);
-                                }
-                              }}
-                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
-                                isEditing
-                                  ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
-                                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                              }`}
-                            >
-                              {isEditing ? "Cancel" : "Edit"}
-                            </button>
-                          </td>
-                        </tr>
-                        {isEditing ? (
-                          <tr className="border-b border-indigo-100">
-                            <td colSpan={9} className="bg-indigo-50/30 px-4 py-4">
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center justify-between gap-2">
-                                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                                    Move-in instructions
-                                    <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500 normal-case tracking-normal">Shown to resident</span>
-                                  </label>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const parts: string[] = [];
-                                      const houseDesc = portalNote.houseDescription?.trim();
-                                      if (houseDesc) parts.push(houseDesc);
-                                      const roomDesc = roomDraft.detail?.trim();
-                                      if (roomDesc) parts.push(roomDesc);
-                                      const generated = parts.join("\n\n").trim();
-                                      if (generated) setRoomDraft((d) => ({ ...d, moveInInstructions: generated }));
-                                    }}
-                                    className="rounded-full border border-indigo-200 bg-white px-3 py-0.5 text-[10px] font-semibold text-indigo-600 hover:bg-indigo-50"
-                                  >
-                                    Auto-generate from listing
-                                  </button>
-                                </div>
-                                <textarea
-                                  rows={4}
-                                  value={roomDraft.moveInInstructions ?? ""}
-                                  onChange={(e) => setRoomDraft((d) => ({ ...d, moveInInstructions: e.target.value }))}
-                                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-                                  placeholder="Keys, parking, access codes, what to bring…"
-                                />
-                                {!roomDraft.detail?.trim() && !portalNote.houseDescription?.trim() ? (
-                                  <p className="text-[10px] text-slate-400">Add a room description or house description to use auto-generate.</p>
-                                ) : null}
-                              </div>
-                              <div className="mt-3 flex gap-2">
-                                <button
-                                  type="button"
-                                  disabled={savingRoom}
-                                  onClick={saveRoomEdits}
-                                  className="rounded-full bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
-                                >
-                                  {savingRoom ? "Saving…" : "Save room"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingRoomId(null)}
-                                  className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">{footer}</div>
       </div>
-      {listingEditorOpen && editorInitial && managerUserId ? (
-        <ManagerAddListingForm
-          key={`preview-edit-${bucket}-${row.adminRefId}-${row.listingId ?? "pending"}`}
-          showToast={showToast}
-          skuTier={skuTier}
-          propCountBeforeSubmit={countManagerManagedPropertiesForUser(managerUserId)}
-          editPendingId={bucket === 0 && !row.adminRefId.startsWith("mgr-") ? row.adminRefId : null}
-          editListingId={
-            bucket === 2 && row.listingId
-              ? row.listingId
-              : bucket === 0 && row.adminRefId.startsWith("mgr-")
-                ? (row.listingId ?? row.adminRefId)
-                : null
-          }
-          initialSubmission={editorInitial}
-          onClose={() => setListingEditorOpen(false)}
-          onSubmitted={() => {
-            setListingEditorOpen(false);
-            onUpdated();
-          }}
-        />
+
+      {displaySub ? (
+        <div className="mt-5">
+          <ManagerListingInlineEditor
+            sub={displaySub}
+            noteKey={noteKey}
+            onSaveSub={handleSaveSub}
+            showToast={showToast}
+            isListed={bucket === 2}
+          />
+        </div>
       ) : null}
-    </>
+    </div>
   );
 }
 
