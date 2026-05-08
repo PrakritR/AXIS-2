@@ -35,7 +35,7 @@ import {
   writeManagerWorkOrderRows,
 } from "@/lib/manager-work-orders-storage";
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
-import { readAmenityOffersForManager, readAmenityOffersForProperty, type ManagerAmenityOffer } from "@/lib/manager-amenity-catalog-storage";
+import { readAmenityOffersForManager, readAmenityOffersForProperty, readAllAmenityOffersForProperty, type ManagerAmenityOffer } from "@/lib/manager-amenity-catalog-storage";
 import { getPropertyById } from "@/lib/rental-application/data";
 import {
   SERVICE_REQUESTS_EVENT,
@@ -303,13 +303,18 @@ export function ResidentServicesPanel() {
     if (!managerUserId && propertyId) {
       managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
     }
+
+    let offers: ManagerAmenityOffer[];
     if (managerUserId) {
-      let offers = readAmenityOffersForProperty(managerUserId, propertyId).filter((o) => o.available);
-      if (offers.length === 0) {
-        offers = readAmenityOffersForManager(managerUserId).filter((o) => o.available);
-      }
-      setAvailableOffers(offers);
+      offers = readAmenityOffersForProperty(managerUserId, propertyId).filter((o) => o.available);
+      if (offers.length === 0) offers = readAmenityOffersForManager(managerUserId).filter((o) => o.available);
+    } else if (propertyId) {
+      // managerUserId not resolved — scan all managers by propertyId
+      offers = readAllAmenityOffersForProperty(propertyId).filter((o) => o.available);
+    } else {
+      offers = [];
     }
+    setAvailableOffers(offers);
   }
 
   useEffect(() => {
@@ -457,10 +462,14 @@ export function ResidentServicesPanel() {
       application?.propertyId?.trim() ||
       application?.application?.propertyId?.trim() ||
       "";
-    // Resolve managerUserId — fall back to property's owner if not on the application row
+    // Resolve managerUserId — try application row, then property, then the selected offer's own field
     let managerUserId = application?.managerUserId?.trim() || "";
     if (!managerUserId && propertyId) {
       managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
+    }
+    if (!managerUserId) {
+      // Derive from the offer — most reliable when application row lacks managerUserId
+      managerUserId = selectedOffer.managerUserId?.trim() || "";
     }
     if (!managerUserId) { showToast("Could not find your property manager. Contact support."); return; }
     createServiceRequest({

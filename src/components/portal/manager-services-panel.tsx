@@ -5,11 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import {
-  ManagerPortalPageShell,
-  ManagerPortalStatusPills,
-} from "@/components/portal/portal-metrics";
-import { ManagerServiceRequests } from "@/components/portal/manager-service-requests";
+import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import {
   deleteAmenityOffer,
   readAmenityOffersForProperty,
@@ -21,18 +17,11 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 
-type Tab = "requests" | "catalog";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "requests", label: "Requests" },
-  { id: "catalog", label: "Service catalog" },
-];
-
 const EMPTY_FORM = { name: "", description: "", price: "", deposit: "" };
 
 export function ManagerServicesPanel() {
   const { showToast } = useAppUi();
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
-  const [tab, setTab] = useState<Tab>("requests");
   const [offers, setOffers] = useState<ManagerAmenityOffer[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<ManagerAmenityOffer | null>(null);
@@ -66,11 +55,6 @@ export function ManagerServicesPanel() {
   };
 
   useEffect(() => { reload(); }, [managerUserId, selectedPropertyId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const tabItems = useMemo(
-    () => TABS.map(({ id, label }) => ({ id, label, count: 0 })),
-    [],
-  );
 
   const openCreate = () => {
     setEditingOffer(null);
@@ -123,26 +107,15 @@ export function ManagerServicesPanel() {
   return (
     <>
       <ManagerPortalPageShell
-        title="Services"
+        title="Service catalog"
         titleAside={
-          tab === "catalog" ? (
-            <Button type="button" className="shrink-0 rounded-full" onClick={openCreate}>
-              Add service
-            </Button>
-          ) : null
+          <Button type="button" className="shrink-0 rounded-full" onClick={openCreate}>
+            Add service
+          </Button>
         }
-        filterRow={
-          <ManagerPortalStatusPills
-            tabs={tabItems}
-            activeId={tab}
-            onChange={(id) => setTab(id as Tab)}
-          />
-        }
+        filterRow={null}
       >
-        {tab === "requests" ? (
-          <ManagerServiceRequests />
-        ) : (
-          <div className="mt-1">
+        <div className="mt-1">
             {propertyOptions.length > 1 && (
               <div className="mb-4 flex items-center gap-2">
                 <label className="text-xs font-semibold text-slate-500">Property</label>
@@ -235,7 +208,6 @@ export function ManagerServicesPanel() {
               </div>
             )}
           </div>
-        )}
       </ManagerPortalPageShell>
 
       <Modal

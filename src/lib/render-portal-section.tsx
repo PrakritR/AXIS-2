@@ -114,6 +114,14 @@ export async function renderPortalSection(
           managerSubscriptionTier: residentManagerTier,
         })
       : false;
+  // work-orders now lives in Residents tab — redirect before findSection so we never 404
+  if (
+    (kind === "manager" || kind === "pro" || kind === "owner") &&
+    section === "work-orders"
+  ) {
+    redirect(`${def.basePath}/residents`);
+  }
+
   const meta = findSection(def, section);
   if (!meta) notFound();
 
@@ -226,8 +234,8 @@ export async function renderPortalSection(
       );
     }
     if (section === "work-orders" || section === "services") {
-      if (!tabParts?.length) redirect(`${def.basePath}/services/requests`);
-      if (!["requests", "catalog"].includes(tabParts[0]!)) notFound();
+      if (!tabParts?.length) redirect(`${def.basePath}/services/catalog`);
+      if (!["catalog"].includes(tabParts[0]!)) notFound();
       return subscriptionGated(<ManagerServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
     if (tabParts?.length) notFound();
@@ -320,8 +328,8 @@ export async function renderPortalSection(
       );
     }
     if (section === "work-orders" || section === "services") {
-      if (!tabParts?.length) redirect(`${def.basePath}/services/requests`);
-      if (!["requests", "catalog"].includes(tabParts[0]!)) notFound();
+      if (!tabParts?.length) redirect(`${def.basePath}/services/catalog`);
+      if (!["catalog"].includes(tabParts[0]!)) notFound();
       return subscriptionGated(<ManagerServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
     if (tabParts?.length) notFound();
@@ -381,8 +389,8 @@ export async function renderPortalSection(
       );
     }
     if (section === "work-orders" || section === "services") {
-      if (!tabParts?.length) redirect(`${def.basePath}/services/requests`);
-      if (!["requests", "catalog"].includes(tabParts[0]!)) notFound();
+      if (!tabParts?.length) redirect(`${def.basePath}/services/catalog`);
+      if (!["catalog"].includes(tabParts[0]!)) notFound();
       return subscriptionGated(<ManagerServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
     if (tabParts?.length) notFound();

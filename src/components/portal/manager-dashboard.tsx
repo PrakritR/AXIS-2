@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { DemoApplicantRow, DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import type { DemoApplicantRow } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
@@ -31,13 +31,11 @@ import {
 } from "@/lib/manager-applications-storage";
 import {
   applicationVisibleToPortalUser,
-  collectAccessiblePropertyIds,
 } from "@/lib/manager-portfolio-access";
 import {
-  readManagerWorkOrderRows,
-  subscribeManagerWorkOrders,
-  syncManagerWorkOrdersFromServer,
-} from "@/lib/manager-work-orders-storage";
+  SERVICE_REQUESTS_EVENT,
+  readServiceRequestsForManager,
+} from "@/lib/service-requests-storage";
 import {
   countUnopenedPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
@@ -58,15 +56,6 @@ function fmt(iso: string) {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function workOrderVisible(row: DemoManagerWorkOrderRow, userId: string | null) {
-  if (!userId) return false;
-  const scoped = row.managerUserId?.trim();
-  if (scoped) return scoped === userId;
-  const pid = row.propertyId?.trim() || row.assignedPropertyId?.trim();
-  if (pid) return collectAccessiblePropertyIds(userId).has(pid);
-  return false;
 }
 
 function dollars(cents: number) {
@@ -143,7 +132,6 @@ export function ManagerDashboard() {
     void Promise.allSettled([
       syncManagerApplicationsFromServer(),
       syncLeasePipelineFromServer(userId),
-      syncManagerWorkOrdersFromServer(),
       syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
       syncHouseholdChargesFromServer(),
       syncScheduleRecordsFromServer(),
@@ -155,7 +143,7 @@ export function ManagerDashboard() {
     window.addEventListener(ADMIN_UI_EVENT, bump);
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
     window.addEventListener("storage", bump);
-    const sub = subscribeManagerWorkOrders(bump);
+    window.addEventListener(SERVICE_REQUESTS_EVENT, bump);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
       window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
@@ -164,7 +152,7 @@ export function ManagerDashboard() {
       window.removeEventListener(ADMIN_UI_EVENT, bump);
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
       window.removeEventListener("storage", bump);
-      sub();
+      window.removeEventListener(SERVICE_REQUESTS_EVENT, bump);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -181,8 +169,9 @@ export function ManagerDashboard() {
     const needsManagerSig = leases.filter((l) => l.status === "Manager Signature Pending").length;
     const totalLeases = leases.length;
 
-    const allWorkOrders = readManagerWorkOrderRows().filter((r) => workOrderVisible(r, userId));
-    const openWorkOrders = allWorkOrders.filter((r) => r.bucket === "open" || r.bucket === "scheduled");
+    const allServiceRequests = readServiceRequestsForManager(userId);
+    const pendingServiceRequests = allServiceRequests.filter((r) => r.status === "pending");
+    const approvedServiceRequests = allServiceRequests.filter((r) => r.status === "approved");
 
     const charges = readChargesForManager(userId);
     const overdueCharges = charges.filter((c) => isHouseholdChargeOverdue(c));
@@ -229,7 +218,6 @@ export function ManagerDashboard() {
     return {
       pendingApps,
       activeResidents,
-      openWorkOrders,
       overdueCharges,
       overdueTotal,
       inbox,
@@ -238,6 +226,8 @@ export function ManagerDashboard() {
       totalProperties,
       pendingProperties,
       tours,
+      pendingServiceRequests,
+      approvedServiceRequests,
     };
   }, [tick, userId]);
 
@@ -246,7 +236,6 @@ export function ManagerDashboard() {
   const {
     pendingApps,
     activeResidents,
-    openWorkOrders,
     overdueCharges,
     overdueTotal,
     inbox,
@@ -255,6 +244,8 @@ export function ManagerDashboard() {
     totalProperties,
     pendingProperties,
     tours,
+    pendingServiceRequests,
+    approvedServiceRequests,
   } = data;
 
   const pendingTours = tours.filter((t) => t.status === "pending");
@@ -363,11 +354,11 @@ export function ManagerDashboard() {
             urgent={pendingApps.length > 0}
           />
           <Tile
-            label="Open work orders"
-            value={openWorkOrders.length}
-            sub={openWorkOrders.filter((r) => r.bucket === "open").length > 0 ? `${openWorkOrders.filter((r) => r.bucket === "open").length} awaiting scheduling` : undefined}
-            href={`${BASE}/work-orders`}
-            urgent={openWorkOrders.filter((r) => r.bucket === "open").length > 0}
+            label="Service requests"
+            value={pendingServiceRequests.length + approvedServiceRequests.length}
+            sub={pendingServiceRequests.length > 0 ? `${pendingServiceRequests.length} awaiting approval` : approvedServiceRequests.length > 0 ? `${approvedServiceRequests.length} active` : undefined}
+            href={`${BASE}/residents`}
+            urgent={pendingServiceRequests.length > 0}
           />
           <Tile
             label="Leases"
@@ -407,29 +398,29 @@ export function ManagerDashboard() {
             )}
           </div>
 
-          {/* Open work orders */}
+          {/* Service requests */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
             <SectionHeader
-              title="Open work orders"
-              href={`${BASE}/work-orders`}
-              linkLabel={openWorkOrders.length > 4 ? `View all ${openWorkOrders.length}` : "View all"}
+              title="Service requests"
+              href={`${BASE}/residents`}
+              linkLabel="View all"
             />
-            {openWorkOrders.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No open work orders right now.</p>
+            {pendingServiceRequests.length + approvedServiceRequests.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-400">No active service requests right now.</p>
             ) : (
               <ul className="mt-3 space-y-2">
-                {openWorkOrders.slice(0, 5).map((wo: DemoManagerWorkOrderRow) => (
-                  <li key={wo.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                {[...pendingServiceRequests, ...approvedServiceRequests].slice(0, 5).map((sr) => (
+                  <li key={sr.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{wo.title}</p>
-                      <p className="truncate text-xs text-slate-500">{wo.residentName || wo.residentEmail || "—"} · {wo.propertyName || "—"}</p>
+                      <p className="truncate text-sm font-semibold text-slate-900">{sr.offerName}</p>
+                      <p className="truncate text-xs text-slate-500">{sr.residentName || sr.residentEmail || "—"}</p>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
-                      wo.bucket === "open"
-                        ? "bg-rose-100 text-rose-800"
+                      sr.status === "pending"
+                        ? "bg-amber-100 text-amber-800"
                         : "bg-sky-100 text-sky-800"
                     }`}>
-                      {wo.bucket === "open" ? "Open" : "Scheduled"}
+                      {sr.status === "pending" ? "Pending" : "Approved"}
                     </span>
                   </li>
                 ))}

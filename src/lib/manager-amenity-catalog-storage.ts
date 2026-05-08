@@ -61,5 +61,25 @@ export function toggleAmenityOfferAvailability(id: string, managerUserId: string
   write(store);
 }
 
+/** Scans ALL manager catalogs and returns offers visible for a given propertyId (global or matching). */
+export function readAllAmenityOffersForProperty(propertyId: string): ManagerAmenityOffer[] {
+  const store = read();
+  const results: ManagerAmenityOffer[] = [];
+  for (const offers of Object.values(store)) {
+    for (const offer of offers) {
+      if (!offer.propertyId?.trim() || offer.propertyId.trim() === propertyId.trim()) {
+        results.push(offer);
+      }
+    }
+  }
+  return results;
+}
+
+/** Scans ALL manager catalogs and returns all offers (for any property). */
+export function readAllAmenityOffers(): ManagerAmenityOffer[] {
+  const store = read();
+  return Object.values(store).flat();
+}
+
 export const AMENITY_CATEGORIES = ["Cleaning", "Linens & Bedding", "Furniture", "Convenience", "Laundry", "Other"] as const;
 export type AmenityCategory = typeof AMENITY_CATEGORIES[number];

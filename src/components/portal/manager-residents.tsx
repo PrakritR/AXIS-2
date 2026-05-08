@@ -85,6 +85,9 @@ import {
 import {
   SERVICE_REQUESTS_EVENT,
   readServiceRequestsForResident,
+  readServiceRequestsForManager,
+  approveServiceRequest,
+  denyServiceRequest,
   markServiceRequestServicePaid,
   markServiceRequestDepositPaid,
   hasDeposit,
@@ -627,10 +630,26 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const residentServiceRequests = useMemo<ServiceRequest[]>(() => {
     void srTick;
     if (!selected?.email) return [];
-    return readServiceRequestsForResident(selected.email).filter(
-      (r) => r.status === "approved" || r.status === "returned",
-    );
+    // All statuses — manager sees pending (to approve/deny), approved, returned, denied
+    return readServiceRequestsForResident(selected.email).sort((a, b) => {
+      const order = { pending: 0, approved: 1, returned: 2, denied: 3 };
+      return (order[a.status] ?? 9) - (order[b.status] ?? 9);
+    });
   }, [selected, srTick]);
+
+  // Per-resident pending service request counts — for table row badges
+  const pendingServiceRequestCountByEmail = useMemo<Map<string, number>>(() => {
+    void srTick;
+    if (!userId) return new Map();
+    const map = new Map<string, number>();
+    for (const req of readServiceRequestsForManager(userId)) {
+      if (req.status === "pending") {
+        const email = req.residentEmail.trim().toLowerCase();
+        map.set(email, (map.get(email) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [userId, srTick]);
 
   const residentInboxThreads = useMemo<PersistedInboxThread[]>(() => {
     void inboxTick;
@@ -1186,7 +1205,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                 {filtered.map((res) => (
                   <Fragment key={res.id}>
                     <tr className={PORTAL_TABLE_TR}>
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{res.name || "—"}</td>
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>
+                        <div className="flex items-center gap-2">
+                          <span>{res.name || "—"}</span>
+                          {(pendingServiceRequestCountByEmail.get(res.email.trim().toLowerCase()) ?? 0) > 0 ? (
+                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-amber-300/60">
+                              {pendingServiceRequestCountByEmail.get(res.email.trim().toLowerCase())} service{pendingServiceRequestCountByEmail.get(res.email.trim().toLowerCase()) === 1 ? "" : "s"} pending
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className={PORTAL_TABLE_TD}>{res.email}</td>
                       <td className={PORTAL_TABLE_TD}>{res.propertyLabel || "—"}</td>
                       <td className={PORTAL_TABLE_TD}>{res.roomLabel || "—"}</td>
@@ -1621,74 +1649,110 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
                             {residentServiceRequests.length > 0 ? (
                               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Service requests</p>
-                                <p className="mt-1 mb-4 text-sm text-slate-500">Active catalog service charges for this resident.</p>
+                                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Service requests</p>
+                                  {residentServiceRequests.filter((r) => r.status === "pending").length > 0 ? (
+                                    <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-amber-300/60">
+                                      {residentServiceRequests.filter((r) => r.status === "pending").length} awaiting approval
+                                    </span>
+                                  ) : null}
+                                </div>
                                 <div className="space-y-3">
                                   {residentServiceRequests.map((req) => {
                                     const needsReturn = hasDeposit(req.deposit);
+                                    const statusColors: Record<string, string> = {
+                                      pending: "bg-amber-50 text-amber-700 ring-amber-200",
+                                      approved: "bg-violet-50 text-violet-700 ring-violet-200",
+                                      returned: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+                                      denied: "bg-rose-50 text-rose-700 ring-rose-200",
+                                    };
+                                    const statusLabels: Record<string, string> = {
+                                      pending: "Pending approval",
+                                      approved: "Approved",
+                                      returned: "Return submitted",
+                                      denied: "Denied",
+                                    };
                                     return (
-                                      <div key={req.id} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                                      <div key={req.id} className={`rounded-2xl border p-4 ${req.status === "pending" ? "border-amber-200 bg-amber-50/40" : "border-slate-200 bg-slate-50/60"}`}>
                                         <div className="flex flex-wrap items-start justify-between gap-2">
                                           <div>
                                             <p className="font-semibold text-slate-900">{req.offerName}</p>
-                                            {req.returnByDate ? (
-                                              <p className="text-xs text-slate-500">
-                                                Return by {new Date(req.returnByDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                                              </p>
-                                            ) : null}
+                                            <div className="mt-1 flex flex-wrap gap-1">
+                                              {req.price ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">{req.price}</span> : null}
+                                              {needsReturn ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {req.deposit}</span> : null}
+                                              {req.returnByDate ? <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">Return by {new Date(req.returnByDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span> : null}
+                                            </div>
                                           </div>
-                                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${req.status === "returned" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-violet-50 text-violet-700 ring-violet-200"}`}>
-                                            {req.status === "returned" ? "Return submitted" : "Approved"}
+                                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${statusColors[req.status] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
+                                            {statusLabels[req.status] ?? req.status}
                                           </span>
                                         </div>
-                                        <div className="mt-3 space-y-2">
-                                          {req.price ? (
-                                            <div className="flex items-center justify-between">
-                                              <span className="text-xs text-slate-700">Service fee · {req.price}</span>
-                                              {req.servicePaid ? (
-                                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Paid</span>
-                                              ) : (
-                                                <Button
-                                                  type="button"
-                                                  className="h-6 rounded-full px-2.5 text-[10px] font-semibold"
-                                                  onClick={() => { markServiceRequestServicePaid(req.id); setSrTick((t) => t + 1); showToast("Service charge marked paid."); }}
-                                                >
-                                                  Mark paid
-                                                </Button>
-                                              )}
+                                        {req.notes ? <p className="mt-2 text-xs text-slate-500 italic">&ldquo;{req.notes}&rdquo;</p> : null}
+
+                                        {/* Pending — Approve / Deny */}
+                                        {req.status === "pending" ? (
+                                          <div className="mt-3 flex flex-wrap gap-2 border-t border-amber-100 pt-3">
+                                            <Button
+                                              type="button"
+                                              className="h-7 rounded-full bg-emerald-600 px-3 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                                              onClick={() => { approveServiceRequest(req.id); setSrTick((t) => t + 1); showToast(`Approved "${req.offerName}".`); }}
+                                            >
+                                              Approve
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              className="h-7 rounded-full border-rose-200 px-3 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                                              onClick={() => { denyServiceRequest(req.id); setSrTick((t) => t + 1); showToast("Request denied."); }}
+                                            >
+                                              Deny
+                                            </Button>
+                                          </div>
+                                        ) : null}
+
+                                        {/* Approved / Returned — charges */}
+                                        {(req.status === "approved" || req.status === "returned") ? (
+                                          <div className="mt-3 rounded-xl bg-white p-3 ring-1 ring-slate-200">
+                                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Charges</p>
+                                            <div className="space-y-2">
+                                              {req.price ? (
+                                                <div className="flex items-center justify-between">
+                                                  <span className="text-xs text-slate-700">Service fee · {req.price}</span>
+                                                  {req.servicePaid ? (
+                                                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Paid</span>
+                                                  ) : (
+                                                    <Button type="button" className="h-6 rounded-full px-2.5 text-[10px] font-semibold" onClick={() => { markServiceRequestServicePaid(req.id); setSrTick((t) => t + 1); showToast("Service charge marked paid."); }}>
+                                                      Mark paid
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              ) : null}
+                                              {needsReturn ? (
+                                                <div className="flex items-center justify-between">
+                                                  <span className="text-xs text-slate-700">Deposit · {req.deposit}</span>
+                                                  {req.depositPaid ? (
+                                                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Refunded</span>
+                                                  ) : (
+                                                    <Button type="button" className="h-6 rounded-full px-2.5 text-[10px] font-semibold" onClick={() => { markServiceRequestDepositPaid(req.id); setSrTick((t) => t + 1); showToast("Deposit marked refunded."); }}>
+                                                      Mark refunded
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              ) : null}
                                             </div>
-                                          ) : null}
-                                          {needsReturn ? (
-                                            <div className="flex items-center justify-between">
-                                              <span className="text-xs text-slate-700">Deposit · {req.deposit}</span>
-                                              {req.depositPaid ? (
-                                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Refunded</span>
-                                              ) : (
-                                                <Button
-                                                  type="button"
-                                                  className="h-6 rounded-full px-2.5 text-[10px] font-semibold"
-                                                  onClick={() => { markServiceRequestDepositPaid(req.id); setSrTick((t) => t + 1); showToast("Deposit marked refunded."); }}
-                                                >
-                                                  Mark refunded
-                                                </Button>
-                                              )}
-                                            </div>
-                                          ) : null}
-                                        </div>
+                                          </div>
+                                        ) : null}
+
                                         {req.returnPhotoDataUrl ? (
                                           <div className="mt-3">
                                             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Return photo</p>
                                             <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-28 overflow-hidden rounded-xl border border-slate-200">
-                                              <Image
-                                                src={req.returnPhotoDataUrl}
-                                                alt="Return"
-                                                width={112}
-                                                height={84}
-                                                className="h-20 w-full object-cover"
-                                                unoptimized
-                                              />
+                                              <Image src={req.returnPhotoDataUrl} alt="Return" width={112} height={84} className="h-20 w-full object-cover" unoptimized />
                                             </a>
                                           </div>
+                                        ) : null}
+                                        {req.status === "denied" && req.managerNote ? (
+                                          <p className="mt-2 text-xs text-rose-600">Note: {req.managerNote}</p>
                                         ) : null}
                                       </div>
                                     );
