@@ -32,7 +32,8 @@ export function readAmenityOffersForManager(managerUserId: string): ManagerAmeni
 export function readAmenityOffersForProperty(managerUserId: string, propertyId: string): ManagerAmenityOffer[] {
   const all = read()[managerUserId] ?? [];
   if (!propertyId.trim()) return all;
-  return all.filter((o) => (o.propertyId ?? "") === propertyId.trim());
+  // Offers with no propertyId are global (show for all properties); also include property-specific matches.
+  return all.filter((o) => !o.propertyId?.trim() || o.propertyId.trim() === propertyId.trim());
 }
 
 export function saveAmenityOffer(offer: ManagerAmenityOffer): void {

@@ -35,7 +35,8 @@ import {
   writeManagerWorkOrderRows,
 } from "@/lib/manager-work-orders-storage";
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
-import { readAmenityOffersForProperty, type ManagerAmenityOffer } from "@/lib/manager-amenity-catalog-storage";
+import { readAmenityOffersForManager, readAmenityOffersForProperty, type ManagerAmenityOffer } from "@/lib/manager-amenity-catalog-storage";
+import { getPropertyById } from "@/lib/rental-application/data";
 import {
   SERVICE_REQUESTS_EVENT,
   createServiceRequest,
@@ -289,31 +290,43 @@ export function ResidentServicesPanel() {
     if (residentEmail) setServiceRequests(readServiceRequestsForResident(residentEmail));
   }
 
+  function reloadOffers(email: string) {
+    const application = readManagerApplicationRows().find(
+      (r) => r.email?.trim().toLowerCase() === email,
+    );
+    const propertyId =
+      application?.assignedPropertyId?.trim() ||
+      application?.propertyId?.trim() ||
+      application?.application?.propertyId?.trim() ||
+      "";
+    let managerUserId = application?.managerUserId?.trim() || "";
+    if (!managerUserId && propertyId) {
+      managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
+    }
+    if (managerUserId) {
+      let offers = readAmenityOffersForProperty(managerUserId, propertyId).filter((o) => o.available);
+      if (offers.length === 0) {
+        offers = readAmenityOffersForManager(managerUserId).filter((o) => o.available);
+      }
+      setAvailableOffers(offers);
+    }
+  }
+
   useEffect(() => {
     const sync = () => setAllRows(readManagerWorkOrderRows());
+    const syncOffers = () => reloadOffers(residentEmail);
     sync();
     void syncManagerWorkOrdersFromServer().then(sync);
-    void syncManagerApplicationsFromServer().then(() => {
-      const application = readManagerApplicationRows().find(
-        (r) => r.email?.trim().toLowerCase() === residentEmail,
-      );
-      if (application?.managerUserId) {
-        const propertyId =
-          application.assignedPropertyId?.trim() ||
-          application.propertyId?.trim() ||
-          application.application?.propertyId?.trim() ||
-          "";
-        setAvailableOffers(
-          readAmenityOffersForProperty(application.managerUserId, propertyId).filter((o) => o.available),
-        );
-      }
-    });
+    void syncManagerApplicationsFromServer().then(() => reloadOffers(residentEmail));
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
     window.addEventListener("storage", sync);
+    window.addEventListener("storage", syncOffers);
     return () => {
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
       window.removeEventListener("storage", sync);
+      window.removeEventListener("storage", syncOffers);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [residentEmail]);
 
   useEffect(() => {
@@ -439,12 +452,17 @@ export function ResidentServicesPanel() {
       return;
     }
     const application = getApplication();
-    if (!application?.managerUserId) { showToast("Could not find your property information."); return; }
     const propertyId =
-      application.assignedPropertyId?.trim() ||
-      application.propertyId?.trim() ||
-      application.application?.propertyId?.trim() ||
+      application?.assignedPropertyId?.trim() ||
+      application?.propertyId?.trim() ||
+      application?.application?.propertyId?.trim() ||
       "";
+    // Resolve managerUserId — fall back to property's owner if not on the application row
+    let managerUserId = application?.managerUserId?.trim() || "";
+    if (!managerUserId && propertyId) {
+      managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
+    }
+    if (!managerUserId) { showToast("Could not find your property manager. Contact support."); return; }
     createServiceRequest({
       offerId: selectedOffer.id,
       offerName: selectedOffer.name,
@@ -452,8 +470,8 @@ export function ResidentServicesPanel() {
       price: selectedOffer.price,
       deposit: selectedOffer.deposit,
       residentEmail,
-      residentName: application.name || residentEmail,
-      managerUserId: application.managerUserId,
+      residentName: application?.name || residentEmail,
+      managerUserId,
       propertyId,
       returnByDate: sReturnBy.trim(),
       notes: sNotes.trim(),
