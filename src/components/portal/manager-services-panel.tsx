@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -12,8 +11,6 @@ import {
 } from "@/components/portal/portal-metrics";
 import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
 import {
-  type AmenityCategory,
-  AMENITY_CATEGORIES,
   deleteAmenityOffer,
   readAmenityOffersForManager,
   saveAmenityOffer,
@@ -28,7 +25,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "catalog", label: "Service catalog" },
 ];
 
-const EMPTY_FORM: { name: string; description: string; price: string; category: AmenityCategory } = { name: "", description: "", price: "", category: AMENITY_CATEGORIES[0] };
+const EMPTY_FORM = { name: "", description: "", price: "" };
 
 export function ManagerServicesPanel() {
   const { showToast } = useAppUi();
@@ -58,7 +55,7 @@ export function ManagerServicesPanel() {
 
   const openEdit = (offer: ManagerAmenityOffer) => {
     setEditingOffer(offer);
-    setForm({ name: offer.name, description: offer.description, price: offer.price, category: offer.category as AmenityCategory });
+    setForm({ name: offer.name, description: offer.description, price: offer.price });
     setModalOpen(true);
   };
 
@@ -70,7 +67,7 @@ export function ManagerServicesPanel() {
       name: form.name.trim(),
       description: form.description.trim(),
       price: form.price.trim(),
-      category: form.category,
+      category: "",
       available: editingOffer?.available ?? true,
       managerUserId,
       createdAt: editingOffer?.createdAt ?? new Date().toISOString(),
@@ -141,7 +138,6 @@ export function ManagerServicesPanel() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-900">{offer.name}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">{offer.category}</p>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1.5">
                         {offer.price ? (
@@ -209,16 +205,6 @@ export function ManagerServicesPanel() {
               placeholder="e.g. Weekly cleaning, Blanket set"
               className="bg-white"
             />
-          </div>
-          <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Category</p>
-            <Select
-              value={form.category}
-              onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as AmenityCategory }))}
-              className="bg-white"
-            >
-              {AMENITY_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </Select>
           </div>
           <div>
             <p className="mb-1 text-[11px] font-medium text-slate-600">Price</p>
