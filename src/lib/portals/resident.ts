@@ -36,7 +36,7 @@ const residentPortalApproved: PortalDefinition = {
     { section: "payments", label: "Payments", tabs: [] },
     { section: "move-in", label: "Move-in", tabs: [] },
     { section: "lease", label: "Lease", tabs: [] },
-    { section: "services", label: "Requests", tabs: [] },
+    { section: "services", label: "Services", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",

@@ -1635,15 +1635,6 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel hint="Quiet hours, guests, smoking, shared spaces.">House rules</FieldLabel>
-                <Textarea
-                  className="min-h-[80px]"
-                  value={sub.houseRulesText}
-                  onChange={(e) => setSub((s) => ({ ...s, houseRulesText: e.target.value }))}
-                  placeholder="e.g. Quiet hours 10pm–8am · No smoking indoors"
-                />
-              </div>
-              <div className="sm:col-span-2">
                 <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 transition hover:border-slate-300">
                   <input
                     type="checkbox"
