@@ -525,14 +525,15 @@ export function updateExtraListingFromSubmission(
   const prev = list[idx]!;
   const next = buildMockPropertyFromDraft(pendingLike, listingId);
   const owner = next.managerUserId ?? managerUserId;
-  /** Any manager edit takes the listing off the public catalog until admin approves again. */
-  list[idx] = { ...next, managerUserId: owner, adminPublishLive: false };
+  // Keep current approval state; manager edits should not auto-demote approved listings.
+  const publishLive = prev.adminPublishLive === true;
+  list[idx] = { ...next, managerUserId: owner, adminPublishLive: publishLive };
   map[managerUserId] = list;
   writeExtrasMap(map);
   mirrorPropertyRecord({
     id: listingId,
     managerUserId,
-    status: "review",
+    status: publishLive ? "live" : "review",
     propertyData: list[idx],
     rowData: { ...legacy, adminRefId: listingId, listingId, managerUserId },
   });
@@ -558,14 +559,17 @@ export async function updateExtraListingFromSubmissionOnServer(
     submission: input,
     submittedByUserId: managerUserId,
   };
+  const prev = list[idx]!;
   const next = buildMockPropertyFromDraft(pendingLike, listingId);
   const owner = next.managerUserId ?? managerUserId;
-  const propertyData: MockProperty = { ...next, managerUserId: owner, adminPublishLive: false };
+  // Keep current approval state; manager edits should not auto-demote approved listings.
+  const publishLive = prev.adminPublishLive === true;
+  const propertyData: MockProperty = { ...next, managerUserId: owner, adminPublishLive: publishLive };
   const rowData = { ...legacy, adminRefId: listingId, listingId, managerUserId };
   const ok = await upsertPropertyRecordToServer({
     id: listingId,
     managerUserId,
-    status: "review",
+    status: publishLive ? "live" : "review",
     propertyData,
     rowData,
   });

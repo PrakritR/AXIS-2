@@ -14,6 +14,7 @@ const SLIDE_GRADS = [
 
 type Slide =
   | { kind: "photo"; src: string }
+  | { kind: "video"; src: string }
   | { kind: "gradient"; className: string };
 
 function slidesForKey(key: string): readonly string[] {
@@ -26,8 +27,10 @@ function slidesForKey(key: string): readonly string[] {
 }
 
 function slidesForRow(row: RoomListingRow): Slide[] {
-  if (row.photoUrls.length > 0) {
-    return row.photoUrls.slice(0, 6).map((src) => ({ kind: "photo", src }));
+  const videos = row.videoUrls.slice(0, 2).map((src) => ({ kind: "video", src } as const));
+  const photos = row.photoUrls.slice(0, 6).map((src) => ({ kind: "photo", src } as const));
+  if (videos.length > 0 || photos.length > 0) {
+    return [...videos, ...photos];
   }
   return slidesForKey(row.key).map((className) => ({ kind: "gradient", className }));
 }
@@ -138,6 +141,19 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
               className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ease-out ${
                 i === slideIdx ? "opacity-100" : "opacity-0"
               }`}
+            />
+          ) : slide.kind === "video" ? (
+            <video
+              key={`${slide.src.slice(0, 48)}-${i}`}
+              src={slide.src}
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ease-out ${
+                i === slideIdx ? "opacity-100" : "opacity-0"
+              }`}
+              muted
+              playsInline
+              autoPlay
+              loop
+              preload="metadata"
             />
           ) : (
             <div

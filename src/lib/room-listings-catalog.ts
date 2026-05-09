@@ -35,8 +35,10 @@ export type RoomListingRow = {
   priceOverlayLabel: string;
   /** Raw listing availability string (for traffic-light styling on search cards). */
   availabilityRaw: string;
-  /** Room photos first, then house photos as fallback. */
+  /** Room photos only (no house-level fallback on room cards). */
   photoUrls: string[];
+  /** Uploaded room videos for this room listing. */
+  videoUrls: string[];
 };
 
 function streetUpperFromProperty(p: MockProperty): string {
@@ -228,7 +230,8 @@ export function filterRoomListings(
           listingTags: listingTags(p),
           priceOverlayLabel: priceOverlayLabelForProperty(p),
           availabilityRaw: room.availability,
-          photoUrls: room.modal.photoUrls?.length ? room.modal.photoUrls : rich.heroHousePhotoUrls?.slice(0, 3) ?? [],
+          photoUrls: room.modal.photoUrls?.length ? room.modal.photoUrls : [],
+          videoUrls: room.modal.videoSrc ? [room.modal.videoSrc] : [],
         });
       }
     }
