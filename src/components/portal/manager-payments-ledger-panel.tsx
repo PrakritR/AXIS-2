@@ -124,14 +124,26 @@ export function ManagerPaymentsLedgerPanel({
                     </span>
                   </td>
                   <td className={`${PORTAL_TABLE_TD} text-right`}>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                      onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                    >
-                      {expandedId === row.id ? "Hide" : "Details"}
-                    </Button>
+                    <div className="inline-flex items-center gap-2">
+                      {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={PORTAL_DETAIL_BTN_PRIMARY}
+                          onClick={() => recordPaid(row, "Marked as paid.")}
+                        >
+                          Mark as paid
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                        onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                      >
+                        {expandedId === row.id ? "Hide" : "Details"}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
                 {expandedId === row.id ? (
