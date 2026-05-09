@@ -42,6 +42,19 @@ export function ResidentMoveInPanel() {
           </p>
         ) : (
           <section className="rounded-2xl border border-slate-200/70 bg-white/90 p-5">
+            {resolved ? (
+              <div className="mb-4 grid gap-3 rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Assigned room</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{resolved.roomLabel}</p>
+                  {resolved.propertyLabel ? <p className="mt-1 text-sm text-slate-600">{resolved.propertyLabel}</p> : null}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move-in available</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{resolved.earliestMoveInDateLabel ?? "Not set yet"}</p>
+                </div>
+              </div>
+            ) : null}
             <h2 className="text-base font-semibold text-slate-900">Instructions &amp; details</h2>
             <div className="mt-3 whitespace-pre-wrap text-slate-700">
               {resolved?.instructions ?? (

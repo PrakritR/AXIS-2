@@ -21,6 +21,38 @@ function formatMoveInDateLabel(iso: string): string {
   return dt.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
+function firstNonEmpty(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function resolveBestResidentRow(email: string, applications: DemoApplicantRow[]): DemoApplicantRow | null {
+  const matches = applications.filter((a) => a.email?.trim().toLowerCase() === email && a.bucket === "approved");
+  if (matches.length === 0) return null;
+  return [...matches].sort((a, b) => {
+    const aAssigned = Number(Boolean(a.assignedPropertyId?.trim() || a.propertyId?.trim()));
+    const bAssigned = Number(Boolean(b.assignedPropertyId?.trim() || b.propertyId?.trim()));
+    if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+
+    const aRoom = Number(
+      Boolean(a.assignedRoomChoice?.trim() || a.application?.roomChoice1?.trim() || a.manualResidentDetails?.roomNumber?.trim()),
+    );
+    const bRoom = Number(
+      Boolean(b.assignedRoomChoice?.trim() || b.application?.roomChoice1?.trim() || b.manualResidentDetails?.roomNumber?.trim()),
+    );
+    if (aRoom !== bRoom) return bRoom - aRoom;
+
+    const aManualDate = Number(Boolean(a.manualResidentDetails?.moveInDate?.trim()));
+    const bManualDate = Number(Boolean(b.manualResidentDetails?.moveInDate?.trim()));
+    if (aManualDate !== bManualDate) return bManualDate - aManualDate;
+
+    return applications.indexOf(b) - applications.indexOf(a);
+  })[0] ?? null;
+}
+
 /** Resolve move-in copy for the signed-in resident from approved application + listing submission. */
 export function resolveResidentMoveInFromApplications(
   email: string,
@@ -29,7 +61,7 @@ export function resolveResidentMoveInFromApplications(
   const e = email.trim().toLowerCase();
   if (!e) return null;
 
-  const row = applications.find((a) => a.email?.trim().toLowerCase() === e && a.bucket === "approved");
+  const row = resolveBestResidentRow(e, applications);
   if (!row) return null;
 
   const effective = effectiveApplicationForRow(row);
@@ -53,33 +85,42 @@ export function resolveResidentMoveInFromApplications(
   let earliestMoveInDateLabel: string | null = null;
   let instructions: string | null = null;
   let listingRoomId: string | null = null;
+  let portalRoomMoveInDate: string | null = null;
+  let portalRoomInstructions: string | null = null;
+  let roomLevelMoveInDate: string | null = null;
+  let roomLevelInstructions: string | null = null;
 
-  if (sub && roomChoice) {
-    const parsed = parseRoomChoiceValue(roomChoice);
-    listingRoomId = parsed.listingRoomId ?? null;
-    const room = listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : undefined;
+  if (sub) {
+    const parsed = roomChoice ? parseRoomChoiceValue(roomChoice) : null;
+    listingRoomId = parsed?.listingRoomId ?? null;
+    const manualRoomName = row.manualResidentDetails?.roomNumber?.trim().toLowerCase() || "";
+    const room =
+      (listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : undefined) ??
+      (manualRoomName ? sub.rooms.find((r) => r.name.trim().toLowerCase() === manualRoomName) : undefined);
+
     if (room) {
+      listingRoomId = room.id;
       if (room.name.trim()) roomLabel = room.name.trim();
-      const d = room.moveInAvailableDate?.trim();
-      if (d) earliestMoveInDateLabel = formatMoveInDateLabel(d);
-      // Listing submission instructions as lowest-priority fallback
-      const subIns = room.moveInInstructions?.trim();
-      if (subIns) instructions = subIns;
+      roomLevelMoveInDate = room.moveInAvailableDate?.trim() || null;
+      roomLevelInstructions = room.moveInInstructions?.trim() || null;
     }
   }
 
-  // Per-resident override (set in Residents panel) — second priority, overrides submission
-  if (row.moveInInstructions?.trim()) {
-    instructions = row.moveInInstructions.trim();
-  }
-
-  // Portal note room instructions take highest priority (manager edits Room Details in Properties panel)
   if (managerUserId && pid && listingRoomId) {
     const noteKey = `${managerUserId}:${pid}`;
     const portalNote = getPortalListingNote(noteKey);
-    const noteIns = portalNote.rooms?.[listingRoomId]?.moveInInstructions?.trim();
-    if (noteIns) instructions = noteIns;
+    portalRoomMoveInDate = portalNote.rooms?.[listingRoomId]?.moveInAvailableDate?.trim() || null;
+    portalRoomInstructions = portalNote.rooms?.[listingRoomId]?.moveInInstructions?.trim() || null;
   }
+
+  const rowLevelInstructions = row.moveInInstructions?.trim() || null;
+  const manualMoveInDate = row.manualResidentDetails?.moveInDate?.trim() || null;
+  const applicationMoveInDate = effective?.leaseStart?.trim() || null;
+
+  earliestMoveInDateLabel = formatMoveInDateLabel(
+    firstNonEmpty(portalRoomMoveInDate, roomLevelMoveInDate, manualMoveInDate, applicationMoveInDate) ?? "",
+  ) || null;
+  instructions = firstNonEmpty(portalRoomInstructions, roomLevelInstructions, rowLevelInstructions);
 
   return {
     propertyLabel: sub?.buildingName || property?.buildingName || property?.title || row.property?.trim() || "Your property",
