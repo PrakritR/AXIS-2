@@ -602,12 +602,14 @@ function firstMonthRentChargeForLeaseStart(
   };
 }
 
-function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId">): {
+function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId" | "manualResidentDetails">): {
   raw: string;
   amount: number;
 } {
   const override = row.application?.managerUtilitiesOverride?.trim();
   if (override != null && override !== "") return { raw: override, amount: parseMoneyAmount(override) };
+  const manualUtils = row.manualResidentDetails?.monthlyUtilities;
+  if (manualUtils != null && manualUtils > 0) return { raw: String(manualUtils), amount: manualUtils };
   const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const prop = getPropertyById(propertyId);
@@ -1258,7 +1260,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const effectiveManagerUserId = managerUserId ?? row.managerUserId ?? prop?.managerUserId ?? null;
   const zelleSnap = sub?.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
   const venmoSnap = sub?.venmoPaymentsEnabled && sub.venmoContact?.trim() ? sub.venmoContact.trim() : undefined;
-  const leaseStart = row.application?.leaseStart?.trim() || undefined;
+  const leaseStart = row.application?.leaseStart?.trim() || row.manualResidentDetails?.moveInDate?.trim() || undefined;
   const moveInDue = dueLabelForLeaseStart(leaseStart);
   const savedAmount = (raw: string | undefined, fallback: string | undefined): number => {
     const value = raw?.trim();
@@ -1267,8 +1269,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   };
   const before = readAll();
   recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId);
+  // Preserve paid charges — only wipe pending ones so they can be regenerated with correct amounts.
   const rows = readAll().filter(
-    (charge) => !(charge.applicationId === applicationId && charge.kind !== "application_fee"),
+    (charge) => !(charge.applicationId === applicationId && charge.kind !== "application_fee" && charge.status === "pending"),
   );
   const existingKeys = new Set(rows.map((charge) => chargeBusinessKey(charge)));
   const created: HouseholdCharge[] = [];
@@ -1326,10 +1329,16 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     );
   }
 
-  const securityDeposit = savedAmount(row.application?.managerSecurityDepositOverride, sub?.securityDeposit);
+  const securityDeposit = savedAmount(
+    row.application?.managerSecurityDepositOverride,
+    row.manualResidentDetails?.securityDeposit != null ? String(row.manualResidentDetails.securityDeposit) : sub?.securityDeposit,
+  );
   pushCharge("security_deposit", securityDeposit, chargeTitle("security_deposit"), true, "Before lease signing");
 
-  const moveInFee = savedAmount(row.application?.managerMoveInFeeOverride, sub?.moveInFee);
+  const moveInFee = savedAmount(
+    row.application?.managerMoveInFeeOverride,
+    row.manualResidentDetails?.moveInFee != null ? String(row.manualResidentDetails.moveInFee) : sub?.moveInFee,
+  );
   pushCharge("move_in_fee", moveInFee, chargeTitle("move_in_fee"), false, "Before move-in");
 
   const otherCostAmount = parseMoneyAmount(row.application?.managerOtherCostAmount ?? "");
@@ -1345,13 +1354,21 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   if (changed) writeAll(next);
 
   // Set up recurring monthly rent (+ utilities) profile starting from the first full month after move-in
+  let computedStartMonth: string | undefined;
   if (leaseStart && (rentAmount > 0 || utilities.amount > 0)) {
     const [leaseYearRaw, leaseMonthRaw] = leaseStart.split("-").map(Number);
     if (leaseYearRaw && leaseMonthRaw) {
-      // First full month is the calendar month after the lease start month
-      const firstFullMonthDate = new Date(leaseYearRaw, leaseMonthRaw, 1); // leaseMonthRaw is 1-indexed, JS months are 0-indexed
-      const startMonth = `${firstFullMonthDate.getFullYear()}-${String(firstFullMonthDate.getMonth() + 1).padStart(2, "0")}`;
-      const roomLabel = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "Room";
+      // If move-in is after the 1st, first full month is the next calendar month; otherwise same month.
+      const [, , leaseDay] = leaseStart.split("-").map(Number);
+      const firstFullMonthDate = leaseDay && leaseDay > 1
+        ? new Date(leaseYearRaw, leaseMonthRaw, 1)    // JS: leaseMonthRaw (1-indexed) → next month
+        : new Date(leaseYearRaw, leaseMonthRaw - 1, 1); // same month
+      computedStartMonth = `${firstFullMonthDate.getFullYear()}-${String(firstFullMonthDate.getMonth() + 1).padStart(2, "0")}`;
+      const roomLabel =
+        row.manualResidentDetails?.roomNumber?.trim() ||
+        row.assignedRoomChoice?.trim() ||
+        row.application?.roomChoice1?.trim() ||
+        "Room";
       upsertRecurringRentProfile({
         residentEmail,
         residentName,
@@ -1362,12 +1379,33 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         monthlyRent: rentAmount,
         monthlyUtilities: utilities.amount > 0 ? Number(utilities.amount.toFixed(2)) : 0,
         dueDay: 1,
-        startMonth,
-        leaseEnd: row.application?.leaseEnd?.trim() || undefined,
+        startMonth: computedStartMonth,
+        leaseEnd: row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || undefined,
         zelleContact: zelleSnap,
         venmoContact: venmoSnap,
       });
     }
+  }
+
+  // Delete pending full-month recurring rent/utilities charges for months before the first full month.
+  // Those months are already covered by the prorated first-month charges created above.
+  if (computedStartMonth) {
+    const emailLower = residentEmail.trim().toLowerCase();
+    const allNow = readAll();
+    const staleIds = new Set(
+      allNow
+        .filter(
+          (c) =>
+            c.residentEmail.trim().toLowerCase() === emailLower &&
+            c.propertyId === propertyId &&
+            c.status === "pending" &&
+            (c.kind === "rent" || c.kind === "utilities") &&
+            c.rentMonth != null &&
+            c.rentMonth < computedStartMonth!,
+        )
+        .map((c) => c.id),
+    );
+    if (staleIds.size > 0) writeAll(allNow.filter((c) => !staleIds.has(c.id)));
   }
 
   return changed;

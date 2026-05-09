@@ -33,11 +33,11 @@ import {
   markHouseholdChargePaid,
   parseMoneyAmount,
   readChargesForManagerResident,
+  recordApprovedApplicationCharges,
   recordWorkOrderResidentCharge,
   syncHouseholdChargesFromServer,
   updateHouseholdChargeAmount,
   updatePendingRentAmountForResident,
-  upsertRecurringRentProfile,
   type HouseholdCharge,
 } from "@/lib/household-charges";
 import {
@@ -1038,22 +1038,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     writeManagerApplicationRows(next);
     upsertApplicationRowToServer(nextRow);
 
-    // Keep recurring rent profile and unpaid charges in sync with the new room/rent.
+    // Update pending recurring rent charge amounts immediately, then refresh all one-time charges
+    // (security deposit, move-in fee, prorated first month, application fee) and the recurring profile.
     const residentEmail = nextRow.email ?? "";
     if (propId && residentEmail && rent != null && Number.isFinite(rent)) {
-      upsertRecurringRentProfile({
-        residentEmail,
-        residentName: nextRow.name,
-        residentUserId: null,
-        propertyId: propId,
-        propertyLabel: propLabel,
-        roomLabel: selectedRoomLabel || nextRow.property,
-        managerUserId: userId ?? null,
-        monthlyRent: rent,
-        monthlyUtilities: utilities ?? undefined,
-      });
       updatePendingRentAmountForResident(residentEmail, propId, rent, userId ?? null);
     }
+    recordApprovedApplicationCharges(nextRow, userId ?? null);
 
     setEditResidentOpen(false);
     setHcTick((n) => n + 1);
