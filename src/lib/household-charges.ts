@@ -867,6 +867,17 @@ function syncAllRecurringRentCharges(): boolean {
   const existing = readAll();
   const newCharges: HouseholdCharge[] = [];
 
+  const hasUpfrontProratedLastCharge = (
+    residentEmail: string,
+    propertyId: string,
+    kind: "prorated_last_month_rent" | "prorated_last_month_utilities",
+  ) => {
+    const emailLower = residentEmail.trim().toLowerCase();
+    return [...existing, ...newCharges].some(
+      (c) => c.kind === kind && c.residentEmail.trim().toLowerCase() === emailLower && c.propertyId === propertyId,
+    );
+  };
+
   // Build a map of profile id → profile for stale-charge cleanup
   const profileById = new Map(profiles.map((p) => [p.id, p]));
 
@@ -914,12 +925,10 @@ function syncAllRecurringRentCharges(): boolean {
       // When the last month is partial, recordApprovedApplicationCharges creates upfront prorated_last_month_rent
       // charges so residents can see them from approval time. Skip the recurring-generated version.
       const emailLower = profile.residentEmail.trim().toLowerCase();
-      const hasUpfrontLastRent = isPartialLastMonth && [...existing, ...newCharges].some(
-        (c) => c.kind === "prorated_last_month_rent" && c.residentEmail.trim().toLowerCase() === emailLower && c.propertyId === profile.propertyId,
-      );
-      const hasUpfrontLastUtil = isPartialLastMonth && [...existing, ...newCharges].some(
-        (c) => c.kind === "prorated_last_month_utilities" && c.residentEmail.trim().toLowerCase() === emailLower && c.propertyId === profile.propertyId,
-      );
+      const hasUpfrontLastRent =
+        isPartialLastMonth && hasUpfrontProratedLastCharge(profile.residentEmail, profile.propertyId, "prorated_last_month_rent");
+      const hasUpfrontLastUtil =
+        isPartialLastMonth && hasUpfrontProratedLastCharge(profile.residentEmail, profile.propertyId, "prorated_last_month_utilities");
 
       if (profile.monthlyRent > 0 && !hasUpfrontLastRent) {
         const chargeKey = `rent|${emailLower}|${profile.propertyId}|${rentMonth}`;
@@ -994,7 +1003,7 @@ function syncAllRecurringRentCharges(): boolean {
     }
   }
 
-  // Remove stale pending recurring charges for months before each profile's startMonth.
+  // Remove stale pending recurring charges that violate profile boundaries/formula.
   // This cleans up incorrect charges created before the correct startMonth was computed.
   const staleIds = new Set<string>();
   for (const c of existing) {
@@ -1002,7 +1011,42 @@ function syncAllRecurringRentCharges(): boolean {
     if (c.kind !== "rent" && c.kind !== "utilities") continue;
     const prof = profileById.get(c.recurringRentProfileId);
     if (!prof) continue;
-    if (c.rentMonth < prof.startMonth) staleIds.add(c.id);
+
+    // 1) Never bill before first full month.
+    if (c.rentMonth < prof.startMonth) {
+      staleIds.add(c.id);
+      continue;
+    }
+
+    const leaseEndParts = prof.leaseEnd?.trim().split("-").map(Number) ?? [];
+    const leaseEndYear = leaseEndParts[0] && Number.isFinite(leaseEndParts[0]) ? leaseEndParts[0] : null;
+    const leaseEndMonthNum = leaseEndParts[1] && Number.isFinite(leaseEndParts[1]) ? leaseEndParts[1] : null;
+    const leaseEndDay = leaseEndParts[2] && Number.isFinite(leaseEndParts[2]) ? leaseEndParts[2] : null;
+
+    if (leaseEndYear && leaseEndMonthNum) {
+      const leaseEndMonth = `${leaseEndYear}-${String(leaseEndMonthNum).padStart(2, "0")}`;
+
+      // 2) Never keep recurring rows after lease end month.
+      if (c.rentMonth > leaseEndMonth) {
+        staleIds.add(c.id);
+        continue;
+      }
+
+      // 3) If end month is partial and we already have upfront prorated last-month charges,
+      //    remove recurring rows in that same month to prevent duplicate billing.
+      const daysInEndMonth = new Date(leaseEndYear, leaseEndMonthNum, 0).getDate();
+      const partialLastMonth = leaseEndDay != null && leaseEndDay > 0 && leaseEndDay < daysInEndMonth;
+      if (partialLastMonth && c.rentMonth === leaseEndMonth) {
+        const hasUpfront =
+          c.kind === "rent"
+            ? hasUpfrontProratedLastCharge(prof.residentEmail, prof.propertyId, "prorated_last_month_rent")
+            : hasUpfrontProratedLastCharge(prof.residentEmail, prof.propertyId, "prorated_last_month_utilities");
+        if (hasUpfront) {
+          staleIds.add(c.id);
+          continue;
+        }
+      }
+    }
   }
 
   const cleanedExisting = staleIds.size > 0 ? existing.filter((c) => !staleIds.has(c.id)) : existing;
@@ -1012,6 +1056,31 @@ function syncAllRecurringRentCharges(): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Re-runs charge generation for every approved resident so payments align with lease dates.
+ * Safe to call repeatedly; idempotent via charge dedupe keys.
+ */
+export function reconcileApprovedResidentPaymentSchedules(managerUserId: string | null): boolean {
+  if (!isBrowser()) return false;
+  const approvedRows = readManagerApplicationRows().filter((row) => {
+    if (row.bucket !== "approved") return false;
+    const email = row.email?.trim();
+    if (!email) return false;
+    if (!managerUserId) return true;
+    const rowManager = row.managerUserId?.trim();
+    return !rowManager || rowManager === managerUserId;
+  });
+
+  let changed = false;
+  for (const row of approvedRows) {
+    if (recordApprovedApplicationCharges(row, managerUserId)) {
+      changed = true;
+    }
+  }
+  if (syncAllRecurringRentCharges()) changed = true;
+  return changed;
 }
 
 export function readRecurringRentProfilesForManager(managerUserId: string | null): RecurringRentProfile[] {

@@ -15,6 +15,7 @@ import {
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
   readChargesForManager,
+  reconcileApprovedResidentPaymentSchedules,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -25,6 +26,7 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
+import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 
@@ -72,6 +74,15 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
     if (!authReady || !userId) return;
     void syncPropertyPipelineFromServer().then(() => setPropertyTick((n) => n + 1));
   }, [authReady, userId]);
+
+  useEffect(() => {
+    if (!authReady || !userId) return;
+    const visibleApprovedCount = readManagerApplicationRows().filter(
+      (row) => row.bucket === "approved" && applicationVisibleToPortalUser(row, userId),
+    ).length;
+    if (visibleApprovedCount === 0) return;
+    reconcileApprovedResidentPaymentSchedules(userId);
+  }, [authReady, userId, applicationTick]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
