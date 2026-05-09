@@ -210,6 +210,16 @@ export function filterRoomListings(
   const centerZip = parseUSZip(opts.zipRaw);
   const moveInDate = opts.moveIn ? parseLocalDate(opts.moveIn) : null;
   const hasMoveInFilter = moveInDate !== null || Boolean(opts.moveIn);
+
+  // When browsing with no dates, check [today, far future] so rooms with any
+  // upcoming approved occupancy are hidden, not just ones occupied right now.
+  const noDates = !opts.moveIn?.trim() && !opts.moveOut?.trim();
+  const todayForOcc = (() => {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  })();
+  const farFutureForOcc = `${new Date().getFullYear() + 5}-12-31`;
+
   const rows: RoomListingRow[] = [];
 
   for (const p of properties) {
@@ -223,8 +233,8 @@ export function filterRoomListings(
         if (!roomAvailableForMoveIn(room.availability, hasMoveInFilter ? (moveInDate ?? new Date()) : null)) continue;
         if (
           !isRoomChoiceAvailable(`${p.id}${LISTING_ROOM_CHOICE_SEP}${room.id}`, room.availability, {
-            leaseStart: opts.moveIn,
-            leaseEnd: opts.moveOut,
+            leaseStart: noDates ? todayForOcc : opts.moveIn,
+            leaseEnd: noDates ? farFutureForOcc : opts.moveOut,
           })
         ) {
           continue;
