@@ -60,6 +60,54 @@ function applicationRowsChanged(a: DemoApplicantRow[], b: DemoApplicantRow[]) {
   return JSON.stringify(normalizeApplicationRows(a)) !== JSON.stringify(normalizeApplicationRows(b));
 }
 
+function chooseString(primary: string | undefined, fallback: string | undefined): string | undefined {
+  const p = primary?.trim();
+  if (p) return primary;
+  const f = fallback?.trim();
+  if (f) return fallback;
+  return primary ?? fallback;
+}
+
+function chooseNumber(primary: number | null | undefined, fallback: number | null | undefined): number | null | undefined {
+  return primary ?? fallback;
+}
+
+function mergeApplicationField<T>(primary: T | undefined, fallback: T | undefined): T | undefined {
+  return primary ?? fallback;
+}
+
+function mergeApplicationRow(existing: DemoApplicantRow | undefined, incoming: DemoApplicantRow): DemoApplicantRow {
+  if (!existing) return incoming;
+  return {
+    ...existing,
+    ...incoming,
+    name: chooseString(incoming.name, existing.name) ?? "",
+    property: chooseString(incoming.property, existing.property) ?? "",
+    stage: chooseString(incoming.stage, existing.stage) ?? "",
+    detail: chooseString(incoming.detail, existing.detail) ?? "",
+    email: chooseString(incoming.email, existing.email),
+    propertyId: chooseString(incoming.propertyId, existing.propertyId),
+    assignedPropertyId: chooseString(incoming.assignedPropertyId, existing.assignedPropertyId),
+    assignedRoomChoice: chooseString(incoming.assignedRoomChoice, existing.assignedRoomChoice),
+    managerUserId: chooseString(incoming.managerUserId ?? undefined, existing.managerUserId ?? undefined) ?? null,
+    moveInInstructions: chooseString(incoming.moveInInstructions, existing.moveInInstructions),
+    signedMonthlyRent: chooseNumber(incoming.signedMonthlyRent, existing.signedMonthlyRent),
+    manuallyAdded: incoming.manuallyAdded ?? existing.manuallyAdded,
+    application: incoming.application ?? existing.application,
+    manualResidentDetails: incoming.manualResidentDetails ?? existing.manualResidentDetails,
+  };
+}
+
+function mergeApplicationRows(existingRows: DemoApplicantRow[], incomingRows: DemoApplicantRow[]): DemoApplicantRow[] {
+  const existingById = new Map(normalizeApplicationRows(existingRows).map((row) => [row.id, row] as const));
+  return normalizeApplicationRows(
+    incomingRows.map((row) => {
+      const normalized = normalizeApplicationRow(row);
+      return mergeApplicationRow(existingById.get(normalized.id), normalized);
+    }),
+  );
+}
+
 function canUseStorage() {
   return typeof window !== "undefined";
 }
@@ -145,7 +193,7 @@ export async function syncManagerApplicationsFromServer(opts?: { force?: boolean
       const res = await fetch("/api/manager-applications", { credentials: "include" });
       if (!res.ok) return readManagerApplicationRows();
       const body = (await res.json()) as { rows?: DemoApplicantRow[] };
-      const rows = normalizeApplicationRows(Array.isArray(body.rows) ? body.rows : []);
+      const rows = mergeApplicationRows(memoryRows, Array.isArray(body.rows) ? body.rows : []);
       const changed = applicationRowsChanged(memoryRows, rows);
       memoryRows = rows;
       persistManagerApplicationsToSession(rows);
@@ -173,7 +221,7 @@ export async function syncPublicApprovedApplicationsFromServer(opts?: { force?: 
       const res = await fetch("/api/public/approved-room-occupancy", { cache: "no-store" });
       if (!res.ok) return readManagerApplicationRows();
       const body = (await res.json()) as { rows?: DemoApplicantRow[] };
-      const rows = normalizeApplicationRows(Array.isArray(body.rows) ? body.rows : []);
+      const rows = mergeApplicationRows(memoryRows, Array.isArray(body.rows) ? body.rows : []);
       memoryRows = rows;
       publicApprovedApplicationsLastSyncedAt = Date.now();
       return rows;
