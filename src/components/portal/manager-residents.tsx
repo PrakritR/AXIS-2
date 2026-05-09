@@ -947,59 +947,30 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       showToast("Resident record not found.");
       return;
     }
-    const assignedPropId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
-    const assignedRoomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
+    const app = row.application;
+    const assignedPropId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || app?.propertyId?.trim() || "";
+    const assignedRoomChoice = row.assignedRoomChoice?.trim() || app?.roomChoice1?.trim() || "";
     const assignedRoomId =
       assignedPropId && assignedRoomChoice.startsWith(`${assignedPropId}${LISTING_ROOM_CHOICE_SEP}`)
         ? assignedRoomChoice.slice(`${assignedPropId}${LISTING_ROOM_CHOICE_SEP}`.length)
-        : "";
-    setErName(row.name || "");
-    setErEmail(row.email?.trim() || "");
+        : assignedRoomChoice;
+    setErName(row.name || app?.fullLegalName?.trim() || "");
+    setErEmail(row.email?.trim() || app?.email?.trim() || "");
     setErPropertyId(assignedPropId);
     setErRoomId(assignedRoomId);
-    setErLeaseTerm(row.manualResidentDetails?.leaseTerm || "");
-    setErMoveInDate(row.manualResidentDetails?.moveInDate || "");
-    setErMoveOutDate(row.manualResidentDetails?.moveOutDate || "");
-    setErRent(Number.isFinite(row.signedMonthlyRent ?? NaN) ? String(row.signedMonthlyRent ?? "") : "");
-    setErUtilities(row.manualResidentDetails?.monthlyUtilities != null ? String(row.manualResidentDetails.monthlyUtilities) : "");
-    setErMoveInFee(row.manualResidentDetails?.moveInFee != null ? String(row.manualResidentDetails.moveInFee) : "");
-    setErSecurityDeposit(
-      row.manualResidentDetails?.securityDeposit != null ? String(row.manualResidentDetails.securityDeposit) : "",
-    );
+    setErLeaseTerm(row.manualResidentDetails?.leaseTerm || app?.leaseTerm || "");
+    setErMoveInDate(row.manualResidentDetails?.moveInDate || app?.leaseStart || "");
+    setErMoveOutDate(row.manualResidentDetails?.moveOutDate || app?.leaseEnd || "");
+    const savedRent = Number.isFinite(row.signedMonthlyRent ?? NaN) ? String(row.signedMonthlyRent ?? "") : "";
+    setErRent(savedRent || app?.managerRentOverride?.trim() || "");
+    const savedUtils = row.manualResidentDetails?.monthlyUtilities != null ? String(row.manualResidentDetails.monthlyUtilities) : "";
+    setErUtilities(savedUtils || app?.managerUtilitiesOverride?.trim() || "");
+    const savedFee = row.manualResidentDetails?.moveInFee != null ? String(row.manualResidentDetails.moveInFee) : "";
+    setErMoveInFee(savedFee || app?.managerMoveInFeeOverride?.trim() || "");
+    const savedDeposit = row.manualResidentDetails?.securityDeposit != null ? String(row.manualResidentDetails.securityDeposit) : "";
+    setErSecurityDeposit(savedDeposit || app?.managerSecurityDepositOverride?.trim() || "");
     setErNotes(row.manualResidentDetails?.notes || "");
     setEditResidentOpen(true);
-  }
-
-  function pullFromApplication() {
-    if (!selected) return;
-    const row = readManagerApplicationRows().find((r) => r.id === selected.id);
-    const app = row?.application;
-    if (!app) {
-      showToast("No application found for this resident.");
-      return;
-    }
-    if (app.fullLegalName?.trim()) setErName(app.fullLegalName.trim());
-    if (app.email?.trim()) setErEmail(app.email.trim());
-    // Property + room
-    const appPropId = app.propertyId?.trim() || "";
-    if (appPropId && propertyOptions.some((p) => p.id === appPropId)) {
-      setErPropertyId(appPropId);
-      const sep = LISTING_ROOM_CHOICE_SEP;
-      const roomChoice = app.roomChoice1?.trim() || "";
-      const roomId =
-        roomChoice.startsWith(`${appPropId}${sep}`)
-          ? roomChoice.slice(`${appPropId}${sep}`.length)
-          : roomChoice;
-      setErRoomId(roomId);
-    }
-    if (app.leaseTerm?.trim()) setErLeaseTerm(app.leaseTerm.trim());
-    if (app.leaseStart?.trim()) setErMoveInDate(app.leaseStart.trim());
-    if (app.leaseEnd?.trim()) setErMoveOutDate(app.leaseEnd.trim());
-    if (app.managerRentOverride?.trim()) setErRent(app.managerRentOverride.trim());
-    if (app.managerUtilitiesOverride?.trim()) setErUtilities(app.managerUtilitiesOverride.trim());
-    if (app.managerMoveInFeeOverride?.trim()) setErMoveInFee(app.managerMoveInFeeOverride.trim());
-    if (app.managerSecurityDepositOverride?.trim()) setErSecurityDeposit(app.managerSecurityDepositOverride.trim());
-    showToast("Fields filled from application.");
   }
 
   function saveEditedResident() {
@@ -1023,13 +994,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     const selectedRoomLabel = erRoomId ? erRoomOptions.find((room) => room.id === erRoomId)?.name?.trim() ?? "" : "";
 
     const existing = rows[idx]!;
+    const newRoomChoice = propId && erRoomId ? `${propId}${LISTING_ROOM_CHOICE_SEP}${erRoomId}` : undefined;
     const nextRow: DemoApplicantRow = {
       ...existing,
       name: erName.trim(),
       email: erEmail.trim() || existing.email,
       property: propLabel,
       assignedPropertyId: propId || undefined,
-      assignedRoomChoice: propId && erRoomId ? `${propId}${LISTING_ROOM_CHOICE_SEP}${erRoomId}` : undefined,
+      assignedRoomChoice: newRoomChoice,
       signedMonthlyRent: rent ?? undefined,
       manualResidentDetails: {
         ...(existing.manualResidentDetails ?? {}),
@@ -1042,6 +1014,23 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         leaseTerm: erLeaseTerm || undefined,
         notes: erNotes.trim() || undefined,
       },
+      // Mirror all edits back into the application so both views stay consistent.
+      application: existing.application
+        ? {
+            ...existing.application,
+            fullLegalName: erName.trim() || existing.application.fullLegalName,
+            email: erEmail.trim() || existing.application.email,
+            propertyId: propId || existing.application.propertyId,
+            roomChoice1: newRoomChoice ?? existing.application.roomChoice1,
+            leaseTerm: erLeaseTerm || existing.application.leaseTerm,
+            leaseStart: erMoveInDate || existing.application.leaseStart,
+            leaseEnd: erMoveOutDate || existing.application.leaseEnd,
+            managerRentOverride: erRent.trim() || existing.application.managerRentOverride,
+            managerUtilitiesOverride: erUtilities.trim() || existing.application.managerUtilitiesOverride,
+            managerMoveInFeeOverride: erMoveInFee.trim() || existing.application.managerMoveInFeeOverride,
+            managerSecurityDepositOverride: erSecurityDeposit.trim() || existing.application.managerSecurityDepositOverride,
+          }
+        : existing.application,
     };
 
     const next = [...rows];
@@ -2154,18 +2143,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <Modal open={editResidentOpen} title="Edit resident" onClose={() => setEditResidentOpen(false)}>
         <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">Update resident profile fields and lease details.</p>
-            {selected && readManagerApplicationRows().find((r) => r.id === selected.id)?.application ? (
-              <button
-                type="button"
-                onClick={pullFromApplication}
-                className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
-              >
-                Pull from application
-              </button>
-            ) : null}
-          </div>
+          <p className="text-xs text-slate-500">Changes here update the resident record and application simultaneously.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-slate-700">Full name *</span>
