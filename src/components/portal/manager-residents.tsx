@@ -970,6 +970,38 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setEditResidentOpen(true);
   }
 
+  function pullFromApplication() {
+    if (!selected) return;
+    const row = readManagerApplicationRows().find((r) => r.id === selected.id);
+    const app = row?.application;
+    if (!app) {
+      showToast("No application found for this resident.");
+      return;
+    }
+    if (app.fullLegalName?.trim()) setErName(app.fullLegalName.trim());
+    if (app.email?.trim()) setErEmail(app.email.trim());
+    // Property + room
+    const appPropId = app.propertyId?.trim() || "";
+    if (appPropId && propertyOptions.some((p) => p.id === appPropId)) {
+      setErPropertyId(appPropId);
+      const sep = LISTING_ROOM_CHOICE_SEP;
+      const roomChoice = app.roomChoice1?.trim() || "";
+      const roomId =
+        roomChoice.startsWith(`${appPropId}${sep}`)
+          ? roomChoice.slice(`${appPropId}${sep}`.length)
+          : roomChoice;
+      setErRoomId(roomId);
+    }
+    if (app.leaseTerm?.trim()) setErLeaseTerm(app.leaseTerm.trim());
+    if (app.leaseStart?.trim()) setErMoveInDate(app.leaseStart.trim());
+    if (app.leaseEnd?.trim()) setErMoveOutDate(app.leaseEnd.trim());
+    if (app.managerRentOverride?.trim()) setErRent(app.managerRentOverride.trim());
+    if (app.managerUtilitiesOverride?.trim()) setErUtilities(app.managerUtilitiesOverride.trim());
+    if (app.managerMoveInFeeOverride?.trim()) setErMoveInFee(app.managerMoveInFeeOverride.trim());
+    if (app.managerSecurityDepositOverride?.trim()) setErSecurityDeposit(app.managerSecurityDepositOverride.trim());
+    showToast("Fields filled from application.");
+  }
+
   function saveEditedResident() {
     if (!selected) return;
     if (!erName.trim()) {
@@ -2122,7 +2154,18 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <Modal open={editResidentOpen} title="Edit resident" onClose={() => setEditResidentOpen(false)}>
         <div className="space-y-3">
-          <p className="text-xs text-slate-500">Update resident profile fields and lease details.</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">Update resident profile fields and lease details.</p>
+            {selected && readManagerApplicationRows().find((r) => r.id === selected.id)?.application ? (
+              <button
+                type="button"
+                onClick={pullFromApplication}
+                className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+              >
+                Pull from application
+              </button>
+            ) : null}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-slate-700">Full name *</span>
