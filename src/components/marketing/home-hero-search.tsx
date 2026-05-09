@@ -103,7 +103,8 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   const zipValid = zipDigits.length === 5;
   const moveInSelected = moveIn.trim().length > 0;
   const budgetSelected = budget < BUDGET_MAX;
-  const roomSearchReady = moveInSelected && budgetSelected;
+  const hasActiveFilter = moveInSelected || budgetSelected || bathroom !== "any" || zipValid;
+  const roomSearchReady = hasActiveFilter;
   const pct = ((budget - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
   const filteredRooms = useMemo(
@@ -242,7 +243,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
           <p className="text-[13px] text-[#6e6e73]">
             {zipValid
               ? <>Rooms within <strong className="font-semibold text-[#1d1d1f]">{radius} mi</strong> of <strong className="font-semibold text-[#1d1d1f]">{zipDigits}</strong></>
-              : "Showing rooms matching your filters"
+              : "Rooms matching your filters"
             }
           </p>
           <a
