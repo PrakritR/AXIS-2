@@ -11,6 +11,7 @@ import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import {
   householdChargeToLedgerRow,
+  householdChargeDueDate,
   HOUSEHOLD_CHARGES_EVENT,
   readChargesForManager,
   reconcileApprovedResidentPaymentSchedules,
@@ -127,8 +128,20 @@ export function ManagerPayments() {
   const mergedRows = useMemo(() => {
     void ledgerDataVersion;
     const applications = readManagerApplicationRows();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const visibilityThreshold = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
     return [
-      ...readChargesForManager(userId).map((charge) => {
+      ...readChargesForManager(userId)
+        .filter((charge) => {
+          // Paid charges always show in the paid bucket
+          if (charge.status === "paid") return true;
+          // Unpaid charges only appear 7 days before their due date
+          const due = householdChargeDueDate(charge);
+          if (!due) return true;
+          return due <= visibilityThreshold;
+        })
+        .map((charge) => {
         const ledgerRow = householdChargeToLedgerRow(charge);
         const chargeEmail = charge.residentEmail.trim().toLowerCase();
         const application = applications.find((row) => {
@@ -140,7 +153,7 @@ export function ManagerPayments() {
         const roomChoice = application?.assignedRoomChoice?.trim() || application?.application?.roomChoice1?.trim() || "";
         const roomLabel = getRoomChoiceLabel(roomChoice).split(" · ")[0]?.trim() || "";
         return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
-      }),
+        }),
       ...mergeManagerPaymentLedger(),
     ];
   }, [userId, ledgerDataVersion]);
