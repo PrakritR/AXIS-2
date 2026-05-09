@@ -50,6 +50,12 @@ const KV_ROW = "flex gap-4 border-b border-slate-100 px-4 py-2.5 last:border-0";
 const KV_KEY = "w-36 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-400";
 const KV_VAL = "text-sm text-slate-700 whitespace-pre-wrap";
 
+function normFloor(raw: string): string {
+  if (!raw.trim()) return "—";
+  const hit = LISTING_ROOM_FLOOR_LEVEL_OPTIONS.find((o) => o.id === raw.trim());
+  return hit ? hit.label : raw.trim();
+}
+
 function normUtility(raw: string): string {
   const t = raw.trim().replace(/\/mo(nth)?\.?$/i, "").trim();
   if (!t) return "—";
@@ -588,7 +594,6 @@ export function ManagerListingInlineEditor({
                   <th className={TH}>Room</th>
                   <th className={TH}>Floor</th>
                   <th className={TH}>Rent/mo</th>
-                  <th className={TH}>Availability</th>
                   <th className={TH}>Move-in date</th>
                   <th className={TH}>Utilities est.</th>
                   <th className={TH}>Furnishing</th>
@@ -611,7 +616,7 @@ export function ManagerListingInlineEditor({
                             <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{room.detail}</p>
                           ) : null}
                         </td>
-                        <td className={TD}>{room.floor || "—"}</td>
+                        <td className={TD}>{normFloor(room.floor)}</td>
                         <td className={TD}>
                           {room.monthlyRent > 0 ? (
                             <span className="font-semibold text-slate-900">${room.monthlyRent.toLocaleString()}</span>
@@ -619,7 +624,6 @@ export function ManagerListingInlineEditor({
                             <span className="text-xs text-slate-400">—</span>
                           )}
                         </td>
-                        <td className={TD}>{room.availability || "—"}</td>
                         <td className={TD}>{room.moveInAvailableDate || "—"}</td>
                         <td className={TD}>{normUtility(room.utilitiesEstimate)}</td>
                         <td className={TD}>{normFurnishing(room.furnishing)}</td>
@@ -648,7 +652,7 @@ export function ManagerListingInlineEditor({
                       </tr>
                       {isEditing && roomDraft ? (
                         <tr className="border-b border-indigo-100">
-                          <td colSpan={9} className="bg-indigo-50/20 px-4 py-4">
+                          <td colSpan={8} className="bg-indigo-50/20 px-4 py-4">
                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                               <div>
                                 <label className={LABEL}>Room name</label>
@@ -686,16 +690,6 @@ export function ManagerListingInlineEditor({
                                   }
                                   className={INPUT}
                                   placeholder="950"
-                                />
-                              </div>
-                              <div>
-                                <label className={LABEL}>Availability</label>
-                                <input
-                                  type="text"
-                                  value={roomDraft.availability}
-                                  onChange={(e) => setRoomDraft((d) => d ? { ...d, availability: e.target.value } : d)}
-                                  className={INPUT}
-                                  placeholder="Available now"
                                 />
                               </div>
                               <div>
