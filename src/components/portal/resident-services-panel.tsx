@@ -40,6 +40,7 @@ import { getPropertyById } from "@/lib/rental-application/data";
 import {
   SERVICE_REQUESTS_EVENT,
   createServiceRequest,
+  deleteServiceRequest,
   readServiceRequestsForResident,
   submitReturnPhoto,
   hasDeposit,
@@ -97,9 +98,11 @@ function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
 function ServiceRequestCard({
   req,
   onReturnPhotoUploaded,
+  onDelete,
 }: {
   req: ServiceRequest;
   onReturnPhotoUploaded: () => void;
+  onDelete: () => void;
 }) {
   const { showToast } = useAppUi();
   const returnPhotoRef = useRef<HTMLInputElement>(null);
@@ -130,6 +133,13 @@ function ServiceRequestCard({
       setUploading(false);
       if (returnPhotoRef.current) returnPhotoRef.current.value = "";
     }
+  }
+
+  function removeRequest() {
+    if (!window.confirm("Delete this service request? This cannot be undone.")) return;
+    deleteServiceRequest(req.id);
+    onDelete();
+    showToast("Service request deleted.");
   }
 
   return (
@@ -252,6 +262,17 @@ function ServiceRequestCard({
           )}
         </div>
       ) : null}
+
+      <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+          onClick={removeRequest}
+        >
+          Delete request
+        </Button>
+      </div>
     </div>
   );
 }
@@ -518,6 +539,7 @@ export function ResidentServicesPanel() {
                 key={req.id}
                 req={req}
                 onReturnPhotoUploaded={reloadServiceRequests}
+                onDelete={reloadServiceRequests}
               />
             ))}
           </div>
@@ -643,7 +665,12 @@ export function ResidentServicesPanel() {
           </summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {deniedServiceRequests.map((req) => (
-              <ServiceRequestCard key={req.id} req={req} onReturnPhotoUploaded={reloadServiceRequests} />
+              <ServiceRequestCard
+                key={req.id}
+                req={req}
+                onReturnPhotoUploaded={reloadServiceRequests}
+                onDelete={reloadServiceRequests}
+              />
             ))}
           </div>
         </details>

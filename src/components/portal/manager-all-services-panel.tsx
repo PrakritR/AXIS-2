@@ -14,6 +14,7 @@ import {
 import {
   readServiceRequestsForManager,
   approveServiceRequest,
+  deleteServiceRequest,
   denyServiceRequest,
   markServiceRequestServicePaid,
   markServiceRequestDepositPaid,
@@ -351,6 +352,23 @@ export function ManagerAllServicesPanel() {
                             </div>
                           </div>
                         ) : null}
+
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 rounded-full border-rose-200 px-4 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                            onClick={() => {
+                              if (!window.confirm("Delete this request? This cannot be undone.")) return;
+                              deleteServiceRequest(req.id);
+                              setDataTick((t) => t + 1);
+                              setExpandedId(null);
+                              showToast("Request deleted.");
+                            }}
+                          >
+                            Delete request
+                          </Button>
+                        </div>
                       </div>
                     ) : null}
                   </div>
