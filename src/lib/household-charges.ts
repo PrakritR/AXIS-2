@@ -36,9 +36,11 @@ export type HouseholdChargeKind =
   | "application_fee"
   | "first_month_rent"
   | "prorated_rent"
+  | "prorated_last_month_rent"
   | "rent"
   | "utilities"
   | "prorated_utilities"
+  | "prorated_last_month_utilities"
   | "security_deposit"
   | "move_in_fee"
   | "other_cost"
@@ -97,7 +99,7 @@ export type RecurringRentProfile = {
   venmoContact?: string;
 };
 
-const FUTURE_RENT_VISIBILITY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const FUTURE_RENT_VISIBILITY_WINDOW_MS = 45 * 24 * 60 * 60 * 1000;
 
 function isBrowser() {
   return typeof window !== "undefined";
@@ -336,8 +338,10 @@ function chargeBusinessKey(charge: HouseholdCharge): string {
   if (charge.applicationId && (
     charge.kind === "first_month_rent" ||
     charge.kind === "prorated_rent" ||
+    charge.kind === "prorated_last_month_rent" ||
     charge.kind === "utilities" ||
     charge.kind === "prorated_utilities" ||
+    charge.kind === "prorated_last_month_utilities" ||
     charge.kind === "security_deposit" ||
     charge.kind === "move_in_fee" ||
     charge.kind === "other_cost"
@@ -503,6 +507,9 @@ export function chargeDueLabel(charge: HouseholdCharge): string {
     case "utilities":
     case "prorated_utilities":
       return "Before move-in";
+    case "prorated_last_month_rent":
+    case "prorated_last_month_utilities":
+      return "By lease end";
     default:
       return new Date(charge.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   }
@@ -516,12 +523,16 @@ function chargeTitle(kind: HouseholdChargeKind): string {
       return "First month's rent";
     case "prorated_rent":
       return "Prorated first month's rent";
+    case "prorated_last_month_rent":
+      return "Prorated last month's rent";
     case "rent":
       return "Monthly rent";
     case "utilities":
       return "Utilities";
     case "prorated_utilities":
       return "Prorated utilities";
+    case "prorated_last_month_utilities":
+      return "Prorated last month's utilities";
     case "security_deposit":
       return "Security deposit";
     case "move_in_fee":
@@ -543,7 +554,9 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
       return sub.applicationFee;
     case "first_month_rent":
     case "prorated_rent":
+    case "prorated_last_month_rent":
     case "prorated_utilities":
+    case "prorated_last_month_utilities":
     case "rent":
       return "$0";
     case "utilities":
@@ -854,6 +867,9 @@ function syncAllRecurringRentCharges(): boolean {
   const existing = readAll();
   const newCharges: HouseholdCharge[] = [];
 
+  // Build a map of profile id → profile for stale-charge cleanup
+  const profileById = new Map(profiles.map((p) => [p.id, p]));
+
   for (const profile of profiles) {
     const dueDay = Math.min(28, Math.max(1, Math.round(profile.dueDay ?? 1)));
     const [startYearRaw, startMonthRaw] = (profile.startMonth ?? "").split("-").map(Number);
@@ -895,8 +911,18 @@ function syncAllRecurringRentCharges(): boolean {
       const isPartialLastMonth = isLastMonth && leaseEndDay! < daysInCandidateMonth;
       const proratedFactor = isPartialLastMonth ? leaseEndDay! / daysInCandidateMonth : 1;
 
-      if (profile.monthlyRent > 0) {
-        const chargeKey = `rent|${profile.residentEmail.trim().toLowerCase()}|${profile.propertyId}|${rentMonth}`;
+      // When the last month is partial, recordApprovedApplicationCharges creates upfront prorated_last_month_rent
+      // charges so residents can see them from approval time. Skip the recurring-generated version.
+      const emailLower = profile.residentEmail.trim().toLowerCase();
+      const hasUpfrontLastRent = isPartialLastMonth && [...existing, ...newCharges].some(
+        (c) => c.kind === "prorated_last_month_rent" && c.residentEmail.trim().toLowerCase() === emailLower && c.propertyId === profile.propertyId,
+      );
+      const hasUpfrontLastUtil = isPartialLastMonth && [...existing, ...newCharges].some(
+        (c) => c.kind === "prorated_last_month_utilities" && c.residentEmail.trim().toLowerCase() === emailLower && c.propertyId === profile.propertyId,
+      );
+
+      if (profile.monthlyRent > 0 && !hasUpfrontLastRent) {
+        const chargeKey = `rent|${emailLower}|${profile.propertyId}|${rentMonth}`;
         const alreadyExists =
           existing.some((c) => chargeBusinessKey(c) === chargeKey) ||
           newCharges.some((c) => chargeBusinessKey(c) === chargeKey);
@@ -931,8 +957,8 @@ function syncAllRecurringRentCharges(): boolean {
       }
 
       const utilAmt = profile.monthlyUtilities ?? 0;
-      if (utilAmt > 0) {
-        const utilKey = `utilities_recurring|${profile.residentEmail.trim().toLowerCase()}|${profile.propertyId}|${rentMonth}`;
+      if (utilAmt > 0 && !hasUpfrontLastUtil) {
+        const utilKey = `utilities_recurring|${emailLower}|${profile.propertyId}|${rentMonth}`;
         const alreadyUtil =
           existing.some((c) => chargeBusinessKey(c) === utilKey) ||
           newCharges.some((c) => chargeBusinessKey(c) === utilKey);
@@ -968,8 +994,20 @@ function syncAllRecurringRentCharges(): boolean {
     }
   }
 
-  if (newCharges.length > 0) {
-    writeAll([...existing, ...newCharges], true);
+  // Remove stale pending recurring charges for months before each profile's startMonth.
+  // This cleans up incorrect charges created before the correct startMonth was computed.
+  const staleIds = new Set<string>();
+  for (const c of existing) {
+    if (c.status === "paid" || !c.recurringRentProfileId || !c.rentMonth) continue;
+    if (c.kind !== "rent" && c.kind !== "utilities") continue;
+    const prof = profileById.get(c.recurringRentProfileId);
+    if (!prof) continue;
+    if (c.rentMonth < prof.startMonth) staleIds.add(c.id);
+  }
+
+  const cleanedExisting = staleIds.size > 0 ? existing.filter((c) => !staleIds.has(c.id)) : existing;
+  if (newCharges.length > 0 || staleIds.size > 0) {
+    writeAll([...cleanedExisting, ...newCharges], true);
     emit();
     return true;
   }
@@ -1329,6 +1367,24 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     );
   }
 
+  // Prorated last month rent/utilities — created upfront so residents see the full charge picture on approval.
+  const leaseEnd = row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || undefined;
+  if (leaseEnd && rentAmount > 0) {
+    const [leEndY, leEndM, leEndD] = leaseEnd.split("-").map(Number);
+    if (leEndY && leEndM && leEndD) {
+      const daysInLeEndMonth = new Date(leEndY, leEndM, 0).getDate();
+      if (leEndD < daysInLeEndMonth) {
+        const lastMonthRentAmt = Number(((rentAmount * leEndD) / daysInLeEndMonth).toFixed(2));
+        const leEndDueLabel = `By ${new Date(leEndY, leEndM - 1, leEndD).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+        pushCharge("prorated_last_month_rent", lastMonthRentAmt, chargeTitle("prorated_last_month_rent"), false, leEndDueLabel);
+        if (utilities.amount > 0) {
+          const lastMonthUtilAmt = Number(((utilities.amount * leEndD) / daysInLeEndMonth).toFixed(2));
+          pushCharge("prorated_last_month_utilities", lastMonthUtilAmt, chargeTitle("prorated_last_month_utilities"), false, leEndDueLabel);
+        }
+      }
+    }
+  }
+
   const securityDeposit = savedAmount(
     row.application?.managerSecurityDepositOverride,
     row.manualResidentDetails?.securityDeposit != null ? String(row.manualResidentDetails.securityDeposit) : sub?.securityDeposit,
@@ -1380,7 +1436,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         monthlyUtilities: utilities.amount > 0 ? Number(utilities.amount.toFixed(2)) : 0,
         dueDay: 1,
         startMonth: computedStartMonth,
-        leaseEnd: row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || undefined,
+        leaseEnd,
         zelleContact: zelleSnap,
         venmoContact: venmoSnap,
       });
