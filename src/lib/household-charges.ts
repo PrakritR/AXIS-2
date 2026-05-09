@@ -433,7 +433,9 @@ function recurringRentDueDate(month: string | undefined, dueDay: number | undefi
 function parseDueDateLabelToDate(label: string | undefined): Date | null {
   const raw = label?.trim();
   if (!raw) return null;
-  const parsed = new Date(raw);
+  // Strip display prefixes like "By " or "Before " before attempting to parse
+  const stripped = raw.replace(/^(by|before)\s+/i, "").trim();
+  const parsed = new Date(stripped);
   if (Number.isNaN(parsed.getTime())) return null;
   return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 12, 0, 0, 0);
 }
@@ -490,6 +492,12 @@ function shouldDisplayChargeInPayments(charge: HouseholdCharge, now = new Date()
         return due.getTime() - now.getTime() <= UPCOMING_CHARGE_VISIBILITY_WINDOW_MS;
       }
       return true;
+    }
+    case "prorated_last_month_rent":
+    case "prorated_last_month_utilities": {
+      const due = parseDueDateLabelToDate(charge.dueDateLabel);
+      if (!due) return true;
+      return due.getTime() - now.getTime() <= UPCOMING_CHARGE_VISIBILITY_WINDOW_MS;
     }
     default:
       return true;
@@ -1487,7 +1495,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       const daysInLeEndMonth = new Date(leEndY, leEndM, 0).getDate();
       if (leEndD < daysInLeEndMonth) {
         const lastMonthRentAmt = Number(((rentAmount * leEndD) / daysInLeEndMonth).toFixed(2));
-        const leEndDueLabel = `By ${new Date(leEndY, leEndM - 1, leEndD).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+        const leEndDate = new Date(leEndY, leEndM - 1, leEndD);
+        const leEndReminderDate = new Date(leEndDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const leEndDueLabel = `By ${leEndReminderDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
         pushCharge("prorated_last_month_rent", lastMonthRentAmt, chargeTitle("prorated_last_month_rent"), false, leEndDueLabel);
         if (utilities.amount > 0) {
           const lastMonthUtilAmt = Number(((utilities.amount * leEndD) / daysInLeEndMonth).toFixed(2));
