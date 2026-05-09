@@ -121,11 +121,7 @@ export function resolveResidentMoveInFromApplications(
   let portalRoomInstructions: string | null = null;
   let roomLevelMoveInDate: string | null = null;
   let roomLevelInstructions: string | null = null;
-  let listingHouseInstructions: string | null = null;
-
   if (sub) {
-    listingHouseInstructions = sub.houseRulesText?.trim() || null;
-
     const parsed = roomChoice ? parseRoomChoiceValue(roomChoice) : null;
     listingRoomId = parsed?.listingRoomId ?? null;
     const manualRoomName = !isPropertyFallbackLabel(manualRoomNumber) ? manualRoomNumber.toLowerCase() : "";
@@ -149,30 +145,10 @@ export function resolveResidentMoveInFromApplications(
     portalRoomInstructions = portalNote.rooms?.[listingRoomId]?.moveInInstructions?.trim() || null;
   }
 
-  const rowLevelInstructions = row.moveInInstructions?.trim() || null;
-  const manualMoveInDate = row.manualResidentDetails?.moveInDate?.trim() || null;
-  const applicationMoveInDate = effective?.leaseStart?.trim() || null;
-
   earliestMoveInDateLabel = formatMoveInDateLabel(
-    firstNonEmpty(portalRoomMoveInDate, roomLevelMoveInDate, manualMoveInDate, applicationMoveInDate) ?? "",
+    firstNonEmpty(portalRoomMoveInDate, roomLevelMoveInDate) ?? "",
   ) || null;
-
-  // Combine instructions from all sources: portal override > room-specific > manager note > listing-wide
-  const instructionParts = [
-    portalRoomInstructions,
-    roomLevelInstructions,
-    rowLevelInstructions,
-    listingHouseInstructions,
-  ].filter((s): s is string => Boolean(s?.trim()));
-  // Deduplicate (same text from multiple sources)
-  const seen = new Set<string>();
-  const uniqueParts = instructionParts.filter((s) => {
-    const k = s.toLowerCase();
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-  const instructions = uniqueParts.length > 0 ? uniqueParts.join("\n\n") : null;
+  const instructions = firstNonEmpty(portalRoomInstructions, roomLevelInstructions);
 
   return {
     propertyLabel:
