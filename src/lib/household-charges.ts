@@ -1303,6 +1303,22 @@ export function markHouseholdChargePaid(chargeId: string, managerUserId: string 
   return true;
 }
 
+export function markHouseholdChargePending(chargeId: string, managerUserId: string | null): boolean {
+  const rows = readAll();
+  const i = rows.findIndex((r) => r.id === chargeId && chargeVisibleToManager(r, managerUserId));
+  if (i === -1) return false;
+  if (rows[i]!.status === "pending") return true;
+  const next = [...rows];
+  next[i] = {
+    ...next[i]!,
+    status: "pending",
+    paidAt: undefined,
+    balanceLabel: next[i]!.amountLabel,
+  };
+  writeAll(next);
+  return true;
+}
+
 /**
  * Marks the pending application-fee line paid after the applicant completes card payment (Stripe) in the apply flow.
  * Demo: simulates an immediate successful charge so submit can proceed without a manager action.

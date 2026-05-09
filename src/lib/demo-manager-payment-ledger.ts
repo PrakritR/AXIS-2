@@ -76,6 +76,18 @@ export function markManagerPaymentLedgerPaid(id: string): void {
   }
 }
 
+export function markManagerPaymentLedgerPending(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const next = new Set(readPaidIds());
+    if (!next.delete(id)) return;
+    writePaidIds(next);
+    emitChargesRefresh();
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Removes a built-in static row id from view, or a custom line from storage. */
 export function deleteManagerPaymentLedgerEntry(id: string): boolean {
   if (typeof window === "undefined") return false;

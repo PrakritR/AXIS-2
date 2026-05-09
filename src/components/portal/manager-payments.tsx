@@ -39,7 +39,10 @@ type HouseSort = "house-asc" | "house-desc";
 function normalizePropertyLabel(label: string): string {
   const trimmed = label.trim();
   if (!trimmed) return "";
-  return trimmed.replace(/\s+[.-]\s+[^\s]+::[^\s]+$/i, "").trim();
+  return trimmed
+    .replace(/\s*·\s*[^·]*::[^·]*$/i, "")
+    .replace(/\s+[.-]\s+[^\s]+::[^\s]+$/i, "")
+    .trim();
 }
 
 export function ManagerPayments() {

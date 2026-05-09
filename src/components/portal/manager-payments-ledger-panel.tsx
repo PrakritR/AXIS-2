@@ -19,8 +19,8 @@ import {
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
-import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid } from "@/lib/demo-manager-payment-ledger";
-import { deleteHouseholdCharge, markHouseholdChargePaid, updateHouseholdChargeAmount } from "@/lib/household-charges";
+import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
+import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
 
 function statusTone(label: string) {
@@ -86,6 +86,23 @@ export function ManagerPaymentsLedgerPanel({
     }
     markManagerPaymentLedgerPaid(row.id);
     showToast(toastMessage);
+    setExpandedId(null);
+    onRowsChanged?.();
+  };
+
+  const moveToPending = (row: DemoManagerPaymentLedgerRow) => {
+    if (row.householdChargeId) {
+      if (markHouseholdChargePending(row.householdChargeId, managerUserId)) {
+        showToast("Moved to pending.");
+        setExpandedId(null);
+        onRowsChanged?.();
+        return;
+      }
+      showToast("Could not update this line.");
+      return;
+    }
+    markManagerPaymentLedgerPending(row.id);
+    showToast("Moved to pending.");
     setExpandedId(null);
     onRowsChanged?.();
   };
@@ -167,7 +184,7 @@ export function ManagerPaymentsLedgerPanel({
                           </>
                         ) : null}
                         {activeBucket !== "pending" ? (
-                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Moved to pending.")}>
+                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => moveToPending(row)}>
                             Move to pending
                           </Button>
                         ) : null}
