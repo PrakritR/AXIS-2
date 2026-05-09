@@ -44,7 +44,39 @@ export function resolveResidentPortalAxisId(input: {
 
 function normalizeApplicationRow(row: DemoApplicantRow): DemoApplicantRow {
   const nextId = normalizeApplicationAxisId(row.id);
-  return nextId === row.id ? row : { ...row, id: nextId };
+  const next = nextId === row.id ? row : { ...row, id: nextId };
+  return syncSignedRentFields(next);
+}
+
+function parseSignedRentValue(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? Number(value.toFixed(2)) : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed.replace(/[^\d.]/g, ""));
+    return Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : null;
+  }
+  return null;
+}
+
+function syncSignedRentFields(row: DemoApplicantRow): DemoApplicantRow {
+  const signedMonthlyRent = parseSignedRentValue(row.signedMonthlyRent);
+  const applicationRent = parseSignedRentValue(row.application?.managerRentOverride);
+  const canonicalRent = signedMonthlyRent ?? applicationRent;
+  if (canonicalRent == null) return row;
+
+  return {
+    ...row,
+    signedMonthlyRent: canonicalRent,
+    application: row.application
+      ? {
+          ...row.application,
+          managerRentOverride: String(canonicalRent),
+        }
+      : row.application,
+  };
 }
 
 function normalizeApplicationRows(rows: DemoApplicantRow[]): DemoApplicantRow[] {
@@ -69,10 +101,6 @@ function chooseString(primary: string | undefined, fallback: string | undefined)
 }
 
 function chooseNumber(primary: number | null | undefined, fallback: number | null | undefined): number | null | undefined {
-  return primary ?? fallback;
-}
-
-function mergeApplicationField<T>(primary: T | undefined, fallback: T | undefined): T | undefined {
   return primary ?? fallback;
 }
 
