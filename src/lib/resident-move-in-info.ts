@@ -82,15 +82,37 @@ export function resolveResidentMoveInFromApplications(
   const managerUserId = row.managerUserId?.trim() || property?.managerUserId?.trim() || "";
 
   // ── Room label: prefer specific room name, not building name ──────────────
-  let roomLabel: string;
+  // Pre-compute property-level strings to detect fallback labels returned by getRoomChoiceLabel
+  // when the specific room isn't found (it falls back to prop.title or buildingName · unitLabel).
+  const propertyTitleVariants = new Set(
+    [
+      property?.title?.trim(),
+      property?.buildingName?.trim(),
+      `${property?.buildingName?.trim() ?? ""} · ${property?.unitLabel?.trim() ?? ""}`.trim(),
+    ].filter(Boolean) as string[],
+  );
+
+  function isPropertyFallbackLabel(s: string): boolean {
+    if (!s) return true;
+    const sl = s.toLowerCase();
+    for (const v of propertyTitleVariants) {
+      if (sl === v.toLowerCase() || sl.startsWith(v.toLowerCase())) return true;
+    }
+    return false;
+  }
+
+  let roomLabel = "Your room";
+  const manualRoomNumber = row.manualResidentDetails?.roomNumber?.trim() || "";
   if (roomChoice) {
     const fullLabel = getRoomChoiceLabel(roomChoice);
-    // Take only the first segment (room name), strip floor/price info
-    roomLabel = fullLabel.split(" · ")[0]?.trim() || fullLabel;
-  } else if (row.manualResidentDetails?.roomNumber?.trim()) {
-    roomLabel = row.manualResidentDetails.roomNumber.trim();
-  } else {
-    roomLabel = "Your room";
+    const firstPart = fullLabel.split(" · ")[0]?.trim() || "";
+    if (firstPart && !isPropertyFallbackLabel(firstPart)) {
+      roomLabel = firstPart;
+    } else if (manualRoomNumber && !isPropertyFallbackLabel(manualRoomNumber)) {
+      roomLabel = manualRoomNumber;
+    }
+  } else if (manualRoomNumber && !isPropertyFallbackLabel(manualRoomNumber)) {
+    roomLabel = manualRoomNumber;
   }
 
   let earliestMoveInDateLabel: string | null = null;
@@ -106,14 +128,15 @@ export function resolveResidentMoveInFromApplications(
 
     const parsed = roomChoice ? parseRoomChoiceValue(roomChoice) : null;
     listingRoomId = parsed?.listingRoomId ?? null;
-    const manualRoomName = row.manualResidentDetails?.roomNumber?.trim().toLowerCase() || "";
+    const manualRoomName = !isPropertyFallbackLabel(manualRoomNumber) ? manualRoomNumber.toLowerCase() : "";
     const room =
       (listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : undefined) ??
       (manualRoomName ? sub.rooms.find((r) => r.name.trim().toLowerCase() === manualRoomName) : undefined);
 
     if (room) {
       listingRoomId = room.id;
-      if (room.name.trim()) roomLabel = room.name.trim();
+      const rn = room.name.trim();
+      if (rn && !isPropertyFallbackLabel(rn)) roomLabel = rn;
       roomLevelMoveInDate = room.moveInAvailableDate?.trim() || null;
       roomLevelInstructions = room.moveInInstructions?.trim() || null;
     }
