@@ -116,6 +116,8 @@ type ActiveResident = {
   propertyLabel: string;
   roomLabel: string;
   signedMonthlyRent: number | null;
+  leaseStart: string;
+  leaseEnd: string;
   axisId: string;
   manuallyAdded?: boolean;
   moveInInstructions?: string;
@@ -126,6 +128,14 @@ type ActiveResident = {
 type ResidentsTabId = "current" | "previous";
 
 const PREVIOUS_RESIDENT_STAGE_TOKENS = ["moved out", "previous", "past", "former", "inactive"];
+
+function shortDateLabel(iso: string): string {
+  const parts = iso.trim().split("-").map(Number);
+  if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) return iso;
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
+}
 
 function isPreviousResidentRow(row: DemoApplicantRow): boolean {
   const moveOut = row.manualResidentDetails?.moveOutDate?.trim();
@@ -463,14 +473,19 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           row.manualResidentDetails?.roomNumber?.trim() ||
           getRoomChoiceLabel(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "").split(" · ")[0]?.trim() ||
           "";
+        const propertyLabel = (prop?.buildingName?.trim() || prop?.title?.trim()?.replace(/\s*·\s*\d+\s*rooms?\s*$/i, "") || row.property || "").trim();
+        const leaseStart = (row.application?.leaseStart?.trim() || row.manualResidentDetails?.moveInDate?.trim() || "");
+        const leaseEnd = (row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || "");
         return {
           id: row.id,
           name: row.name,
           email: row.email!.trim(),
           propertyId: propId,
-          propertyLabel: prop?.title?.trim() || row.property,
+          propertyLabel,
           roomLabel,
           signedMonthlyRent: row.signedMonthlyRent ?? null,
+          leaseStart,
+          leaseEnd,
           axisId: normalizeApplicationAxisId(row.id),
           manuallyAdded: row.manuallyAdded,
           moveInInstructions: row.moveInInstructions,
@@ -485,7 +500,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     const labelById = new Map<string, string>();
     if (userId) {
       for (const p of readExtraListingsForUser(userId)) {
-        labelById.set(p.id, (p.title || p.buildingName || p.address || p.id).trim());
+        labelById.set(p.id, (p.buildingName || p.title?.replace(/\s*·\s*\d+\s*rooms?\s*$/i, "") || p.address || p.id).trim());
       }
       for (const p of readPendingManagerPropertiesForUser(userId)) {
         const label = [p.buildingName, p.address].filter(Boolean).join(" · ").trim() || p.id;
@@ -1247,7 +1262,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Email</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-                  <th className={`${MANAGER_TABLE_TH} text-right`}>Monthly rent</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
                   <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
               </thead>
@@ -1268,9 +1284,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                       <td className={PORTAL_TABLE_TD}>{res.email}</td>
                       <td className={PORTAL_TABLE_TD}>{res.propertyLabel || "—"}</td>
                       <td className={PORTAL_TABLE_TD}>{res.roomLabel || "—"}</td>
-                      <td className={`${PORTAL_TABLE_TD} text-right tabular-nums`}>
-                        {res.signedMonthlyRent ? `$${res.signedMonthlyRent.toFixed(2)}/mo` : "—"}
-                      </td>
+                      <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseStart ? shortDateLabel(res.leaseStart) : "—"}</td>
+                      <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseEnd ? shortDateLabel(res.leaseEnd) : "—"}</td>
                       <td className={`${PORTAL_TABLE_TD} text-right`}>
                         <Button
                           type="button"
@@ -1284,7 +1299,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                     </tr>
                     {selectedId === res.id && selected ? (
                       <tr>
-                        <td colSpan={6} className="bg-slate-50/60 px-4 py-5">
+                        <td colSpan={7} className="bg-slate-50/60 px-4 py-5">
                           <div className="flex flex-col gap-4">
                             <div className="rounded-2xl border border-slate-200 bg-white p-4">
                               <div className="flex flex-wrap items-center justify-between gap-2">

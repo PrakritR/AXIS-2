@@ -412,7 +412,7 @@ function ManagerPropertyInlineDetails({
       <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Details</p>
-          <h3 className="mt-2 text-base font-semibold text-slate-950">{mock.title}</h3>
+          <h3 className="mt-2 text-base font-semibold text-slate-950">{mock.buildingName || mock.title.replace(/\s*·\s*\d+\s*rooms?\s*$/i, "")}</h3>
           <p className="mt-1 text-sm text-slate-600">{mock.address}</p>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">{mock.tagline}</p>
           <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
@@ -571,7 +571,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                       <tr className={PORTAL_TABLE_TR}>
                         <td className={PORTAL_TABLE_TD}>
                           <p className="font-medium text-slate-900">
-                            {row.buildingName} · {row.unitLabel}
+                            {row.buildingName}
                           </p>
                           <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
                             {row.address}
