@@ -41,6 +41,14 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
 
 type HouseSort = "house-asc" | "house-desc";
 
+const PAYMENT_ACCOUNT_EXCLUSIONS = ["sharad ramachandran", "sharad"] as const;
+
+function shouldExcludePaymentAccount(residentName: string, residentEmail?: string): boolean {
+  const name = residentName.trim().toLowerCase();
+  const email = (residentEmail ?? "").trim().toLowerCase();
+  return PAYMENT_ACCOUNT_EXCLUSIONS.some((token) => name.includes(token) || email.includes(token));
+}
+
 function normalizePropertyLabel(label: string): string {
   const trimmed = label.trim();
   if (!trimmed) return "";
@@ -136,7 +144,9 @@ export function ManagerPayments() {
     void ledgerDataVersion;
     const applications = readManagerApplicationRows();
     return [
-      ...readChargesForManager(userId).map((charge) => {
+      ...readChargesForManager(userId)
+        .filter((charge) => !shouldExcludePaymentAccount(charge.residentName, charge.residentEmail))
+        .map((charge) => {
         const ledgerRow = householdChargeToLedgerRow(charge);
         const chargeEmail = charge.residentEmail.trim().toLowerCase();
         const application = applications.find((row) => {
@@ -149,7 +159,7 @@ export function ManagerPayments() {
         const roomLabel = getRoomChoiceLabel(roomChoice).split(" · ")[0]?.trim() || "";
         return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
       }),
-      ...mergeManagerPaymentLedger(),
+      ...mergeManagerPaymentLedger().filter((row) => !shouldExcludePaymentAccount(row.residentName)),
     ];
   }, [userId, ledgerDataVersion]);
 
