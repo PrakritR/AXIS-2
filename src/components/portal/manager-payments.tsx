@@ -12,7 +12,6 @@ import {
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
-import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import {
@@ -278,9 +277,6 @@ export function ManagerPayments() {
       }
       filterRow={filterRow}
     >
-      <div className="mb-4 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
-        <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
-      </div>
       <ManagerPaymentsLedgerPanel
         rows={rowsForBucket}
         managerUserId={userId ?? null}
