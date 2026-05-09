@@ -81,16 +81,29 @@ export function resolveResidentMoveInFromApplications(
   // Resolve managerUserId for portal notes lookup
   const managerUserId = row.managerUserId?.trim() || property?.managerUserId?.trim() || "";
 
-  let roomLabel = roomChoice ? getRoomChoiceLabel(roomChoice) : row.property?.trim() || "Your room";
+  // ── Room label: prefer specific room name, not building name ──────────────
+  let roomLabel: string;
+  if (roomChoice) {
+    const fullLabel = getRoomChoiceLabel(roomChoice);
+    // Take only the first segment (room name), strip floor/price info
+    roomLabel = fullLabel.split(" · ")[0]?.trim() || fullLabel;
+  } else if (row.manualResidentDetails?.roomNumber?.trim()) {
+    roomLabel = row.manualResidentDetails.roomNumber.trim();
+  } else {
+    roomLabel = "Your room";
+  }
+
   let earliestMoveInDateLabel: string | null = null;
-  let instructions: string | null = null;
   let listingRoomId: string | null = null;
   let portalRoomMoveInDate: string | null = null;
   let portalRoomInstructions: string | null = null;
   let roomLevelMoveInDate: string | null = null;
   let roomLevelInstructions: string | null = null;
+  let listingHouseInstructions: string | null = null;
 
   if (sub) {
+    listingHouseInstructions = sub.houseRulesText?.trim() || null;
+
     const parsed = roomChoice ? parseRoomChoiceValue(roomChoice) : null;
     listingRoomId = parsed?.listingRoomId ?? null;
     const manualRoomName = row.manualResidentDetails?.roomNumber?.trim().toLowerCase() || "";
@@ -120,10 +133,31 @@ export function resolveResidentMoveInFromApplications(
   earliestMoveInDateLabel = formatMoveInDateLabel(
     firstNonEmpty(portalRoomMoveInDate, roomLevelMoveInDate, manualMoveInDate, applicationMoveInDate) ?? "",
   ) || null;
-  instructions = firstNonEmpty(portalRoomInstructions, roomLevelInstructions, rowLevelInstructions);
+
+  // Combine instructions from all sources: portal override > room-specific > manager note > listing-wide
+  const instructionParts = [
+    portalRoomInstructions,
+    roomLevelInstructions,
+    rowLevelInstructions,
+    listingHouseInstructions,
+  ].filter((s): s is string => Boolean(s?.trim()));
+  // Deduplicate (same text from multiple sources)
+  const seen = new Set<string>();
+  const uniqueParts = instructionParts.filter((s) => {
+    const k = s.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  const instructions = uniqueParts.length > 0 ? uniqueParts.join("\n\n") : null;
 
   return {
-    propertyLabel: sub?.buildingName || property?.buildingName || property?.title || row.property?.trim() || "Your property",
+    propertyLabel:
+      sub?.buildingName?.trim() ||
+      property?.buildingName?.trim() ||
+      property?.title?.trim() ||
+      row.property?.trim() ||
+      "Your property",
     addressLine: sub ? [sub.address, sub.zip].filter(Boolean).join(", ").trim() : property?.address?.trim() || "",
     roomLabel,
     earliestMoveInDateLabel,

@@ -91,7 +91,6 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   const zipValid = zipDigits.length === 5;
   /** Hero search only runs once a concrete move-in date is chosen (YYYY-MM-DD from date input). */
   const moveInSelected = moveIn.trim().length > 0;
-  const hasOtherFilters = zipValid || budget < BUDGET_MAX || bathroom !== "any" || moveOut.trim().length > 0;
   const pct = ((budget - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
   const filteredRooms = useMemo(
@@ -105,6 +104,11 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         moveOut,
       }),
     [combinedProperties, zipDigits, radius, budget, bathroom, moveIn, moveOut],
+  );
+
+  const allRooms = useMemo(
+    () => filterRoomListings(combinedProperties, { zipRaw: "", radiusMiles: 10, maxBudgetNum: null, bathroom: "any" }),
+    [combinedProperties],
   );
 
   const listingsHref = useMemo(() => {
@@ -209,12 +213,6 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
 
       <div className="my-6 h-px w-full bg-black/[0.05]" />
 
-      {hasOtherFilters && !moveInSelected ? (
-        <p className="text-center text-[13px] font-medium text-amber-800/90">
-          Select a <span className="whitespace-nowrap">move-in date</span> to run your search.
-        </p>
-      ) : null}
-
       {moveInSelected ? (
         <div className="flex w-full flex-col items-center gap-3 text-center">
           <p className="text-[13px] text-[#6e6e73]">
@@ -253,17 +251,37 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-3 text-center">
-          <span className="text-[#6e6e73]/25" aria-hidden><SearchIcon size={26} /></span>
-          <p className="text-[13px] text-[#6e6e73]/60">
-            Choose a <span className="font-medium text-[#6e6e73]">move-in date</span> to search listings. ZIP, budget, and bath filters are optional.
-          </p>
-          <Link
-            href="/rent/listings"
-            className="inline-flex min-h-[48px] w-full max-w-xs items-center justify-center rounded-full border border-[#007aff]/35 bg-[#007aff]/[0.06] px-6 py-3 text-[14px] font-semibold text-[#007aff] transition hover:bg-[#007aff]/[0.1] sm:min-h-0 sm:w-auto sm:py-2 sm:text-[13px]"
-          >
-            View all rooms
-          </Link>
+        <div className="w-full">
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-sm font-semibold text-[#1d1d1f]">
+              {allRooms.length} room{allRooms.length === 1 ? "" : "s"} available
+            </p>
+            <Link
+              href="/rent/listings"
+              className="text-[13px] font-semibold text-[#007aff] hover:underline underline-offset-2"
+            >
+              View all →
+            </Link>
+          </div>
+          {allRooms.length === 0 ? (
+            <p className="py-6 text-center text-[13px] text-[#6e6e73]">No listings available yet.</p>
+          ) : (
+            <div className="grid w-full gap-4 sm:grid-cols-2">
+              {allRooms.slice(0, 6).map((room) => (
+                <RoomListingCard key={room.key} row={room} />
+              ))}
+            </div>
+          )}
+          {allRooms.length > 6 && (
+            <div className="mt-5 text-center">
+              <Link
+                href="/rent/listings"
+                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#007aff] hover:underline underline-offset-2"
+              >
+                See all {allRooms.length} rooms →
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -47,11 +47,18 @@ export function ResidentMoveInPanel() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Assigned room</p>
                   <p className="mt-1 text-sm font-semibold text-slate-900">{resolved.roomLabel}</p>
-                  {resolved.propertyLabel ? <p className="mt-1 text-sm text-slate-600">{resolved.propertyLabel}</p> : null}
+                  {resolved.propertyLabel ? (
+                    <p className="mt-0.5 text-sm text-slate-600">{resolved.propertyLabel}</p>
+                  ) : null}
+                  {resolved.addressLine ? (
+                    <p className="mt-0.5 text-xs text-slate-400">{resolved.addressLine}</p>
+                  ) : null}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move-in available</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">{resolved.earliestMoveInDateLabel ?? "Not set yet"}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move-in date</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {resolved.earliestMoveInDateLabel ?? "Not set yet"}
+                  </p>
                 </div>
               </div>
             ) : null}
@@ -59,8 +66,8 @@ export function ResidentMoveInPanel() {
             <div className="mt-3 whitespace-pre-wrap text-slate-700">
               {resolved?.instructions ?? (
                 <span className="text-slate-500">
-                  No move-in instructions were added for this room yet. Your property manager can add keys, parking, access
-                  codes, and a checklist when they edit the listing.
+                  No move-in instructions have been added for this room yet. Your property manager can add keys,
+                  parking, access codes, and house rules when they edit the listing.
                 </span>
               )}
             </div>
