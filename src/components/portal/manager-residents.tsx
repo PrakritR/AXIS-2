@@ -123,6 +123,8 @@ type ActiveResident = {
   moveInInstructions?: string;
   manualResidentDetails?: NonNullable<import("@/data/demo-portal").DemoApplicantRow["manualResidentDetails"]>;
   isPrevious: boolean;
+  /** null = no Axis account yet; true = resident set their own password; false = still on auto-provisioned default */
+  portalSetup: boolean | null;
 };
 
 type ResidentsTabId = "current" | "previous";
@@ -296,6 +298,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [chargeBlocksLease, setChargeBlocksLease] = useState(false);
   const [chargeTab, setChargeTab] = useState<"pending" | "paid">("pending");
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
+  const [portalSetupMap, setPortalSetupMap] = useState<Map<string, boolean>>(new Map());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
   const [generatingLeaseRowId, setGeneratingLeaseRowId] = useState<string | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
@@ -432,26 +435,31 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       ),
     ];
     let cancelled = false;
-    void Promise.resolve().then(() => {
+    void Promise.resolve().then(async () => {
       if (cancelled) return;
       if (emails.length === 0) {
         setResidentAccountEmails(new Set());
+        setPortalSetupMap(new Map());
         return;
       }
-      return fetch("/api/manager/resident-account-emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emails }),
-      })
-        .then(async (res) => {
-          const body = (await res.json()) as { emails?: string[] };
-          if (!cancelled && res.ok) {
-            setResidentAccountEmails(new Set((body.emails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean)));
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setResidentAccountEmails(new Set());
-        });
+      const opts = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emails }) };
+      const [accountRes, portalRes] = await Promise.allSettled([
+        fetch("/api/manager/resident-account-emails", opts),
+        fetch("/api/manager/resident-portal-status", opts),
+      ]);
+      if (cancelled) return;
+      if (accountRes.status === "fulfilled" && accountRes.value.ok) {
+        const body = (await accountRes.value.json()) as { emails?: string[] };
+        if (!cancelled) setResidentAccountEmails(new Set((body.emails ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean)));
+      }
+      if (portalRes.status === "fulfilled" && portalRes.value.ok) {
+        const body = (await portalRes.value.json()) as { statuses?: { email: string; portalSetup: boolean }[] };
+        if (!cancelled) {
+          const map = new Map<string, boolean>();
+          for (const s of body.statuses ?? []) map.set(s.email.trim().toLowerCase(), s.portalSetup);
+          setPortalSetupMap(map);
+        }
+      }
     });
     return () => {
       cancelled = true;
@@ -476,6 +484,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         const propertyLabel = (prop?.buildingName?.trim() || prop?.title?.trim()?.replace(/\s*·\s*\d+\s*rooms?\s*$/i, "") || row.property || "").trim();
         const leaseStart = (row.application?.leaseStart?.trim() || row.manualResidentDetails?.moveInDate?.trim() || "");
         const leaseEnd = (row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || "");
+        const emailKey = row.email!.trim().toLowerCase();
+        const hasAccount = residentAccountEmails.has(emailKey);
+        const portalSetup = hasAccount ? (portalSetupMap.get(emailKey) ?? false) : null;
         return {
           id: row.id,
           name: row.name,
@@ -491,9 +502,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           moveInInstructions: row.moveInInstructions,
           manualResidentDetails: row.manualResidentDetails,
           isPrevious: isPreviousResidentRow(row),
+          portalSetup,
         };
       });
-  }, [userId, hcTick, residentAccountEmails]);
+  }, [userId, hcTick, residentAccountEmails, portalSetupMap]);
 
   const propertyOptions = useMemo(() => {
     void propertyTick;
@@ -1264,6 +1276,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Portal</th>
                   <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
               </thead>
@@ -1286,6 +1299,21 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                       <td className={PORTAL_TABLE_TD}>{res.roomLabel || "—"}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseStart ? shortDateLabel(res.leaseStart) : "—"}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseEnd ? shortDateLabel(res.leaseEnd) : "—"}</td>
+                      <td className={PORTAL_TABLE_TD}>
+                        {res.portalSetup === null ? (
+                          <span className="text-slate-400">—</span>
+                        ) : res.portalSetup ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200/80">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200/80">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                            Pending
+                          </span>
+                        )}
+                      </td>
                       <td className={`${PORTAL_TABLE_TD} text-right`}>
                         <Button
                           type="button"
@@ -1299,7 +1327,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                     </tr>
                     {selectedId === res.id && selected ? (
                       <tr>
-                        <td colSpan={7} className="bg-slate-50/60 px-4 py-5">
+                        <td colSpan={8} className="bg-slate-50/60 px-4 py-5">
                           <div className="flex flex-col gap-4">
                             <div className="rounded-2xl border border-slate-200 bg-white p-4">
                               <div className="flex flex-wrap items-center justify-between gap-2">
