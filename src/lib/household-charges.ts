@@ -190,11 +190,13 @@ export async function syncHouseholdChargesFromServer(force = false): Promise<{
       if (hasLocalOnlyCharges || hasLocalOnlyProfiles) {
         postHouseholdPayload({ action: "replace", charges: memoryCharges, rentProfiles: memoryRentProfiles });
       }
+      reconcileApprovedResidentPaymentSchedules(null);
       syncAllRecurringRentCharges();
       return { charges: readAll(), rentProfiles: readRentProfiles() };
     })
     .catch(() => {
       hydrateHouseholdStateFromSession();
+      reconcileApprovedResidentPaymentSchedules(null);
       syncAllRecurringRentCharges();
       return { charges: readAll(), rentProfiles: readRentProfiles() };
     });
@@ -652,7 +654,7 @@ function firstMonthRentChargeForLeaseStart(
   };
 }
 
-function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId" | "manualResidentDetails">): {
+function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId" | "manualResidentDetails" | "manuallyAdded">): {
   raw: string;
   amount: number;
 } {
@@ -660,6 +662,7 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
   if (override != null && override !== "") return { raw: override, amount: parseMoneyAmount(override) };
   const manualUtils = row.manualResidentDetails?.monthlyUtilities;
   if (manualUtils != null && manualUtils > 0) return { raw: String(manualUtils), amount: manualUtils };
+  if (row.manuallyAdded) return { raw: "", amount: 0 };
   const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const prop = getPropertyById(propertyId);
@@ -679,6 +682,7 @@ function selectedRoomRentAmount(row: DemoApplicantRow): number {
   }
   const signedRent = Number(row.signedMonthlyRent ?? 0);
   if (Number.isFinite(signedRent) && signedRent > 0) return signedRent;
+  if (row.manuallyAdded) return 0;
   const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const prop = getPropertyById(propertyId);
@@ -1363,6 +1367,7 @@ export function recordApplicationCharges(
 
 export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, managerUserId: string | null): boolean {
   if (!isBrowser()) return false;
+  if (row.manuallyAdded) return false;
   const residentEmail = row.email?.trim();
   if (!residentEmail || !residentEmail.includes("@")) return false;
   const pidAssigned = row.assignedPropertyId?.trim() || "";
@@ -1397,6 +1402,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
 
   const prop = getPropertyById(propertyId);
   const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  const allowListingDefaults = !row.manuallyAdded;
   const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Resident";
   const propertyLabel = prop?.title ?? row.property ?? "Listing";
   const effectiveManagerUserId = managerUserId ?? row.managerUserId ?? prop?.managerUserId ?? null;
@@ -1410,7 +1416,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     return parseMoneyAmount(fallback ?? "");
   };
   const before = readAll();
-  recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId);
+  if (!row.manuallyAdded) {
+    recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId);
+  }
   // Preserve paid charges — only wipe pending ones so they can be regenerated with correct amounts.
   const rows = readAll().filter(
     (charge) => !(charge.applicationId === applicationId && charge.kind !== "application_fee" && charge.status === "pending"),
@@ -1491,13 +1499,21 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
 
   const securityDeposit = savedAmount(
     row.application?.managerSecurityDepositOverride,
-    row.manualResidentDetails?.securityDeposit != null ? String(row.manualResidentDetails.securityDeposit) : sub?.securityDeposit,
+    row.manualResidentDetails?.securityDeposit != null
+      ? String(row.manualResidentDetails.securityDeposit)
+      : allowListingDefaults
+        ? sub?.securityDeposit
+        : undefined,
   );
   pushCharge("security_deposit", securityDeposit, chargeTitle("security_deposit"), true, "Before lease signing");
 
   const moveInFee = savedAmount(
     row.application?.managerMoveInFeeOverride,
-    row.manualResidentDetails?.moveInFee != null ? String(row.manualResidentDetails.moveInFee) : sub?.moveInFee,
+    row.manualResidentDetails?.moveInFee != null
+      ? String(row.manualResidentDetails.moveInFee)
+      : allowListingDefaults
+        ? sub?.moveInFee
+        : undefined,
   );
   pushCharge("move_in_fee", moveInFee, chargeTitle("move_in_fee"), false, "Before move-in");
 

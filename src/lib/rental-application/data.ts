@@ -83,53 +83,6 @@ function intervalsOverlap(
   return aStart <= bEnd && bStart <= aEnd;
 }
 
-function manualUnavailableRangesForRoomChoice(roomChoiceValue: string) {
-  const parsed = parseRoomChoiceValue(roomChoiceValue);
-  if (!parsed.listingRoomId || !parsed.propertyId) return [];
-  const prop = getPropertyById(parsed.propertyId);
-  if (!prop?.listingSubmission || prop.listingSubmission.v !== 1) return [];
-  const sub = normalizeManagerListingSubmissionV1(prop.listingSubmission);
-  const room = sub.rooms.find((r) => r.id === parsed.listingRoomId);
-  return room?.manualUnavailableRanges ?? [];
-}
-
-function structuredRoomForChoice(roomChoiceValue: string) {
-  const parsed = parseRoomChoiceValue(roomChoiceValue);
-  if (!parsed.listingRoomId || !parsed.propertyId) return null;
-  const prop = getPropertyById(parsed.propertyId);
-  if (!prop?.listingSubmission || prop.listingSubmission.v !== 1) return null;
-  const sub = normalizeManagerListingSubmissionV1(prop.listingSubmission);
-  return sub.rooms.find((r) => r.id === parsed.listingRoomId) ?? null;
-}
-
-function explicitAvailabilityBlocksRoom(rawAvailability: string | undefined | null): boolean {
-  const raw = String(rawAvailability ?? "").trim().toLowerCase();
-  if (!raw) return false;
-  return /\bunavailable\b|not available|signed.*not available|no longer available|not open\b|\bwaitlist\b|available soon/.test(raw);
-}
-
-function earliestRoomAvailabilityDate(roomChoiceValue: string, rawAvailability: string | undefined | null): Date | null {
-  const structured = structuredRoomForChoice(roomChoiceValue);
-  const structuredDate = parseFlexibleLocalDate(structured?.moveInAvailableDate);
-  if (structuredDate) return structuredDate;
-
-  const raw = String(rawAvailability ?? "").trim();
-  const afterMatch = raw.match(/available\s+after\s+(.+)/i);
-  return afterMatch ? parseFlexibleLocalDate(afterMatch[1]) : null;
-}
-
-/** True if proposed lease [targetStart, targetEnd] overlaps any manager-defined block (inclusive). */
-function leaseBlockedByManualRanges(roomChoiceValue: string, targetStart: Date, targetEnd: Date | null): boolean {
-  for (const range of manualUnavailableRangesForRoomChoice(roomChoiceValue)) {
-    const bs = parseFlexibleLocalDate(range.start);
-    const be = parseFlexibleLocalDate(range.end);
-    if (!bs || !be) continue;
-    if (be.getTime() < bs.getTime()) continue;
-    if (intervalsOverlap(targetStart, targetEnd, bs, be)) return true;
-  }
-  return false;
-}
-
 type ApprovedRoomOccupancy = {
   rowId: string;
   leaseStart: Date;
@@ -220,23 +173,7 @@ export function getRoomUnavailabilityWindows(
     })
     .filter((w) => w !== null);
 
-  const manualWindows = manualUnavailableRangesForRoomChoice(roomChoiceValue)
-    .map((range) => {
-      const start = parseFlexibleLocalDate(range.start);
-      const end = parseFlexibleLocalDate(range.end);
-      if (!start || !end) return null;
-      if (end.getTime() < start.getTime()) return null;
-      return {
-        id: `manual-${range.id}`,
-        start,
-        end,
-        label: `Blocked ${formatAvailabilityDate(start)} to ${formatAvailabilityDate(end)}`,
-        source: "manual_block" as const,
-      };
-    })
-    .filter((w) => w !== null);
-
-  return [...residentWindows, ...manualWindows].sort((a, b) => {
+  return [...residentWindows].sort((a, b) => {
     const at = a.start?.getTime() ?? Number.NEGATIVE_INFINITY;
     const bt = b.start?.getTime() ?? Number.NEGATIVE_INFINITY;
     return at - bt;
@@ -245,25 +182,15 @@ export function getRoomUnavailabilityWindows(
 
 export function isRoomChoiceAvailable(
   roomChoiceValue: string,
-  rawAvailability: string,
+  _rawAvailability: string,
   options: RoomAvailabilityOptions = {},
 ): boolean {
-  if (explicitAvailabilityBlocksRoom(rawAvailability)) {
-    return false;
-  }
   const targetStart = parseFlexibleLocalDate(options.leaseStart) ?? startOfToday();
   // When no end date is given (e.g. search with only move-in), treat as a point-in-time
   // check so we don't falsely conflict with occupancy windows outside the search date.
   const targetEnd = parseFlexibleLocalDate(options.leaseEnd) ?? targetStart;
-  const earliestAvailable = earliestRoomAvailabilityDate(roomChoiceValue, rawAvailability);
-  if (earliestAvailable && targetStart.getTime() < earliestAvailable.getTime()) {
-    return false;
-  }
   const occupancies = approvedOccupancyForRoom(roomChoiceValue, options.excludeApplicationId);
   if (occupancies.some((occ) => intervalsOverlap(targetStart, targetEnd, occ.leaseStart, occ.leaseEnd))) {
-    return false;
-  }
-  if (leaseBlockedByManualRanges(roomChoiceValue, targetStart, targetEnd)) {
     return false;
   }
   return true;
@@ -306,10 +233,7 @@ export function isRoomApprovedConflict(
   const targetStart = parseFlexibleLocalDate(leaseStart) ?? startOfToday();
   const targetEnd = parseFlexibleLocalDate(leaseEnd) ?? targetStart;
   const occupancies = approvedOccupancyForRoom(roomChoiceValue);
-  return (
-    occupancies.some((occ) => intervalsOverlap(targetStart, targetEnd, occ.leaseStart, occ.leaseEnd)) ||
-    leaseBlockedByManualRanges(roomChoiceValue, targetStart, targetEnd)
-  );
+  return occupancies.some((occ) => intervalsOverlap(targetStart, targetEnd, occ.leaseStart, occ.leaseEnd));
 }
 
 export function isRoomPendingConflict(
@@ -322,20 +246,11 @@ export function isRoomPendingConflict(
 
 export function effectiveRoomAvailabilityLabel(
   roomChoiceValue: string,
-  rawAvailability: string,
+  _rawAvailability: string,
   options: RoomAvailabilityOptions = {},
 ): string {
-  if (explicitAvailabilityBlocksRoom(rawAvailability)) {
-    return rawAvailability.trim() || "Unavailable";
-  }
-
   const today = startOfToday();
   const windows = getRoomUnavailabilityWindows(roomChoiceValue, { excludeApplicationId: options.excludeApplicationId });
-  const earliestAvailable = earliestRoomAvailabilityDate(roomChoiceValue, rawAvailability);
-
-  if (earliestAvailable && today.getTime() < earliestAvailable.getTime()) {
-    return `Available after ${formatAvailabilityDate(earliestAvailable)}`;
-  }
 
   // Check if today is within any unavailability window (point-in-time check).
   const currentBlock = windows.find((w) => {

@@ -90,7 +90,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "manager" || kind === "owner" || kind === "pro") {
-    if (section === "stripe") redirect(`${def.basePath}/payments/payouts`);
+    if (section === "stripe") redirect(`${def.basePath}/payments`);
   }
   const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
   const residentManagerTier =
@@ -238,18 +238,10 @@ export async function renderPortalSection(
       return subscriptionGated(<ManagerAllServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
     if (section === "payments") {
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/${section}/ledger`);
+      if (tabParts?.length) {
+        redirect(`${def.basePath}/${section}`);
       }
-      if (tabParts.length > 1) notFound();
-      const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "ledger") {
-        return subscriptionGated(<ManagerPayments view="ledger" />, kind, "payments", managerOwnerSubscriptionTier);
-      }
-      if (paymentsTab === "payouts") {
-        return subscriptionGated(<ManagerPayments view="payouts" />, kind, "payments", managerOwnerSubscriptionTier);
-      }
-      notFound();
+      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
@@ -341,18 +333,10 @@ export async function renderPortalSection(
       );
     }
     if (section === "payments") {
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/${section}/ledger`);
+      if (tabParts?.length) {
+        redirect(`${def.basePath}/${section}`);
       }
-      if (tabParts.length > 1) notFound();
-      const paymentsTab = tabParts[0]!;
-      if (paymentsTab === "ledger") {
-        return subscriptionGated(<ManagerPayments view="ledger" />, kind, "payments", managerOwnerSubscriptionTier);
-      }
-      if (paymentsTab === "payouts") {
-        return subscriptionGated(<ManagerPayments view="payouts" />, kind, "payments", managerOwnerSubscriptionTier);
-      }
-      notFound();
+      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
     if (section === "work-orders" || section === "services") {
       return subscriptionGated(<ManagerAllServicesPanel />, kind, "services", managerOwnerSubscriptionTier);

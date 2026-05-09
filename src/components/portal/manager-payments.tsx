@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
-import { TabNav, type TabItem } from "@/components/ui/tabs";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import {
@@ -36,12 +34,16 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "paid", label: "Paid" },
 ];
 
-type ManagerPaymentsView = "ledger" | "payouts";
 type HouseSort = "house-asc" | "house-desc";
 
-export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsView }) {
+function normalizePropertyLabel(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) return "";
+  return trimmed.replace(/\s+[.-]\s+[^\s]+::[^\s]+$/i, "").trim();
+}
+
+export function ManagerPayments() {
   const { showToast } = useAppUi();
-  const router = useRouter();
   const { userId, ready: authReady } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
@@ -101,9 +103,9 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
       }
     }
     if (payouts === "1") {
-      window.location.replace(`${portalBase}/payments/payouts`);
+      window.location.replace(`${portalBase}/payments`);
     } else if (connect === "done" || connect === "refresh") {
-      window.location.replace(`${portalBase}/payments/payouts?connect=${encodeURIComponent(connect)}`);
+      window.location.replace(`${portalBase}/payments?connect=${encodeURIComponent(connect)}`);
     }
   }, [portalBase]);
 
@@ -146,7 +148,7 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
   const propertyOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const row of mergedRows) {
-      const key = row.propertyName.trim();
+      const key = normalizePropertyLabel(row.propertyName);
       if (!key) continue;
       if (!seen.has(key)) seen.set(key, key);
     }
@@ -158,6 +160,7 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
   const residentOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const row of mergedRows) {
+      if (propertyFilter && normalizePropertyLabel(row.propertyName) !== propertyFilter) continue;
       const key = row.residentName.trim();
       if (!key) continue;
       if (!seen.has(key)) seen.set(key, key);
@@ -165,7 +168,9 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
     return [...seen.entries()]
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [mergedRows]);
+  }, [mergedRows, propertyFilter]);
+
+  const activeResidentFilter = residentOptions.some((option) => option.id === residentFilter) ? residentFilter : "";
 
   const counts = useMemo(() => {
     const c: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
@@ -179,23 +184,20 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
     () => PAY_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),
     [counts],
   );
-  const paymentTabs = useMemo<TabItem[]>(
-    () => [
-      { id: "ledger", label: "Ledger", href: `${portalBase}/payments/ledger` },
-      { id: "payouts", label: "Payouts", href: `${portalBase}/payments/payouts` },
-    ],
-    [portalBase],
-  );
-
   const rowsForBucket = useMemo(() => {
     const filtered = mergedRows.filter((r) => {
       if (r.bucket !== bucket) return false;
-      if (propertyFilter && r.propertyName !== propertyFilter) return false;
-      if (residentFilter && r.residentName !== residentFilter) return false;
+      if (propertyFilter && normalizePropertyLabel(r.propertyName) !== propertyFilter) return false;
+      if (activeResidentFilter && r.residentName !== activeResidentFilter) return false;
       return true;
     });
 
     return [...filtered].sort((a, b) => {
+      if (propertyFilter) {
+        const byResident = a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
+        const residentOrder = houseSort === "house-asc" ? byResident : -byResident;
+        if (residentOrder !== 0) return residentOrder;
+      }
       const byHouse = a.propertyName.localeCompare(b.propertyName, undefined, { sensitivity: "base" });
       const houseOrder = houseSort === "house-asc" ? byHouse : -byHouse;
       if (houseOrder !== 0) return houseOrder;
@@ -203,38 +205,13 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
       if (byResident !== 0) return byResident;
       return a.chargeTitle.localeCompare(b.chargeTitle, undefined, { sensitivity: "base" });
     });
-  }, [mergedRows, bucket, propertyFilter, residentFilter, houseSort]);
+  }, [mergedRows, bucket, propertyFilter, activeResidentFilter, houseSort]);
 
   const filterRow = (
     <div className="flex flex-col gap-4">
-      <TabNav items={paymentTabs} activeId={view} />
-      {view === "ledger" ? (
-        <>
-          <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-3 text-sm text-slate-800">
-            Set up <span className="font-semibold">Payouts</span> before creating a listing.{" "}
-            <button
-              type="button"
-              className="font-semibold text-primary underline underline-offset-2 hover:text-primary/90"
-              onClick={() => router.push(`${portalBase}/payments/payouts`)}
-            >
-              Open Payouts
-            </button>
-          </div>
-          <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
-        </>
-      ) : null}
+      <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
     </div>
   );
-
-  if (view === "payouts") {
-    return (
-      <ManagerPortalPageShell title="Payments" filterRow={filterRow}>
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
-          <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
-        </div>
-      </ManagerPortalPageShell>
-    );
-  }
 
   return (
     <ManagerPortalPageShell
@@ -244,14 +221,17 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
           <PortalPropertyFilterPill
             propertyOptions={propertyOptions}
             propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
+            onPropertyChange={(nextProperty) => {
+              setPropertyFilter(nextProperty);
+              setResidentFilter("");
+            }}
             residents
             residentOptions={residentOptions}
-            residentValue={residentFilter}
+            residentValue={activeResidentFilter}
             onResidentChange={setResidentFilter}
           />
           <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700">
-            Sort house
+            {propertyFilter ? "Sort resident" : "Sort house"}
             <select
               value={houseSort}
               onChange={(e) => setHouseSort(e.target.value as HouseSort)}
@@ -287,6 +267,9 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
       }
       filterRow={filterRow}
     >
+      <div className="mb-4 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
+        <PortalStripeConnectPanel variant="embedded" basePath={portalBase} />
+      </div>
       <ManagerPaymentsLedgerPanel
         rows={rowsForBucket}
         managerUserId={userId ?? null}

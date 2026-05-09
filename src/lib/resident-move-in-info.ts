@@ -168,7 +168,6 @@ export function resolveResidentMoveInFromApplications(
     roomLabel = manualRoomNumber;
   }
 
-  let roomLevelMoveInDate: string | null = null;
   let roomLevelInstructions: string | null = null;
   if (sub) {
     const parsed = roomChoice ? parseRoomChoiceValue(roomChoice) : null;
@@ -181,14 +180,15 @@ export function resolveResidentMoveInFromApplications(
     if (room) {
       const rn = room.name.trim();
       if (rn && !isPropertyFallbackLabel(rn)) roomLabel = rn;
-      roomLevelMoveInDate = room.moveInAvailableDate?.trim() || null;
       roomLevelInstructions = room.moveInInstructions?.trim() || null;
     }
   }
 
   const earliestMoveInDateLabel =
-    formatMoveInDateLabel(firstNonEmpty(row.manualResidentDetails?.moveInDate, roomLevelMoveInDate) ?? "") || null;
-  const instructions = firstNonEmpty(row.moveInInstructions, roomLevelInstructions);
+    formatMoveInDateLabel(
+      firstNonEmpty(row.manualResidentDetails?.moveInDate, row.application?.leaseStart) ?? "",
+    ) || null;
+  const instructions = firstNonEmpty(roomLevelInstructions, row.moveInInstructions);
 
   return {
     propertyLabel:

@@ -1364,9 +1364,6 @@ export function ManagerAddListingForm({
       rooms: sub.rooms.map((room) => ({
         ...room,
         roomAmenitiesText: sanitizeRoomAmenityText(room.roomAmenitiesText),
-        manualUnavailableRanges: (room.manualUnavailableRanges ?? [])
-          .filter((r) => r.start?.trim() && r.end?.trim() && r.start <= r.end)
-          .map((r) => ({ id: r.id, start: r.start.trim(), end: r.end.trim() })),
       })),
     };
     const roomsOk = submission.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
@@ -1376,19 +1373,6 @@ export function ManagerAddListingForm({
     }
     if (!roomsOk) {
       showToast("Add at least one room with a name and monthly rent.");
-      return;
-    }
-    const blockedRangesInvalid = sub.rooms.some((r) =>
-      (r.manualUnavailableRanges ?? []).some((range) => {
-        const s = range.start?.trim();
-        const e = range.end?.trim();
-        if (!s && !e) return false;
-        if (!s || !e) return true;
-        return s > e;
-      }),
-    );
-    if (blockedRangesInvalid) {
-      showToast("Blocked date ranges need both dates, and the end date must be on or after the start.");
       return;
     }
     if (submission.bathrooms.length > 0 && submission.bathrooms.every((b) => !b.name.trim())) {
@@ -2221,75 +2205,6 @@ export function ManagerAddListingForm({
                             onChange={(e) => setRoom(i, { utilitiesEstimate: e.target.value })}
                             placeholder="175"
                           />
-                        </div>
-                      </GridField>
-                      <GridField className="sm:col-span-2">
-                        <FieldLabel hint="Applicants cannot choose lease dates that overlap these inclusive spans. Approved placements for this room are also blocked automatically.">
-                          Blocked date ranges (optional)
-                        </FieldLabel>
-                        <div className="mt-2 space-y-3">
-                          {(room.manualUnavailableRanges ?? []).map((range, ri) => (
-                            <div
-                              key={range.id}
-                              className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/90 bg-slate-50/40 p-3 sm:items-center"
-                            >
-                              <div className="min-w-[10rem] flex-1">
-                                <span className="mb-1 block text-[11px] font-semibold text-slate-500">From</span>
-                                <Input
-                                  type="date"
-                                  value={range.start}
-                                  onChange={(e) => {
-                                    const next = [...(room.manualUnavailableRanges ?? [])];
-                                    next[ri] = { ...range, start: e.target.value };
-                                    setRoom(i, { manualUnavailableRanges: next });
-                                  }}
-                                  aria-label={`Blocked range start ${ri + 1}`}
-                                />
-                              </div>
-                              <div className="min-w-[10rem] flex-1">
-                                <span className="mb-1 block text-[11px] font-semibold text-slate-500">Through</span>
-                                <Input
-                                  type="date"
-                                  value={range.end}
-                                  onChange={(e) => {
-                                    const next = [...(room.manualUnavailableRanges ?? [])];
-                                    next[ri] = { ...range, end: e.target.value };
-                                    setRoom(i, { manualUnavailableRanges: next });
-                                  }}
-                                  aria-label={`Blocked range end ${ri + 1}`}
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                className="shrink-0 pb-2 text-xs font-semibold text-rose-600 hover:underline sm:pb-0"
-                                onClick={() => {
-                                  const next = (room.manualUnavailableRanges ?? []).filter((_, j) => j !== ri);
-                                  setRoom(i, { manualUnavailableRanges: next });
-                                }}
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          ))}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded-full text-xs"
-                            onClick={() =>
-                              setRoom(i, {
-                                manualUnavailableRanges: [
-                                  ...(room.manualUnavailableRanges ?? []),
-                                  {
-                                    id: `unavail-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                                    start: "",
-                                    end: "",
-                                  },
-                                ],
-                              })
-                            }
-                          >
-                            + Add blocked range
-                          </Button>
                         </div>
                       </GridField>
                       <div className="sm:col-span-2">

@@ -31,7 +31,8 @@ import {
   splitLineList,
 } from "@/data/manager-listing-presets";
 import type { PortalListingNote } from "@/lib/portal-listing-notes";
-import { getPortalListingNote, savePortalListingNote, savePortalRoomNote } from "@/lib/portal-listing-notes";
+import { getPortalListingNote, savePortalListingNote } from "@/lib/portal-listing-notes";
+import { uploadListingImageFiles, uploadListingVideoFile } from "@/lib/listing-media-client";
 
 // ─── shared style constants ──────────────────────────────────────────────────
 
@@ -240,16 +241,34 @@ function SaveRow({ onSave, onCancel, saving }: { onSave: () => void; onCancel: (
   );
 }
 
-function InlinePhotoStrip({ urls, emptyLabel }: { urls: string[] | undefined; emptyLabel: string }) {
+function InlinePhotoStrip({
+  urls,
+  emptyLabel,
+  onRemove,
+}: {
+  urls: string[] | undefined;
+  emptyLabel: string;
+  onRemove?: (index: number) => void;
+}) {
   if (!urls?.length) {
     return <p className="text-xs text-slate-400">{emptyLabel}</p>;
   }
   return (
     <div className="flex flex-wrap gap-2">
       {urls.slice(0, 6).map((url, index) => (
-        <div key={`${url.slice(0, 32)}-${index}`} className="h-16 w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+        <div key={`${url.slice(0, 32)}-${index}`} className="relative h-16 w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={url} alt="" className="h-full w-full object-cover" />
+          {onRemove ? (
+            <button
+              type="button"
+              className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-bl bg-black/60 text-xs font-bold text-white hover:bg-black/75"
+              onClick={() => onRemove(index)}
+              aria-label="Remove photo"
+            >
+              ×
+            </button>
+          ) : null}
         </div>
       ))}
       {urls.length > 6 ? (
@@ -294,9 +313,14 @@ export function ManagerListingInlineEditor({
   // ── section drafts ────────────────────────────────────────────────────────
   const [basicsDraft, setBasicsDraft] = useState<Partial<ManagerListingSubmissionV1>>({});
   const [overviewDraft, setOverviewDraft] = useState("");
+  const [mediaDraft, setMediaDraft] = useState<Pick<ManagerListingSubmissionV1, "housePhotoDataUrls" | "houseVideoDataUrl">>({
+    housePhotoDataUrls: [],
+    houseVideoDataUrl: null,
+  });
   const [leaseDraft, setLeaseDraft] = useState<Partial<ManagerListingSubmissionV1>>({});
   const [amenitiesDraft, setAmenitiesDraft] = useState("");
   const [qfDraft, setQfDraft] = useState<ManagerQuickFactRow[]>([]);
+  const [mediaUploadingKeys, setMediaUploadingKeys] = useState<Set<string>>(() => new Set());
 
   // ── portal notes state (house details) ────────────────────────────────────
   const [notesTick, setNotesTick] = useState(0);
@@ -316,6 +340,120 @@ export function ManagerListingInlineEditor({
       showToast(isListed ? `${msg} (sent for re-approval)` : msg);
     },
     [onSaveSub, showToast, isListed],
+  );
+
+  const withMediaUpload = useCallback(
+    async (key: string, work: () => Promise<void>) => {
+      setMediaUploadingKeys((current) => new Set([...current, key]));
+      try {
+        await work();
+      } finally {
+        setMediaUploadingKeys((current) => {
+          const next = new Set(current);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [],
+  );
+
+  const onPickRoomPhotos = useCallback(
+    async (files: FileList | null) => {
+      if (!files?.length || !roomDraft) return;
+      await withMediaUpload(`room-photos-${roomDraft.id}`, async () => {
+        const uploaded = await uploadListingImageFiles(Array.from(files).slice(0, 8 - roomDraft.photoDataUrls.length));
+        setRoomDraft((draft) =>
+          draft ? { ...draft, photoDataUrls: [...draft.photoDataUrls, ...uploaded].slice(0, 8) } : draft,
+        );
+      }).catch((error) => showToast(error instanceof Error ? error.message : "Could not upload room photos."));
+    },
+    [roomDraft, showToast, withMediaUpload],
+  );
+
+  const onPickRoomVideo = useCallback(
+    async (file: File | null) => {
+      if (!file || !roomDraft) return;
+      await withMediaUpload(`room-video-${roomDraft.id}`, async () => {
+        const uploaded = await uploadListingVideoFile(file);
+        setRoomDraft((draft) => (draft ? { ...draft, videoDataUrl: uploaded } : draft));
+      }).catch((error) => showToast(error instanceof Error ? error.message : "Could not upload room video."));
+    },
+    [roomDraft, showToast, withMediaUpload],
+  );
+
+  const onPickBathPhotos = useCallback(
+    async (files: FileList | null) => {
+      if (!files?.length || !bathDraft) return;
+      await withMediaUpload(`bath-photos-${bathDraft.id}`, async () => {
+        const uploaded = await uploadListingImageFiles(Array.from(files).slice(0, 8 - bathDraft.photoDataUrls.length));
+        setBathDraft((draft) =>
+          draft ? { ...draft, photoDataUrls: [...draft.photoDataUrls, ...uploaded].slice(0, 8) } : draft,
+        );
+      }).catch((error) => showToast(error instanceof Error ? error.message : "Could not upload bathroom photos."));
+    },
+    [bathDraft, showToast, withMediaUpload],
+  );
+
+  const onPickBathVideo = useCallback(
+    async (file: File | null) => {
+      if (!file || !bathDraft) return;
+      await withMediaUpload(`bath-video-${bathDraft.id}`, async () => {
+        const uploaded = await uploadListingVideoFile(file);
+        setBathDraft((draft) => (draft ? { ...draft, videoDataUrl: uploaded } : draft));
+      }).catch((error) => showToast(error instanceof Error ? error.message : "Could not upload bathroom video."));
+    },
+    [bathDraft, showToast, withMediaUpload],
+  );
+
+  const onPickSpacePhotos = useCallback(
+    async (files: FileList | null) => {
+      if (!files?.length || !spaceDraft) return;
+      await withMediaUpload(`space-photos-${spaceDraft.id}`, async () => {
+        const uploaded = await uploadListingImageFiles(Array.from(files).slice(0, 8 - spaceDraft.photoDataUrls.length));
+        setSpaceDraft((draft) =>
+          draft ? { ...draft, photoDataUrls: [...draft.photoDataUrls, ...uploaded].slice(0, 8) } : draft,
+        );
+      }).catch((error) => showToast(error instanceof Error ? error.message : "Could not upload shared-space photos."));
+    },
+    [spaceDraft, showToast, withMediaUpload],
+  );
+
+  const onPickSpaceVideo = useCallback(
+    async (file: File | null) => {
+      if (!file || !spaceDraft) return;
+      await withMediaUpload(`space-video-${spaceDraft.id}`, async () => {
+        const uploaded = await uploadListingVideoFile(file);
+        setSpaceDraft((draft) => (draft ? { ...draft, videoDataUrl: uploaded } : draft));
+      }).catch((error) => showToast(error instanceof Error ? error.message : "Could not upload shared-space video."));
+    },
+    [spaceDraft, showToast, withMediaUpload],
+  );
+
+  const onPickHousePhotos = useCallback(
+    async (files: FileList | null) => {
+      if (!files?.length) return;
+      await withMediaUpload("house-photos", async () => {
+        const currentPhotos = mediaDraft.housePhotoDataUrls ?? [];
+        const uploaded = await uploadListingImageFiles(Array.from(files).slice(0, 12 - currentPhotos.length));
+        setMediaDraft((draft) => ({
+          ...draft,
+          housePhotoDataUrls: [...(draft.housePhotoDataUrls ?? []), ...uploaded].slice(0, 12),
+        }));
+      }).catch((error) => showToast(error instanceof Error ? error.message : "Could not upload house photos."));
+    },
+    [mediaDraft.housePhotoDataUrls, showToast, withMediaUpload],
+  );
+
+  const onPickHouseVideo = useCallback(
+    async (file: File | null) => {
+      if (!file) return;
+      await withMediaUpload("house-video", async () => {
+        const uploaded = await uploadListingVideoFile(file);
+        setMediaDraft((draft) => ({ ...draft, houseVideoDataUrl: uploaded }));
+      }).catch((error) => showToast(error instanceof Error ? error.message : "Could not upload house video."));
+    },
+    [showToast, withMediaUpload],
   );
 
   const closeSection = useCallback(() => {
@@ -359,6 +497,26 @@ export function ManagerListingInlineEditor({
     setEditingSection(null);
   };
 
+  const startEditMedia = () => {
+    setMediaDraft({
+      housePhotoDataUrls: [...(sub.housePhotoDataUrls ?? [])],
+      houseVideoDataUrl: sub.houseVideoDataUrl ?? null,
+    });
+    setEditingSection("media");
+  };
+
+  const saveMedia = () => {
+    saveSub(
+      {
+        ...sub,
+        housePhotoDataUrls: [...(mediaDraft.housePhotoDataUrls ?? [])],
+        houseVideoDataUrl: mediaDraft.houseVideoDataUrl ?? null,
+      },
+      "Listing media saved.",
+    );
+    setEditingSection(null);
+  };
+
   // ── SECTION: ROOMS ────────────────────────────────────────────────────────
   const startEditRoom = (room: ManagerRoomSubmission) => {
     setRoomDraft({ ...room });
@@ -370,11 +528,6 @@ export function ManagerListingInlineEditor({
     if (!roomDraft) return;
     const updatedRooms = sub.rooms.map((r) => (r.id === roomDraft.id ? roomDraft : r));
     saveSub({ ...sub, rooms: updatedRooms }, "Room saved.");
-    // Also save move-in instructions to portal note for highest-priority override
-    if (noteKey && roomDraft.moveInInstructions?.trim()) {
-      savePortalRoomNote(noteKey, roomDraft.id, { moveInInstructions: roomDraft.moveInInstructions });
-      setNotesTick((t) => t + 1);
-    }
     closeSection();
   };
 
@@ -707,6 +860,114 @@ export function ManagerListingInlineEditor({
         )}
       </div>
 
+      <div className={`${SECTION_WRAP} border-slate-200`}>
+        <SectionHeader
+          title="Listing media"
+          color="slate"
+          isEditing={editingSection === "media"}
+          onEdit={() => (editingSection === "media" ? setEditingSection(null) : startEditMedia())}
+        />
+        {editingSection === "media" ? (
+          <div className="grid gap-4 p-4">
+            <div>
+              <label className={LABEL}>House photos</label>
+              <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        void onPickHousePhotos(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                    {mediaUploadingKeys.has("house-photos") ? "Uploading..." : "Upload house photos"}
+                  </label>
+                </div>
+                <div className="mt-3">
+                  <InlinePhotoStrip
+                    urls={mediaDraft.housePhotoDataUrls}
+                    emptyLabel="No house photos on this listing yet."
+                    onRemove={(photoIndex) =>
+                      setMediaDraft((draft) => ({
+                        ...draft,
+                        housePhotoDataUrls: (draft.housePhotoDataUrls ?? []).filter((_, index) => index !== photoIndex),
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className={LABEL}>House video</label>
+              <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        void onPickHouseVideo(e.target.files?.[0] ?? null);
+                        e.target.value = "";
+                      }}
+                    />
+                    {mediaUploadingKeys.has("house-video")
+                      ? "Uploading..."
+                      : mediaDraft.houseVideoDataUrl
+                        ? "Replace house video"
+                        : "Upload house video"}
+                  </label>
+                  {mediaDraft.houseVideoDataUrl ? (
+                    <button
+                      type="button"
+                      className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                      onClick={() => setMediaDraft((draft) => ({ ...draft, houseVideoDataUrl: null }))}
+                    >
+                      Remove video
+                    </button>
+                  ) : null}
+                </div>
+                {mediaDraft.houseVideoDataUrl ? (
+                  <video
+                    src={mediaDraft.houseVideoDataUrl}
+                    controls
+                    playsInline
+                    className="mt-3 max-h-72 w-full rounded-lg border border-slate-200 bg-black object-contain"
+                  />
+                ) : (
+                  <p className="mt-3 text-xs text-slate-400">No house video on this listing yet.</p>
+                )}
+              </div>
+            </div>
+            <SaveRow onSave={saveMedia} onCancel={() => setEditingSection(null)} />
+          </div>
+        ) : (
+          <div className="grid gap-4 px-4 py-3 sm:grid-cols-2">
+            <div>
+              <p className={`${LABEL} mb-2`}>House photos</p>
+              <InlinePhotoStrip urls={sub.housePhotoDataUrls} emptyLabel="No house photos on this listing yet." />
+            </div>
+            <div>
+              <p className={`${LABEL} mb-2`}>House video</p>
+              {sub.houseVideoDataUrl ? (
+                <video
+                  src={sub.houseVideoDataUrl}
+                  controls
+                  playsInline
+                  className="max-h-56 w-full rounded-lg border border-slate-200 bg-black object-contain"
+                />
+              ) : (
+                <p className="text-sm text-slate-400">No house video yet.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── ROOMS ── */}
       <div className={`${SECTION_WRAP} border-sky-100`}>
         <div className={`${SECTION_HEAD} border-sky-100 bg-sky-50/60`}>
@@ -730,7 +991,6 @@ export function ManagerListingInlineEditor({
                   <th className={TH}>#</th>
                   <th className={TH}>Room</th>
                   <th className={TH}>Floor</th>
-                  <th className={TH}>Availability</th>
                   <th className={TH}>Rent/mo</th>
                   <th className={TH}>Utilities est.</th>
                   <th className={TH}>Furnishing</th>
@@ -759,14 +1019,6 @@ export function ManagerListingInlineEditor({
                           ) : null}
                         </td>
                         <td className={TD}>{normFloor(room.floor)}</td>
-                        <td className={TD}>
-                          <div className="space-y-1">
-                            <p className="text-sm text-slate-700">{room.availability || "Available now"}</p>
-                            <p className="text-xs text-slate-400">
-                              {room.moveInAvailableDate?.trim() ? `Earliest move-in ${room.moveInAvailableDate}` : "No earliest move-in date set"}
-                            </p>
-                          </div>
-                        </td>
                         <td className={TD}>
                           {room.monthlyRent > 0 ? (
                             <span className="font-semibold text-slate-900">${room.monthlyRent.toLocaleString()}</span>
@@ -801,7 +1053,7 @@ export function ManagerListingInlineEditor({
                       </tr>
                       {isEditing && roomDraft ? (
                         <tr className="border-b border-sky-100">
-                          <td colSpan={9} className="bg-sky-50/20 px-4 py-4">
+                          <td colSpan={8} className="bg-sky-50/20 px-4 py-4">
                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                               <div>
                                 <label className={LABEL}>Room name</label>
@@ -842,25 +1094,6 @@ export function ManagerListingInlineEditor({
                                 />
                               </div>
                               <div>
-                                <label className={LABEL}>Availability label</label>
-                                <input
-                                  type="text"
-                                  value={roomDraft.availability}
-                                  onChange={(e) => setRoomDraft((d) => d ? { ...d, availability: e.target.value } : d)}
-                                  className={INPUT}
-                                  placeholder="Available now"
-                                />
-                              </div>
-                              <div>
-                                <label className={LABEL}>Earliest move-in date</label>
-                                <input
-                                  type="date"
-                                  value={roomDraft.moveInAvailableDate}
-                                  onChange={(e) => setRoomDraft((d) => d ? { ...d, moveInAvailableDate: e.target.value } : d)}
-                                  className={INPUT}
-                                />
-                              </div>
-                              <div>
                                 <label className={LABEL}>Est. utilities/mo</label>
                                 <input
                                   type="text"
@@ -896,7 +1129,79 @@ export function ManagerListingInlineEditor({
                               <div className="sm:col-span-2 lg:col-span-3">
                                 <label className={LABEL}>Room photos</label>
                                 <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
-                                  <InlinePhotoStrip urls={roomDraft.photoDataUrls} emptyLabel="No room photos on this listing yet." />
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          void onPickRoomPhotos(e.target.files);
+                                          e.target.value = "";
+                                        }}
+                                      />
+                                      {mediaUploadingKeys.has(`room-photos-${roomDraft.id}`) ? "Uploading..." : "Upload photos"}
+                                    </label>
+                                  </div>
+                                  <div className="mt-3">
+                                    <InlinePhotoStrip
+                                      urls={roomDraft.photoDataUrls}
+                                      emptyLabel="No room photos on this listing yet."
+                                      onRemove={(photoIndex) =>
+                                        setRoomDraft((draft) =>
+                                          draft
+                                            ? {
+                                                ...draft,
+                                                photoDataUrls: draft.photoDataUrls.filter((_, index) => index !== photoIndex),
+                                              }
+                                            : draft,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="sm:col-span-2 lg:col-span-3">
+                                <label className={LABEL}>Room video</label>
+                                <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                                      <input
+                                        type="file"
+                                        accept="video/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          void onPickRoomVideo(e.target.files?.[0] ?? null);
+                                          e.target.value = "";
+                                        }}
+                                      />
+                                      {mediaUploadingKeys.has(`room-video-${roomDraft.id}`)
+                                        ? "Uploading..."
+                                        : roomDraft.videoDataUrl
+                                          ? "Replace video"
+                                          : "Upload video"}
+                                    </label>
+                                    {roomDraft.videoDataUrl ? (
+                                      <button
+                                        type="button"
+                                        className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                                        onClick={() => setRoomDraft((draft) => (draft ? { ...draft, videoDataUrl: null } : draft))}
+                                      >
+                                        Remove video
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                  {roomDraft.videoDataUrl ? (
+                                    <video
+                                      src={roomDraft.videoDataUrl}
+                                      controls
+                                      playsInline
+                                      className="mt-3 max-h-64 w-full rounded-lg border border-slate-200 bg-black object-contain"
+                                    />
+                                  ) : (
+                                    <p className="mt-3 text-xs text-slate-400">No room video on this listing yet.</p>
+                                  )}
                                 </div>
                               </div>
                               <div className="sm:col-span-2 lg:col-span-3">
@@ -1090,7 +1395,79 @@ export function ManagerListingInlineEditor({
                               <div className="sm:col-span-2">
                                 <label className={LABEL}>Bathroom photos</label>
                                 <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
-                                  <InlinePhotoStrip urls={bathDraft.photoDataUrls} emptyLabel="No bathroom photos on this listing yet." />
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          void onPickBathPhotos(e.target.files);
+                                          e.target.value = "";
+                                        }}
+                                      />
+                                      {mediaUploadingKeys.has(`bath-photos-${bathDraft.id}`) ? "Uploading..." : "Upload photos"}
+                                    </label>
+                                  </div>
+                                  <div className="mt-3">
+                                    <InlinePhotoStrip
+                                      urls={bathDraft.photoDataUrls}
+                                      emptyLabel="No bathroom photos on this listing yet."
+                                      onRemove={(photoIndex) =>
+                                        setBathDraft((draft) =>
+                                          draft
+                                            ? {
+                                                ...draft,
+                                                photoDataUrls: draft.photoDataUrls.filter((_, index) => index !== photoIndex),
+                                              }
+                                            : draft,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="sm:col-span-2">
+                                <label className={LABEL}>Bathroom video</label>
+                                <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <label className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                                      <input
+                                        type="file"
+                                        accept="video/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          void onPickBathVideo(e.target.files?.[0] ?? null);
+                                          e.target.value = "";
+                                        }}
+                                      />
+                                      {mediaUploadingKeys.has(`bath-video-${bathDraft.id}`)
+                                        ? "Uploading..."
+                                        : bathDraft.videoDataUrl
+                                          ? "Replace video"
+                                          : "Upload video"}
+                                    </label>
+                                    {bathDraft.videoDataUrl ? (
+                                      <button
+                                        type="button"
+                                        className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                                        onClick={() => setBathDraft((draft) => (draft ? { ...draft, videoDataUrl: null } : draft))}
+                                      >
+                                        Remove video
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                  {bathDraft.videoDataUrl ? (
+                                    <video
+                                      src={bathDraft.videoDataUrl}
+                                      controls
+                                      playsInline
+                                      className="mt-3 max-h-64 w-full rounded-lg border border-slate-200 bg-black object-contain"
+                                    />
+                                  ) : (
+                                    <p className="mt-3 text-xs text-slate-400">No bathroom video on this listing yet.</p>
+                                  )}
                                 </div>
                               </div>
                               <div className="sm:col-span-2">
@@ -1335,7 +1712,79 @@ export function ManagerListingInlineEditor({
                         <div className="sm:col-span-2">
                           <label className={LABEL}>Shared space photos</label>
                           <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
-                            <InlinePhotoStrip urls={spaceDraft.photoDataUrls} emptyLabel="No shared-space photos on this listing yet." />
+                            <div className="flex flex-wrap items-center gap-2">
+                              <label className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    void onPickSpacePhotos(e.target.files);
+                                    e.target.value = "";
+                                  }}
+                                />
+                                {mediaUploadingKeys.has(`space-photos-${spaceDraft.id}`) ? "Uploading..." : "Upload photos"}
+                              </label>
+                            </div>
+                            <div className="mt-3">
+                              <InlinePhotoStrip
+                                urls={spaceDraft.photoDataUrls}
+                                emptyLabel="No shared-space photos on this listing yet."
+                                onRemove={(photoIndex) =>
+                                  setSpaceDraft((draft) =>
+                                    draft
+                                      ? {
+                                          ...draft,
+                                          photoDataUrls: draft.photoDataUrls.filter((_, index) => index !== photoIndex),
+                                        }
+                                      : draft,
+                                  )
+                                }
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className={LABEL}>Shared space video</label>
+                          <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <label className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                                <input
+                                  type="file"
+                                  accept="video/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    void onPickSpaceVideo(e.target.files?.[0] ?? null);
+                                    e.target.value = "";
+                                  }}
+                                />
+                                {mediaUploadingKeys.has(`space-video-${spaceDraft.id}`)
+                                  ? "Uploading..."
+                                  : spaceDraft.videoDataUrl
+                                    ? "Replace video"
+                                    : "Upload video"}
+                              </label>
+                              {spaceDraft.videoDataUrl ? (
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                                  onClick={() => setSpaceDraft((draft) => (draft ? { ...draft, videoDataUrl: null } : draft))}
+                                >
+                                  Remove video
+                                </button>
+                              ) : null}
+                            </div>
+                            {spaceDraft.videoDataUrl ? (
+                              <video
+                                src={spaceDraft.videoDataUrl}
+                                controls
+                                playsInline
+                                className="mt-3 max-h-64 w-full rounded-lg border border-slate-200 bg-black object-contain"
+                              />
+                            ) : (
+                              <p className="mt-3 text-xs text-slate-400">No shared-space video on this listing yet.</p>
+                            )}
                           </div>
                         </div>
                         <div className="sm:col-span-2">

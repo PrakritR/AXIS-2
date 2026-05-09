@@ -876,9 +876,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     const propLabel = arPropertyId
       ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
       : "—";
-    const propId = arPropertyId || "manual";
     const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
-    appendManagerApplicationRow({
+    const nextRow: DemoApplicantRow = {
       id: axisId,
       name: arName.trim(),
       email: arEmail.trim(),
@@ -901,19 +900,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         leaseTerm: arLeaseTerm || undefined,
         notes: arNotes.trim() || undefined,
       },
-    });
-    // Auto-create pending charges for every monetary field filled in
-    const chargeBase = {
-      residentEmail: arEmail.trim(),
-      residentName: arName.trim(),
-      propertyId: propId,
-      propertyLabel: propLabel,
-      managerUserId: userId ?? null,
     };
-    if (rent && rent > 0) createManagerCharge({ ...chargeBase, title: "First month rent", amount: rent, blocksLeaseUntilPaid: true });
-    if (secDeposit && secDeposit > 0) createManagerCharge({ ...chargeBase, title: "Security deposit", amount: secDeposit, blocksLeaseUntilPaid: true });
-    if (moveInFee && moveInFee > 0) createManagerCharge({ ...chargeBase, title: "Move-in fee", amount: moveInFee, blocksLeaseUntilPaid: true });
-    if (utilities && utilities > 0) createManagerCharge({ ...chargeBase, title: "First month utilities", amount: utilities });
+    appendManagerApplicationRow(nextRow);
+    recordApprovedApplicationCharges(nextRow, userId ?? null);
     void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
     setChargeTab("pending");
     setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm("");
@@ -2130,10 +2119,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   onChange={(e) => {
                     const roomId = e.target.value;
                     setArRoomId(roomId);
-                    const room = arRoomOptions.find((r) => r.id === roomId);
-                    if (room?.monthlyRent && !arRent.trim()) {
-                      setArRent(String(room.monthlyRent));
-                    }
                   }}
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 >
@@ -2263,10 +2248,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   onChange={(e) => {
                     const roomId = e.target.value;
                     setErRoomId(roomId);
-                    const room = erRoomOptions.find((r) => r.id === roomId);
-                    if (room?.monthlyRent) {
-                      setErRent(String(room.monthlyRent));
-                    }
                   }}
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 >

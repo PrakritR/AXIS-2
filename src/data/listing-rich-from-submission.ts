@@ -244,7 +244,7 @@ function buildListingFloorCard(
       detail: roomListingTableSubtitle(r),
       utilitiesEstimate: utilRaw || undefined,
       price: `$${r.monthlyRent}`,
-      availability: r.availability.trim() || "Available now",
+      availability: "Available now",
       bathroomShareCount: bathroomShareCountForRoom(r.id, sub),
       modal: {
         setupLine: setup,
