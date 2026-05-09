@@ -4,6 +4,7 @@ import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import { loadPublicExtraListingsFromServer, PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
 import { RADIUS_MILE_OPTIONS, parseRadiusParam } from "@/lib/listings-search";
+import { PropertyCard } from "@/components/marketing/property-card";
 import { RoomListingCard } from "@/components/marketing/room-listing-card";
 import { filterRoomListings } from "@/lib/room-listings-catalog";
 import Link from "next/link";
@@ -24,6 +25,8 @@ const BATHROOM_OPTIONS = [
   { id: "4-share", label: "4-share" },
 ];
 
+export const LISTINGS_PENDING_SEARCH_KEY = "axis:listings-pending-search:v1";
+
 const inputCls =
   "[color-scheme:light] min-h-[44px] w-full rounded-xl border-0 bg-black/[0.04] px-3.5 py-2.5 text-[16px] text-[#1d1d1f] outline-none transition-all duration-200 placeholder:text-[#6e6e73]/60 focus:bg-white focus:ring-2 focus:ring-[#007aff]/25 hover:bg-black/[0.06] sm:py-3 sm:text-[14px]";
 
@@ -37,6 +40,15 @@ export type HomeHeroSearchProps = {
   /** When set and below max slider value, budget cap is active */
   initialMaxBudget?: number | null;
   initialBathroom?: string;
+};
+
+type PendingListingsSearch = {
+  zipRaw: string;
+  radiusMiles: number;
+  moveIn: string;
+  moveOut: string;
+  maxBudgetNum: number | null;
+  bathroom: string;
 };
 
 function clampBudget(n: number) {
@@ -89,8 +101,9 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
 
   const zipDigits = zip.replace(/\D/g, "").slice(0, 5);
   const zipValid = zipDigits.length === 5;
-  /** Hero search only runs once a concrete move-in date is chosen (YYYY-MM-DD from date input). */
   const moveInSelected = moveIn.trim().length > 0;
+  const budgetSelected = budget < BUDGET_MAX;
+  const roomSearchReady = moveInSelected && budgetSelected;
   const pct = ((budget - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
   const filteredRooms = useMemo(
@@ -106,21 +119,32 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
     [combinedProperties, zipDigits, radius, budget, bathroom, moveIn, moveOut],
   );
 
-  const allRooms = useMemo(
-    () => filterRoomListings(combinedProperties, { zipRaw: "", radiusMiles: 10, maxBudgetNum: null, bathroom: "any" }),
-    [combinedProperties],
-  );
+  const pendingSearch = useMemo<PendingListingsSearch | null>(() => {
+    if (!roomSearchReady) return null;
+    return {
+      zipRaw: zipValid ? zipDigits : "",
+      radiusMiles: radius,
+      moveIn,
+      moveOut,
+      maxBudgetNum: budget,
+      bathroom,
+    };
+  }, [roomSearchReady, zipValid, zipDigits, radius, moveIn, moveOut, budget, bathroom]);
 
-  const listingsHref = useMemo(() => {
-    const q = new URLSearchParams();
-    if (zipValid) q.set("zip", zipDigits);
-    q.set("radius", String(radius));
-    if (moveIn) q.set("moveIn", moveIn);
-    if (moveOut) q.set("moveOut", moveOut);
-    if (budget < BUDGET_MAX) q.set("maxBudget", String(budget));
-    q.set("bathroom", bathroom);
-    return `/rent/listings?${q.toString()}`;
-  }, [zipValid, zipDigits, radius, moveIn, moveOut, budget, bathroom]);
+  const listingsHref = "/rent/listings";
+
+  function storePendingListingsSearch() {
+    if (typeof window === "undefined") return;
+    try {
+      if (pendingSearch) {
+        window.sessionStorage.setItem(LISTINGS_PENDING_SEARCH_KEY, JSON.stringify(pendingSearch));
+      } else {
+        window.sessionStorage.removeItem(LISTINGS_PENDING_SEARCH_KEY);
+      }
+    } catch {
+      /* ignore session storage failures */
+    }
+  }
 
   return (
     <div
@@ -213,16 +237,17 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
 
       <div className="my-6 h-px w-full bg-black/[0.05]" />
 
-      {moveInSelected ? (
+      {roomSearchReady ? (
         <div className="flex w-full flex-col items-center gap-3 text-center">
           <p className="text-[13px] text-[#6e6e73]">
             {zipValid
-              ? <>Listings within <strong className="font-semibold text-[#1d1d1f]">{radius} mi</strong> of <strong className="font-semibold text-[#1d1d1f]">{zipDigits}</strong>{moveIn || budget < BUDGET_MAX || bathroom !== "any" ? " · plus your filters" : ""}</>
-              : "Showing listings matching your filters"
+              ? <>Rooms within <strong className="font-semibold text-[#1d1d1f]">{radius} mi</strong> of <strong className="font-semibold text-[#1d1d1f]">{zipDigits}</strong></>
+              : "Showing rooms matching your filters"
             }
           </p>
           <a
             href={listingsHref}
+            onClick={storePendingListingsSearch}
             className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full px-8 py-3 text-[15px] font-semibold text-white transition-all duration-200 hover:-translate-y-[1px] active:scale-[0.98] sm:min-h-0 sm:py-2.5 sm:text-[14px]"
             style={{ background: "linear-gradient(135deg, #007aff, #339cff)", boxShadow: "0 4px 20px rgba(0,122,255,0.35)" }}
           >
@@ -230,9 +255,17 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
           </a>
           <Link
             href="/rent/listings"
+            onClick={() => {
+              if (typeof window === "undefined") return;
+              try {
+                window.sessionStorage.removeItem(LISTINGS_PENDING_SEARCH_KEY);
+              } catch {
+                /* ignore */
+              }
+            }}
             className="text-[13px] font-semibold text-[#007aff] underline-offset-4 hover:underline"
           >
-            View all rooms
+            View all houses
           </Link>
 
           <div className="mt-6 w-full border-t border-black/[0.06] pt-6 text-left">
@@ -254,31 +287,47 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         <div className="w-full">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm font-semibold text-[#1d1d1f]">
-              {allRooms.length} room{allRooms.length === 1 ? "" : "s"} available
+              {combinedProperties.length} house{combinedProperties.length === 1 ? "" : "s"} available
             </p>
             <Link
               href="/rent/listings"
+              onClick={() => {
+                if (typeof window === "undefined") return;
+                try {
+                  window.sessionStorage.removeItem(LISTINGS_PENDING_SEARCH_KEY);
+                } catch {
+                  /* ignore */
+                }
+              }}
               className="text-[13px] font-semibold text-[#007aff] hover:underline underline-offset-2"
             >
               View all →
             </Link>
           </div>
-          {allRooms.length === 0 ? (
+          {combinedProperties.length === 0 ? (
             <p className="py-6 text-center text-[13px] text-[#6e6e73]">No listings available yet.</p>
           ) : (
             <div className="grid w-full gap-4 sm:grid-cols-2">
-              {allRooms.slice(0, 6).map((room) => (
-                <RoomListingCard key={room.key} row={room} />
+              {combinedProperties.slice(0, 6).map((property) => (
+                <PropertyCard key={property.id} property={property} />
               ))}
             </div>
           )}
-          {allRooms.length > 6 && (
+          {combinedProperties.length > 6 && (
             <div className="mt-5 text-center">
               <Link
                 href="/rent/listings"
+                onClick={() => {
+                  if (typeof window === "undefined") return;
+                  try {
+                    window.sessionStorage.removeItem(LISTINGS_PENDING_SEARCH_KEY);
+                  } catch {
+                    /* ignore */
+                  }
+                }}
                 className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#007aff] hover:underline underline-offset-2"
               >
-                See all {allRooms.length} rooms →
+                See all {combinedProperties.length} houses →
               </Link>
             </div>
           )}
