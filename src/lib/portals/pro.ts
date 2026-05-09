@@ -9,6 +9,7 @@ export const proPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
+    { section: "calendar", label: "Calendar", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
     {
       section: "residents",
@@ -18,12 +19,15 @@ export const proPortal: PortalDefinition = {
         { id: "previous", label: "Previous residents" },
       ],
     },
-    { section: "calendar", label: "Calendar", tabs: [] },
     {
-      section: "relationships",
-      label: "Account links",
-      tabs: [],
+      section: "payments",
+      label: "Payments",
+      tabs: [
+        { id: "ledger", label: "Ledger" },
+        { id: "payouts", label: "Payouts" },
+      ],
     },
+    { section: "services", label: "Services", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",
@@ -34,7 +38,11 @@ export const proPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
-    { section: "services", label: "Services", tabs: [] },
+    {
+      section: "relationships",
+      label: "Account links",
+      tabs: [],
+    },
     { section: "plan", label: "Plan", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
   ],

@@ -1,8 +1,8 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
-import { effectiveApplicationForRow } from "@/lib/manager-applications-storage";
+import type { MockProperty } from "@/data/types";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { getPropertyById, getRoomChoiceLabel, parseRoomChoiceValue } from "@/lib/rental-application/data";
-import { getPortalListingNote } from "@/lib/portal-listing-notes";
+import { parseRoomChoiceValue } from "@/lib/rental-application/data";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export type ResidentMoveInResolved = {
   propertyLabel: string;
@@ -11,6 +11,15 @@ export type ResidentMoveInResolved = {
   earliestMoveInDateLabel: string | null;
   instructions: string | null;
 };
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
 
 function formatMoveInDateLabel(iso: string): string {
   const t = iso.trim();
@@ -53,10 +62,65 @@ function resolveBestResidentRow(email: string, applications: DemoApplicantRow[])
   })[0] ?? null;
 }
 
+function propertyFromRecord(record: { id: string; property_data: unknown; row_data: unknown }): MockProperty | undefined {
+  const propertyData = asObject(record.property_data);
+  if (propertyData) {
+    const id = asString(propertyData.id) || record.id;
+    const buildingName = asString(propertyData.buildingName);
+    const title = asString(propertyData.title) || buildingName || "Property";
+    return {
+      id,
+      title,
+      tagline: asString(propertyData.tagline),
+      address: asString(propertyData.address),
+      zip: asString(propertyData.zip),
+      neighborhood: asString(propertyData.neighborhood),
+      beds: typeof propertyData.beds === "number" ? propertyData.beds : 0,
+      baths: typeof propertyData.baths === "number" ? propertyData.baths : 0,
+      rentLabel: asString(propertyData.rentLabel),
+      available: asString(propertyData.available),
+      petFriendly: Boolean(propertyData.petFriendly),
+      buildingId: asString(propertyData.buildingId) || id,
+      buildingName: buildingName || title,
+      unitLabel: asString(propertyData.unitLabel),
+      listingSubmission: propertyData.listingSubmission as MockProperty["listingSubmission"],
+      managerUserId: asString(propertyData.managerUserId) || undefined,
+      adminPublishLive: Boolean(propertyData.adminPublishLive),
+    };
+  }
+
+  const rowData = asObject(record.row_data);
+  if (!rowData) return undefined;
+  const submission = asObject(rowData.submission);
+  if (!submission) return undefined;
+
+  const buildingName = asString(rowData.buildingName) || asString(submission.buildingName) || "Property";
+  return {
+    id: record.id,
+    title: buildingName,
+    tagline: asString(rowData.tagline),
+    address: asString(rowData.address) || asString(submission.address),
+    zip: asString(rowData.zip) || asString(submission.zip),
+    neighborhood: asString(rowData.neighborhood),
+    beds: typeof rowData.beds === "number" ? rowData.beds : 0,
+    baths: typeof rowData.baths === "number" ? rowData.baths : 0,
+    rentLabel: "",
+    available: "",
+    petFriendly: Boolean(rowData.petFriendly),
+    buildingId: record.id,
+    buildingName,
+    unitLabel: asString(rowData.unitLabel),
+    listingSubmission: submission as MockProperty["listingSubmission"],
+    managerUserId: undefined,
+    adminPublishLive: false,
+  };
+}
+
 /** Resolve move-in copy for the signed-in resident from approved application + listing submission. */
 export function resolveResidentMoveInFromApplications(
   email: string,
   applications: DemoApplicantRow[],
+  propertiesById: Record<string, MockProperty | undefined> = {},
 ): ResidentMoveInResolved | null {
   const e = email.trim().toLowerCase();
   if (!e) return null;
@@ -64,26 +128,19 @@ export function resolveResidentMoveInFromApplications(
   const row = resolveBestResidentRow(e, applications);
   if (!row) return null;
 
-  const effective = effectiveApplicationForRow(row);
   const pid =
     row.assignedPropertyId?.trim() ||
     row.propertyId?.trim() ||
-    effective?.propertyId?.trim() ||
+    row.application?.propertyId?.trim() ||
     "";
 
   const roomChoice =
-    row.assignedRoomChoice?.trim() || effective?.roomChoice1?.trim() || "";
+    row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
 
-  const property = pid ? getPropertyById(pid) : undefined;
+  const property = pid ? propertiesById[pid] : undefined;
   const sub =
     property?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(property.listingSubmission) : null;
 
-  // Resolve managerUserId for portal notes lookup
-  const managerUserId = row.managerUserId?.trim() || property?.managerUserId?.trim() || "";
-
-  // ── Room label: prefer specific room name, not building name ──────────────
-  // Pre-compute property-level strings to detect fallback labels returned by getRoomChoiceLabel
-  // when the specific room isn't found (it falls back to prop.title or buildingName · unitLabel).
   const propertyTitleVariants = new Set(
     [
       property?.title?.trim(),
@@ -101,36 +158,27 @@ export function resolveResidentMoveInFromApplications(
     return false;
   }
 
-  let roomLabel = "Your room";
+  let roomLabel = "Not assigned yet";
   const manualRoomNumber = row.manualResidentDetails?.roomNumber?.trim() || "";
   if (roomChoice) {
-    const fullLabel = getRoomChoiceLabel(roomChoice);
-    const firstPart = fullLabel.split(" · ")[0]?.trim() || "";
-    if (firstPart && !isPropertyFallbackLabel(firstPart)) {
-      roomLabel = firstPart;
-    } else if (manualRoomNumber && !isPropertyFallbackLabel(manualRoomNumber)) {
+    if (manualRoomNumber && !isPropertyFallbackLabel(manualRoomNumber)) {
       roomLabel = manualRoomNumber;
     }
   } else if (manualRoomNumber && !isPropertyFallbackLabel(manualRoomNumber)) {
     roomLabel = manualRoomNumber;
   }
 
-  let earliestMoveInDateLabel: string | null = null;
-  let listingRoomId: string | null = null;
-  let portalRoomMoveInDate: string | null = null;
-  let portalRoomInstructions: string | null = null;
   let roomLevelMoveInDate: string | null = null;
   let roomLevelInstructions: string | null = null;
   if (sub) {
     const parsed = roomChoice ? parseRoomChoiceValue(roomChoice) : null;
-    listingRoomId = parsed?.listingRoomId ?? null;
+    const listingRoomId = parsed?.listingRoomId ?? null;
     const manualRoomName = !isPropertyFallbackLabel(manualRoomNumber) ? manualRoomNumber.toLowerCase() : "";
     const room =
       (listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : undefined) ??
       (manualRoomName ? sub.rooms.find((r) => r.name.trim().toLowerCase() === manualRoomName) : undefined);
 
     if (room) {
-      listingRoomId = room.id;
       const rn = room.name.trim();
       if (rn && !isPropertyFallbackLabel(rn)) roomLabel = rn;
       roomLevelMoveInDate = room.moveInAvailableDate?.trim() || null;
@@ -138,17 +186,9 @@ export function resolveResidentMoveInFromApplications(
     }
   }
 
-  if (managerUserId && pid && listingRoomId) {
-    const noteKey = `${managerUserId}:${pid}`;
-    const portalNote = getPortalListingNote(noteKey);
-    portalRoomMoveInDate = portalNote.rooms?.[listingRoomId]?.moveInAvailableDate?.trim() || null;
-    portalRoomInstructions = portalNote.rooms?.[listingRoomId]?.moveInInstructions?.trim() || null;
-  }
-
-  earliestMoveInDateLabel = formatMoveInDateLabel(
-    firstNonEmpty(portalRoomMoveInDate, roomLevelMoveInDate) ?? "",
-  ) || null;
-  const instructions = firstNonEmpty(portalRoomInstructions, roomLevelInstructions);
+  const earliestMoveInDateLabel =
+    formatMoveInDateLabel(firstNonEmpty(row.manualResidentDetails?.moveInDate, roomLevelMoveInDate) ?? "") || null;
+  const instructions = firstNonEmpty(row.moveInInstructions, roomLevelInstructions);
 
   return {
     propertyLabel:
@@ -162,4 +202,46 @@ export function resolveResidentMoveInFromApplications(
     earliestMoveInDateLabel,
     instructions,
   };
+}
+
+export async function loadResidentMoveInForEmail(email: string): Promise<ResidentMoveInResolved | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return null;
+
+  const db = createSupabaseServiceRoleClient();
+  const { data: records } = await db
+    .from("manager_application_records")
+    .select("row_data, updated_at")
+    .eq("resident_email", normalizedEmail)
+    .order("updated_at", { ascending: false });
+
+  const applications = (records ?? [])
+    .map((record) => asObject(record.row_data))
+    .filter((row): row is Record<string, unknown> => Boolean(row))
+    .map((row) => row as unknown as DemoApplicantRow)
+    .map((row) => ({ ...row, email: row.email?.trim().toLowerCase() || normalizedEmail }));
+
+  const bestRow = resolveBestResidentRow(normalizedEmail, applications);
+  if (!bestRow) return null;
+
+  const propertyId =
+    bestRow.assignedPropertyId?.trim() ||
+    bestRow.propertyId?.trim() ||
+    bestRow.application?.propertyId?.trim() ||
+    "";
+
+  if (!propertyId) {
+    return resolveResidentMoveInFromApplications(normalizedEmail, applications, {});
+  }
+
+  const { data: propertyRecord } = await db
+    .from("manager_property_records")
+    .select("id, property_data, row_data")
+    .eq("id", propertyId)
+    .maybeSingle();
+
+  const property = propertyRecord ? propertyFromRecord(propertyRecord) : undefined;
+  return resolveResidentMoveInFromApplications(normalizedEmail, applications, {
+    [propertyId]: property,
+  });
 }

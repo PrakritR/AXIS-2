@@ -35,6 +35,7 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
 ];
 
 type ManagerPaymentsView = "ledger" | "payouts";
+type HouseSort = "house-asc" | "house-desc";
 
 export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsView }) {
   const { showToast } = useAppUi();
@@ -46,6 +47,7 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
   const [addOpen, setAddOpen] = useState(false);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
+  const [houseSort, setHouseSort] = useState<HouseSort>("house-asc");
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
@@ -175,13 +177,22 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
   );
 
   const rowsForBucket = useMemo(() => {
-    return mergedRows.filter((r) => {
+    const filtered = mergedRows.filter((r) => {
       if (r.bucket !== bucket) return false;
       if (propertyFilter && r.propertyName !== propertyFilter) return false;
       if (residentFilter && r.residentName !== residentFilter) return false;
       return true;
     });
-  }, [mergedRows, bucket, propertyFilter, residentFilter]);
+
+    return [...filtered].sort((a, b) => {
+      const byHouse = a.propertyName.localeCompare(b.propertyName, undefined, { sensitivity: "base" });
+      const houseOrder = houseSort === "house-asc" ? byHouse : -byHouse;
+      if (houseOrder !== 0) return houseOrder;
+      const byResident = a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
+      if (byResident !== 0) return byResident;
+      return a.chargeTitle.localeCompare(b.chargeTitle, undefined, { sensitivity: "base" });
+    });
+  }, [mergedRows, bucket, propertyFilter, residentFilter, houseSort]);
 
   const filterRow = (
     <div className="flex flex-col gap-4">
@@ -228,6 +239,17 @@ export function ManagerPayments({ view = "ledger" }: { view?: ManagerPaymentsVie
             residentValue={residentFilter}
             onResidentChange={setResidentFilter}
           />
+          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700">
+            Sort house
+            <select
+              value={houseSort}
+              onChange={(e) => setHouseSort(e.target.value as HouseSort)}
+              className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+            >
+              <option value="house-asc">A-Z</option>
+              <option value="house-desc">Z-A</option>
+            </select>
+          </label>
           <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setAddOpen(true)}>
             Add payment
           </Button>

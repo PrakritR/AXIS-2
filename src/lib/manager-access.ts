@@ -23,6 +23,7 @@ export const FREE_SUBSCRIPTION_SECTIONS = new Set([
   "dashboard",
   "properties",
   "applications",
+  "payments",
   "calendar",
   "profile",
   "plan",

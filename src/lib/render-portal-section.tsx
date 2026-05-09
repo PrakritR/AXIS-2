@@ -5,6 +5,7 @@ import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 import { ManagerInbox } from "@/components/portal/manager-inbox";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { ManagerLeases } from "@/components/portal/manager-leases";
+import { ManagerPayments } from "@/components/portal/manager-payments";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
 import { AdminCreateResidentClient } from "@/components/portal/admin-create-resident-client";
@@ -89,7 +90,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "manager" || kind === "owner" || kind === "pro") {
-    if (section === "payments" || section === "stripe") redirect(`${def.basePath}/dashboard`);
+    if (section === "stripe") redirect(`${def.basePath}/payments/payouts`);
   }
   const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
   const residentManagerTier =
@@ -236,6 +237,20 @@ export async function renderPortalSection(
     if (section === "work-orders" || section === "services") {
       return subscriptionGated(<ManagerAllServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
+    if (section === "payments") {
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/ledger`);
+      }
+      if (tabParts.length > 1) notFound();
+      const paymentsTab = tabParts[0]!;
+      if (paymentsTab === "ledger") {
+        return subscriptionGated(<ManagerPayments view="ledger" />, kind, "payments", managerOwnerSubscriptionTier);
+      }
+      if (paymentsTab === "payouts") {
+        return subscriptionGated(<ManagerPayments view="payouts" />, kind, "payments", managerOwnerSubscriptionTier);
+      }
+      notFound();
+    }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
       return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
@@ -324,6 +339,20 @@ export async function renderPortalSection(
         "residents",
         managerOwnerSubscriptionTier,
       );
+    }
+    if (section === "payments") {
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/ledger`);
+      }
+      if (tabParts.length > 1) notFound();
+      const paymentsTab = tabParts[0]!;
+      if (paymentsTab === "ledger") {
+        return subscriptionGated(<ManagerPayments view="ledger" />, kind, "payments", managerOwnerSubscriptionTier);
+      }
+      if (paymentsTab === "payouts") {
+        return subscriptionGated(<ManagerPayments view="payouts" />, kind, "payments", managerOwnerSubscriptionTier);
+      }
+      notFound();
     }
     if (section === "work-orders" || section === "services") {
       return subscriptionGated(<ManagerAllServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
@@ -443,7 +472,7 @@ export async function renderPortalSection(
 
   if (kind === "resident" && section === "move-in") {
     if (tabParts?.length) notFound();
-    return <ResidentMoveInPanel />;
+    return <ResidentMoveInPanel residentEmail={residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null} />;
   }
 
   if (kind === "resident" && section === "inbox") {
