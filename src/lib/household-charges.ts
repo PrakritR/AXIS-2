@@ -99,7 +99,7 @@ export type RecurringRentProfile = {
   venmoContact?: string;
 };
 
-const FUTURE_RENT_VISIBILITY_WINDOW_MS = 45 * 24 * 60 * 60 * 1000;
+const UPCOMING_CHARGE_VISIBILITY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function isBrowser() {
   return typeof window !== "undefined";
@@ -462,7 +462,13 @@ export function isHouseholdChargeOverdue(charge: HouseholdCharge, now = new Date
 function dueLabelForLeaseStart(leaseStart?: string | null): string {
   const raw = leaseStart?.trim();
   if (!raw) return "Before move-in";
-  const date = new Date(raw);
+  let date: Date;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split("-").map(Number);
+    date = new Date(year, month - 1, day);
+  } else {
+    date = new Date(raw);
+  }
   if (Number.isNaN(date.getTime())) return "Before move-in";
   return `Before ${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
 }
@@ -473,13 +479,13 @@ function shouldDisplayChargeInPayments(charge: HouseholdCharge, now = new Date()
     case "rent": {
       const due = recurringRentDueDate(charge.rentMonth, charge.dueDay);
       if (!due) return true;
-      return due.getTime() - now.getTime() <= FUTURE_RENT_VISIBILITY_WINDOW_MS;
+      return due.getTime() - now.getTime() <= UPCOMING_CHARGE_VISIBILITY_WINDOW_MS;
     }
     case "utilities": {
       if (charge.rentMonth && charge.recurringRentProfileId) {
         const due = recurringRentDueDate(charge.rentMonth, charge.dueDay);
         if (!due) return true;
-        return due.getTime() - now.getTime() <= FUTURE_RENT_VISIBILITY_WINDOW_MS;
+        return due.getTime() - now.getTime() <= UPCOMING_CHARGE_VISIBILITY_WINDOW_MS;
       }
       return true;
     }
@@ -578,6 +584,37 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
 
 function moneyAmountLabel(amount: number): string {
   return `$${amount.toFixed(2)}`;
+}
+
+function monthKeyFromDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function addMonthsToMonthKey(month: string, offset: number): string {
+  const [yearRaw, monthRaw] = month.split("-").map(Number);
+  if (!yearRaw || !monthRaw) return month;
+  const next = new Date(yearRaw, monthRaw - 1 + offset, 1);
+  return monthKeyFromDate(next);
+}
+
+function monthsBetweenInclusive(startMonth: string, endMonth: string): string[] {
+  if (startMonth > endMonth) return [];
+  const out: string[] = [];
+  let current = startMonth;
+  while (current <= endMonth) {
+    out.push(current);
+    current = addMonthsToMonthKey(current, 1);
+  }
+  return out;
+}
+
+function firstRecurringMonthAfterLeaseStart(leaseStart: string | undefined): string {
+  const raw = leaseStart?.trim();
+  if (!raw) return currentRentMonth();
+  const [yearRaw, monthRaw] = raw.split("-").map(Number);
+  if (!yearRaw || !monthRaw) return currentRentMonth();
+  const nextMonth = new Date(yearRaw, monthRaw, 1);
+  return monthKeyFromDate(nextMonth);
 }
 
 function leaseStartProration(leaseStart: string | undefined): { prorated: boolean; factor: number; label: string } {
@@ -883,9 +920,7 @@ function syncAllRecurringRentCharges(): boolean {
 
   for (const profile of profiles) {
     const dueDay = Math.min(28, Math.max(1, Math.round(profile.dueDay ?? 1)));
-    const [startYearRaw, startMonthRaw] = (profile.startMonth ?? "").split("-").map(Number);
-    const startYear = startYearRaw && Number.isFinite(startYearRaw) ? startYearRaw : now.getFullYear();
-    const startMonthNum = startMonthRaw && Number.isFinite(startMonthRaw) ? startMonthRaw : now.getMonth() + 1;
+    const profileStartMonth = profile.startMonth?.trim() || currentRentMonth();
 
     // Parse lease end for last-month proration
     const leaseEndParts = profile.leaseEnd?.trim().split("-").map(Number) ?? [];
@@ -893,25 +928,25 @@ function syncAllRecurringRentCharges(): boolean {
     const leaseEndMonthNum = leaseEndParts[1] && Number.isFinite(leaseEndParts[1]) ? leaseEndParts[1] : null;
     const leaseEndDay = leaseEndParts[2] && Number.isFinite(leaseEndParts[2]) ? leaseEndParts[2] : null;
 
-    // Check current month and next 2 months for due dates within the 7-day window
-    for (let offset = 0; offset <= 2; offset++) {
-      const candidateDate = new Date(now.getFullYear(), now.getMonth() + offset, dueDay, 12, 0, 0, 0);
-      const candidateYear = candidateDate.getFullYear();
-      const candidateMonthNum = candidateDate.getMonth() + 1;
+    const currentMonth = monthKeyFromDate(now);
+    const nextMonth = addMonthsToMonthKey(currentMonth, 1);
+    const monthsToGenerate = new Set<string>(monthsBetweenInclusive(profileStartMonth, currentMonth));
+    const nextMonthDue = recurringRentDueDate(nextMonth, dueDay);
+    if (nextMonthDue && nextMonthDue.getTime() - now.getTime() <= UPCOMING_CHARGE_VISIBILITY_WINDOW_MS) {
+      monthsToGenerate.add(nextMonth);
+    }
 
-      // Skip months before the profile's start month
-      if (candidateYear < startYear || (candidateYear === startYear && candidateMonthNum < startMonthNum)) continue;
+    for (const rentMonth of [...monthsToGenerate].sort()) {
+      const [candidateYear, candidateMonthNum] = rentMonth.split("-").map(Number);
+      if (!candidateYear || !candidateMonthNum) continue;
 
       // Skip months after lease end
       if (leaseEndYear && leaseEndMonthNum) {
-        if (candidateYear > leaseEndYear || (candidateYear === leaseEndYear && candidateMonthNum > leaseEndMonthNum)) continue;
+        const leaseEndMonth = `${leaseEndYear}-${String(leaseEndMonthNum).padStart(2, "0")}`;
+        if (rentMonth > leaseEndMonth) continue;
       }
 
-      // Only emit if the due date is within the 7-day visibility window from now
-      const msTillDue = candidateDate.getTime() - now.getTime();
-      if (msTillDue > FUTURE_RENT_VISIBILITY_WINDOW_MS) break;
-
-      const rentMonth = `${candidateYear}-${String(candidateMonthNum).padStart(2, "0")}`;
+      const candidateDate = new Date(candidateYear, candidateMonthNum - 1, dueDay, 12, 0, 0, 0);
       const dueLabel = formatRecurringRentDueLabel(rentMonth, dueDay);
       const monthLabel = candidateDate.toLocaleString("default", { month: "long", year: "numeric" });
 
@@ -1478,17 +1513,13 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     JSON.stringify(next.map((charge) => charge.id).sort()) !== JSON.stringify(before.map((charge) => charge.id).sort());
   if (changed) writeAll(next);
 
-  // Set up recurring monthly rent (+ utilities) profile starting from the first full month after move-in
+  // Set up recurring monthly rent (+ utilities) starting the month after move-in.
+  // The move-in month itself is always covered by the upfront first-month/prorated charges above.
   let computedStartMonth: string | undefined;
   if (leaseStart && (rentAmount > 0 || utilities.amount > 0)) {
     const [leaseYearRaw, leaseMonthRaw] = leaseStart.split("-").map(Number);
     if (leaseYearRaw && leaseMonthRaw) {
-      // If move-in is after the 1st, first full month is the next calendar month; otherwise same month.
-      const [, , leaseDay] = leaseStart.split("-").map(Number);
-      const firstFullMonthDate = leaseDay && leaseDay > 1
-        ? new Date(leaseYearRaw, leaseMonthRaw, 1)    // JS: leaseMonthRaw (1-indexed) → next month
-        : new Date(leaseYearRaw, leaseMonthRaw - 1, 1); // same month
-      computedStartMonth = `${firstFullMonthDate.getFullYear()}-${String(firstFullMonthDate.getMonth() + 1).padStart(2, "0")}`;
+      computedStartMonth = firstRecurringMonthAfterLeaseStart(leaseStart);
       const roomLabel =
         row.manualResidentDetails?.roomNumber?.trim() ||
         row.assignedRoomChoice?.trim() ||
