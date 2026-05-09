@@ -1029,6 +1029,36 @@ export function upsertRecurringRentProfile(input: {
   return profile;
 }
 
+/**
+ * When a manager changes a resident's room or rent amount, update all unpaid
+ * recurring rent charges so the balance the resident sees stays accurate.
+ */
+export function updatePendingRentAmountForResident(
+  email: string,
+  propertyId: string,
+  newAmount: number,
+  managerUserId: string | null,
+): void {
+  if (!isBrowser()) return;
+  const e = email.trim().toLowerCase();
+  const rows = readAll();
+  let changed = false;
+  const next = rows.map((r) => {
+    if (
+      r.kind === "rent" &&
+      r.status === "pending" &&
+      r.residentEmail.trim().toLowerCase() === e &&
+      r.propertyId === propertyId &&
+      (r.managerUserId === managerUserId || r.managerUserId === HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE)
+    ) {
+      changed = true;
+      return { ...r, amountLabel: `$${newAmount}`, balanceLabel: `$${newAmount}` };
+    }
+    return r;
+  });
+  if (changed) writeAll(next);
+}
+
 /** Link charges created with email-only to the signed-in resident account. */
 export function linkHouseholdChargesToResidentUser(email: string, userId: string) {
   const e = email.trim().toLowerCase();

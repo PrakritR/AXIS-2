@@ -36,6 +36,8 @@ import {
   recordWorkOrderResidentCharge,
   syncHouseholdChargesFromServer,
   updateHouseholdChargeAmount,
+  updatePendingRentAmountForResident,
+  upsertRecurringRentProfile,
   type HouseholdCharge,
 } from "@/lib/household-charges";
 import {
@@ -1014,6 +1016,24 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     next[idx] = nextRow;
     writeManagerApplicationRows(next);
     upsertApplicationRowToServer(nextRow);
+
+    // Keep recurring rent profile and unpaid charges in sync with the new room/rent.
+    const residentEmail = nextRow.email ?? "";
+    if (propId && residentEmail && rent != null && Number.isFinite(rent)) {
+      upsertRecurringRentProfile({
+        residentEmail,
+        residentName: nextRow.name,
+        residentUserId: null,
+        propertyId: propId,
+        propertyLabel: propLabel,
+        roomLabel: selectedRoomLabel || nextRow.property,
+        managerUserId: userId ?? null,
+        monthlyRent: rent,
+        monthlyUtilities: utilities ?? undefined,
+      });
+      updatePendingRentAmountForResident(residentEmail, propId, rent, userId ?? null);
+    }
+
     setEditResidentOpen(false);
     setHcTick((n) => n + 1);
     showToast("Resident updated.");
@@ -2171,7 +2191,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                     const roomId = e.target.value;
                     setErRoomId(roomId);
                     const room = erRoomOptions.find((r) => r.id === roomId);
-                    if (room?.monthlyRent && !erRent.trim()) {
+                    if (room?.monthlyRent) {
                       setErRent(String(room.monthlyRent));
                     }
                   }}
