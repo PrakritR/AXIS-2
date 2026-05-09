@@ -11,6 +11,7 @@ import {
   SERVICE_REQUESTS_EVENT,
   approveServiceRequest,
   denyServiceRequest,
+  deleteServiceRequest,
   markServiceRequestServicePaid,
   markServiceRequestDepositPaid,
   readServiceRequestsForManager,
@@ -94,6 +95,13 @@ function ServiceRequestCard({
     markServiceRequestDepositPaid(req.id);
     onAction();
     showToast("Deposit marked as paid.");
+  }
+
+  function removeRequest() {
+    if (!window.confirm("Delete this request? This cannot be undone.")) return;
+    deleteServiceRequest(req.id);
+    onAction();
+    showToast("Request deleted.");
   }
 
   return (
@@ -222,6 +230,17 @@ function ServiceRequestCard({
           </div>
         </div>
       ) : null}
+
+      <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+          onClick={removeRequest}
+        >
+          Delete request
+        </Button>
+      </div>
     </div>
   );
 }

@@ -116,6 +116,13 @@ export function markServiceRequestDepositPaid(id: string): void {
   writeAll(all);
 }
 
+export function deleteServiceRequest(id: string): void {
+  const all = readAll();
+  const next = all.filter((r) => r.id !== id);
+  if (next.length === all.length) return;
+  writeAll(next);
+}
+
 export function submitReturnPhoto(id: string, photoDataUrl: string): void {
   const all = readAll();
   const idx = all.findIndex((r) => r.id === id);
