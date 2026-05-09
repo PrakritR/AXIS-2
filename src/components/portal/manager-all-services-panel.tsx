@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import {
+  ManagerPortalPageShell,
+  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_TOOLBAR_GROUP,
+  PORTAL_TOOLBAR_LABEL,
+  PORTAL_TOOLBAR_PILL_BUTTON,
+  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
+  PORTAL_TOOLBAR_SELECT,
+} from "@/components/portal/portal-metrics";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
@@ -179,7 +187,7 @@ export function ManagerAllServicesPanel() {
           <Button
             type="button"
             variant="outline"
-            className="rounded-full text-xs"
+            className={PORTAL_HEADER_ACTION_BTN}
             onClick={() => {
               void Promise.all([
                 syncManagerWorkOrdersFromServer({ force: true }),
@@ -202,12 +210,12 @@ export function ManagerAllServicesPanel() {
         <div className="flex flex-wrap items-center gap-3 pb-4">
           {/* Property filter */}
           {allPropertyOptions.length > 2 && (
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-semibold text-slate-500">Property</label>
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+              <label className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Property</label>
               <select
                 value={propertyFilter}
                 onChange={(e) => setPropertyFilter(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
               >
                 {allPropertyOptions.map((p) => (
                   <option key={p.id} value={p.id}>{p.label}</option>
@@ -217,14 +225,14 @@ export function ManagerAllServicesPanel() {
           )}
 
           {/* Type filter pills */}
-          <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+          <div className={PORTAL_TOOLBAR_GROUP}>
             {(["all", "requests", "work-orders"] as FilterType[]).map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTypeFilter(t)}
-                className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
-                  typeFilter === t ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${
+                  typeFilter === t ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""
                 }`}
               >
                 {t === "all" ? "All" : t === "requests" ? "Requests" : "Work orders"}
@@ -233,12 +241,12 @@ export function ManagerAllServicesPanel() {
           </div>
 
           {/* Sort */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold text-slate-500">Sort</label>
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+            <label className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort</label>
             <select
               value={sortKey}
               onChange={(e) => setSortKey(e.target.value as SortKey)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
             >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>

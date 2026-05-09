@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import {
+  ManagerPortalPageShell,
+  ManagerPortalStatusPills,
+  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_TOOLBAR_LABEL,
+  PORTAL_TOOLBAR_SELECT,
+} from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
@@ -233,24 +239,26 @@ export function ManagerPayments() {
             residentValue={activeResidentFilter}
             onResidentChange={setResidentFilter}
           />
-          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700">
+          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+            <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>
             {propertyFilter ? "Sort resident" : "Sort house"}
+            </span>
             <select
               value={houseSort}
               onChange={(e) => setHouseSort(e.target.value as HouseSort)}
-              className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
             >
               <option value="house-asc">A-Z</option>
               <option value="house-desc">Z-A</option>
             </select>
           </label>
-          <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setAddOpen(true)}>
+          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddOpen(true)}>
             Add payment
           </Button>
           <Button
             type="button"
             variant="outline"
-            className="shrink-0 rounded-full"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => {
               void Promise.all([
                 syncHouseholdChargesFromServer(),

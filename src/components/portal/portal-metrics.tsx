@@ -272,6 +272,28 @@ export function ManagerPortalPageShell({
 export const MANAGER_TABLE_TH =
   "px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:px-5";
 
+/** Shared toolbar shell for filters/toggles in portal tabs. */
+export const PORTAL_TOOLBAR_GROUP =
+  "inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1";
+
+/** Shared pill toggle button in portal toolbars. */
+export const PORTAL_TOOLBAR_PILL_BUTTON =
+  "min-h-9 rounded-full px-4 py-1.5 text-sm font-semibold text-slate-600 transition hover:text-slate-800";
+
+/** Active variant for toolbar pill buttons. */
+export const PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE =
+  "bg-white text-slate-900 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.28)]";
+
+/** Label used before toolbar selects (Property/Sort/etc.). */
+export const PORTAL_TOOLBAR_LABEL = "text-xs font-semibold text-slate-500";
+
+/** Shared dropdown style for toolbar selects. */
+export const PORTAL_TOOLBAR_SELECT =
+  "h-10 rounded-full border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
+
+/** Shared action button sizing for page header controls. */
+export const PORTAL_HEADER_ACTION_BTN = "h-10 rounded-full px-5 text-sm font-semibold";
+
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */
 export const PORTAL_KPI_CHIP_INACTIVE =
   "rounded-xl border border-slate-200/60 bg-slate-50/90 px-4 py-3 text-left transition-colors duration-150 hover:border-slate-200 hover:bg-white";

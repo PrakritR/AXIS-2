@@ -9,6 +9,10 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
+  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_TOOLBAR_GROUP,
+  PORTAL_TOOLBAR_PILL_BUTTON,
+  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -1212,12 +1216,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         title="Residents"
         titleAside={
           <>
-            <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1">
+            <div className={PORTAL_TOOLBAR_GROUP}>
               <button
                 type="button"
                 onClick={() => setResidentsTab("current")}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                  residentsTab === "current" ? "bg-slate-900 text-white" : "bg-transparent text-slate-600 hover:bg-white"
+                className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${
+                  residentsTab === "current"
+                    ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
+                    : "bg-transparent text-slate-600 hover:bg-white"
                 }`}
               >
                 Current ({currentResidentsCount})
@@ -1225,14 +1231,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               <button
                 type="button"
                 onClick={() => setResidentsTab("previous")}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                  residentsTab === "previous" ? "bg-slate-900 text-white" : "bg-transparent text-slate-600 hover:bg-white"
+                className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${
+                  residentsTab === "previous"
+                    ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
+                    : "bg-transparent text-slate-600 hover:bg-white"
                 }`}
               >
                 Previous ({previousResidentsCount})
               </button>
             </div>
-            <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setAddResidentOpen(true)}>
+            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
               + Add resident
             </Button>
             <PortalPropertyFilterPill

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import {
@@ -427,7 +427,24 @@ export function ProAccountLinksPanel({
   const activeCards = useRemote ? activeRemote : localRows;
 
   return (
-    <ManagerPortalPageShell title="Linked accounts">
+    <ManagerPortalPageShell
+      title="Linked accounts"
+      titleAside={
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_HEADER_ACTION_BTN}
+          onClick={() => {
+            void Promise.all([loadRemoteInvites(), syncPropertyPipelineFromServer({ force: true })]).then(() => {
+              refreshLocal();
+              showToast("Account links refreshed.");
+            });
+          }}
+        >
+          Refresh
+        </Button>
+      }
+    >
       <div className="mx-auto max-w-3xl space-y-8">
         <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
@@ -474,12 +491,12 @@ export function ProAccountLinksPanel({
                 value={axisInput}
                 onChange={(e) => setAxisInput(e.target.value)}
                 placeholder="e.g. AXIS-1A2B3C4D"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                className="mt-1 h-10 w-full rounded-full border border-slate-200 bg-white px-4 font-mono text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
             </label>
             <Button
               type="button"
-              className="rounded-full px-6"
+              className={PORTAL_HEADER_ACTION_BTN}
               disabled={lookupBusy || atLinkCap}
               onClick={() => void lookup()}
               title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}

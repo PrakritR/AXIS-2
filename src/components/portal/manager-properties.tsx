@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerHousePropertiesPanel } from "@/components/portal/manager-house-properties-panel";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
@@ -116,13 +116,13 @@ export function ManagerProperties() {
       title="Properties"
       titleAside={
         <>
-          <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={tryOpenAdd}>
+          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={tryOpenAdd}>
             + Create listing
           </Button>
           <Button
             type="button"
             variant="outline"
-            className="shrink-0 rounded-full"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => {
               void loadSku();
               refreshPending();
