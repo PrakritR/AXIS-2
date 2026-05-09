@@ -410,13 +410,17 @@ export function propertyAllowsShortTermRental(propertyId: string): boolean {
 }
 
 /** Rooms for the selected listing: manager submission rooms, else legacy one-row-per-unit in the same building. */
-export function getRoomOptionsForProperty(propertyId: string): { value: string; label: string }[] {
+export function getRoomOptionsForProperty(propertyId: string, options: RoomAvailabilityOptions = {}): { value: string; label: string }[] {
   const selected = getPropertyById(propertyId);
   if (!selected) return [];
 
   if (selected.listingSubmission?.v === 1) {
     const sub = normalizeManagerListingSubmissionV1(selected.listingSubmission);
-    const roomRows = sub.rooms.filter((r) => r.name.trim());
+    const roomRows = sub.rooms.filter(
+      (r) =>
+        r.name.trim() &&
+        isRoomChoiceAvailable(`${selected.id}${LISTING_ROOM_CHOICE_SEP}${r.id}`, r.availability, options),
+    );
     if (roomRows.length > 0) {
       return roomRows.map((r) => {
         const rent = r.monthlyRent > 0 ? `$${r.monthlyRent}/mo` : "Rent TBD";
