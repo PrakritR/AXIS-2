@@ -7,12 +7,9 @@ import { roomAvailabilityTextClasses, roomAvailabilityTone } from "@/lib/room-av
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 
 const SLIDE_GRADS = [
-  "from-slate-600 via-slate-700 to-slate-900",
-  "from-sky-600 via-blue-800 to-indigo-950",
-  "from-teal-600 via-emerald-800 to-slate-900",
-  "from-violet-600 via-purple-800 to-slate-950",
-  "from-amber-600 via-orange-800 to-stone-900",
-  "from-slate-500 via-slate-600 to-zinc-900",
+  "from-sky-200 via-sky-300 to-blue-400",
+  "from-sky-100 via-blue-200 to-sky-400",
+  "from-cyan-100 via-sky-200 to-blue-300",
 ] as const;
 
 function slidesForKey(key: string): readonly string[] {

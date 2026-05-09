@@ -374,7 +374,7 @@ function ListingDetailModal({
                   <div className="mt-3 space-y-2">
                     {roomUnavailableWindows.map((w) => (
                       <div key={w.id} className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-                        <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${w.source === "resident" ? "bg-rose-500" : "bg-amber-500"}`} />
+                        <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${w.source === "resident" ? "bg-rose-500" : "bg-sky-500"}`} />
                         <span>{rangeSummaryLabel(w)}</span>
                       </div>
                     ))}
@@ -433,18 +433,18 @@ function ListingDetailModal({
                 state.room.modal.roomAmenityLabels ?? [],
               );
               return furnishingDetail ? (
-              <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/70 p-5">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-950/90">Furnishing</p>
+              <div className="mt-5 rounded-2xl border border-sky-100 bg-sky-50/60 p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-950/90">Furnishing</p>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{furnishingDetail}</p>
               </div>
               ) : null;
             })()}
             {state.room.modal.roomAmenityLabels?.length ? (
-              <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/50 p-5">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-950/90">Room amenities</p>
+              <div className="mt-5 rounded-2xl border border-sky-100 bg-sky-50/60 p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-950/90">Room amenities</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {state.room.modal.roomAmenityLabels.map((t) => (
-                    <span key={t} className="rounded-full border border-violet-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
+                    <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
                       {t}
                     </span>
                   ))}
@@ -730,8 +730,8 @@ export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: 
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{floor.floorLabel}</p>
             <p className="mt-0.5 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{floor.fromPrice}</p>
             {floor.remainingNote ? (
-              <p className="mt-1.5 flex items-center gap-2 text-xs text-amber-800 sm:text-sm">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden />
+              <p className="mt-1.5 flex items-center gap-2 text-xs text-sky-800 sm:text-sm">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" aria-hidden />
                 {floor.remainingNote}
               </p>
             ) : null}

@@ -187,7 +187,7 @@ const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
 function FormSection({ id, title, description, children, accent }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode; accent?: string }) {
   return (
     <section id={id} className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_6px_rgba(15,23,42,0.06)]">
-      <div className={`border-b border-slate-100 px-5 py-4 sm:px-6 ${accent ?? "bg-gradient-to-r from-slate-50 to-white"}`}>
+      <div className={`border-b border-slate-100 px-5 py-4 sm:px-6 ${accent ?? "bg-sky-50/60"}`}>
         <h3 className="text-[15px] font-bold tracking-tight text-slate-900">{title}</h3>
         {description ? <div className="mt-1 max-w-3xl text-[13px] leading-relaxed text-slate-500">{description}</div> : null}
       </div>
@@ -1541,7 +1541,7 @@ export function ManagerAddListingForm({
             title="Tell us about your place"
             description="Pick the property type and basics, then we’ll match room slots on the next step. Everything here can be changed later."
           >
-            <div className="mb-6 rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/90 to-white px-4 py-4 sm:px-5">
+            <div className="mb-6 rounded-2xl border border-sky-100/90 bg-sky-50/50 px-4 py-4 sm:px-5">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Step 1 · Basics</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">What kind of place is this?</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -1799,16 +1799,16 @@ export function ManagerAddListingForm({
                 title="Lease bundles"
                 description="Optional packages on the public listing — whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
               >
-                <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-white p-4 sm:p-5">
-                  <p className="text-sm font-semibold text-violet-950">Build from your rooms</p>
-                  <p className="mt-1 text-xs leading-5 text-violet-900/80">
+                <div className="rounded-2xl border border-sky-200/80 bg-sky-50/60 p-4 sm:p-5">
+                  <p className="text-sm font-semibold text-sky-950">Build from your rooms</p>
+                  <p className="mt-1 text-xs leading-5 text-sky-900/80">
                     Bundle rent defaults to the sum of selected room rents — edit the price when you offer a discount. Use strikethrough + promo for limited-time offers.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"
-                      className="rounded-full border-violet-200 bg-white text-xs"
+                      className="rounded-full border-sky-200 bg-white text-xs"
                       onClick={() => addGeneratedBundle("whole_house")}
                       disabled={!sub.rooms.some((room) => room.name.trim())}
                     >
@@ -1817,7 +1817,7 @@ export function ManagerAddListingForm({
                     <Button
                       type="button"
                       variant="outline"
-                      className="rounded-full border-violet-200 bg-white text-xs"
+                      className="rounded-full border-sky-200 bg-white text-xs"
                       onClick={() => addGeneratedBundle("multi_room")}
                       disabled={sub.rooms.filter((room) => room.name.trim()).length < 2}
                     >
@@ -1859,7 +1859,7 @@ export function ManagerAddListingForm({
                                   </>
                                 ) : null}
                                 {hasManualPrice ? (
-                                  <span className="ml-1 font-medium text-amber-800">· Custom bundle price</span>
+                                  <span className="ml-1 font-medium text-sky-800">· Custom bundle price</span>
                                 ) : null}
                               </p>
                             </div>
@@ -3227,7 +3227,7 @@ export function ManagerAddListingForm({
                 </div>
               </ListingSubsection>
 
-              <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-white p-4 sm:p-6">
+              <div className="rounded-2xl border border-sky-200/80 bg-sky-50/60 p-4 sm:p-6">
                 <p className="text-sm font-bold text-slate-950">{isEditMode ? "Ready to submit changes?" : "Ready to submit this listing?"}</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
                   {isEditMode

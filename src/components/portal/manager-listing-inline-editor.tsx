@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useMemo, useState } from "react";
 import type {
+  ManagerBathroomRoomAccessKind,
   ManagerBathroomSubmission,
   ManagerListingSubmissionV1,
   ManagerQuickFactRow,
@@ -38,10 +39,10 @@ const TH = "px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wid
 const TD = "px-3 py-2.5 text-sm text-slate-700";
 const LABEL = "block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5";
 const INPUT =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-200";
 const TEXTAREA = `${INPUT} resize-y`;
 const SAVE_BTN =
-  "rounded-full bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60";
+  "rounded-full bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-700 disabled:opacity-60";
 const CANCEL_BTN =
   "rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50";
 const SECTION_WRAP = "mt-4 overflow-hidden rounded-2xl border bg-white";
@@ -50,12 +51,13 @@ const SECTION_TITLE = "text-xs font-bold uppercase tracking-[0.14em]";
 const EDIT_BTN_OFF =
   "rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50";
 const EDIT_BTN_ON =
-  "rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-100";
+  "rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold text-sky-700 transition hover:bg-sky-100";
 const ADD_BTN =
-  "rounded-full border border-dashed border-slate-300 bg-white px-3 py-1 text-[11px] font-semibold text-slate-500 transition hover:border-indigo-300 hover:text-indigo-600";
+  "rounded-full border border-dashed border-slate-300 bg-white px-3 py-1 text-[11px] font-semibold text-slate-500 transition hover:border-sky-300 hover:text-sky-700";
 const KV_ROW = "flex gap-4 border-b border-slate-100 px-4 py-2.5 last:border-0";
 const KV_KEY = "w-36 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-400";
 const KV_VAL = "text-sm text-slate-700 whitespace-pre-wrap";
+const LOCATION_LEVEL_CUSTOM = "__location_custom__";
 
 function normFloor(raw: string): string {
   if (!raw.trim()) return "—";
@@ -96,10 +98,44 @@ function rid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function locationOptionsFromStories(storiesId: string | undefined): string[] {
+  if (storiesId === "1") return ["1st / main floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+  if (storiesId === "2") return ["1st / main floor", "2nd floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+  if (storiesId === "3") return ["1st / main floor", "2nd floor", "3rd floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+  if (storiesId === "4") return ["1st / main floor", "2nd floor", "3rd floor", "4th floor or higher", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+  if (storiesId === "split") return ["Main split level", "Upper split level", "Lower split level", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+  return ["1st / main floor", "2nd floor", "3rd floor", "4th floor or higher", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
+}
+
+function locationSelectValue(location: string, options: readonly string[]): string {
+  const t = location.trim();
+  if (!t) return "";
+  return options.includes(t) ? t : LOCATION_LEVEL_CUSTOM;
+}
+
+function dedupeIds(ids: string[]): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const id of ids) {
+    const trimmed = id.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    next.push(trimmed);
+  }
+  return next;
+}
+
+function updateSelectedIdAt(ids: string[], index: number, nextId: string): string[] {
+  const next = [...ids];
+  if (nextId.trim()) next[index] = nextId.trim();
+  else next.splice(index, 1);
+  return dedupeIds(next);
+}
+
 // ─── amenity chip picker ─────────────────────────────────────────────────────
 
-const CHIP_OFF = "cursor-pointer select-none rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700";
-const CHIP_ON  = "cursor-pointer select-none rounded-full border border-indigo-400 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700";
+const CHIP_OFF = "cursor-pointer select-none rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700";
+const CHIP_ON  = "cursor-pointer select-none rounded-full border border-sky-400 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700";
 
 function AmenityChipPicker({
   presets,
@@ -254,6 +290,7 @@ export function ManagerListingInlineEditor({
   );
   const [houseEditing, setHouseEditing] = useState(false);
   const [houseDraft, setHouseDraft] = useState<PortalListingNote>({});
+  const locationLevelOptions = useMemo(() => locationOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const saveSub = useCallback(
@@ -349,7 +386,17 @@ export function ManagerListingInlineEditor({
 
   const saveBath = () => {
     if (!bathDraft) return;
-    const updatedBaths = sub.bathrooms.map((b) => (b.id === bathDraft.id ? bathDraft : b));
+    const assignedRoomIds = bathDraft.allResidents ? [] : dedupeIds(bathDraft.assignedRoomIds);
+    const cleanedBath: ManagerBathroomSubmission = {
+      ...bathDraft,
+      assignedRoomIds,
+      accessKindByRoomId: bathDraft.allResidents
+        ? undefined
+        : Object.fromEntries(
+            Object.entries(bathDraft.accessKindByRoomId ?? {}).filter(([roomId]) => assignedRoomIds.includes(roomId)),
+          ),
+    };
+    const updatedBaths = sub.bathrooms.map((b) => (b.id === cleanedBath.id ? cleanedBath : b));
     saveSub({ ...sub, bathrooms: updatedBaths }, "Bathroom saved.");
     closeSection();
   };
@@ -373,7 +420,11 @@ export function ManagerListingInlineEditor({
 
   const saveSpace = () => {
     if (!spaceDraft) return;
-    const updatedSpaces = sub.sharedSpaces.map((s) => (s.id === spaceDraft.id ? spaceDraft : s));
+    const cleanedSpace: ManagerSharedSpaceSubmission = {
+      ...spaceDraft,
+      roomAccessIds: dedupeIds(spaceDraft.roomAccessIds),
+    };
+    const updatedSpaces = sub.sharedSpaces.map((s) => (s.id === cleanedSpace.id ? cleanedSpace : s));
     saveSub({ ...sub, sharedSpaces: updatedSpaces }, "Shared space saved.");
     closeSection();
   };
@@ -572,7 +623,7 @@ export function ManagerListingInlineEditor({
                     type="checkbox"
                     checked={basicsDraft.petFriendly ?? false}
                     onChange={(e) => setBasicsDraft((d) => ({ ...d, petFriendly: e.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300 accent-indigo-600"
+                    className="h-4 w-4 rounded border-slate-300 accent-sky-600"
                   />
                   Pet-friendly
                 </label>
@@ -640,11 +691,11 @@ export function ManagerListingInlineEditor({
       </div>
 
       {/* ── ROOMS ── */}
-      <div className={`${SECTION_WRAP} border-indigo-100`}>
-        <div className={`${SECTION_HEAD} border-indigo-100 bg-indigo-50/60`}>
+      <div className={`${SECTION_WRAP} border-sky-100`}>
+        <div className={`${SECTION_HEAD} border-sky-100 bg-sky-50/60`}>
           <div className="flex items-center gap-2">
-            <p className={`${SECTION_TITLE} text-indigo-700`}>Rooms</p>
-            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">
+            <p className={`${SECTION_TITLE} text-sky-700`}>Rooms</p>
+            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
               {sub.rooms.length} room{sub.rooms.length !== 1 ? "s" : ""}
             </span>
           </div>
@@ -674,7 +725,7 @@ export function ManagerListingInlineEditor({
                   const rowBg = idx % 2 === 0 ? "bg-white" : "bg-slate-50/40";
                   return (
                     <Fragment key={room.id}>
-                      <tr className={`border-b border-slate-100 ${isEditing ? "bg-indigo-50/40" : rowBg}`}>
+                      <tr className={`border-b border-slate-100 ${isEditing ? "bg-sky-50/40" : rowBg}`}>
                         <td className={TD}>
                           <span className="text-xs font-semibold text-slate-400">{idx + 1}</span>
                         </td>
@@ -718,8 +769,8 @@ export function ManagerListingInlineEditor({
                         </td>
                       </tr>
                       {isEditing && roomDraft ? (
-                        <tr className="border-b border-indigo-100">
-                          <td colSpan={8} className="bg-indigo-50/20 px-4 py-4">
+                        <tr className="border-b border-sky-100">
+                          <td colSpan={8} className="bg-sky-50/20 px-4 py-4">
                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                               <div>
                                 <label className={LABEL}>Room name</label>
@@ -805,7 +856,7 @@ export function ManagerListingInlineEditor({
                               <div className="sm:col-span-2 lg:col-span-3">
                                 <label className={LABEL}>
                                   Move-in instructions
-                                  <span className="ml-1.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-600 normal-case tracking-normal">
+                                  <span className="ml-1.5 rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700 normal-case tracking-normal">
                                     Shown to resident
                                   </span>
                                 </label>
@@ -834,11 +885,11 @@ export function ManagerListingInlineEditor({
       </div>
 
       {/* ── BATHROOMS ── */}
-      <div className={`${SECTION_WRAP} border-violet-100`}>
-        <div className={`${SECTION_HEAD} border-violet-100 bg-violet-50/60`}>
+      <div className={`${SECTION_WRAP} border-sky-100`}>
+        <div className={`${SECTION_HEAD} border-sky-100 bg-sky-50/60`}>
           <div className="flex items-center gap-2">
-            <p className={`${SECTION_TITLE} text-violet-700`}>Bathrooms</p>
-            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-600">
+            <p className={`${SECTION_TITLE} text-sky-700`}>Bathrooms</p>
+            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
               {sub.bathrooms.length}
             </span>
           </div>
@@ -874,7 +925,7 @@ export function ManagerListingInlineEditor({
                   return (
                     <Fragment key={bath.id}>
                       <tr
-                        className={`border-b border-slate-100 ${isEditing ? "bg-violet-50/40" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
+                        className={`border-b border-slate-100 ${isEditing ? "bg-sky-50/40" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
                       >
                         <td className={TD}>
                           <p className="font-semibold text-slate-900">{bath.name || `Bathroom ${idx + 1}`}</p>
@@ -904,8 +955,8 @@ export function ManagerListingInlineEditor({
                         </td>
                       </tr>
                       {isEditing && bathDraft ? (
-                        <tr className="border-b border-violet-100">
-                          <td colSpan={5} className="bg-violet-50/20 px-4 py-4">
+                        <tr className="border-b border-sky-100">
+                          <td colSpan={5} className="bg-sky-50/20 px-4 py-4">
                             <div className="grid gap-3 sm:grid-cols-2">
                               <div>
                                 <label className={LABEL}>Bathroom name</label>
@@ -918,13 +969,39 @@ export function ManagerListingInlineEditor({
                               </div>
                               <div>
                                 <label className={LABEL}>Location</label>
-                                <input
-                                  type="text"
-                                  value={bathDraft.location}
-                                  onChange={(e) => setBathDraft((d) => d ? { ...d, location: e.target.value } : d)}
-                                  className={INPUT}
-                                  placeholder="e.g. 2nd floor hallway"
-                                />
+                                <div className="space-y-2">
+                                  <select
+                                    value={locationSelectValue(bathDraft.location, locationLevelOptions)}
+                                    onChange={(e) =>
+                                      setBathDraft((d) => {
+                                        if (!d) return d;
+                                        const nextValue = e.target.value;
+                                        if (!nextValue) return { ...d, location: "" };
+                                        if (nextValue === LOCATION_LEVEL_CUSTOM) {
+                                          if (locationLevelOptions.includes(d.location.trim())) return { ...d, location: "" };
+                                          return d;
+                                        }
+                                        return { ...d, location: nextValue };
+                                      })
+                                    }
+                                    className={INPUT}
+                                  >
+                                    <option value="">Select location</option>
+                                    {locationLevelOptions.map((option) => (
+                                      <option key={option} value={option}>{option}</option>
+                                    ))}
+                                    <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
+                                  </select>
+                                  {locationSelectValue(bathDraft.location, locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
+                                    <input
+                                      type="text"
+                                      value={bathDraft.location}
+                                      onChange={(e) => setBathDraft((d) => d ? { ...d, location: e.target.value } : d)}
+                                      className={INPUT}
+                                      placeholder="Custom location"
+                                    />
+                                  ) : null}
+                                </div>
                               </div>
                               <div className="sm:col-span-2">
                                 <label className={`${LABEL} mb-2`}>Fixtures & finishes</label>
@@ -943,7 +1020,7 @@ export function ManagerListingInlineEditor({
                                       type="checkbox"
                                       checked={bathDraft[f]}
                                       onChange={(e) => setBathDraft((d) => d ? { ...d, [f]: e.target.checked } : d)}
-                                      className="h-4 w-4 rounded border-slate-300 accent-violet-600"
+                                      className="h-4 w-4 rounded border-slate-300 accent-sky-600"
                                     />
                                     {f}
                                   </label>
@@ -956,31 +1033,89 @@ export function ManagerListingInlineEditor({
                                     type="checkbox"
                                     checked={bathDraft.allResidents ?? false}
                                     onChange={(e) => setBathDraft((d) => d ? { ...d, allResidents: e.target.checked } : d)}
-                                    className="h-4 w-4 rounded border-slate-300 accent-violet-600"
+                                    className="h-4 w-4 rounded border-slate-300 accent-sky-600"
                                   />
                                   Available to all residents
                                 </label>
                                 {!bathDraft.allResidents ? (
-                                  <div className="flex flex-wrap gap-2">
-                                    {sub.rooms.map((r) => (
-                                      <label key={r.id} className="flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">
-                                        <input
-                                          type="checkbox"
-                                          checked={bathDraft.assignedRoomIds.includes(r.id)}
-                                          onChange={(e) => {
+                                  <div className="space-y-2 rounded-xl border border-sky-100 bg-white/90 p-3">
+                                    {(bathDraft.assignedRoomIds.length ? bathDraft.assignedRoomIds : [""]).map((roomId, roomIndex) => (
+                                      <div key={`${bathDraft.id}-room-select-${roomIndex}-${roomId || "empty"}`} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                                        <select
+                                          value={roomId}
+                                          onChange={(e) =>
                                             setBathDraft((d) => {
                                               if (!d) return d;
-                                              const ids = e.target.checked
-                                                ? [...d.assignedRoomIds, r.id]
-                                                : d.assignedRoomIds.filter((x) => x !== r.id);
-                                              return { ...d, assignedRoomIds: ids };
-                                            });
-                                          }}
-                                          className="h-3.5 w-3.5 rounded border-slate-300 accent-violet-600"
-                                        />
-                                        {r.name || `Room ${sub.rooms.indexOf(r) + 1}`}
-                                      </label>
+                                              const previousId = d.assignedRoomIds[roomIndex] ?? "";
+                                              const assignedRoomIds = updateSelectedIdAt(d.assignedRoomIds, roomIndex, e.target.value);
+                                              const accessKindByRoomId = { ...(d.accessKindByRoomId ?? {}) };
+                                              if (previousId && previousId !== e.target.value) delete accessKindByRoomId[previousId];
+                                              if (e.target.value && previousId && previousId !== e.target.value && d.accessKindByRoomId?.[previousId]) {
+                                                accessKindByRoomId[e.target.value] = d.accessKindByRoomId[previousId];
+                                              }
+                                              return { ...d, assignedRoomIds, accessKindByRoomId };
+                                            })
+                                          }
+                                          className={INPUT}
+                                        >
+                                          <option value="">Select room</option>
+                                          {sub.rooms.map((r) => (
+                                            <option
+                                              key={r.id}
+                                              value={r.id}
+                                              disabled={r.id !== roomId && bathDraft.assignedRoomIds.includes(r.id)}
+                                            >
+                                              {r.name || `Room ${sub.rooms.indexOf(r) + 1}`}
+                                            </option>
+                                          ))}
+                                        </select>
+                                        <select
+                                          value={(roomId && bathDraft.accessKindByRoomId?.[roomId]) ?? ""}
+                                          onChange={(e) =>
+                                            setBathDraft((d) => {
+                                              if (!d || !roomId) return d;
+                                              const accessKindByRoomId = { ...(d.accessKindByRoomId ?? {}) };
+                                              const value = e.target.value as "" | ManagerBathroomRoomAccessKind;
+                                              if (value) accessKindByRoomId[roomId] = value;
+                                              else delete accessKindByRoomId[roomId];
+                                              return { ...d, accessKindByRoomId };
+                                            })
+                                          }
+                                          className={INPUT}
+                                          disabled={!roomId}
+                                        >
+                                          <option value="">Auto-detect setup</option>
+                                          <option value="ensuite">En suite</option>
+                                          <option value="shared">Shared</option>
+                                          <option value="hall">Hall / common</option>
+                                        </select>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setBathDraft((d) => {
+                                              if (!d) return d;
+                                              const targetId = d.assignedRoomIds[roomIndex];
+                                              const assignedRoomIds = d.assignedRoomIds.filter((_, idx2) => idx2 !== roomIndex);
+                                              const accessKindByRoomId = { ...(d.accessKindByRoomId ?? {}) };
+                                              if (targetId) delete accessKindByRoomId[targetId];
+                                              return { ...d, assignedRoomIds, accessKindByRoomId };
+                                            })
+                                          }
+                                          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-50"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
                                     ))}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setBathDraft((d) => (d ? { ...d, assignedRoomIds: [...d.assignedRoomIds, ""] } : d))
+                                      }
+                                      className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                                    >
+                                      + Add room
+                                    </button>
                                   </div>
                                 ) : null}
                               </div>
@@ -1072,13 +1207,39 @@ export function ManagerListingInlineEditor({
                         </div>
                         <div>
                           <label className={LABEL}>Location</label>
-                          <input
-                            type="text"
-                            value={spaceDraft.location}
-                            onChange={(e) => setSpaceDraft((d) => d ? { ...d, location: e.target.value } : d)}
-                            className={INPUT}
-                            placeholder="e.g. Main floor"
-                          />
+                          <div className="space-y-2">
+                            <select
+                              value={locationSelectValue(spaceDraft.location, locationLevelOptions)}
+                              onChange={(e) =>
+                                setSpaceDraft((d) => {
+                                  if (!d) return d;
+                                  const nextValue = e.target.value;
+                                  if (!nextValue) return { ...d, location: "" };
+                                  if (nextValue === LOCATION_LEVEL_CUSTOM) {
+                                    if (locationLevelOptions.includes(d.location.trim())) return { ...d, location: "" };
+                                    return d;
+                                  }
+                                  return { ...d, location: nextValue };
+                                })
+                              }
+                              className={INPUT}
+                            >
+                              <option value="">Select location</option>
+                              {locationLevelOptions.map((option) => (
+                                <option key={option} value={option}>{option}</option>
+                              ))}
+                              <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
+                            </select>
+                            {locationSelectValue(spaceDraft.location, locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
+                              <input
+                                type="text"
+                                value={spaceDraft.location}
+                                onChange={(e) => setSpaceDraft((d) => d ? { ...d, location: e.target.value } : d)}
+                                className={INPUT}
+                                placeholder="Custom location"
+                              />
+                            ) : null}
+                          </div>
                         </div>
                         <div className="sm:col-span-2">
                           <label className={LABEL}>Description / rules</label>
@@ -1101,26 +1262,47 @@ export function ManagerListingInlineEditor({
                         </div>
                         <div className="sm:col-span-2">
                           <label className={LABEL}>Room access</label>
-                          <div className="flex flex-wrap gap-2">
-                            {sub.rooms.map((r) => (
-                              <label key={r.id} className="flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">
-                                <input
-                                  type="checkbox"
-                                  checked={spaceDraft.roomAccessIds.includes(r.id)}
-                                  onChange={(e) => {
-                                    setSpaceDraft((d) => {
-                                      if (!d) return d;
-                                      const ids = e.target.checked
-                                        ? [...d.roomAccessIds, r.id]
-                                        : d.roomAccessIds.filter((x) => x !== r.id);
-                                      return { ...d, roomAccessIds: ids };
-                                    });
-                                  }}
-                                  className="h-3.5 w-3.5 rounded border-slate-300 accent-sky-600"
-                                />
-                                {r.name || `Room ${sub.rooms.indexOf(r) + 1}`}
-                              </label>
+                          <div className="space-y-2 rounded-xl border border-sky-100 bg-white/90 p-3">
+                            {(spaceDraft.roomAccessIds.length ? spaceDraft.roomAccessIds : [""]).map((roomId, roomIndex) => (
+                              <div key={`${spaceDraft.id}-access-${roomIndex}-${roomId || "empty"}`} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                <select
+                                  value={roomId}
+                                  onChange={(e) =>
+                                    setSpaceDraft((d) => (d ? { ...d, roomAccessIds: updateSelectedIdAt(d.roomAccessIds, roomIndex, e.target.value) } : d))
+                                  }
+                                  className={INPUT}
+                                >
+                                  <option value="">Select room</option>
+                                  {sub.rooms.map((r) => (
+                                    <option
+                                      key={r.id}
+                                      value={r.id}
+                                      disabled={r.id !== roomId && spaceDraft.roomAccessIds.includes(r.id)}
+                                    >
+                                      {r.name || `Room ${sub.rooms.indexOf(r) + 1}`}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSpaceDraft((d) => (d ? { ...d, roomAccessIds: d.roomAccessIds.filter((_, idx2) => idx2 !== roomIndex) } : d))
+                                  }
+                                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-50"
+                                >
+                                  Remove
+                                </button>
+                              </div>
                             ))}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSpaceDraft((d) => (d ? { ...d, roomAccessIds: [...d.roomAccessIds, ""] } : d))
+                              }
+                              className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                            >
+                              + Add room
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1135,10 +1317,10 @@ export function ManagerListingInlineEditor({
       </div>
 
       {/* ── LEASE & PRICING ── */}
-      <div className={`${SECTION_WRAP} border-amber-100`}>
+      <div className={`${SECTION_WRAP} border-sky-100`}>
         <SectionHeader
           title="Lease & pricing"
-          color="amber"
+          color="sky"
           isEditing={editingSection === "lease"}
           onEdit={() => (editingSection === "lease" ? setEditingSection(null) : startEditLease())}
         />
@@ -1250,7 +1432,7 @@ export function ManagerListingInlineEditor({
                             return { ...d, paymentAtSigningIncludes: next };
                           });
                         }}
-                        className="h-3.5 w-3.5 rounded border-slate-300 accent-amber-600"
+                        className="h-3.5 w-3.5 rounded border-slate-300 accent-sky-600"
                       />
                       {o.label}
                     </label>
@@ -1265,7 +1447,7 @@ export function ManagerListingInlineEditor({
                       type="checkbox"
                       checked={leaseDraft.zellePaymentsEnabled ?? false}
                       onChange={(e) => setLeaseDraft((d) => ({ ...d, zellePaymentsEnabled: e.target.checked }))}
-                      className="h-4 w-4 rounded border-slate-300 accent-amber-600"
+                      className="h-4 w-4 rounded border-slate-300 accent-sky-600"
                     />
                     Zelle payments
                   </label>
@@ -1283,7 +1465,7 @@ export function ManagerListingInlineEditor({
                       type="checkbox"
                       checked={leaseDraft.venmoPaymentsEnabled ?? false}
                       onChange={(e) => setLeaseDraft((d) => ({ ...d, venmoPaymentsEnabled: e.target.checked }))}
-                      className="h-4 w-4 rounded border-slate-300 accent-amber-600"
+                      className="h-4 w-4 rounded border-slate-300 accent-sky-600"
                     />
                     Venmo payments
                   </label>
@@ -1304,7 +1486,7 @@ export function ManagerListingInlineEditor({
                     type="checkbox"
                     checked={leaseDraft.shortTermRentalsAllowed ?? false}
                     onChange={(e) => setLeaseDraft((d) => ({ ...d, shortTermRentalsAllowed: e.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300 accent-amber-600"
+                    className="h-4 w-4 rounded border-slate-300 accent-sky-600"
                   />
                   Short-term rentals allowed
                 </label>
