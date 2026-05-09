@@ -74,7 +74,9 @@ import {
   downloadLeaseFromRow,
   printLeaseAsPdf,
   hasBothLeaseSignatures,
+  hasAnyLeaseSignature,
   residentHasSignedLease,
+  updateLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 import {
@@ -1045,6 +1047,22 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       updatePendingRentAmountForResident(residentEmail, propId, rent, userId ?? null);
     }
     recordApprovedApplicationCharges(nextRow, userId ?? null);
+
+    // Auto-regenerate any unsigned leases so room/rent/rules changes are reflected immediately
+    if (residentEmail && nextRow.application) {
+      const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
+        (lr) =>
+          lr.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase() &&
+          !hasAnyLeaseSignature(lr) &&
+          lr.status !== "Voided",
+      );
+      for (const lr of leasesToRegen) {
+        updateLeasePipelineRow(lr.id, {
+          application: { ...(lr.application ?? {}), ...nextRow.application },
+        });
+        generateLeaseHtmlForRow(lr.id);
+      }
+    }
 
     setEditResidentOpen(false);
     setHcTick((n) => n + 1);

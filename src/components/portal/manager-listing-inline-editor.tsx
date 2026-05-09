@@ -116,6 +116,7 @@ function AmenityChipPicker({
   const customLines = splitLineList(value).filter(
     (s) => !presets.some((p) => p.label.toLowerCase() === s.toLowerCase()),
   );
+  const [showCustom, setShowCustom] = useState(() => customLines.length > 0);
 
   return (
     <div className="space-y-3">
@@ -130,9 +131,15 @@ function AmenityChipPicker({
             {checked.has(p.label.toLowerCase()) ? "✓ " : ""}{p.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setShowCustom((v) => !v)}
+          className={showCustom ? CHIP_ON : CHIP_OFF}
+        >
+          {showCustom ? "✓ " : "+ "}Custom
+        </button>
       </div>
-      <div>
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Custom (one per line)</p>
+      {showCustom && (
         <textarea
           rows={2}
           value={customLines.join("\n")}
@@ -146,7 +153,7 @@ function AmenityChipPicker({
           className={`${TEXTAREA} text-xs`}
           placeholder={extraPlaceholder ?? "Any additional items…"}
         />
-      </div>
+      )}
     </div>
   );
 }
@@ -656,7 +663,6 @@ export function ManagerListingInlineEditor({
                   <th className={TH}>Room</th>
                   <th className={TH}>Floor</th>
                   <th className={TH}>Rent/mo</th>
-                  <th className={TH}>Move-in date</th>
                   <th className={TH}>Utilities est.</th>
                   <th className={TH}>Furnishing</th>
                   <th className={`${TH} text-right`}>Actions</th>
@@ -686,7 +692,6 @@ export function ManagerListingInlineEditor({
                             <span className="text-xs text-slate-400">—</span>
                           )}
                         </td>
-                        <td className={TD}>{room.moveInAvailableDate || "—"}</td>
                         <td className={TD}>{normUtility(room.utilitiesEstimate)}</td>
                         <td className={TD}>{normFurnishing(room.furnishing)}</td>
                         <td className={`${TD} text-right`}>
@@ -752,17 +757,6 @@ export function ManagerListingInlineEditor({
                                   }
                                   className={INPUT}
                                   placeholder="950"
-                                />
-                              </div>
-                              <div>
-                                <label className={LABEL}>Move-in available date</label>
-                                <input
-                                  type="date"
-                                  value={roomDraft.moveInAvailableDate}
-                                  onChange={(e) =>
-                                    setRoomDraft((d) => d ? { ...d, moveInAvailableDate: e.target.value } : d)
-                                  }
-                                  className={INPUT}
                                 />
                               </div>
                               <div>

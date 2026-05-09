@@ -1,9 +1,16 @@
 import { mockProperties } from "@/data/mock-properties";
 import type { ListingRichContent } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
+import { LISTING_ROOM_FLOOR_LEVEL_OPTIONS } from "@/data/manager-listing-presets";
 import { readAllExtraListings, readExtraListings } from "@/lib/demo-property-pipeline";
 import { effectiveApplicationForRow, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+
+function normFloorLabel(raw: string): string {
+  if (!raw.trim()) return "";
+  const hit = LISTING_ROOM_FLOOR_LEVEL_OPTIONS.find((o) => o.id === raw.trim());
+  return hit ? hit.label : raw.trim();
+}
 
 export const LEASE_TERM_OPTIONS = ["3-Month", "9-Month", "12-Month", "Month-to-Month", "Custom"] as const;
 export const SHORT_TERM_LEASE_TERM = "Short-Term Stay";
@@ -334,7 +341,7 @@ export function getRoomChoiceLabel(roomChoiceValue: string): string {
     const room = sub.rooms.find((r) => r.id === listingRoomId);
     if (!room) return prop.title;
     const rent = room.monthlyRent > 0 ? `$${room.monthlyRent}/mo` : "";
-    const parts = [room.name.trim(), room.floor.trim(), rent].filter(Boolean);
+    const parts = [room.name.trim(), normFloorLabel(room.floor), rent].filter(Boolean);
     return parts.length ? parts.join(" · ") : room.name.trim();
   }
   const r = getPropertyById(t);
@@ -376,7 +383,7 @@ export function getRoomOptionsForProperty(propertyId: string, options: RoomAvail
     if (roomRows.length > 0) {
       return roomRows.map((r) => {
         const rent = r.monthlyRent > 0 ? `$${r.monthlyRent}/mo` : "Rent TBD";
-        const floor = r.floor.trim();
+        const floor = normFloorLabel(r.floor);
         const label = [r.name.trim(), floor, rent].filter(Boolean).join(" · ");
         return { value: `${selected.id}${LISTING_ROOM_CHOICE_SEP}${r.id}`, label };
       });
