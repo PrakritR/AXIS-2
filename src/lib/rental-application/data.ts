@@ -61,10 +61,6 @@ function dateMinusOneDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
 }
 
-function datePlusOneDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-}
-
 function formatAvailabilityDate(date: Date): string {
   return date.toLocaleDateString("en-US", {
     month: "long",
@@ -95,6 +91,31 @@ function manualUnavailableRangesForRoomChoice(roomChoiceValue: string) {
   const sub = normalizeManagerListingSubmissionV1(prop.listingSubmission);
   const room = sub.rooms.find((r) => r.id === parsed.listingRoomId);
   return room?.manualUnavailableRanges ?? [];
+}
+
+function structuredRoomForChoice(roomChoiceValue: string) {
+  const parsed = parseRoomChoiceValue(roomChoiceValue);
+  if (!parsed.listingRoomId || !parsed.propertyId) return null;
+  const prop = getPropertyById(parsed.propertyId);
+  if (!prop?.listingSubmission || prop.listingSubmission.v !== 1) return null;
+  const sub = normalizeManagerListingSubmissionV1(prop.listingSubmission);
+  return sub.rooms.find((r) => r.id === parsed.listingRoomId) ?? null;
+}
+
+function explicitAvailabilityBlocksRoom(rawAvailability: string | undefined | null): boolean {
+  const raw = String(rawAvailability ?? "").trim().toLowerCase();
+  if (!raw) return false;
+  return /\bunavailable\b|not available|signed.*not available|no longer available|not open\b|\bwaitlist\b|available soon/.test(raw);
+}
+
+function earliestRoomAvailabilityDate(roomChoiceValue: string, rawAvailability: string | undefined | null): Date | null {
+  const structured = structuredRoomForChoice(roomChoiceValue);
+  const structuredDate = parseFlexibleLocalDate(structured?.moveInAvailableDate);
+  if (structuredDate) return structuredDate;
+
+  const raw = String(rawAvailability ?? "").trim();
+  const afterMatch = raw.match(/available\s+after\s+(.+)/i);
+  return afterMatch ? parseFlexibleLocalDate(afterMatch[1]) : null;
 }
 
 /** True if proposed lease [targetStart, targetEnd] overlaps any manager-defined block (inclusive). */
@@ -224,13 +245,20 @@ export function getRoomUnavailabilityWindows(
 
 export function isRoomChoiceAvailable(
   roomChoiceValue: string,
-  _rawAvailability: string,
+  rawAvailability: string,
   options: RoomAvailabilityOptions = {},
 ): boolean {
+  if (explicitAvailabilityBlocksRoom(rawAvailability)) {
+    return false;
+  }
   const targetStart = parseFlexibleLocalDate(options.leaseStart) ?? startOfToday();
   // When no end date is given (e.g. search with only move-in), treat as a point-in-time
   // check so we don't falsely conflict with occupancy windows outside the search date.
   const targetEnd = parseFlexibleLocalDate(options.leaseEnd) ?? targetStart;
+  const earliestAvailable = earliestRoomAvailabilityDate(roomChoiceValue, rawAvailability);
+  if (earliestAvailable && targetStart.getTime() < earliestAvailable.getTime()) {
+    return false;
+  }
   const occupancies = approvedOccupancyForRoom(roomChoiceValue, options.excludeApplicationId);
   if (occupancies.some((occ) => intervalsOverlap(targetStart, targetEnd, occ.leaseStart, occ.leaseEnd))) {
     return false;
@@ -294,11 +322,20 @@ export function isRoomPendingConflict(
 
 export function effectiveRoomAvailabilityLabel(
   roomChoiceValue: string,
-  _rawAvailability: string,
+  rawAvailability: string,
   options: RoomAvailabilityOptions = {},
 ): string {
+  if (explicitAvailabilityBlocksRoom(rawAvailability)) {
+    return rawAvailability.trim() || "Unavailable";
+  }
+
   const today = startOfToday();
   const windows = getRoomUnavailabilityWindows(roomChoiceValue, { excludeApplicationId: options.excludeApplicationId });
+  const earliestAvailable = earliestRoomAvailabilityDate(roomChoiceValue, rawAvailability);
+
+  if (earliestAvailable && today.getTime() < earliestAvailable.getTime()) {
+    return `Available after ${formatAvailabilityDate(earliestAvailable)}`;
+  }
 
   // Check if today is within any unavailability window (point-in-time check).
   const currentBlock = windows.find((w) => {
@@ -373,7 +410,7 @@ export function propertyAllowsShortTermRental(propertyId: string): boolean {
 }
 
 /** Rooms for the selected listing: manager submission rooms, else legacy one-row-per-unit in the same building. */
-export function getRoomOptionsForProperty(propertyId: string, options: RoomAvailabilityOptions = {}): { value: string; label: string }[] {
+export function getRoomOptionsForProperty(propertyId: string): { value: string; label: string }[] {
   const selected = getPropertyById(propertyId);
   if (!selected) return [];
 

@@ -94,10 +94,6 @@ function normFurnishing(raw: string): string {
   return deduped.slice(0, -1).join(", ") + " & " + deduped[deduped.length - 1];
 }
 
-function rid(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 function locationOptionsFromStories(storiesId: string | undefined): string[] {
   if (storiesId === "1") return ["1st / main floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
   if (storiesId === "2") return ["1st / main floor", "2nd floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
@@ -240,6 +236,27 @@ function SaveRow({ onSave, onCancel, saving }: { onSave: () => void; onCancel: (
       <button type="button" onClick={onCancel} className={CANCEL_BTN}>
         Cancel
       </button>
+    </div>
+  );
+}
+
+function InlinePhotoStrip({ urls, emptyLabel }: { urls: string[] | undefined; emptyLabel: string }) {
+  if (!urls?.length) {
+    return <p className="text-xs text-slate-400">{emptyLabel}</p>;
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {urls.slice(0, 6).map((url, index) => (
+        <div key={`${url.slice(0, 32)}-${index}`} className="h-16 w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt="" className="h-full w-full object-cover" />
+        </div>
+      ))}
+      {urls.length > 6 ? (
+        <span className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500">
+          +{urls.length - 6}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -713,6 +730,7 @@ export function ManagerListingInlineEditor({
                   <th className={TH}>#</th>
                   <th className={TH}>Room</th>
                   <th className={TH}>Floor</th>
+                  <th className={TH}>Availability</th>
                   <th className={TH}>Rent/mo</th>
                   <th className={TH}>Utilities est.</th>
                   <th className={TH}>Furnishing</th>
@@ -734,8 +752,21 @@ export function ManagerListingInlineEditor({
                           {room.detail?.trim() ? (
                             <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{room.detail}</p>
                           ) : null}
+                          {room.photoDataUrls.length > 0 ? (
+                            <div className="mt-2">
+                              <InlinePhotoStrip urls={room.photoDataUrls.slice(0, 3)} emptyLabel="" />
+                            </div>
+                          ) : null}
                         </td>
                         <td className={TD}>{normFloor(room.floor)}</td>
+                        <td className={TD}>
+                          <div className="space-y-1">
+                            <p className="text-sm text-slate-700">{room.availability || "Available now"}</p>
+                            <p className="text-xs text-slate-400">
+                              {room.moveInAvailableDate?.trim() ? `Earliest move-in ${room.moveInAvailableDate}` : "No earliest move-in date set"}
+                            </p>
+                          </div>
+                        </td>
                         <td className={TD}>
                           {room.monthlyRent > 0 ? (
                             <span className="font-semibold text-slate-900">${room.monthlyRent.toLocaleString()}</span>
@@ -770,7 +801,7 @@ export function ManagerListingInlineEditor({
                       </tr>
                       {isEditing && roomDraft ? (
                         <tr className="border-b border-sky-100">
-                          <td colSpan={8} className="bg-sky-50/20 px-4 py-4">
+                          <td colSpan={9} className="bg-sky-50/20 px-4 py-4">
                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                               <div>
                                 <label className={LABEL}>Room name</label>
@@ -811,6 +842,25 @@ export function ManagerListingInlineEditor({
                                 />
                               </div>
                               <div>
+                                <label className={LABEL}>Availability label</label>
+                                <input
+                                  type="text"
+                                  value={roomDraft.availability}
+                                  onChange={(e) => setRoomDraft((d) => d ? { ...d, availability: e.target.value } : d)}
+                                  className={INPUT}
+                                  placeholder="Available now"
+                                />
+                              </div>
+                              <div>
+                                <label className={LABEL}>Earliest move-in date</label>
+                                <input
+                                  type="date"
+                                  value={roomDraft.moveInAvailableDate}
+                                  onChange={(e) => setRoomDraft((d) => d ? { ...d, moveInAvailableDate: e.target.value } : d)}
+                                  className={INPUT}
+                                />
+                              </div>
+                              <div>
                                 <label className={LABEL}>Est. utilities/mo</label>
                                 <input
                                   type="text"
@@ -842,6 +892,12 @@ export function ManagerListingInlineEditor({
                                   onChange={(v) => setRoomDraft((d) => d ? { ...d, roomAmenitiesText: v } : d)}
                                   extraPlaceholder="Private patio, Murphy bed…"
                                 />
+                              </div>
+                              <div className="sm:col-span-2 lg:col-span-3">
+                                <label className={LABEL}>Room photos</label>
+                                <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+                                  <InlinePhotoStrip urls={roomDraft.photoDataUrls} emptyLabel="No room photos on this listing yet." />
+                                </div>
                               </div>
                               <div className="sm:col-span-2 lg:col-span-3">
                                 <label className={LABEL}>Room description</label>
@@ -929,6 +985,11 @@ export function ManagerListingInlineEditor({
                       >
                         <td className={TD}>
                           <p className="font-semibold text-slate-900">{bath.name || `Bathroom ${idx + 1}`}</p>
+                          {bath.photoDataUrls.length > 0 ? (
+                            <div className="mt-2">
+                              <InlinePhotoStrip urls={bath.photoDataUrls.slice(0, 3)} emptyLabel="" />
+                            </div>
+                          ) : null}
                         </td>
                         <td className={TD}>{bath.location || "—"}</td>
                         <td className={TD}>{fixtures || "—"}</td>
@@ -1025,6 +1086,12 @@ export function ManagerListingInlineEditor({
                                     {f}
                                   </label>
                                 ))}
+                              </div>
+                              <div className="sm:col-span-2">
+                                <label className={LABEL}>Bathroom photos</label>
+                                <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+                                  <InlinePhotoStrip urls={bathDraft.photoDataUrls} emptyLabel="No bathroom photos on this listing yet." />
+                                </div>
                               </div>
                               <div className="sm:col-span-2">
                                 <label className={LABEL}>Assigned rooms</label>
@@ -1171,6 +1238,11 @@ export function ManagerListingInlineEditor({
                         {space.amenitiesText?.trim() ? (
                           <p className="mt-0.5 text-xs text-slate-400">{space.amenitiesText}</p>
                         ) : null}
+                        {space.photoDataUrls.length > 0 ? (
+                          <div className="mt-2">
+                            <InlinePhotoStrip urls={space.photoDataUrls.slice(0, 3)} emptyLabel="" />
+                          </div>
+                        ) : null}
                       </div>
                       <div className="flex shrink-0 gap-1.5">
                         <button
@@ -1259,6 +1331,12 @@ export function ManagerListingInlineEditor({
                             onChange={(v) => setSpaceDraft((d) => d ? { ...d, amenitiesText: v } : d)}
                             extraPlaceholder="Ice maker, wine fridge…"
                           />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className={LABEL}>Shared space photos</label>
+                          <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+                            <InlinePhotoStrip urls={spaceDraft.photoDataUrls} emptyLabel="No shared-space photos on this listing yet." />
+                          </div>
                         </div>
                         <div className="sm:col-span-2">
                           <label className={LABEL}>Room access</label>

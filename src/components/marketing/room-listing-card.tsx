@@ -12,6 +12,10 @@ const SLIDE_GRADS = [
   "from-cyan-100 via-sky-200 to-blue-300",
 ] as const;
 
+type Slide =
+  | { kind: "photo"; src: string }
+  | { kind: "gradient"; className: string };
+
 function slidesForKey(key: string): readonly string[] {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h + key.charCodeAt(i) * (i + 1)) % 997;
@@ -19,6 +23,13 @@ function slidesForKey(key: string): readonly string[] {
   const b = SLIDE_GRADS[(h + 2) % SLIDE_GRADS.length]!;
   const c = SLIDE_GRADS[(h + 4) % SLIDE_GRADS.length]!;
   return [a, b, c];
+}
+
+function slidesForRow(row: RoomListingRow): Slide[] {
+  if (row.photoUrls.length > 0) {
+    return row.photoUrls.slice(0, 6).map((src) => ({ kind: "photo", src }));
+  }
+  return slidesForKey(row.key).map((className) => ({ kind: "gradient", className }));
 }
 
 function BedIcon({ className }: { className?: string }) {
@@ -89,7 +100,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
     roomPrice: row.priceLabel,
   });
 
-  const slides = useMemo(() => slidesForKey(row.key), [row.key]);
+  const slides = useMemo(() => slidesForRow(row), [row]);
   const [slideIdx, setSlideIdx] = useState(0);
   const n = slides.length;
 
@@ -117,15 +128,27 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_10px_40px_-18px_rgba(15,23,42,0.2)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_50px_-14px_rgba(15,23,42,0.25)]">
       <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-slate-200">
-        {slides.map((grad, i) => (
-          <div
-            key={grad + i}
-            className={`absolute inset-0 bg-gradient-to-br ${grad} transition-opacity duration-500 ease-out ${
-              i === slideIdx ? "opacity-100" : "opacity-0"
-            }`}
-            aria-hidden
-          />
-        ))}
+        {slides.map((slide, i) =>
+          slide.kind === "photo" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={`${slide.src.slice(0, 48)}-${i}`}
+              src={slide.src}
+              alt={row.roomName}
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ease-out ${
+                i === slideIdx ? "opacity-100" : "opacity-0"
+              }`}
+            />
+          ) : (
+            <div
+              key={slide.className + i}
+              className={`absolute inset-0 bg-gradient-to-br ${slide.className} transition-opacity duration-500 ease-out ${
+                i === slideIdx ? "opacity-100" : "opacity-0"
+              }`}
+              aria-hidden
+            />
+          ),
+        )}
 
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" aria-hidden />
 

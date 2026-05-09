@@ -35,6 +35,8 @@ export type RoomListingRow = {
   priceOverlayLabel: string;
   /** Raw listing availability string (for traffic-light styling on search cards). */
   availabilityRaw: string;
+  /** Room photos first, then house photos as fallback. */
+  photoUrls: string[];
 };
 
 function streetUpperFromProperty(p: MockProperty): string {
@@ -269,6 +271,7 @@ export function filterRoomListings(
           listingTags: listingTags(p),
           priceOverlayLabel: priceOverlayLabelForProperty(p),
           availabilityRaw: room.availability,
+          photoUrls: room.modal.photoUrls?.length ? room.modal.photoUrls : rich.heroHousePhotoUrls?.slice(0, 3) ?? [],
         });
       }
     }

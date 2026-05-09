@@ -3,6 +3,7 @@
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
 import { loadPublicExtraListingsFromServer, PROPERTY_PIPELINE_EVENT, readExtraListings } from "@/lib/demo-property-pipeline";
+import { MANAGER_APPLICATIONS_EVENT, syncPublicApprovedApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { RADIUS_MILE_OPTIONS, parseRadiusParam } from "@/lib/listings-search";
 import { PropertyCard } from "@/components/marketing/property-card";
 import { RoomListingCard } from "@/components/marketing/room-listing-card";
@@ -80,6 +81,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   const [zip, setZip] = useState(() => initialZip.replace(/\D/g, "").slice(0, 5));
   const [radius, setRadius] = useState<number>(safeRadius);
   const [extras, setExtras] = useState<MockProperty[]>([]);
+  const [applicationTick, setApplicationTick] = useState(0);
 
   useEffect(() => {
     const sync = () => {
@@ -90,6 +92,15 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
     const on = () => sync();
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      void syncPublicApprovedApplicationsFromServer({ force: true }).then(() => setApplicationTick((n) => n + 1));
+    };
+    sync();
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
+    return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
   }, []);
 
   const combinedProperties = useMemo(() => [...mockProperties, ...extras], [extras]);
@@ -108,7 +119,9 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   const pct = ((budget - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
   const filteredRooms = useMemo(
-    () =>
+    () => {
+      void applicationTick;
+      return (
       filterRoomListings(combinedProperties, {
         zipRaw: zipDigits,
         radiusMiles: radius,
@@ -116,8 +129,10 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         bathroom,
         moveIn,
         moveOut,
-      }),
-    [combinedProperties, zipDigits, radius, budget, bathroom, moveIn, moveOut],
+      })
+      );
+    },
+    [combinedProperties, zipDigits, radius, budget, bathroom, moveIn, moveOut, applicationTick],
   );
 
   const pendingSearch = useMemo<PendingListingsSearch | null>(() => {
