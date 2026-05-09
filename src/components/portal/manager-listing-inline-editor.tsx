@@ -16,11 +16,18 @@ import {
   emptySharedSpace,
 } from "@/lib/manager-listing-submission";
 import {
+  BATHROOM_EXTRA_AMENITY_PRESETS,
+  HOUSE_WIDE_AMENITY_PRESETS,
   LISTING_PLACE_CATEGORY_OPTIONS,
   LISTING_PROPERTY_TYPE_OPTIONS,
   LISTING_ROOM_FLOOR_LEVEL_OPTIONS,
   LISTING_STORIES_OPTIONS,
   LISTING_TOTAL_BATH_OPTIONS,
+  ROOM_AMENITY_PRESETS,
+  ROOM_FURNISHING_OPTIONS,
+  SHARED_SPACE_AMENITY_PRESETS,
+  mergeToggleLine,
+  splitLineList,
 } from "@/data/manager-listing-presets";
 import type { PortalListingNote } from "@/lib/portal-listing-notes";
 import { getPortalListingNote, savePortalListingNote, savePortalRoomNote } from "@/lib/portal-listing-notes";
@@ -87,6 +94,61 @@ function normFurnishing(raw: string): string {
 
 function rid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// ─── amenity chip picker ─────────────────────────────────────────────────────
+
+const CHIP_OFF = "cursor-pointer select-none rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700";
+const CHIP_ON  = "cursor-pointer select-none rounded-full border border-indigo-400 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700";
+
+function AmenityChipPicker({
+  presets,
+  value,
+  onChange,
+  extraPlaceholder,
+}: {
+  presets: ReadonlyArray<{ id: string; label: string }>;
+  value: string;
+  onChange: (v: string) => void;
+  extraPlaceholder?: string;
+}) {
+  const checked = new Set(splitLineList(value).map((s) => s.toLowerCase()));
+  const customLines = splitLineList(value).filter(
+    (s) => !presets.some((p) => p.label.toLowerCase() === s.toLowerCase()),
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-1.5">
+        {presets.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onChange(mergeToggleLine(value, p.label, !checked.has(p.label.toLowerCase())))}
+            className={checked.has(p.label.toLowerCase()) ? CHIP_ON : CHIP_OFF}
+          >
+            {checked.has(p.label.toLowerCase()) ? "✓ " : ""}{p.label}
+          </button>
+        ))}
+      </div>
+      <div>
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Custom (one per line)</p>
+        <textarea
+          rows={2}
+          value={customLines.join("\n")}
+          onChange={(e) => {
+            const custom = splitLineList(e.target.value);
+            const kept = splitLineList(value).filter((s) =>
+              presets.some((p) => p.label.toLowerCase() === s.toLowerCase()),
+            );
+            onChange([...kept, ...custom].join("\n"));
+          }}
+          className={`${TEXTAREA} text-xs`}
+          placeholder={extraPlaceholder ?? "Any additional items…"}
+        />
+      </div>
+    </div>
+  );
 }
 
 // ─── sub-components ──────────────────────────────────────────────────────────
@@ -717,24 +779,23 @@ export function ManagerListingInlineEditor({
                               </div>
                               <div>
                                 <label className={LABEL}>Furnishing</label>
-                                <input
-                                  type="text"
-                                  value={roomDraft.furnishing}
+                                <select
+                                  value={ROOM_FURNISHING_OPTIONS.find((o) => o.value === roomDraft.furnishing)?.value ?? ""}
                                   onChange={(e) => setRoomDraft((d) => d ? { ...d, furnishing: e.target.value } : d)}
                                   className={INPUT}
-                                  placeholder="Bed, desk, chair"
-                                />
+                                >
+                                  {ROOM_FURNISHING_OPTIONS.map((o) => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
                               </div>
-                              <div className="sm:col-span-2 lg:col-span-2">
-                                <label className={LABEL}>Room amenities (one per line)</label>
-                                <textarea
-                                  rows={2}
+                              <div className="sm:col-span-2 lg:col-span-3">
+                                <label className={`${LABEL} mb-2`}>Room amenities</label>
+                                <AmenityChipPicker
+                                  presets={ROOM_AMENITY_PRESETS}
                                   value={roomDraft.roomAmenitiesText}
-                                  onChange={(e) =>
-                                    setRoomDraft((d) => d ? { ...d, roomAmenitiesText: e.target.value } : d)
-                                  }
-                                  className={TEXTAREA}
-                                  placeholder="Private balcony&#10;Walk-in closet"
+                                  onChange={(v) => setRoomDraft((d) => d ? { ...d, roomAmenitiesText: v } : d)}
+                                  extraPlaceholder="Private patio, Murphy bed…"
                                 />
                               </div>
                               <div className="sm:col-span-2 lg:col-span-3">
@@ -871,14 +932,13 @@ export function ManagerListingInlineEditor({
                                   placeholder="e.g. 2nd floor hallway"
                                 />
                               </div>
-                              <div>
-                                <label className={LABEL}>Amenities / finishes</label>
-                                <textarea
-                                  rows={2}
+                              <div className="sm:col-span-2">
+                                <label className={`${LABEL} mb-2`}>Fixtures & finishes</label>
+                                <AmenityChipPicker
+                                  presets={BATHROOM_EXTRA_AMENITY_PRESETS}
                                   value={bathDraft.amenitiesText}
-                                  onChange={(e) => setBathDraft((d) => d ? { ...d, amenitiesText: e.target.value } : d)}
-                                  className={TEXTAREA}
-                                  placeholder="Double vanity, heated floor…"
+                                  onChange={(v) => setBathDraft((d) => d ? { ...d, amenitiesText: v } : d)}
+                                  extraPlaceholder="Rain shower, towel warmer…"
                                 />
                               </div>
                               <div className="flex flex-col gap-2">
@@ -1037,13 +1097,12 @@ export function ManagerListingInlineEditor({
                           />
                         </div>
                         <div className="sm:col-span-2">
-                          <label className={LABEL}>Amenities / equipment</label>
-                          <textarea
-                            rows={2}
+                          <label className={`${LABEL} mb-2`}>Amenities / equipment</label>
+                          <AmenityChipPicker
+                            presets={SHARED_SPACE_AMENITY_PRESETS}
                             value={spaceDraft.amenitiesText}
-                            onChange={(e) => setSpaceDraft((d) => d ? { ...d, amenitiesText: e.target.value } : d)}
-                            className={TEXTAREA}
-                            placeholder="Washer, dryer, dishwasher…"
+                            onChange={(v) => setSpaceDraft((d) => d ? { ...d, amenitiesText: v } : d)}
+                            extraPlaceholder="Ice maker, wine fridge…"
                           />
                         </div>
                         <div className="sm:col-span-2">
@@ -1349,13 +1408,12 @@ export function ManagerListingInlineEditor({
           <div className="p-4">
             <div className="grid gap-4">
               <div>
-                <label className={LABEL}>Building / house amenities (one per line)</label>
-                <textarea
-                  rows={5}
+                <label className={`${LABEL} mb-2`}>Building / house amenities</label>
+                <AmenityChipPicker
+                  presets={HOUSE_WIDE_AMENITY_PRESETS}
                   value={amenitiesDraft}
-                  onChange={(e) => setAmenitiesDraft(e.target.value)}
-                  className={TEXTAREA}
-                  placeholder="High-speed WiFi&#10;In-unit laundry&#10;Backyard&#10;Garage parking"
+                  onChange={setAmenitiesDraft}
+                  extraPlaceholder="Rooftop access, sauna…"
                 />
               </div>
               <div>
