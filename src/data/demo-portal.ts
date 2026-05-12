@@ -112,6 +112,7 @@ export type DemoManagerPaymentLedgerRow = {
   propertyName: string;
   roomNumber: string;
   residentName: string;
+  residentEmail?: string;
   chargeTitle: string;
   lineAmount: string;
   amountPaid: string;

@@ -2207,6 +2207,157 @@ export function ManagerAddListingForm({
                           />
                         </div>
                       </GridField>
+
+                      {/* Proration method */}
+                      <GridField className="sm:col-span-2">
+                        <FieldLabel hint="How first-month rent and utilities are prorated when a resident moves in mid-month.">
+                          Proration method
+                        </FieldLabel>
+                        <div className="mt-2 flex gap-3">
+                          {(["auto", "daily_rate"] as const).map((method) => {
+                            const active = (room.prorateMethod ?? "auto") === method;
+                            return (
+                              <button
+                                key={method}
+                                type="button"
+                                onClick={() => setRoom(i, { prorateMethod: method })}
+                                className={`flex-1 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${active ? "border-primary bg-primary/5 font-medium text-primary" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}
+                              >
+                                <span className="block font-semibold">
+                                  {method === "auto" ? "Auto (÷ days in month)" : "Manual daily rate"}
+                                </span>
+                                <span className="mt-0.5 block text-xs text-slate-500">
+                                  {method === "auto"
+                                    ? "Remaining days ÷ days in month × monthly rate"
+                                    : "Remaining days × your set daily rate"}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {(room.prorateMethod ?? "auto") === "auto" && room.monthlyRent > 0 && (
+                          <p className="mt-2 text-xs text-slate-500">
+                            Example: move-in May 14 → 18 days remaining → 18/31 × ${room.monthlyRent} ={" "}
+                            <span className="font-semibold text-slate-700">
+                              ${((18 / 31) * room.monthlyRent).toFixed(2)}
+                            </span>{" "}
+                            prorated rent
+                          </p>
+                        )}
+                      </GridField>
+
+                      {(room.prorateMethod ?? "auto") === "daily_rate" && (
+                        <>
+                          <GridField>
+                            <FieldLabel hint="Charged per day of occupancy in the move-in month.">Daily rent rate</FieldLabel>
+                            <div className="relative">
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                              <Input
+                                inputMode="decimal"
+                                className="pl-8"
+                                value={room.dailyRentRate ?? ""}
+                                onChange={(e) => setRoom(i, { dailyRentRate: Number(e.target.value) || undefined })}
+                                placeholder={room.monthlyRent > 0 ? String(Math.ceil(room.monthlyRent / 30)) : "28"}
+                              />
+                            </div>
+                            {room.dailyRentRate && room.dailyRentRate > 0 && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                Example: move-in May 14 (18 days) → 18 × ${room.dailyRentRate} ={" "}
+                                <span className="font-semibold text-slate-700">${(18 * room.dailyRentRate).toFixed(2)}</span>
+                              </p>
+                            )}
+                          </GridField>
+                          <GridField>
+                            <FieldLabel hint="Charged per day for utilities in the move-in month.">Daily utilities rate</FieldLabel>
+                            <div className="relative">
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                              <Input
+                                inputMode="decimal"
+                                className="pl-8"
+                                value={room.dailyUtilitiesRate ?? ""}
+                                onChange={(e) => setRoom(i, { dailyUtilitiesRate: Number(e.target.value) || undefined })}
+                                placeholder="6"
+                              />
+                            </div>
+                            {room.dailyUtilitiesRate && room.dailyUtilitiesRate > 0 && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                Example: move-in May 14 (18 days) → 18 × ${room.dailyUtilitiesRate} ={" "}
+                                <span className="font-semibold text-slate-700">${(18 * room.dailyUtilitiesRate).toFixed(2)}</span>
+                              </p>
+                            )}
+                          </GridField>
+                        </>
+                      )}
+
+                      <GridField className="sm:col-span-2">
+                        <FieldLabel hint="Applicants cannot choose lease dates that overlap these inclusive spans. Approved placements for this room are also blocked automatically.">
+                          Blocked date ranges (optional)
+                        </FieldLabel>
+                        <div className="mt-2 space-y-3">
+                          {(room.manualUnavailableRanges ?? []).map((range, ri) => (
+                            <div
+                              key={range.id}
+                              className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/90 bg-slate-50/40 p-3 sm:items-center"
+                            >
+                              <div className="min-w-[10rem] flex-1">
+                                <span className="mb-1 block text-[11px] font-semibold text-slate-500">From</span>
+                                <Input
+                                  type="date"
+                                  value={range.start}
+                                  onChange={(e) => {
+                                    const next = [...(room.manualUnavailableRanges ?? [])];
+                                    next[ri] = { ...range, start: e.target.value };
+                                    setRoom(i, { manualUnavailableRanges: next });
+                                  }}
+                                  aria-label={`Blocked range start ${ri + 1}`}
+                                />
+                              </div>
+                              <div className="min-w-[10rem] flex-1">
+                                <span className="mb-1 block text-[11px] font-semibold text-slate-500">Through</span>
+                                <Input
+                                  type="date"
+                                  value={range.end}
+                                  onChange={(e) => {
+                                    const next = [...(room.manualUnavailableRanges ?? [])];
+                                    next[ri] = { ...range, end: e.target.value };
+                                    setRoom(i, { manualUnavailableRanges: next });
+                                  }}
+                                  aria-label={`Blocked range end ${ri + 1}`}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                className="shrink-0 pb-2 text-xs font-semibold text-rose-600 hover:underline sm:pb-0"
+                                onClick={() => {
+                                  const next = (room.manualUnavailableRanges ?? []).filter((_, j) => j !== ri);
+                                  setRoom(i, { manualUnavailableRanges: next });
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full text-xs"
+                            onClick={() =>
+                              setRoom(i, {
+                                manualUnavailableRanges: [
+                                  ...(room.manualUnavailableRanges ?? []),
+                                  {
+                                    id: `unavail-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                                    start: "",
+                                    end: "",
+                                  },
+                                ],
+                              })
+                            }
+                          >
+                            + Add blocked range
+                          </Button>
+                        </div>
+                      </GridField>
                       <div className="sm:col-span-2">
                         <FieldLabel hint="Toggle specific items included in this room.">Furnishing &amp; furniture</FieldLabel>
                         <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">

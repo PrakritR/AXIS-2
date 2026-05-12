@@ -46,6 +46,42 @@ export function ManagerPaymentsLedgerPanel({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
   const [editAmountDraft, setEditAmountDraft] = useState("");
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+
+  const sendReminder = async (row: DemoManagerPaymentLedgerRow) => {
+    const email = row.residentEmail?.trim();
+    if (!email) {
+      showToast("No email on file for this resident.");
+      return;
+    }
+    setSendingReminderId(row.id);
+    try {
+      const res = await fetch("/api/portal/send-payment-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          residentEmail: email,
+          residentName: row.residentName,
+          chargeTitle: row.chargeTitle,
+          balanceDue: row.balanceDue,
+          propertyLabel: row.propertyName,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; skipped?: boolean };
+      if (data.skipped) {
+        showToast("Reminder sent to portal inbox (demo email — no real email sent).");
+      } else if (data.ok) {
+        showToast("Reminder sent to resident via email and portal inbox.");
+      } else {
+        showToast("Could not send reminder. Please try again.");
+      }
+    } catch {
+      showToast("Could not send reminder. Please try again.");
+    } finally {
+      setSendingReminderId(null);
+    }
+  };
 
   const hasAnySource = useMemo(() => rows.length > 0, [rows]);
 
@@ -183,6 +219,15 @@ export function ManagerPaymentsLedgerPanel({
                             </Button>
                           </>
                         ) : null}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={PORTAL_DETAIL_BTN}
+                          disabled={sendingReminderId === row.id}
+                          onClick={() => void sendReminder(row)}
+                        >
+                          {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
+                        </Button>
                         {activeBucket !== "pending" ? (
                           <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => moveToPending(row)}>
                             Move to pending

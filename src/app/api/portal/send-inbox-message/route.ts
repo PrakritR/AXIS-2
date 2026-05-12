@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
@@ -23,20 +24,57 @@ export async function POST(req: Request) {
       toEmails?: unknown;
       subject?: string;
       text?: string;
+      deliverToPortalInbox?: boolean;
     };
 
-    const toEmails = normalizeEmails(body.toEmails).filter(
-      (e) => e.includes("@") && !e.endsWith("@axis.local"),
-    );
+    const allEmails = normalizeEmails(body.toEmails).filter((e) => e.includes("@"));
+    const toEmails = allEmails.filter((e) => !e.endsWith("@axis.local"));
     const subject = String(body.subject ?? "").trim();
     const text = String(body.text ?? "").trim();
     const fromName = String(body.fromName ?? "Axis Housing Portal").trim();
+    const deliverToPortalInbox = body.deliverToPortalInbox !== false;
 
     if (!subject || !text) {
       return NextResponse.json({ ok: false, error: "subject and text are required." }, { status: 400 });
     }
+
+    const db = createSupabaseServiceRoleClient();
+    const senderEmail = user.email ?? body.fromEmail ?? "portal@example.com";
+
+    // Deliver to portal inbox for all recipients (including @axis.local demo emails)
+    if (deliverToPortalInbox && allEmails.length > 0) {
+      const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      for (const recipientEmail of allEmails) {
+        const threadId = `msg_${user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const thread = {
+          id: threadId,
+          folder: "inbox",
+          from: fromName,
+          email: senderEmail,
+          subject,
+          preview: text.slice(0, 100).replace(/\n/g, " "),
+          body: text,
+          time: when,
+          unread: true,
+          scope: "axis_portal_inbox_resident_v1",
+        };
+        await db.from("portal_inbox_thread_records").upsert(
+          {
+            id: threadId,
+            scope: "axis_portal_inbox_resident_v1",
+            owner_user_id: user.id,
+            participant_email: recipientEmail.toLowerCase(),
+            thread_type: "portal_message",
+            row_data: thread,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" },
+        );
+      }
+    }
+
     if (toEmails.length === 0) {
-      return NextResponse.json({ ok: true, skipped: true, reason: "No real email recipients." });
+      return NextResponse.json({ ok: true, skipped: true, reason: "No real email recipients — portal inbox updated." });
     }
 
     const apiKey = process.env.RESEND_API_KEY?.trim();

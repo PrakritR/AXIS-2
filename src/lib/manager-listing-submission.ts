@@ -49,6 +49,12 @@ export type ManagerRoomSubmission = {
   videoDataUrl: string | null;
   /** Estimated monthly utilities for this room (shown on listing). */
   utilitiesEstimate: string;
+  /** How prorated first-month rent is calculated. "auto" = (days_remaining / days_in_month) × monthly rate. "daily_rate" = days_remaining × set daily rate. Defaults to "auto" when absent. */
+  prorateMethod?: "auto" | "daily_rate";
+  /** Daily rent rate used when prorateMethod is "daily_rate". */
+  dailyRentRate?: number;
+  /** Daily utilities rate used when prorateMethod is "daily_rate". */
+  dailyUtilitiesRate?: number;
 };
 
 /** Sidebar “Quick facts” rows on the public listing; when empty, facts are auto-derived from the submission. */
@@ -278,6 +284,11 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         typeof (legacyRoom as ManagerRoomSubmission & { moveInInstructions?: unknown }).moveInInstructions === "string"
           ? (legacyRoom as ManagerRoomSubmission & { moveInInstructions: string }).moveInInstructions.trim()
           : "",
+      prorateMethod: (legacyRoom.prorateMethod === "daily_rate" ? "daily_rate" : "auto") as "auto" | "daily_rate",
+      dailyRentRate:
+        typeof legacyRoom.dailyRentRate === "number" && legacyRoom.dailyRentRate > 0 ? legacyRoom.dailyRentRate : undefined,
+      dailyUtilitiesRate:
+        typeof legacyRoom.dailyUtilitiesRate === "number" && legacyRoom.dailyUtilitiesRate > 0 ? legacyRoom.dailyUtilitiesRate : undefined,
       manualUnavailableRanges: (() => {
         const raw = (legacyRoom as ManagerRoomSubmission & { manualUnavailableRanges?: unknown }).manualUnavailableRanges;
         if (!Array.isArray(raw)) return [];

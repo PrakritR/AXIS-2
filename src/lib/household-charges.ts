@@ -627,18 +627,20 @@ function firstRecurringMonthAfterLeaseStart(leaseStart: string | undefined): str
   return monthKeyFromDate(nextMonth);
 }
 
-function leaseStartProration(leaseStart: string | undefined): { prorated: boolean; factor: number; label: string } {
-  if (!leaseStart?.trim()) return { prorated: false, factor: 1, label: "full first month" };
+function leaseStartProration(leaseStart: string | undefined): { prorated: boolean; factor: number; billableDays: number; daysInMonth: number; label: string } {
+  if (!leaseStart?.trim()) return { prorated: false, factor: 1, billableDays: 0, daysInMonth: 0, label: "full first month" };
   const [yearRaw, monthRaw, dayRaw] = leaseStart.split("-").map(Number);
-  if (!yearRaw || !monthRaw || !dayRaw) return { prorated: false, factor: 1, label: "full first month" };
+  if (!yearRaw || !monthRaw || !dayRaw) return { prorated: false, factor: 1, billableDays: 0, daysInMonth: 0, label: "full first month" };
   const daysInMonth = new Date(yearRaw, monthRaw, 0).getDate();
   if (!Number.isFinite(daysInMonth) || daysInMonth <= 0 || dayRaw <= 1) {
-    return { prorated: false, factor: 1, label: "full first month" };
+    return { prorated: false, factor: 1, billableDays: daysInMonth, daysInMonth, label: "full first month" };
   }
   const billableDays = Math.max(1, daysInMonth - dayRaw + 1);
   return {
     prorated: true,
     factor: billableDays / daysInMonth,
+    billableDays,
+    daysInMonth,
     label: `${billableDays}/${daysInMonth} days from lease start`,
   };
 }
@@ -646,6 +648,8 @@ function leaseStartProration(leaseStart: string | undefined): { prorated: boolea
 function firstMonthRentChargeForLeaseStart(
   monthlyRent: number,
   leaseStart: string | undefined,
+  prorateMethod?: "auto" | "daily_rate",
+  dailyRentRate?: number,
 ): {
   kind: HouseholdChargeKind;
   amount: number;
@@ -653,11 +657,20 @@ function firstMonthRentChargeForLeaseStart(
   proration: ReturnType<typeof leaseStartProration>;
 } {
   const proration = leaseStartProration(leaseStart);
-  const amount = proration.prorated ? monthlyRent * proration.factor : monthlyRent;
+  let amount: number;
+  if (proration.prorated && prorateMethod === "daily_rate" && dailyRentRate && dailyRentRate > 0) {
+    amount = Number((proration.billableDays * dailyRentRate).toFixed(2));
+  } else {
+    amount = proration.prorated ? monthlyRent * proration.factor : monthlyRent;
+  }
   return {
     kind: proration.prorated ? "prorated_rent" : "first_month_rent",
     amount,
-    title: proration.prorated ? "Prorated first month's rent" : "First month's rent",
+    title: proration.prorated
+      ? prorateMethod === "daily_rate" && dailyRentRate && dailyRentRate > 0
+        ? `Prorated first month's rent (${proration.billableDays} days × $${dailyRentRate}/day)`
+        : `Prorated first month's rent (${proration.label})`
+      : "First month's rent",
     proration,
   };
 }
@@ -680,6 +693,16 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
   const room = listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : null;
   const raw = room?.utilitiesEstimate?.trim() || "";
   return { raw, amount: parseMoneyAmount(raw) };
+}
+
+function selectedRoom(row: DemoApplicantRow) {
+  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
+  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  if (!sub) return null;
+  const { listingRoomId } = parseRoomChoiceValue(choice);
+  return listingRoomId ? (sub.rooms.find((r) => r.id === listingRoomId) ?? null) : null;
 }
 
 function selectedRoomRentAmount(row: DemoApplicantRow): number {
@@ -1485,19 +1508,33 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     created.push(charge);
   };
 
+  const room = selectedRoom(row);
+  const prorateMethod = room?.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
+  const dailyRentRate = room?.dailyRentRate;
+  const dailyUtilitiesRate = room?.dailyUtilitiesRate;
+
   const rentAmount = selectedRoomRentAmount(row);
   if (rentAmount > 0) {
-    const rentCharge = firstMonthRentChargeForLeaseStart(rentAmount, leaseStart);
+    const rentCharge = firstMonthRentChargeForLeaseStart(rentAmount, leaseStart, prorateMethod, dailyRentRate);
     pushCharge(rentCharge.kind, rentCharge.amount, rentCharge.title, true, moveInDue);
   }
 
   const utilities = selectedRoomUtilities(row);
   if (utilities.amount > 0) {
     const proration = leaseStartProration(leaseStart);
+    let utilAmount: number;
+    let utilTitle: string;
+    if (proration.prorated && prorateMethod === "daily_rate" && dailyUtilitiesRate && dailyUtilitiesRate > 0) {
+      utilAmount = Number((proration.billableDays * dailyUtilitiesRate).toFixed(2));
+      utilTitle = `Prorated utilities (${proration.billableDays} days × $${dailyUtilitiesRate}/day)`;
+    } else {
+      utilAmount = proration.prorated ? utilities.amount * proration.factor : utilities.amount;
+      utilTitle = proration.prorated ? `Prorated utilities (${proration.label})` : "Utilities";
+    }
     pushCharge(
       proration.prorated ? "prorated_utilities" : "utilities",
-      proration.prorated ? utilities.amount * proration.factor : utilities.amount,
-      proration.prorated ? "Prorated utilities" : "Utilities",
+      utilAmount,
+      utilTitle,
       false,
       moveInDue,
     );
@@ -1963,6 +2000,7 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     propertyName: c.propertyLabel,
     roomNumber: "—",
     residentName: c.residentName,
+    residentEmail: c.residentEmail,
     chargeTitle: c.title,
     lineAmount: c.amountLabel,
     amountPaid: c.status === "paid" ? c.amountLabel : "$0.00",
