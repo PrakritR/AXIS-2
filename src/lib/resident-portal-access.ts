@@ -110,6 +110,30 @@ export async function loadResidentPortalAccessState(params: {
   };
 }
 
+/** Server-side: returns true when the resident has a lease that both manager and resident signed. */
+export async function loadResidentLeaseSignedStatus(email: string): Promise<boolean> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return false;
+  const db = createSupabaseServiceRoleClient();
+  const { data } = await db
+    .from("portal_lease_pipeline_records")
+    .select("row_data")
+    .eq("resident_email", normalizedEmail)
+    .order("updated_at", { ascending: false });
+  if (!data?.length) return false;
+  return data.some((record) => {
+    const row = record.row_data as Record<string, unknown> | null;
+    if (!row) return false;
+    const mgr = row.managerSignature as Record<string, unknown> | null | undefined;
+    const res = row.residentSignature as Record<string, unknown> | null | undefined;
+    const legacyName = typeof row.signatureName === "string" ? row.signatureName : null;
+    const legacyAt = typeof row.signedAtIso === "string" ? row.signedAtIso : null;
+    const managerSigned = Boolean(mgr?.name && mgr?.signedAtIso);
+    const residentSigned = Boolean((res?.name && res?.signedAtIso) || (legacyName && legacyAt));
+    return managerSigned && residentSigned;
+  });
+}
+
 export function residentHasFullPortalAccess(params: {
   applicationApproved: boolean;
   role: string | null | undefined;

@@ -20,6 +20,7 @@ import {
   appendLeaseThreadMessage,
   downloadLeaseFromRow,
   findLeaseForResidentEmail,
+  generateLeaseHtmlForRow,
   hasBothLeaseSignatures,
   printLeaseAsPdf,
   residentCanViewLeaseRow,
@@ -39,6 +40,10 @@ export function ResidentLeasePanel() {
   const [editRequestDraft, setEditRequestDraft] = useState("");
   const [showSigningModal, setShowSigningModal] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [showExtendForm, setShowExtendForm] = useState(false);
+  const [extendDate, setExtendDate] = useState("");
+  const [extendLoading, setExtendLoading] = useState(false);
+  const [extendError, setExtendError] = useState<string | null>(null);
   const email = session.email?.trim() || null;
 
   useEffect(() => {
@@ -91,7 +96,7 @@ export function ResidentLeasePanel() {
     usesElectronicSigning && pipelineRow?.status === "Resident Signature Pending" && !pipelineRow.residentSignature && !leaseLocked,
   );
   const residentLeaseActions = Boolean(pipelineRow?.status === "Resident Signature Pending" && !leaseLocked);
-  const canRequestExtension = Boolean(pipelineRow?.status === "Fully Signed");
+  const canRequestExtension = leaseLocked;
   const canUseManualPdfFlow = Boolean(
     pipelineRow?.managerUploadedPdf?.dataUrl && pipelineRow?.status === "Resident Signature Pending" && !leaseLocked,
   );
@@ -215,8 +220,8 @@ export function ResidentLeasePanel() {
       titleAside={
         <>
           {canRequestExtension ? (
-            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => showToast("Extension request sent.")}>
-              Request extension
+            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => { setShowExtendForm((v) => !v); setExtendError(null); }}>
+              {showExtendForm ? "Cancel" : "Change move-out date"}
             </Button>
           ) : null}
           {canUseManualPdfFlow ? (
@@ -288,6 +293,71 @@ export function ResidentLeasePanel() {
             </Card>
           ) : null}
         </div>
+      ) : null}
+
+      {leaseLocked && showExtendForm && pipelineRow ? (
+        <Card className="mb-6 border-slate-200/80 p-5">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Change move-out date</p>
+          <p className="mt-1.5 text-sm text-slate-600">
+            Current move-out date:{" "}
+            <strong>
+              {pipelineRow.application?.leaseEnd
+                ? new Date(pipelineRow.application.leaseEnd + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
+                : "—"}
+            </strong>
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            Selecting a new date will reset the lease for re-signing by you and your manager. The prorated charges and room availability will update automatically.
+          </p>
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700">New move-out date</label>
+              <input
+                type="date"
+                value={extendDate}
+                min={pipelineRow.application?.leaseEnd ? (() => { const d = new Date(pipelineRow.application!.leaseEnd! + "T00:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() : ""}
+                onChange={(e) => { setExtendDate(e.target.value); setExtendError(null); }}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              disabled={!extendDate || extendLoading}
+              onClick={async () => {
+                if (!extendDate) return;
+                setExtendLoading(true);
+                setExtendError(null);
+                try {
+                  const res = await fetch("/api/resident/extend-lease", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ newLeaseEnd: extendDate }),
+                  });
+                  const json = await res.json() as { ok?: boolean; error?: string };
+                  if (!res.ok || !json.ok) {
+                    setExtendError(json.error ?? "Failed to update move-out date.");
+                  } else {
+                    await syncLeasePipelineFromServer();
+                    if (pipelineRow?.id) generateLeaseHtmlForRow(pipelineRow.id);
+                    setPipelineTick((t) => t + 1);
+                    setShowExtendForm(false);
+                    setExtendDate("");
+                    showToast("Move-out date updated. Your lease needs to be re-signed.");
+                  }
+                } catch {
+                  setExtendError("Network error — please try again.");
+                } finally {
+                  setExtendLoading(false);
+                }
+              }}
+            >
+              {extendLoading ? "Saving…" : "Confirm new date"}
+            </Button>
+          </div>
+          {extendError ? <p className="mt-3 text-sm text-red-600">{extendError}</p> : null}
+        </Card>
       ) : null}
 
       {leaseVisibleToResident && pipelineRow && email ? (

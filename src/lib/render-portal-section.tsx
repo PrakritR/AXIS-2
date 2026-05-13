@@ -38,7 +38,7 @@ import type { TabItem } from "@/components/ui/tabs";
 import type { ReactNode } from "react";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId, managerSectionAllowedForTier } from "@/lib/manager-access";
-import { loadResidentPortalAccessState, residentHasFullPortalAccess } from "@/lib/resident-portal-access";
+import { loadResidentPortalAccessState, loadResidentLeaseSignedStatus, residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
@@ -456,7 +456,22 @@ export async function renderPortalSection(
 
   if (kind === "resident" && section === "move-in") {
     if (tabParts?.length) notFound();
-    return <ResidentMoveInPanel residentEmail={residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null} />;
+    const moveInEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
+    const leaseSigned = moveInEmail ? await loadResidentLeaseSignedStatus(moveInEmail) : false;
+    if (!leaseSigned) {
+      return (
+        <ManagerPortalPageShell title="Move-in">
+          <div className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-5 py-4 text-sm text-amber-950">
+            <p className="font-semibold">Lease signature required</p>
+            <p className="mt-1 text-amber-800">
+              Your move-in details will be available here once your lease has been fully signed by both you and your
+              property manager. Head to the <strong>Lease</strong> tab to review and sign.
+            </p>
+          </div>
+        </ManagerPortalPageShell>
+      );
+    }
+    return <ResidentMoveInPanel residentEmail={moveInEmail} />;
   }
 
   if (kind === "resident" && section === "inbox") {
