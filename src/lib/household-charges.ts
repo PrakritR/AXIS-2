@@ -675,7 +675,25 @@ function firstMonthRentChargeForLeaseStart(
   };
 }
 
-function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId" | "manualResidentDetails" | "manuallyAdded">): {
+function findRoomInSub(
+  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
+  choice: string,
+  signedRent?: number | null,
+) {
+  const { listingRoomId } = parseRoomChoiceValue(choice);
+  if (listingRoomId) {
+    const byId = sub.rooms.find((r) => r.id === listingRoomId);
+    if (byId) return byId;
+  }
+  if (signedRent && signedRent > 0) {
+    const byRent = sub.rooms.filter((r) => r.monthlyRent === signedRent);
+    if (byRent.length === 1) return byRent[0]!;
+  }
+  if (sub.rooms.length === 1) return sub.rooms[0]!;
+  return null;
+}
+
+function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId" | "manualResidentDetails" | "manuallyAdded" | "signedMonthlyRent">): {
   raw: string;
   amount: number;
 } {
@@ -689,8 +707,7 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
   const prop = getPropertyById(propertyId);
   const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
   if (!sub) return { raw: "", amount: 0 };
-  const { listingRoomId } = parseRoomChoiceValue(choice);
-  const room = listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : null;
+  const room = findRoomInSub(sub, choice, row.signedMonthlyRent);
   const raw = room?.utilitiesEstimate?.trim() || "";
   return { raw, amount: parseMoneyAmount(raw) };
 }
@@ -701,8 +718,7 @@ function selectedRoom(row: DemoApplicantRow) {
   const prop = getPropertyById(propertyId);
   const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
   if (!sub) return null;
-  const { listingRoomId } = parseRoomChoiceValue(choice);
-  return listingRoomId ? (sub.rooms.find((r) => r.id === listingRoomId) ?? null) : null;
+  return findRoomInSub(sub, choice, row.signedMonthlyRent);
 }
 
 function selectedRoomRentAmount(row: DemoApplicantRow): number {
@@ -719,8 +735,7 @@ function selectedRoomRentAmount(row: DemoApplicantRow): number {
   const prop = getPropertyById(propertyId);
   const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
   if (!sub) return 0;
-  const { listingRoomId } = parseRoomChoiceValue(choice);
-  const room = listingRoomId ? sub.rooms.find((r) => r.id === listingRoomId) : null;
+  const room = findRoomInSub(sub, choice, row.signedMonthlyRent);
   return room?.monthlyRent && room.monthlyRent > 0 ? room.monthlyRent : 0;
 }
 

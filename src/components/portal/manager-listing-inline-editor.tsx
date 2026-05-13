@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   ManagerBathroomRoomAccessKind,
   ManagerBathroomSubmission,
@@ -39,6 +39,17 @@ import { uploadListingImageFiles, uploadListingVideoFile } from "@/lib/listing-m
 const TH = "px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400";
 const TD = "px-3 py-2.5 text-sm text-slate-700";
 const LABEL = "block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5";
+
+function AutoResizeTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [props.value]);
+  return <textarea {...props} ref={ref} rows={undefined} style={{ ...props.style, overflowY: "hidden", minHeight: "2.5rem" }} />;
+}
 const INPUT =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-200";
 const TEXTAREA = `${INPUT} resize-y`;
@@ -173,7 +184,7 @@ function AmenityChipPicker({
         </button>
       </div>
       {showCustom && (
-        <textarea
+        <AutoResizeTextarea
           rows={2}
           value={customLines.join("\n")}
           onChange={(e) => {
@@ -840,7 +851,7 @@ export function ManagerListingInlineEditor({
         {editingSection === "overview" ? (
           <div className="p-4">
             <label className={LABEL}>Overview / description shown on listing</label>
-            <textarea
+            <AutoResizeTextarea
               rows={6}
               value={overviewDraft}
               onChange={(e) => setOverviewDraft(e.target.value)}
@@ -1251,7 +1262,7 @@ export function ManagerListingInlineEditor({
                               </div>
                               <div className="sm:col-span-2 lg:col-span-3">
                                 <label className={LABEL}>Room description</label>
-                                <textarea
+                                <AutoResizeTextarea
                                   rows={3}
                                   value={roomDraft.detail}
                                   onChange={(e) => setRoomDraft((d) => d ? { ...d, detail: e.target.value } : d)}
@@ -1266,7 +1277,7 @@ export function ManagerListingInlineEditor({
                                     Shown to resident
                                   </span>
                                 </label>
-                                <textarea
+                                <AutoResizeTextarea
                                   rows={4}
                                   value={roomDraft.moveInInstructions}
                                   onChange={(e) =>
@@ -1737,7 +1748,7 @@ export function ManagerListingInlineEditor({
                         </div>
                         <div className="sm:col-span-2">
                           <label className={LABEL}>Description / rules</label>
-                          <textarea
+                          <AutoResizeTextarea
                             rows={3}
                             value={spaceDraft.detail}
                             onChange={(e) => setSpaceDraft((d) => d ? { ...d, detail: e.target.value } : d)}
@@ -1971,7 +1982,7 @@ export function ManagerListingInlineEditor({
               </div>
               <div className="sm:col-span-2">
                 <label className={LABEL}>House costs detail</label>
-                <textarea
+                <AutoResizeTextarea
                   rows={2}
                   value={leaseDraft.houseCostsDetail ?? ""}
                   onChange={(e) => setLeaseDraft((d) => ({ ...d, houseCostsDetail: e.target.value }))}
@@ -1981,7 +1992,7 @@ export function ManagerListingInlineEditor({
               </div>
               <div className="sm:col-span-2 lg:col-span-3">
                 <label className={LABEL}>Lease terms</label>
-                <textarea
+                <AutoResizeTextarea
                   rows={4}
                   value={leaseDraft.leaseTermsBody ?? ""}
                   onChange={(e) => setLeaseDraft((d) => ({ ...d, leaseTermsBody: e.target.value }))}
@@ -2086,7 +2097,7 @@ export function ManagerListingInlineEditor({
                     </div>
                     <div className="sm:col-span-2">
                       <label className={LABEL}>Short-term requirements</label>
-                      <textarea
+                      <AutoResizeTextarea
                         rows={2}
                         value={leaseDraft.shortTermRequirements ?? ""}
                         onChange={(e) => setLeaseDraft((d) => ({ ...d, shortTermRequirements: e.target.value }))}
@@ -2286,7 +2297,7 @@ export function ManagerListingInlineEditor({
                     <label className={LABEL}>House description</label>
                     <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">Manager only</span>
                   </div>
-                  <textarea
+                  <AutoResizeTextarea
                     rows={4}
                     value={houseDraft.houseDescription ?? ""}
                     onChange={(e) => setHouseDraft((d) => ({ ...d, houseDescription: e.target.value }))}
@@ -2296,7 +2307,7 @@ export function ManagerListingInlineEditor({
                 </div>
                 <div>
                   <label className={LABEL}>House rules</label>
-                  <textarea
+                  <AutoResizeTextarea
                     rows={3}
                     value={houseDraft.houseRulesText ?? ""}
                     onChange={(e) => setHouseDraft((d) => ({ ...d, houseRulesText: e.target.value }))}
@@ -2309,7 +2320,7 @@ export function ManagerListingInlineEditor({
                     <label className={LABEL}>General house info</label>
                     <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">Residents only</span>
                   </div>
-                  <textarea
+                  <AutoResizeTextarea
                     rows={4}
                     value={houseDraft.generalHouseInfo ?? ""}
                     onChange={(e) => setHouseDraft((d) => ({ ...d, generalHouseInfo: e.target.value }))}

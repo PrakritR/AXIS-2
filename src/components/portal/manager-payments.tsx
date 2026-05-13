@@ -269,9 +269,14 @@ export function ManagerPayments() {
             variant="outline"
             className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => {
-              reconcileApprovedResidentPaymentSchedules(userId ?? null);
-              setHcTick((n) => n + 1);
-              showToast("Payments regenerated from current listing settings.");
+              void Promise.all([
+                syncPropertyPipelineFromServer({ force: true }),
+                syncManagerApplicationsFromServer({ force: true }),
+              ]).then(() => {
+                reconcileApprovedResidentPaymentSchedules(userId ?? null);
+                setHcTick((n) => n + 1);
+                showToast("Payments regenerated from current listing settings.");
+              });
             }}
           >
             Regenerate
