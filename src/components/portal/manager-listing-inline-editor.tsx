@@ -655,8 +655,8 @@ export function ManagerListingInlineEditor({
   // ── SECTION: HOUSE DETAILS (PORTAL NOTE) ─────────────────────────────────
   const saveHouseDetails = () => {
     if (!noteKey) return;
-    savePortalListingNote(noteKey, houseDraft);
-    showToast("House details saved.");
+    savePortalListingNote(noteKey, { houseDescription: houseDraft.houseDescription, houseRulesText: houseDraft.houseRulesText });
+    saveSub({ ...sub, generalHouseInfo: houseDraft.generalHouseInfo ?? "" }, "House details saved.");
     setHouseEditing(false);
     setNotesTick((t) => t + 1);
   };
@@ -2268,6 +2268,7 @@ export function ManagerListingInlineEditor({
                   setHouseDraft({
                     houseDescription: portalNote.houseDescription ?? "",
                     houseRulesText: portalNote.houseRulesText ?? "",
+                    generalHouseInfo: sub.generalHouseInfo ?? "",
                   });
                   setHouseEditing(true);
                 }
@@ -2303,6 +2304,19 @@ export function ManagerListingInlineEditor({
                     placeholder="Quiet hours, guests, smoking, pets…"
                   />
                 </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <label className={LABEL}>General house info</label>
+                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">Residents only</span>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={houseDraft.generalHouseInfo ?? ""}
+                    onChange={(e) => setHouseDraft((d) => ({ ...d, generalHouseInfo: e.target.value }))}
+                    className={TEXTAREA}
+                    placeholder="Wi-Fi network & password, gate/door codes, laundry tips, trash schedule…"
+                  />
+                </div>
               </div>
               <SaveRow onSave={saveHouseDetails} onCancel={() => setHouseEditing(false)} />
             </div>
@@ -2311,6 +2325,7 @@ export function ManagerListingInlineEditor({
               {[
                 { label: "Description", value: portalNote.houseDescription, badge: "Manager only" },
                 { label: "Rules", value: portalNote.houseRulesText, badge: null },
+                { label: "General info", value: sub.generalHouseInfo, badge: "Residents only" },
               ]
                 .filter(({ value }) => value?.trim())
                 .map(({ label, value, badge }) => (
@@ -2324,7 +2339,7 @@ export function ManagerListingInlineEditor({
                     <p className="whitespace-pre-wrap text-sm text-slate-700">{value}</p>
                   </div>
                 ))}
-              {!portalNote.houseDescription?.trim() && !portalNote.houseRulesText?.trim() ? (
+              {!portalNote.houseDescription?.trim() && !portalNote.houseRulesText?.trim() && !sub.generalHouseInfo?.trim() ? (
                 <p className="px-4 py-3 text-sm text-slate-400">No house details yet — click Edit to add.</p>
               ) : null}
             </div>

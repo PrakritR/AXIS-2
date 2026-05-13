@@ -148,6 +148,8 @@ export type ManagerListingSubmissionV1 = {
   houseOverview: string;
   /** Quiet hours, guests, smoking, shared spaces — shown on House rules tab */
   houseRulesText: string;
+  /** Resident-only general house info (Wi-Fi password, codes, tips) — shown in resident portal move-in only. */
+  generalHouseInfo?: string;
   /** General house photos (common areas, exterior, kitchen) shown at the top of the public listing. */
   housePhotoDataUrls: string[];
   /** Optional full-house walkthrough video shown on the public listing. */
@@ -509,6 +511,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     listingBedroomSlots,
     homeStructureNote: typeof sub.homeStructureNote === "string" ? sub.homeStructureNote : "",
     houseRulesText: typeof sub.houseRulesText === "string" ? sub.houseRulesText : "",
+    generalHouseInfo: typeof sub.generalHouseInfo === "string" ? sub.generalHouseInfo : "",
     shortTermRentalsAllowed: Boolean(sub.shortTermRentalsAllowed),
     shortTermRequirements: typeof sub.shortTermRequirements === "string" ? sub.shortTermRequirements : "",
     shortTermDailyCost: typeof sub.shortTermDailyCost === "string" ? sub.shortTermDailyCost : "",

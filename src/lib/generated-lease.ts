@@ -234,7 +234,13 @@ function isMonthToMonthOtherCost(label: string | undefined | null): boolean {
   return normalized.includes("month to month");
 }
 
-function proratedBlock(monthlyRentStr: string, utilitiesStr: string, leaseStartStr: string): string {
+type ProrateOptions = {
+  method?: "auto" | "daily_rate";
+  dailyRentRate?: number;
+  dailyUtilitiesRate?: number;
+};
+
+function proratedBlock(monthlyRentStr: string, utilitiesStr: string, leaseStartStr: string, prorate?: ProrateOptions): string {
   const rent = parseAmount(monthlyRentStr);
   if (!rent || !leaseStartStr || leaseStartStr === "—") return "";
   try {
@@ -246,18 +252,27 @@ function proratedBlock(monthlyRentStr: string, utilitiesStr: string, leaseStartS
     const month = start.getMonth();
     const dim = new Date(year, month + 1, 0).getDate();
     const remaining = dim - day + 1;
-    const daily = rent / dim;
-    const proratedRent = Math.round(daily * remaining * 100) / 100;
+    const useManual = prorate?.method === "daily_rate" && prorate.dailyRentRate && prorate.dailyRentRate > 0;
+    const proratedRent = useManual
+      ? Math.round(prorate!.dailyRentRate! * remaining * 100) / 100
+      : Math.round((rent / dim) * remaining * 100) / 100;
     const utils = parseAmount(utilitiesStr);
-    const proratedUtils = utils ? Math.round((utils / dim) * remaining * 100) / 100 : null;
+    const proratedUtils = useManual && prorate!.dailyUtilitiesRate && prorate!.dailyUtilitiesRate > 0
+      ? Math.round(prorate!.dailyUtilitiesRate * remaining * 100) / 100
+      : utils ? Math.round((utils / dim) * remaining * 100) / 100 : null;
     const total = proratedRent + (proratedUtils ?? 0);
+    const rateCol = useManual ? "Daily rate" : "Monthly rate";
+    const rentRateDisplay = useManual ? fmtUsd(prorate!.dailyRentRate!) + "/day" : fmtUsd(rent);
+    const utilRateDisplay = useManual && prorate!.dailyUtilitiesRate && prorate!.dailyUtilitiesRate > 0
+      ? fmtUsd(prorate!.dailyUtilitiesRate) + "/day"
+      : utils ? fmtUsd(utils) : null;
     return `
 <h2>5. Prorated First Month</h2>
 <p>Because the Lease commences on the <strong>${ordinal(day)}</strong> of the month, the first partial month is prorated as follows (${remaining} of ${dim} days):</p>
 <table>
-  <tr><th>Item</th><th>Monthly rate</th><th>Days remaining</th><th>Prorated amount</th></tr>
-  <tr><td>Rent</td><td>${fmtUsd(rent)}</td><td>${remaining} / ${dim}</td><td>${fmtUsd(proratedRent)}</td></tr>
-  ${proratedUtils != null ? `<tr><td>Utilities estimate</td><td>${fmtUsd(utils!)}</td><td>${remaining} / ${dim}</td><td>${fmtUsd(proratedUtils)}</td></tr>` : ""}
+  <tr><th>Item</th><th>${rateCol}</th><th>Days remaining</th><th>Prorated amount</th></tr>
+  <tr><td>Rent</td><td>${rentRateDisplay}</td><td>${remaining} / ${dim}</td><td>${fmtUsd(proratedRent)}</td></tr>
+  ${proratedUtils != null && utilRateDisplay != null ? `<tr><td>Utilities estimate</td><td>${utilRateDisplay}</td><td>${remaining} / ${dim}</td><td>${fmtUsd(proratedUtils)}</td></tr>` : ""}
   <tr class="total-row"><td colspan="3"><strong>Prorated total due first month</strong></td><td><strong>${fmtUsd(total)}</strong></td></tr>
 </table>
 <p>Beginning the first full month, regular rent and utilities as stated in Sections 4 and 9 apply.</p>
@@ -365,7 +380,11 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
       ? `Payment may be made via Stripe (portal), ${manualPaymentMethods.join(", ")}, or another method agreed in writing.`
       : "Payment shall be made via the Axis portal or by a method agreed in writing with Landlord.";
 
-  const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "");
+  const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "", {
+    method: specificRoom?.prorateMethod,
+    dailyRentRate: specificRoom?.dailyRentRate,
+    dailyUtilitiesRate: specificRoom?.dailyUtilitiesRate,
+  });
 
   if (a.rentalType === "short_term") {
     const dailyCostRaw = subNorm?.shortTermDailyCost?.trim() || "—";

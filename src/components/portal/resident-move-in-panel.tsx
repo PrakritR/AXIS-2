@@ -41,6 +41,12 @@ export async function ResidentMoveInPanel({ residentEmail }: ResidentMoveInPanel
                 <p className="mt-1 text-sm font-semibold text-slate-900">{resolved.earliestMoveInDateLabel ?? "Not set yet"}</p>
               </div>
             </div>
+            {resolved.generalHouseInfo ? (
+              <div className="mb-5">
+                <h2 className="text-base font-semibold text-slate-900">General info</h2>
+                <div className="mt-3 whitespace-pre-wrap text-slate-700">{resolved.generalHouseInfo}</div>
+              </div>
+            ) : null}
             <h2 className="text-base font-semibold text-slate-900">Instructions &amp; details</h2>
             <div className="mt-3 whitespace-pre-wrap text-slate-700">
               {resolved.instructions ?? (
