@@ -1352,6 +1352,36 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   <Button
                                     type="button"
                                     variant="outline"
+                                    className="rounded-full px-3 py-1 text-xs"
+                                    onClick={() => {
+                                      const row = readManagerApplicationRows().find((r) => r.id === selected.id);
+                                      if (!row) { showToast("Resident not found."); return; }
+                                      // Regenerate payment charges from current listing settings
+                                      recordApprovedApplicationCharges(row, userId ?? null);
+                                      setHcTick((n) => n + 1);
+                                      // Regenerate any unsigned leases
+                                      const email = row.email?.trim().toLowerCase() ?? "";
+                                      if (email && row.application) {
+                                        const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
+                                          (lr) =>
+                                            lr.residentEmail.trim().toLowerCase() === email &&
+                                            !hasAnyLeaseSignature(lr) &&
+                                            lr.status !== "Voided",
+                                        );
+                                        for (const lr of leasesToRegen) {
+                                          updateLeasePipelineRow(lr.id, { application: { ...(lr.application ?? {}), ...row.application } });
+                                          generateLeaseHtmlForRow(lr.id);
+                                        }
+                                        if (leasesToRegen.length > 0) setLeaseTick((n) => n + 1);
+                                      }
+                                      showToast("Payments and lease regenerated from current listing settings.");
+                                    }}
+                                  >
+                                    Regenerate
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
                                     className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-rose-50"
                                     onClick={deleteSelectedResident}
                                   >
