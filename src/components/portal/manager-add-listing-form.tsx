@@ -1659,7 +1659,7 @@ export function ManagerAddListingForm({
                   Extra layout note
                 </FieldLabel>
                 <Textarea
-                  className="min-h-[72px]"
+                  className=""
                   value={sub.homeStructureNote}
                   onChange={(e) => setSub((s) => ({ ...s, homeStructureNote: e.target.value }))}
                   placeholder="e.g. Garden apartment in a triplex; private entrance on the side."
@@ -1672,7 +1672,7 @@ export function ManagerAddListingForm({
               <div className="sm:col-span-2">
                 <FieldLabel hint="Describe the home, culture, and who it is good for.">House overview</FieldLabel>
                 <Textarea
-                  className="min-h-[100px]"
+                  className=""
                   value={sub.houseOverview}
                   onChange={(e) => setSub((s) => ({ ...s, houseOverview: e.target.value }))}
                   placeholder="Full description of the house, co-living setup, and what applicants should know."
@@ -1706,7 +1706,7 @@ export function ManagerAddListingForm({
               <ListingSubsection title="Lease terms">
                 <div>
                   <FieldLabel hint="Lease lengths and terms shown on your listing.">Lease terms</FieldLabel>
-                  <Textarea className="min-h-[72px]" value={sub.leaseTermsBody} onChange={(e) => setSub((s) => ({ ...s, leaseTermsBody: e.target.value }))} />
+                  <Textarea className="" value={sub.leaseTermsBody} onChange={(e) => setSub((s) => ({ ...s, leaseTermsBody: e.target.value }))} />
                 </div>
               </ListingSubsection>
 
@@ -1769,7 +1769,7 @@ export function ManagerAddListingForm({
                         Requirements / house rules for short-term stays
                       </FieldLabel>
                       <Textarea
-                        className="min-h-[90px]"
+                        className=""
                         value={sub.shortTermRequirements ?? ""}
                         onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
                         placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout. Follow posted house rules."
@@ -2001,7 +2001,7 @@ export function ManagerAddListingForm({
                 </div>
                 <div className="mt-3">
                   <FieldLabel hint="Explain all recurring and one-time housing costs (shown on your listing).">Cost summary</FieldLabel>
-                  <Textarea className="min-h-[72px]" value={sub.houseCostsDetail} onChange={(e) => setSub((s) => ({ ...s, houseCostsDetail: e.target.value }))} />
+                  <Textarea className="" value={sub.houseCostsDetail} onChange={(e) => setSub((s) => ({ ...s, houseCostsDetail: e.target.value }))} />
                 </div>
               </ListingSubsection>
 
@@ -2414,7 +2414,7 @@ export function ManagerAddListingForm({
                       </div>
                       <div className="sm:col-span-2">
                         <FieldLabel hint="Notes for listing card (closet size, light, layout).">Room details</FieldLabel>
-                        <Textarea className="min-h-[60px]" value={room.detail} onChange={(e) => setRoom(i, { detail: e.target.value })} />
+                        <Textarea className="" value={room.detail} onChange={(e) => setRoom(i, { detail: e.target.value })} />
                       </div>
 
                       <div className="sm:col-span-2">
@@ -2705,7 +2705,7 @@ export function ManagerAddListingForm({
                           })}
                         </div>
                         <Textarea
-                          className="mt-2 min-h-[80px]"
+                          className="mt-2"
                           value={b.amenitiesText ?? ""}
                           onChange={(e) => setBath(i, { amenitiesText: e.target.value })}
                           placeholder="Add custom amenities not listed above (one per line)."
