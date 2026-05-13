@@ -1332,11 +1332,14 @@ export function markHouseholdChargePending(chargeId: string, managerUserId: stri
   if (i === -1) return false;
   if (rows[i]!.status === "pending") return true;
   const next = [...rows];
+  // Clear dueDateLabel so parseDueDateLabelToDate returns null → isHouseholdChargeOverdue is false
+  // → the charge lands in the Pending bucket, not Overdue, regardless of the original due date.
   next[i] = {
     ...next[i]!,
     status: "pending",
     paidAt: undefined,
     balanceLabel: next[i]!.amountLabel,
+    dueDateLabel: undefined,
   };
   writeAll(next);
   return true;

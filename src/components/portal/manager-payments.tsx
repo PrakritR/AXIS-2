@@ -269,6 +269,18 @@ export function ManagerPayments() {
             variant="outline"
             className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => {
+              reconcileApprovedResidentPaymentSchedules(userId ?? null);
+              setHcTick((n) => n + 1);
+              showToast("Payments regenerated from current listing settings.");
+            }}
+          >
+            Regenerate
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={() => {
               void Promise.all([
                 syncHouseholdChargesFromServer(),
                 syncManagerApplicationsFromServer({ force: true }),
