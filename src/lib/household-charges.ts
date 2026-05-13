@@ -1997,10 +1997,17 @@ export function residentLeaseBlockedReasons(email: string, userId: string | null
 export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPaymentLedgerRow {
   const overdue = c.status !== "paid" && isHouseholdChargeOverdue(c, startOfTodayLocal());
   const bucket: ManagerPaymentBucket = c.status === "paid" ? "paid" : overdue ? "overdue" : "pending";
+  // If the stored label looks like a raw internal ID (pending property not yet resolved at charge-creation
+  // time), try to resolve the human-readable title now via getPropertyById which now includes pending props.
+  let propertyName = c.propertyLabel;
+  if (/^(pend-|mgr-)/.test(propertyName)) {
+    const resolved = getPropertyById(c.propertyId)?.title;
+    if (resolved) propertyName = resolved;
+  }
   return {
     id: c.id,
     householdChargeId: c.id,
-    propertyName: c.propertyLabel,
+    propertyName,
     roomNumber: "—",
     residentName: c.residentName,
     residentEmail: c.residentEmail,
