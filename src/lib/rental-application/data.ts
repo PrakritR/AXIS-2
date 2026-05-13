@@ -2,7 +2,7 @@ import { mockProperties } from "@/data/mock-properties";
 import type { ListingRichContent } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
 import { LISTING_ROOM_FLOOR_LEVEL_OPTIONS } from "@/data/manager-listing-presets";
-import { readAllExtraListings, readExtraListings } from "@/lib/demo-property-pipeline";
+import { buildMockPropertyFromDraft, readAllExtraListings, readAllPendingManagerProperties, readExtraListings } from "@/lib/demo-property-pipeline";
 import { effectiveApplicationForRow, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 
@@ -312,11 +312,15 @@ export function getPropertyById(id: string): MockProperty | undefined {
   const base = id.trim();
   if (!base) return undefined;
   const { propertyId } = parseRoomChoiceValue(base);
-  return (
+  const fromKnown =
     mockProperties.find((p) => p.id === propertyId) ??
     readExtraListings().find((p) => p.id === propertyId) ??
-    readAllExtraListings().find((p) => p.id === propertyId)
-  );
+    readAllExtraListings().find((p) => p.id === propertyId);
+  if (fromKnown) return fromKnown;
+  // Fall back to pending properties (not yet approved/listed) so their title resolves correctly.
+  const pendingRow = readAllPendingManagerProperties().find((p) => p.id === propertyId);
+  if (pendingRow) return buildMockPropertyFromDraft(pendingRow, propertyId);
+  return undefined;
 }
 
 export function propertyAllowsShortTermRental(propertyId: string): boolean {
