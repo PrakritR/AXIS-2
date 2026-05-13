@@ -308,7 +308,14 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   // ── Room / premises ───────────────────────────────────────────────────────
   const { listingRoomId } = parseRoomChoiceValue(String(a.roomChoice1 ?? ""));
   const subNorm = sub ? normalizeManagerListingSubmissionV1(sub) : undefined;
-  const specificRoom = subNorm?.rooms.find((r) => r.id === listingRoomId);
+  const specificRoom = subNorm?.rooms.find((r) => r.id === listingRoomId) ??
+    // Fallback: match by room label when listingRoomId is absent (legacy / manual assignments)
+    (() => {
+      const label = room?.unitLabel?.trim().toLowerCase();
+      if (!label || !subNorm?.rooms.length) return undefined;
+      return subNorm.rooms.find((r) => r.name.trim().toLowerCase() === label) ??
+        subNorm.rooms.find((r) => r.name.trim().toLowerCase().includes(label) || label.includes(r.name.trim().toLowerCase()));
+    })();
   const roomLabel = escapeHtml(
     specificRoom?.name?.trim() ||
     room?.unitLabel?.trim() ||

@@ -58,6 +58,7 @@ import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
+  buildMockPropertyFromDraft,
   PROPERTY_PIPELINE_EVENT,
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
@@ -519,7 +520,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         labelById.set(p.id, (p.buildingName || p.title?.replace(/\s*·\s*\d+\s*rooms?\s*$/i, "") || p.address || p.id).trim());
       }
       for (const p of readPendingManagerPropertiesForUser(userId)) {
-        const label = [p.buildingName, p.address].filter(Boolean).join(" · ").trim() || p.id;
+        const built = buildMockPropertyFromDraft(p, p.id);
+        const label = [built.buildingName, built.address].filter(Boolean).join(" · ").trim() || built.title;
         labelById.set(p.id, label);
       }
     }
@@ -600,6 +602,27 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   useEffect(() => {
     if (selectedId) setChargeTab("pending");
+  }, [selectedId]);
+
+  // Auto-regenerate unsigned leases when a resident is selected so stale HTML is always refreshed
+  useEffect(() => {
+    if (!selectedId) return;
+    const resident = residents.find((r) => r.id === selectedId);
+    if (!resident?.email) return;
+    const email = resident.email.trim().toLowerCase();
+    const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
+      (lr) =>
+        lr.residentEmail.trim().toLowerCase() === email &&
+        !hasAnyLeaseSignature(lr) &&
+        lr.status !== "Voided" &&
+        Boolean(lr.application),
+    );
+    if (leasesToRegen.length === 0) return;
+    for (const lr of leasesToRegen) {
+      generateLeaseHtmlForRow(lr.id);
+    }
+    setLeaseTick((n) => n + 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   useEffect(() => {
