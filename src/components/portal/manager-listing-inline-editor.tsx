@@ -1105,6 +1105,51 @@ export function ManagerListingInlineEditor({
                                   placeholder="$175"
                                 />
                               </div>
+                              <div className="sm:col-span-2 lg:col-span-3">
+                                <label className={LABEL}>Proration method</label>
+                                <div className="mt-1.5 flex gap-2">
+                                  {(["auto", "daily_rate"] as const).map((method) => {
+                                    const active = (roomDraft.prorateMethod ?? "auto") === method;
+                                    return (
+                                      <button
+                                        key={method}
+                                        type="button"
+                                        onClick={() => setRoomDraft((d) => d ? { ...d, prorateMethod: method } : d)}
+                                        className={`flex-1 rounded-xl border px-3 py-2 text-left text-xs transition-colors ${active ? "border-sky-400 bg-sky-50 font-semibold text-sky-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                                      >
+                                        <span className="block font-semibold">{method === "auto" ? "Auto (÷ days in month)" : "Manual daily rate"}</span>
+                                        <span className="block text-[11px] opacity-70">{method === "auto" ? "Remaining days ÷ days in month × monthly rate" : "Remaining days × your set daily rate"}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              {(roomDraft.prorateMethod ?? "auto") === "daily_rate" && (
+                                <>
+                                  <div>
+                                    <label className={LABEL}>Daily rent rate ($)</label>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      value={roomDraft.dailyRentRate ?? ""}
+                                      onChange={(e) => setRoomDraft((d) => d ? { ...d, dailyRentRate: parseFloat(e.target.value) || undefined } : d)}
+                                      className={INPUT}
+                                      placeholder={roomDraft.monthlyRent > 0 ? String(Math.ceil(roomDraft.monthlyRent / 30)) : "28"}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className={LABEL}>Daily utilities rate ($)</label>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      value={roomDraft.dailyUtilitiesRate ?? ""}
+                                      onChange={(e) => setRoomDraft((d) => d ? { ...d, dailyUtilitiesRate: parseFloat(e.target.value) || undefined } : d)}
+                                      className={INPUT}
+                                      placeholder="6"
+                                    />
+                                  </div>
+                                </>
+                              )}
                               <div>
                                 <label className={LABEL}>Furnishing</label>
                                 <select
