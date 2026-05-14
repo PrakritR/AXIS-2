@@ -206,18 +206,37 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     setLocal((prev) => prev.filter((t) => t.id !== id));
     setExpandedId((e) => (e === id ? null : e));
     showToast("Message deleted.");
+    void fetch("/api/portal-inbox-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "delete", id }),
+    }).catch(() => undefined);
   };
 
   const deleteAllTrash = () => {
-    const trashCount = local.filter((t) => t.folder === "trash").length;
-    if (trashCount === 0) {
+    const trashItems = local.filter((t) => t.folder === "trash");
+    if (trashItems.length === 0) {
       showToast("Trash is already empty.");
       return;
     }
-    if (!window.confirm(`Delete all ${trashCount} trash message${trashCount === 1 ? "" : "s"}? This cannot be undone.`)) return;
-    setLocal((prev) => prev.filter((t) => t.folder !== "trash"));
-    setExpandedId(null);
-    showToast("Trash cleared.");
+    if (!window.confirm(`Delete all ${trashItems.length} trash message${trashItems.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    void (async () => {
+      const ids = trashItems.map((item) => item.id).filter(Boolean);
+      if (ids.length === 0) return;
+      await fetch("/api/portal-inbox-threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: "deleteIds", ids }),
+      });
+      setLocal((prev) => prev.filter((t) => t.folder !== "trash"));
+      setExpandedId(null);
+      showToast("Trash cleared.");
+      await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+        setLocal(rows as InboxThread[]);
+      });
+    })().catch(() => showToast("Could not clear trash."));
   };
 
   const toggleExpand = (id: string) => {
