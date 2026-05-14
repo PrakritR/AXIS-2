@@ -22,7 +22,6 @@ export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind })
         } else if (currentKind === "resident") {
           if (roles.includes("manager")) setOtherRole("manager");
           else if (roles.includes("owner")) setOtherRole("owner");
-          else if (roles.includes("pro")) setOtherRole("pro");
         }
       })
       .catch(() => {});
