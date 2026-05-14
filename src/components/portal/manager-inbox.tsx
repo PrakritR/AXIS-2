@@ -208,6 +208,18 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     showToast("Message deleted.");
   };
 
+  const deleteAllTrash = () => {
+    const trashCount = local.filter((t) => t.folder === "trash").length;
+    if (trashCount === 0) {
+      showToast("Trash is already empty.");
+      return;
+    }
+    if (!window.confirm(`Delete all ${trashCount} trash message${trashCount === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    setLocal((prev) => prev.filter((t) => t.folder !== "trash"));
+    setExpandedId(null);
+    showToast("Trash cleared.");
+  };
+
   const toggleExpand = (id: string) => {
     setExpandedId((cur) => (cur === id ? null : id));
   };
@@ -286,6 +298,16 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       title="Inbox"
       titleAside={
         <>
+          {tabId === "trash" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+              onClick={deleteAllTrash}
+            >
+              Delete all trash
+            </Button>
+          ) : null}
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
             New message
           </Button>

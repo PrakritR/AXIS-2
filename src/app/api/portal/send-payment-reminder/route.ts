@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       managerName?: string;
     };
 
-    const residentEmail = String(body.residentEmail ?? "").trim();
+    const residentEmail = String(body.residentEmail ?? "").trim().toLowerCase();
     const residentName = String(body.residentName ?? "Resident").trim();
     const chargeTitle = String(body.chargeTitle ?? "outstanding charge").trim();
     const balanceDue = String(body.balanceDue ?? "").trim();
@@ -32,10 +32,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Valid resident email required." }, { status: 400 });
     }
 
-    if (residentEmail.endsWith("@axis.local")) {
+    const senderLower = (user.email ?? "").trim().toLowerCase();
+    const skipExternalEmail = residentEmail.endsWith("@axis.local") || (!!senderLower && residentEmail === senderLower);
+
+    if (skipExternalEmail) {
       // Demo email — still deliver to portal inbox, just skip real email
       await deliverToPortalInbox({ db: createSupabaseServiceRoleClient(), userId: user.id, managerEmail: user.email ?? "", residentEmail, residentName, chargeTitle, balanceDue, propertyLabel, managerName });
-      return NextResponse.json({ ok: true, skipped: true, reason: "Demo email — no real delivery, portal inbox updated." });
+      return NextResponse.json({ ok: true, skipped: true, reason: "Skipped external delivery; portal inbox updated." });
     }
 
     const subject = `Payment reminder: ${chargeTitle}`;

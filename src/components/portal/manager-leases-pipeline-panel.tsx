@@ -156,7 +156,7 @@ export function ManagerLeasesPipelinePanel({
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          fromName: "Axis Housing Portal",
+          fromName: "Property Manager",
           toEmails: [recipient],
           subject,
           text,

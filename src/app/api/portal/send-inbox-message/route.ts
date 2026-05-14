@@ -27,8 +27,13 @@ export async function POST(req: Request) {
       deliverToPortalInbox?: boolean;
     };
 
-    const allEmails = normalizeEmails(body.toEmails).filter((e) => e.includes("@"));
-    const toEmails = allEmails.filter((e) => !e.endsWith("@axis.local"));
+    const senderEmail = String(user.email ?? body.fromEmail ?? "portal@example.com").trim().toLowerCase();
+    const allEmails = normalizeEmails(body.toEmails)
+      .filter((e) => e.includes("@"))
+      .map((e) => e.trim().toLowerCase())
+      .filter((email, index, arr) => arr.indexOf(email) === index);
+    const recipientEmails = allEmails.filter((email) => email !== senderEmail);
+    const toEmails = recipientEmails.filter((e) => !e.endsWith("@axis.local"));
     const subject = String(body.subject ?? "").trim();
     const text = String(body.text ?? "").trim();
     const fromName = String(body.fromName ?? "Axis Housing Portal").trim();
@@ -39,16 +44,14 @@ export async function POST(req: Request) {
     }
 
     const db = createSupabaseServiceRoleClient();
-    const senderEmail = user.email ?? body.fromEmail ?? "portal@example.com";
-
     // Deliver to portal inbox for all recipients (including @axis.local demo emails)
-    if (deliverToPortalInbox && allEmails.length > 0) {
+    if (deliverToPortalInbox && recipientEmails.length > 0) {
       const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
       const preview = text.slice(0, 100).replace(/\n/g, " ");
-      for (const recipientEmail of allEmails) {
+      for (const recipientEmail of recipientEmails) {
         const ts = Date.now();
         const rand = Math.random().toString(36).slice(2, 6);
-        const recipientLower = recipientEmail.toLowerCase();
+        const recipientLower = recipientEmail;
 
         // Manager's Sent record (owner-only, so resident doesn't see a duplicate "sent" copy)
         const managerThreadId = `msg_${user.id}_${ts}_${rand}`;
@@ -74,7 +77,7 @@ export async function POST(req: Request) {
             owner_user_id: null,
             participant_email: recipientLower,
             thread_type: "portal_message",
-            row_data: { id: residentThreadId, folder: "inbox", from: fromName, email: senderEmail.toLowerCase(), subject, preview, body: text, time: when, unread: true, scope: "axis_portal_inbox_resident_v1" },
+            row_data: { id: residentThreadId, folder: "inbox", from: fromName, email: senderEmail, subject, preview, body: text, time: when, unread: true, scope: "axis_portal_inbox_resident_v1" },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" },
@@ -83,7 +86,7 @@ export async function POST(req: Request) {
     }
 
     if (toEmails.length === 0) {
-      return NextResponse.json({ ok: true, skipped: true, reason: "No real email recipients — portal inbox updated." });
+      return NextResponse.json({ ok: true, skipped: true, reason: "No eligible real recipients — portal inbox updated." });
     }
 
     const apiKey = process.env.RESEND_API_KEY?.trim();

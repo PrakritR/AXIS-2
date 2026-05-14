@@ -50,6 +50,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Axis ID is required." }, { status: 400 });
     }
 
+    const senderEmail = normalizeEmail(user.email);
+    const skipExternalEmail = to.endsWith("@axis.local") || (senderEmail && to === senderEmail);
+
     const svc = createSupabaseServiceRoleClient();
     const { data: requestor, error: requestorError } = await svc
       .from("profiles")
@@ -83,46 +86,50 @@ export async function POST(req: Request) {
       origin: "",
     });
 
-    const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (!apiKey) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Email delivery is not configured (set RESEND_API_KEY).",
-          mailtoHref,
+    let payloadId: string | null = null;
+    if (!skipExternalEmail) {
+      const apiKey = process.env.RESEND_API_KEY?.trim();
+      if (!apiKey) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "Email delivery is not configured (set RESEND_API_KEY).",
+            mailtoHref,
+          },
+          { status: 503 },
+        );
+      }
+
+      const from = process.env.RESEND_FROM?.trim() || "Axis Housing <onboarding@resend.dev>";
+
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
         },
-        { status: 503 },
-      );
-    }
+        body: JSON.stringify({
+          from,
+          to: [to],
+          subject: RESIDENT_WELCOME_EMAIL_SUBJECT,
+          text,
+          html,
+        }),
+      });
 
-    const from = process.env.RESEND_FROM?.trim() || "Axis Housing <onboarding@resend.dev>";
-
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject: RESIDENT_WELCOME_EMAIL_SUBJECT,
-        text,
-        html,
-      }),
-    });
-
-    const payload = (await res.json().catch(() => ({}))) as { message?: string; id?: string; name?: string };
-    if (!res.ok) {
-      const msg = payload.message ?? res.statusText ?? "Resend request failed.";
-      return NextResponse.json(
-        {
-          ok: false,
-          error: msg,
-          mailtoHref,
-        },
-        { status: 502 },
-      );
+      const payload = (await res.json().catch(() => ({}))) as { message?: string; id?: string; name?: string };
+      if (!res.ok) {
+        const msg = payload.message ?? res.statusText ?? "Resend request failed.";
+        return NextResponse.json(
+          {
+            ok: false,
+            error: msg,
+            mailtoHref,
+          },
+          { status: 502 },
+        );
+      }
+      payloadId = payload.id ?? null;
     }
 
     // Deliver to portal inboxes: manager's Sent + resident's Unopened
@@ -131,6 +138,7 @@ export async function POST(req: Request) {
       const ts = Date.now();
       const rand = Math.random().toString(36).slice(2, 6);
       const senderName = user.email ?? "Axis Housing";
+      const senderLower = normalizeEmail(user.email) || "manager@example.com";
       const preview = text.slice(0, 100).replace(/\n/g, " ");
 
       // Manager's Sent record (no participant_email so the resident doesn't get this copy)
@@ -172,7 +180,7 @@ export async function POST(req: Request) {
             id: residentThreadId,
             folder: "inbox",
             from: senderName,
-            email: to,
+            email: senderLower,
             subject: RESIDENT_WELCOME_EMAIL_SUBJECT,
             preview,
             body: text,
@@ -188,7 +196,7 @@ export async function POST(req: Request) {
       /* non-critical — email already sent */
     }
 
-    return NextResponse.json({ ok: true, id: payload.id ?? null });
+    return NextResponse.json({ ok: true, id: payloadId, skipped: skipExternalEmail });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to send welcome email." },
