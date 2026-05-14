@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_LABEL, PORTAL_TOOLBAR_SELECT } from "@/components/portal/portal-metrics";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
@@ -24,6 +24,7 @@ import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 type InboxThread = {
   id: string;
   folder: "inbox" | "sent" | "trash";
+  previousFolder?: "inbox" | "sent";
   from: string;
   email: string;
   subject: string;
@@ -39,11 +40,11 @@ function previewLine(body: string, max = 100) {
   return `${t.slice(0, max)}…`;
 }
 
-function toRows(list: InboxThread[]): PortalInboxTableRow[] {
+function toRows(list: InboxThread[], tabId: string): PortalInboxTableRow[] {
   return list.map((t) => ({
     id: t.id,
-    name: t.from,
-    email: t.email,
+    name: tabId === "sent" ? (t.email || "Unknown recipient") : t.from,
+    email: tabId === "sent" ? (t.from ? `From ${t.from}` : "") : t.email,
     topic: t.subject,
     preview: t.preview,
     whenLabel: t.time,
@@ -128,19 +129,35 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     persistInbox(MANAGER_INBOX_STORAGE_KEY, local);
   }, [local, persistReady]);
 
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "sender" | "subject">("newest");
+
   const counts = useMemo(() => countThreads(local), [local]);
   const tabs = useMemo(
     () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: counts[id as keyof typeof counts] })),
     [counts],
   );
 
+  function threadTimestamp(t: InboxThread): number {
+    const match = t.id.match(/(\d{10,})/);
+    return match ? parseInt(match[1]!, 10) : 0;
+  }
+
   const rowsForTab = useMemo(() => {
-    if (tabId === "unopened") return local.filter((t) => t.folder === "inbox" && t.unread);
-    if (tabId === "opened") return local.filter((t) => t.folder === "inbox" && !t.unread);
-    if (tabId === "sent") return local.filter((t) => t.folder === "sent");
-    if (tabId === "trash") return local.filter((t) => t.folder === "trash");
-    return [];
-  }, [local, tabId]);
+    let filtered: InboxThread[];
+    if (tabId === "unopened") filtered = local.filter((t) => t.folder === "inbox" && t.unread);
+    else if (tabId === "opened") filtered = local.filter((t) => t.folder === "inbox" && !t.unread);
+    else if (tabId === "sent") filtered = local.filter((t) => t.folder === "sent");
+    else if (tabId === "trash") filtered = local.filter((t) => t.folder === "trash");
+    else filtered = [];
+
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "newest") return threadTimestamp(b) - threadTimestamp(a);
+      if (sortBy === "oldest") return threadTimestamp(a) - threadTimestamp(b);
+      if (sortBy === "sender") return a.from.localeCompare(b.from, undefined, { sensitivity: "base" });
+      if (sortBy === "subject") return a.subject.localeCompare(b.subject, undefined, { sensitivity: "base" });
+      return 0;
+    });
+  }, [local, tabId, sortBy]);
 
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
@@ -156,16 +173,32 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
   const moveToTrash = (id: string) => {
     setLocal((prev) =>
-      prev.map((t) => (t.id === id && (t.folder === "inbox" || t.folder === "sent") ? { ...t, folder: "trash" as const, unread: false } : t)),
+      prev.map((t) =>
+        t.id === id && (t.folder === "inbox" || t.folder === "sent")
+          ? { ...t, folder: "trash" as const, previousFolder: t.folder, unread: false }
+          : t,
+      ),
     );
     setExpandedId((e) => (e === id ? null : e));
     showToast("Moved to trash.");
   };
 
+  function inferPreviousFolder(t: InboxThread): "inbox" | "sent" {
+    if (t.previousFolder) return t.previousFolder;
+    if (/^(sent_|msg_|welcome_)/.test(t.id)) return "sent";
+    return "inbox";
+  }
+
   const restoreFromTrash = (id: string) => {
-    setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "trash" ? { ...t, folder: "inbox" as const, unread: false } : t)));
+    setLocal((prev) =>
+      prev.map((t) => {
+        if (t.id !== id || t.folder !== "trash") return t;
+        const dest = inferPreviousFolder(t);
+        return { ...t, folder: dest, previousFolder: undefined, unread: false };
+      }),
+    );
     setExpandedId((e) => (e === id ? null : e));
-    showToast("Restored to inbox.");
+    showToast("Restored.");
   };
 
   const deleteForever = (id: string) => {
@@ -266,12 +299,27 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         </>
       }
       filterRow={
-        <ManagerPortalStatusPills
-          activeTone="primary"
-          tabs={tabs}
-          activeId={tabId}
-          onChange={(id) => router.push(`${portalBase}/inbox/${id}`)}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <ManagerPortalStatusPills
+            activeTone="primary"
+            tabs={tabs}
+            activeId={tabId}
+            onChange={(id) => router.push(`${portalBase}/inbox/${id}`)}
+          />
+          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+            <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="sender">Sender A–Z</option>
+              <option value="subject">Subject A–Z</option>
+            </select>
+          </label>
+        </div>
       }
     >
       <ScopedInboxComposeModal
@@ -295,7 +343,8 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         />
       ) : (
         <PortalInboxMessageTable
-          rows={toRows(rowsForTab)}
+          rows={toRows(rowsForTab, tabId)}
+          primaryPartyHeader={tabId === "sent" ? "To" : "From"}
           onMarkRead={tabId === "unopened" ? markRead : undefined}
           getDetailBody={(row) => bodyById[row.id]}
           expandedId={expandedId}

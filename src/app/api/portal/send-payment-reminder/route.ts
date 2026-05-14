@@ -131,33 +131,63 @@ async function deliverToPortalInbox({
 }) {
   const subject = `Payment reminder: ${chargeTitle}`;
   const messageBody = buildReminderBody({ residentName, chargeTitle, balanceDue, propertyLabel, managerName });
-  const threadId = `reminder_${userId}_${Date.now()}`;
+  const ts = Date.now();
+  const rand = Math.random().toString(36).slice(2, 6);
+  const residentLower = residentEmail.toLowerCase();
+  const senderLower = (managerEmail || "manager@example.com").toLowerCase();
   const when = new Date().toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
-  const thread = {
-    id: threadId,
-    folder: "inbox",
-    from: managerName,
-    email: managerEmail || "manager@example.com",
-    subject,
-    preview: messageBody.slice(0, 100).replace(/\n/g, " "),
-    body: messageBody,
-    time: when,
-    unread: true,
-    scope: "axis_portal_inbox_resident_v1",
-  };
+  const preview = messageBody.slice(0, 100).replace(/\n/g, " ");
+
+  const managerThreadId = `payment_sent_${userId}_${ts}_${rand}`;
   await db.from("portal_inbox_thread_records").upsert(
     {
-      id: threadId,
+      id: managerThreadId,
       scope: "axis_portal_inbox_resident_v1",
       owner_user_id: userId,
-      participant_email: residentEmail.toLowerCase(),
+      participant_email: null,
       thread_type: "payment_reminder",
-      row_data: thread,
+      row_data: {
+        id: managerThreadId,
+        folder: "sent",
+        from: managerName,
+        email: residentLower,
+        subject,
+        preview,
+        body: messageBody,
+        time: when,
+        unread: false,
+        scope: "axis_portal_inbox_resident_v1",
+      },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+
+  const residentThreadId = `payment_inbox_${ts}_${rand}`;
+  await db.from("portal_inbox_thread_records").upsert(
+    {
+      id: residentThreadId,
+      scope: "axis_portal_inbox_resident_v1",
+      owner_user_id: null,
+      participant_email: residentLower,
+      thread_type: "payment_reminder",
+      row_data: {
+        id: residentThreadId,
+        folder: "inbox",
+        from: managerName,
+        email: senderLower,
+        subject,
+        preview,
+        body: messageBody,
+        time: when,
+        unread: true,
+        scope: "axis_portal_inbox_resident_v1",
+      },
       updated_at: new Date().toISOString(),
     },
     { onConflict: "id" },

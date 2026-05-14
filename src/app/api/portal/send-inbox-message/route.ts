@@ -44,28 +44,37 @@ export async function POST(req: Request) {
     // Deliver to portal inbox for all recipients (including @axis.local demo emails)
     if (deliverToPortalInbox && allEmails.length > 0) {
       const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      const preview = text.slice(0, 100).replace(/\n/g, " ");
       for (const recipientEmail of allEmails) {
-        const threadId = `msg_${user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-        const thread = {
-          id: threadId,
-          folder: "inbox",
-          from: fromName,
-          email: senderEmail,
-          subject,
-          preview: text.slice(0, 100).replace(/\n/g, " "),
-          body: text,
-          time: when,
-          unread: true,
-          scope: "axis_portal_inbox_resident_v1",
-        };
+        const ts = Date.now();
+        const rand = Math.random().toString(36).slice(2, 6);
+        const recipientLower = recipientEmail.toLowerCase();
+
+        // Manager's Sent record (owner-only, so resident doesn't see a duplicate "sent" copy)
+        const managerThreadId = `msg_${user.id}_${ts}_${rand}`;
         await db.from("portal_inbox_thread_records").upsert(
           {
-            id: threadId,
+            id: managerThreadId,
             scope: "axis_portal_inbox_resident_v1",
             owner_user_id: user.id,
-            participant_email: recipientEmail.toLowerCase(),
+            participant_email: null,
             thread_type: "portal_message",
-            row_data: thread,
+            row_data: { id: managerThreadId, folder: "sent", from: fromName, email: recipientLower, subject, preview, body: text, time: when, unread: false, scope: "axis_portal_inbox_resident_v1" },
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" },
+        );
+
+        // Resident's Unopened record
+        const residentThreadId = `msg_inbox_${ts}_${rand}`;
+        await db.from("portal_inbox_thread_records").upsert(
+          {
+            id: residentThreadId,
+            scope: "axis_portal_inbox_resident_v1",
+            owner_user_id: null,
+            participant_email: recipientLower,
+            thread_type: "portal_message",
+            row_data: { id: residentThreadId, folder: "inbox", from: fromName, email: senderEmail.toLowerCase(), subject, preview, body: text, time: when, unread: true, scope: "axis_portal_inbox_resident_v1" },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" },

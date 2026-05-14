@@ -174,6 +174,7 @@ export function PortalInboxMessageTable({
   expandedId,
   onToggleExpand,
   renderExtraActions,
+  primaryPartyHeader = "From",
 }: {
   rows: PortalInboxTableRow[];
   onMarkRead?: (id: string) => void;
@@ -183,6 +184,7 @@ export function PortalInboxMessageTable({
   onToggleExpand?: (id: string) => void;
   /** Trash / restore / delete — shown in the expanded row only (with Mark read, Reply, Hide). */
   renderExtraActions?: (row: PortalInboxTableRow) => ReactNode;
+  primaryPartyHeader?: "From" | "To";
 }) {
   const { showToast } = useAppUi();
   return (
@@ -191,7 +193,7 @@ export function PortalInboxMessageTable({
         <table className="w-full min-w-[640px] border-collapse text-left text-sm">
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>{primaryPartyHeader}</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Topic</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Preview</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>

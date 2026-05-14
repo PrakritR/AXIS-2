@@ -41,11 +41,11 @@ function previewLine(body: string, max = 100) {
   return `${x.slice(0, max)}…`;
 }
 
-function toRows(list: InboxThread[]): PortalInboxTableRow[] {
+function toRows(list: InboxThread[], tabId: string): PortalInboxTableRow[] {
   return list.map((t) => ({
     id: t.id,
-    name: t.from,
-    email: t.email,
+    name: tabId === "sent" ? (t.email || "Unknown recipient") : t.from,
+    email: tabId === "sent" ? (t.from ? `From ${t.from}` : "") : t.email,
     topic: t.subject,
     preview: t.preview,
     whenLabel: t.time,
@@ -239,7 +239,8 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         />
       ) : (
         <PortalInboxMessageTable
-          rows={toRows(rowsForTab)}
+          rows={toRows(rowsForTab, tabId)}
+          primaryPartyHeader={tabId === "sent" ? "To" : "From"}
           onMarkRead={tabId === "unopened" ? markRead : undefined}
           getDetailBody={(row) => bodyById[row.id]}
           expandedId={expandedId}
