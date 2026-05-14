@@ -316,7 +316,11 @@ export function ResidentServicesPanel() {
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
   function reloadServiceRequests() {
-    if (residentEmail) setServiceRequests(readServiceRequestsForResident(residentEmail));
+    if (!residentEmail) {
+      setServiceRequests([]);
+      return;
+    }
+    setServiceRequests(readServiceRequestsForResident(residentEmail));
   }
 
   // Memoize application lookup to avoid redundant scans
