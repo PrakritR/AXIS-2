@@ -55,6 +55,7 @@ import {
   recordSubmittedApplicationFeeCharge,
   removeAllApplicationCharges,
   removeApprovedApplicationCharges,
+  removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
 
@@ -766,6 +767,9 @@ function ManagerApplicationsContent() {
         if (!res.ok) removedResidentAccess = false;
       } catch {
         removedResidentAccess = false;
+      }
+      if (removedResidentAccess) {
+        removeResidentHouseholdPaymentData(email);
       }
     }
 

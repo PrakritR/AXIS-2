@@ -31,7 +31,6 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   createManagerCharge,
   chargeDueLabel,
-  deleteHouseholdCharge,
   HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
   HOUSEHOLD_CHARGES_EVENT,
   HOUSEHOLD_CHARGES_SESSION_KEY,
@@ -41,6 +40,7 @@ import {
   readChargesForManagerResident,
   recordApprovedApplicationCharges,
   recordWorkOrderResidentCharge,
+  removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
   updateHouseholdChargeAmount,
   updatePendingRentAmountForResident,
@@ -1322,10 +1322,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     writeManagerApplicationRows(allRows.filter((row) => row.id !== selectedResident.id));
 
     const residentEmail = selectedResident.email.trim().toLowerCase();
-    const residentCharges = readChargesForManagerResident(selectedResident.email, userId ?? null);
-    for (const charge of residentCharges) {
-      deleteHouseholdCharge(charge.id, userId ?? null);
-    }
+    removeResidentHouseholdPaymentData(selectedResident.email);
 
     const residentLeases = readLeasePipeline(userId).filter(
       (row) => row.residentEmail.trim().toLowerCase() === residentEmail,

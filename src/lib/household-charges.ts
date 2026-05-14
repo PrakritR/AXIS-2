@@ -1737,6 +1737,35 @@ export function removeAllApplicationCharges(applicationId: string, managerUserId
   return true;
 }
 
+export function removeResidentHouseholdPaymentData(residentEmail: string): boolean {
+  if (!isBrowser()) return false;
+  const email = residentEmail.trim().toLowerCase();
+  if (!email) return false;
+
+  const charges = readAll();
+  const profiles = readRentProfiles();
+
+  const nextCharges = charges.filter((charge) => charge.residentEmail.trim().toLowerCase() !== email);
+  const nextProfiles = profiles.filter((profile) => profile.residentEmail.trim().toLowerCase() !== email);
+
+  const chargesChanged = nextCharges.length !== charges.length;
+  const profilesChanged = nextProfiles.length !== profiles.length;
+
+  if (!chargesChanged && !profilesChanged) return false;
+
+  if (chargesChanged) {
+    writeAll(nextCharges, true);
+  }
+  if (profilesChanged) {
+    writeRentProfiles(nextProfiles);
+  }
+  if (chargesChanged && !profilesChanged) {
+    emit();
+  }
+
+  return true;
+}
+
 /**
  * Legacy helper kept for compatibility with older flows. New approval code calls
  * recordApprovedApplicationCharges instead.
