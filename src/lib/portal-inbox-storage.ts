@@ -114,6 +114,8 @@ export function persistInbox(key: string, threads: PersistedInboxThread[]): void
   if (!canUse()) return;
   const existing = memoryByKey.get(key) ?? [];
   if (!inboxRowsChanged(existing, threads)) return;
+  const newIds = new Set(threads.map((t) => t.id));
+  const removedIds = existing.map((t) => t.id).filter((id) => !newIds.has(id));
   memoryByKey.set(key, threads);
   persistInboxToSession(key, threads);
   inboxLastSyncedAtByKey.set(key, Date.now());
@@ -124,6 +126,14 @@ export function persistInbox(key: string, threads: PersistedInboxThread[]): void
     credentials: "include",
     body: JSON.stringify({ action: "replace", rows: threads.map((thread) => ({ ...thread, scope: key })) }),
   }).catch(() => undefined);
+  if (removedIds.length > 0) {
+    void fetch("/api/portal-inbox-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "deleteIds", ids: removedIds }),
+    }).catch(() => undefined);
+  }
 }
 
 /** Append one thread and emit inbox-changed event for live UI refresh. */

@@ -171,28 +171,31 @@ async function deliverToPortalInbox({
     { onConflict: "id" },
   );
 
-  const residentThreadId = `payment_inbox_${ts}_${rand}`;
-  await db.from("portal_inbox_thread_records").upsert(
-    {
-      id: residentThreadId,
-      scope: "axis_portal_inbox_resident_v1",
-      owner_user_id: null,
-      participant_email: residentLower,
-      thread_type: "payment_reminder",
-      row_data: {
+  // Skip resident inbox record when recipient = sender (self-send) to avoid polluting manager's Unopened tab
+  if (residentLower !== senderLower) {
+    const residentThreadId = `payment_inbox_${ts}_${rand}`;
+    await db.from("portal_inbox_thread_records").upsert(
+      {
         id: residentThreadId,
-        folder: "inbox",
-        from: managerName,
-        email: senderLower,
-        subject,
-        preview,
-        body: messageBody,
-        time: when,
-        unread: true,
         scope: "axis_portal_inbox_resident_v1",
+        owner_user_id: null,
+        participant_email: residentLower,
+        thread_type: "payment_reminder",
+        row_data: {
+          id: residentThreadId,
+          folder: "inbox",
+          from: managerName,
+          email: senderLower,
+          subject,
+          preview,
+          body: messageBody,
+          time: when,
+          unread: true,
+          scope: "axis_portal_inbox_resident_v1",
+        },
+        updated_at: new Date().toISOString(),
       },
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" },
-  );
+      { onConflict: "id" },
+    );
+  }
 }

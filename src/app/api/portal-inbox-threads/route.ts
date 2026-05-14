@@ -6,7 +6,6 @@ const route = createJsonRecordRoute({
   table: "portal_inbox_thread_records",
   scope: (query, user) => {
     const q = query as { or: (expr: string) => unknown };
-    if (user.role === "admin") return query;
     return q.or(`owner_user_id.eq.${user.id},participant_email.eq.${user.email ?? ""}`);
   },
   normalize: (row) => ({

@@ -189,8 +189,10 @@ export function ResidentDashboard({
           return roomLabel.split(" · ")[0]?.trim() || roomLabel;
         })();
 
-        setAppStatus(row.bucket);
-        setAppStage(row.stage?.trim() || row.bucket);
+        // Use row's bucket, but prefer server-determined approval status if it's more permissive
+        const finalBucket = applicationApproved && row.bucket === "pending" ? "approved" : row.bucket;
+        setAppStatus(finalBucket);
+        setAppStage(row.stage?.trim() || finalBucket);
         setAppProperty(resolvedProperty);
         setAppRoom(resolvedRoom);
         setAppId(row.id?.trim() || null);

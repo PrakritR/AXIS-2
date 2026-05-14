@@ -22,6 +22,7 @@ import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/d
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 
 function statusTone(label: string) {
   const l = label.toLowerCase();
@@ -47,13 +48,42 @@ export function ManagerPaymentsLedgerPanel({
   const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
   const [editAmountDraft, setEditAmountDraft] = useState("");
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+  const [reminderPreview, setReminderPreview] = useState<{ row: DemoManagerPaymentLedgerRow; subject: string; body: string } | null>(null);
 
-  const sendReminder = async (row: DemoManagerPaymentLedgerRow) => {
+  const openReminderPreview = (row: DemoManagerPaymentLedgerRow) => {
     const email = row.residentEmail?.trim();
     if (!email) {
       showToast("No email on file for this resident.");
       return;
     }
+    const residentName = row.residentName || "Resident";
+    const chargeTitle = row.chargeTitle || "outstanding charge";
+    const subject = `Payment reminder: ${chargeTitle}`;
+    const lines = [
+      `Hi ${residentName},`,
+      "",
+      `This is a friendly reminder that your ${chargeTitle} payment is outstanding.`,
+    ];
+    if (row.balanceDue) lines.push(`Amount due: ${row.balanceDue}`);
+    if (row.propertyName) lines.push(`Property: ${row.propertyName}`);
+    lines.push(
+      "",
+      "Please log in to your Axis resident portal to make your payment at your earliest convenience.",
+      "",
+      "If you have any questions, please don't hesitate to reach out.",
+      "",
+      "Your property manager",
+      "Axis Housing Portal",
+    );
+    setReminderPreview({ row, subject, body: lines.join("\n") });
+  };
+
+  const doSendReminder = async () => {
+    if (!reminderPreview) return;
+    const { row } = reminderPreview;
+    const email = row.residentEmail?.trim();
+    if (!email) return;
+    setReminderPreview(null);
     setSendingReminderId(row.id);
     try {
       const res = await fetch("/api/portal/send-payment-reminder", {
@@ -144,6 +174,31 @@ export function ManagerPaymentsLedgerPanel({
   };
 
   return (
+    <>
+    {reminderPreview && (
+      <Modal open title="Send payment reminder" onClose={() => setReminderPreview(null)}>
+        <div className="space-y-4 p-1">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">To</p>
+            <p className="mt-0.5 text-sm text-slate-800">{reminderPreview.row.residentEmail}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Subject</p>
+            <p className="mt-0.5 text-sm text-slate-800">{reminderPreview.subject}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Message</p>
+            <pre className="mt-1 whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">{reminderPreview.body}</pre>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setReminderPreview(null)}>Cancel</Button>
+            <Button type="button" variant="primary" disabled={!!sendingReminderId} onClick={() => void doSendReminder()}>
+              {sendingReminderId ? "Sending…" : "Send"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    )}
     <div className={PORTAL_DATA_TABLE_WRAP}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
         <table className="min-w-[880px] w-full border-collapse text-left text-sm">
@@ -224,7 +279,7 @@ export function ManagerPaymentsLedgerPanel({
                           variant="outline"
                           className={PORTAL_DETAIL_BTN}
                           disabled={sendingReminderId === row.id}
-                          onClick={() => void sendReminder(row)}
+                          onClick={() => openReminderPreview(row)}
                         >
                           {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
                         </Button>
@@ -279,5 +334,6 @@ export function ManagerPaymentsLedgerPanel({
         </table>
       </div>
     </div>
+    </>
   );
 }

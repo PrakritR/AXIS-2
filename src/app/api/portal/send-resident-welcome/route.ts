@@ -167,31 +167,33 @@ export async function POST(req: Request) {
         { onConflict: "id" },
       );
 
-      // Resident's Unopened record
-      const residentThreadId = `welcome_inbox_${ts}_${rand}`;
-      await svc.from("portal_inbox_thread_records").upsert(
-        {
-          id: residentThreadId,
-          scope: "axis_portal_inbox_resident_v1",
-          owner_user_id: null,
-          participant_email: to,
-          thread_type: "portal_message",
-          row_data: {
+      // Resident's Unopened record (skip when recipient = sender to avoid polluting manager's Unopened tab)
+      if (!skipExternalEmail) {
+        const residentThreadId = `welcome_inbox_${ts}_${rand}`;
+        await svc.from("portal_inbox_thread_records").upsert(
+          {
             id: residentThreadId,
-            folder: "inbox",
-            from: senderName,
-            email: senderLower,
-            subject: RESIDENT_WELCOME_EMAIL_SUBJECT,
-            preview,
-            body: text,
-            time: when,
-            unread: true,
             scope: "axis_portal_inbox_resident_v1",
+            owner_user_id: null,
+            participant_email: to,
+            thread_type: "portal_message",
+            row_data: {
+              id: residentThreadId,
+              folder: "inbox",
+              from: senderName,
+              email: senderLower,
+              subject: RESIDENT_WELCOME_EMAIL_SUBJECT,
+              preview,
+              body: text,
+              time: when,
+              unread: true,
+              scope: "axis_portal_inbox_resident_v1",
+            },
+            updated_at: new Date().toISOString(),
           },
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" },
-      );
+          { onConflict: "id" },
+        );
+      }
     } catch {
       /* non-critical — email already sent */
     }
