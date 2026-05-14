@@ -47,6 +47,12 @@ import {
   hasDeposit,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
+import {
+  LEASE_PIPELINE_EVENT,
+  findLeaseForResidentEmail,
+  hasBothLeaseSignatures,
+  syncLeasePipelineFromServer,
+} from "@/lib/lease-pipeline-storage";
 
 const STATUS_TABS: { id: ResidentWorkBucket; label: string }[] = [
   { id: "open", label: "Open" },
@@ -305,6 +311,7 @@ export function ResidentServicesPanel() {
   const [availableOffers, setAvailableOffers] = useState<ManagerAmenityOffer[]>([]);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [srTick, setSrTick] = useState(0);
+  const [leaseTick, setLeaseTick] = useState(0);
 
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
@@ -369,6 +376,17 @@ export function ResidentServicesPanel() {
   }, [residentEmail]);
 
   useEffect(() => {
+    const onLease = () => setLeaseTick((t) => t + 1);
+    void syncLeasePipelineFromServer().then(onLease);
+    window.addEventListener(LEASE_PIPELINE_EVENT, onLease);
+    window.addEventListener("storage", onLease);
+    return () => {
+      window.removeEventListener(LEASE_PIPELINE_EVENT, onLease);
+      window.removeEventListener("storage", onLease);
+    };
+  }, []);
+
+  useEffect(() => {
     reloadServiceRequests();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [srTick]);
@@ -406,6 +424,20 @@ export function ResidentServicesPanel() {
     [serviceRequests],
   );
 
+  const residentLeaseRow = useMemo(() => {
+    void leaseTick;
+    if (!residentEmail) return null;
+    return findLeaseForResidentEmail(residentEmail);
+  }, [leaseTick, residentEmail]);
+
+  const servicesUnlocked = Boolean(residentLeaseRow && hasBothLeaseSignatures(residentLeaseRow));
+
+  useEffect(() => {
+    if (!servicesUnlocked && modalMode !== "none") {
+      setModalMode("none");
+    }
+  }, [servicesUnlocked, modalMode]);
+
   const fileToDataUrl = (file: File) =>
     new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -439,6 +471,10 @@ export function ResidentServicesPanel() {
   }
 
   const submitMaintenance = () => {
+    if (!servicesUnlocked) {
+      showToast("Services unlock after your lease is fully signed.");
+      return;
+    }
     if (!mTitle.trim()) { showToast("Add a title first."); return; }
     if (!residentEmail) { showToast("Sign in to submit."); return; }
     const application = getApplication();
@@ -472,6 +508,10 @@ export function ResidentServicesPanel() {
   };
 
   const submitService = () => {
+    if (!servicesUnlocked) {
+      showToast("Services unlock after your lease is fully signed.");
+      return;
+    }
     if (!selectedOffer) { showToast("Select a service first."); return; }
     if (!residentEmail) { showToast("Sign in to submit."); return; }
     if (hasDeposit(selectedOffer.deposit) && !sReturnBy.trim()) {
@@ -518,10 +558,33 @@ export function ResidentServicesPanel() {
       title="Requests"
       titleAside={
         <div className="flex shrink-0 gap-2">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setModalMode("maintenance")}>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            disabled={!servicesUnlocked}
+            onClick={() => {
+              if (!servicesUnlocked) {
+                showToast("Services unlock after your lease is fully signed.");
+                return;
+              }
+              setModalMode("maintenance");
+            }}
+          >
             Report maintenance
           </Button>
-          <Button type="button" className="rounded-full" onClick={() => setModalMode("service")}>
+          <Button
+            type="button"
+            className="rounded-full"
+            disabled={!servicesUnlocked}
+            onClick={() => {
+              if (!servicesUnlocked) {
+                showToast("Services unlock after your lease is fully signed.");
+                return;
+              }
+              setModalMode("service");
+            }}
+          >
             Request a service
           </Button>
         </div>
@@ -529,6 +592,12 @@ export function ResidentServicesPanel() {
       filterRow={null}
     >
       <input ref={photoInputRef} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void onPickPhotos(e.target.files); }} />
+
+      {!servicesUnlocked ? (
+        <div className="mb-6 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-4 text-sm text-amber-950">
+          Services are locked until your lease is fully signed by you and your manager.
+        </div>
+      ) : null}
 
       {/* Active service requests */}
       {activeServiceRequests.length > 0 ? (
