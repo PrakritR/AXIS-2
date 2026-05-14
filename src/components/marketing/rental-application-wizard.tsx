@@ -20,7 +20,14 @@ import {
   recordApplicationCharges,
 } from "@/lib/household-charges";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { getPropertyById, getPropertySelectOptions, getRoomOptionsForProperty, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
+import {
+  getPropertyById,
+  getPropertySelectOptions,
+  getRoomOptionsForProperty,
+  isRoomApprovedConflict,
+  isRoomPendingConflict,
+  LISTING_ROOM_CHOICE_SEP,
+} from "@/lib/rental-application/data";
 import { resolveApplicationFeePayChannel } from "@/lib/rental-application/application-fee-channel";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
@@ -80,6 +87,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const [reviewReturnStep, setReviewReturnStep] = useState<number | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [postSubmit, setPostSubmit] = useState<{ axisId: string } | null>(null);
+  const [showAvailabilityWarnings, setShowAvailabilityWarnings] = useState(false);
   /** Bumps after server sync so step 3 room dropdowns re-filter against approved occupancy. */
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
   const router = useRouter();
@@ -160,7 +168,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     const listingRoomId = searchParams.get("listingRoomId") ?? "";
 
     setForm((prev) => {
-      const opts = getRoomOptionsForProperty(pid).filter((o) => o.value);
+      const opts = getRoomOptionsForProperty(pid, { includeUnavailable: true }).filter((o) => o.value);
       let room1 = opts[0]?.value ?? "";
       const lr = listingRoomId.trim();
       if (lr) {
@@ -181,6 +189,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
     setForm((f) => ({ ...f, ...p }));
+    if (Object.keys(p).some((k) => ["propertyId", "roomChoice1", "roomChoice2", "roomChoice3", "rentalType", "leaseTerm", "leaseStart", "leaseEnd"].includes(k))) {
+      setShowAvailabilityWarnings(false);
+    }
     setErrors((e) => {
       const next = { ...e };
       for (const k of Object.keys(p)) delete next[k];
@@ -218,6 +229,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     setStep(n);
     setErrors({});
     setReviewReturnStep(null);
+    if (n === 3) setShowAvailabilityWarnings(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -225,6 +237,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     setStep(n);
     setErrors({});
     setReviewReturnStep(n);
+    if (n === 3) setShowAvailabilityWarnings(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -501,6 +514,20 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       showToast("Please fix the highlighted fields before continuing.");
       return;
     }
+    if (step === 3) {
+      const approvedConflict = form.roomChoice1
+        ? isRoomApprovedConflict(form.roomChoice1, form.leaseStart, form.leaseEnd)
+        : false;
+      const pendingConflict = !approvedConflict && form.roomChoice1
+        ? isRoomPendingConflict(form.roomChoice1, form.leaseStart, form.leaseEnd)
+        : false;
+      setShowAvailabilityWarnings(approvedConflict || pendingConflict);
+      if (approvedConflict) {
+        showToast("Your first-choice room may be unavailable for those move-in dates, but your application can still continue.");
+      } else if (pendingConflict) {
+        showToast("Someone else has already applied for your first-choice room on those dates, but your application can still continue.");
+      }
+    }
     if (reviewReturnStep != null && reviewReturnStep === step) {
       setStep(11);
       setReviewReturnStep(null);
@@ -528,6 +555,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     }
     setStep((s) => s - 1);
     setErrors({});
+    if (step - 1 === 3) setShowAvailabilityWarnings(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -626,6 +654,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 patch={patchForm}
                 applicationFeeGate={applicationFeeGate}
                 occupancySyncEpoch={occupancySyncEpoch}
+                showAvailabilityWarnings={showAvailabilityWarnings}
                 setPhone={setPhone}
                 setLandlordPhone={setLandlordPhone}
                 setPrevLandlordPhone={setPrevLandlordPhone}

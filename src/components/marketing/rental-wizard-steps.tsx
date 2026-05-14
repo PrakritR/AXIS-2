@@ -3,7 +3,16 @@
 import type { ReactNode } from "react";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel } from "@/lib/rental-application/application-fee-channel";
-import { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, getPropertyById, getRoomChoiceLabel, isRoomApprovedConflict, isRoomPendingConflict, propertyAllowsShortTermRental, roomSelectOptionsWithNone } from "@/lib/rental-application/data";
+import {
+  LEASE_TERM_OPTIONS,
+  SHORT_TERM_LEASE_TERM,
+  getPropertyById,
+  getRoomChoiceLabel,
+  isRoomApprovedConflict,
+  isRoomPendingConflict,
+  propertyAllowsShortTermRental,
+  roomSelectOptionsWithNone,
+} from "@/lib/rental-application/data";
 import {
   applicantFirstChoiceRentLabel,
   formatListingFeeDisplay,
@@ -88,6 +97,7 @@ export type WizardStepsProps = {
   };
   /** Incremented when public approved-occupancy sync completes; ties room availability to server data. */
   occupancySyncEpoch: number;
+  showAvailabilityWarnings: boolean;
   setPhone: (next: string) => void;
   setLandlordPhone: (next: string) => void;
   setPrevLandlordPhone: (next: string) => void;
@@ -111,7 +121,7 @@ function maskSsnReview(ssn: string) {
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, propertyOptions, patch, goToStep, editFromReview, applicationFeeGate, occupancySyncEpoch } = p;
+  const { step, form, errors, propertyOptions, patch, goToStep, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
 
   if (step === 1) {
     return (
@@ -257,14 +267,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
 
   if (step === 3) {
     void occupancySyncEpoch;
-    const roomOptionParams = {
-      leaseStart: form.leaseStart,
-      leaseEnd: form.leaseEnd,
-    };
     const selectedProperty = getPropertyById(form.propertyId);
     const shortTermAllowed = propertyAllowsShortTermRental(form.propertyId);
-    const rooms = roomSelectOptionsWithNone(form.propertyId, roomOptionParams).filter((o) => o.value !== "");
-    const roomsWithNone = roomSelectOptionsWithNone(form.propertyId, roomOptionParams);
+    const rooms = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true }).filter((o) => o.value !== "");
+    const roomsWithNone = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true });
     const room1ApprovedConflict = form.roomChoice1
       ? isRoomApprovedConflict(form.roomChoice1, form.leaseStart, form.leaseEnd)
       : false;
@@ -316,7 +322,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 value={form.roomChoice1}
                 disabled={!form.propertyId}
                 onChange={(e) => patch({ roomChoice1: e.target.value })}
-                className={errors.roomChoice1 || room1ApprovedConflict ? "border-red-400 ring-2 ring-red-100" : ""}
+                className={errors.roomChoice1 ? "border-red-400 ring-2 ring-red-100" : ""}
               >
                 <option value="">{form.propertyId ? "Select a room" : "Select a property first"}</option>
                 {rooms.map((o) => (
@@ -325,15 +331,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   </option>
                 ))}
               </Select>
-              {room1ApprovedConflict ? (
-                <p className="mt-1 text-xs font-medium text-rose-600">
-                  This move-in date is already taken for this room. Choose different dates or another room.
-                </p>
-              ) : room1PendingConflict ? (
-                <p className="mt-1 text-xs font-medium text-amber-600">
-                  Someone else has also applied for these dates — you may not get first choice.
-                </p>
-              ) : null}
               <FieldError msg={errors.roomChoice1} />
             </div>
             <div>
@@ -491,6 +488,18 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           ) : null}
         </div>
+        {showAvailabilityWarnings && room1ApprovedConflict ? (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            Warning: your first-choice room does not appear available for the selected move-in dates, but you can still submit
+            this application.
+          </p>
+        ) : null}
+        {showAvailabilityWarnings && !room1ApprovedConflict && room1PendingConflict ? (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            Warning: someone else has already applied for your first-choice room on these dates, but you can still submit this
+            application.
+          </p>
+        ) : null}
         {form.rentalType === "short_term" ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

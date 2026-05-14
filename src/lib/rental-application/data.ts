@@ -25,6 +25,7 @@ type RoomAvailabilityOptions = {
   leaseStart?: string | null;
   leaseEnd?: string | null;
   excludeApplicationId?: string | null;
+  includeUnavailable?: boolean;
 };
 
 export function parseRoomChoiceValue(value: string): ParsedRoomChoice {
@@ -338,7 +339,8 @@ export function getRoomOptionsForProperty(propertyId: string, options: RoomAvail
     const roomRows = sub.rooms.filter(
       (r) =>
         r.name.trim() &&
-        isRoomChoiceAvailable(`${selected.id}${LISTING_ROOM_CHOICE_SEP}${r.id}`, r.availability, options),
+        (options.includeUnavailable ||
+          isRoomChoiceAvailable(`${selected.id}${LISTING_ROOM_CHOICE_SEP}${r.id}`, r.availability, options)),
     );
     if (roomRows.length > 0) {
       return roomRows.map((r) => {
