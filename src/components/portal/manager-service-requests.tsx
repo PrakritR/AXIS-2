@@ -7,6 +7,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import { formatPacificDate } from "@/lib/pacific-time";
 import {
   SERVICE_REQUESTS_EVENT,
   approveServiceRequest,
@@ -34,7 +35,7 @@ function formatDate(iso: string) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return formatPacificDate(d, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function StatusBadge({ status }: { status: ServiceRequestStatus }) {

@@ -14,7 +14,7 @@ export default async function ManagerLayout({ children }: { children: React.Reac
       <PublicNavbar />
       <div className="shrink-0">
         <PortalTopBanners
-          planHref="/manager/plan"
+          planHref="/portal/plan"
           showPreviewBanner={nav.showPreviewBanner}
           previewLabel={nav.previewLabel}
           showPlanBanner={nav.showPlanBanner}

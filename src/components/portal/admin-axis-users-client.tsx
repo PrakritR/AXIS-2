@@ -5,6 +5,7 @@ import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { formatPacificDate } from "@/lib/pacific-time";
 
 type ManagerRow = {
   id: string;
@@ -158,7 +159,7 @@ function ManagerDetailRow({
             </div>
             {row.joinedAt && (
               <p className="pt-1 text-xs text-slate-500">
-                Joined {new Date(row.joinedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
               </p>
             )}
           </div>
@@ -278,7 +279,7 @@ function SimpleAccountDetailRow({
             </div>
             {row.joinedAt && (
               <p className="pt-1 text-xs text-slate-500">
-                Joined {new Date(row.joinedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
               </p>
             )}
           </div>

@@ -43,19 +43,14 @@ import {
   syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 
 const BASE = "/portal";
 
 function fmt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
-  return d.toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatPacificDateTime(d);
 }
 
 function dollars(cents: number) {

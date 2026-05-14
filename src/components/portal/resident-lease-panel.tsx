@@ -7,6 +7,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { formatPacificDate } from "@/lib/pacific-time";
 import {
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
@@ -302,7 +303,7 @@ export function ResidentLeasePanel() {
             Current move-out date:{" "}
             <strong>
               {pipelineRow.application?.leaseEnd
-                ? new Date(pipelineRow.application.leaseEnd + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
+                ? formatPacificDate(new Date(pipelineRow.application.leaseEnd + "T00:00:00"), { year: "numeric", month: "long", day: "numeric" })
                 : "—"}
             </strong>
           </p>

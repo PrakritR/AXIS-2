@@ -8,6 +8,7 @@ import { ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
@@ -213,12 +214,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
-      const when = new Date().toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
+      const when = formatPacificDateTime(new Date());
       if (p.includesAxisAdmin) {
         appendPortalMessageToAdminInbox({
           role: "manager",

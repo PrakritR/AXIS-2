@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { readInboxMessages } from "@/lib/demo-admin-partner-inbox";
 import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
@@ -22,13 +23,7 @@ type PortalCounts = { managers: number; residents: number; owners: number };
 function fmt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
-  return d.toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatPacificDateTime(d);
 }
 
 function NotifBanner({

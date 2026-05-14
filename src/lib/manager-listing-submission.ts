@@ -287,10 +287,16 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
           ? (legacyRoom as ManagerRoomSubmission & { moveInInstructions: string }).moveInInstructions.trim()
           : "",
       prorateMethod: (legacyRoom.prorateMethod === "daily_rate" ? "daily_rate" : "auto") as "auto" | "daily_rate",
-      dailyRentRate:
-        typeof legacyRoom.dailyRentRate === "number" && legacyRoom.dailyRentRate > 0 ? legacyRoom.dailyRentRate : undefined,
-      dailyUtilitiesRate:
-        typeof legacyRoom.dailyUtilitiesRate === "number" && legacyRoom.dailyUtilitiesRate > 0 ? legacyRoom.dailyUtilitiesRate : undefined,
+      dailyRentRate: (() => {
+        const v = legacyRoom.dailyRentRate;
+        const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+        return Number.isFinite(n) && n > 0 ? n : undefined;
+      })(),
+      dailyUtilitiesRate: (() => {
+        const v = legacyRoom.dailyUtilitiesRate;
+        const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+        return Number.isFinite(n) && n > 0 ? n : undefined;
+      })(),
       manualUnavailableRanges: (() => {
         const raw = (legacyRoom as ManagerRoomSubmission & { manualUnavailableRanges?: unknown }).manualUnavailableRanges;
         if (!Array.isArray(raw)) return [];

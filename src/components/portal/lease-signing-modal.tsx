@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 
 export function LeaseSigningModal({
   row,
@@ -25,15 +26,7 @@ export function LeaseSigningModal({
   const [submitting, setSubmitting] = useState(false);
 
   const now = useMemo(
-    () =>
-      new Date().toLocaleString(undefined, {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
+    () => formatPacificDateTime(new Date()),
     [],
   );
 

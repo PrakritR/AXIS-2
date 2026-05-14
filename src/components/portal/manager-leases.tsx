@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
-import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import {
+  ManagerPortalPageShell,
+  ManagerPortalStatusPills,
+  PORTAL_TOOLBAR_LABEL,
+  PORTAL_TOOLBAR_SELECT,
+} from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -22,6 +27,8 @@ const LEASE_LABELS: { id: ManagerLeaseBucket; label: string }[] = [
   { id: "signed", label: "Manager signature pending / signed" },
 ];
 
+type HouseSort = "house-asc" | "house-desc";
+
 function countBuckets(rows: ReturnType<typeof readLeasePipeline>) {
   const c: Record<ManagerLeaseBucket, number> = { manager: 0, admin: 0, resident: 0, signed: 0 };
   for (const r of rows) c[r.bucket] += 1;
@@ -35,6 +42,7 @@ export function ManagerLeases() {
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [houseSort, setHouseSort] = useState<HouseSort>("house-asc");
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -72,9 +80,29 @@ export function ManagerLeases() {
   const rows = useMemo(() => {
     void tick;
     const allRows = readLeasePipeline(userId);
-    if (!propertyFilter.trim()) return allRows;
-    return allRows.filter((row) => row.application?.propertyId?.trim() === propertyFilter);
-  }, [tick, propertyFilter, userId]);
+    const filtered = !propertyFilter.trim()
+      ? allRows
+      : allRows.filter((row) => row.application?.propertyId?.trim() === propertyFilter);
+
+    return [...filtered].sort((a, b) => {
+      if (propertyFilter) {
+        const byResident = a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
+        const residentOrder = houseSort === "house-asc" ? byResident : -byResident;
+        if (residentOrder !== 0) return residentOrder;
+      }
+
+      const byHouse = a.unit.localeCompare(b.unit, undefined, { sensitivity: "base" });
+      const houseOrder = houseSort === "house-asc" ? byHouse : -byHouse;
+      if (houseOrder !== 0) return houseOrder;
+
+      const byResident = a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
+      if (byResident !== 0) return byResident;
+
+      const aTs = Date.parse(a.updatedAtIso || "");
+      const bTs = Date.parse(b.updatedAtIso || "");
+      return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+    });
+  }, [tick, propertyFilter, houseSort, userId]);
 
   useEffect(() => {
     const emails = [...new Set(rows.map((row) => row.residentEmail.trim().toLowerCase()).filter(Boolean))];
@@ -123,6 +151,17 @@ export function ManagerLeases() {
               onPropertyChange={setPropertyFilter}
             />
           </div>
+          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+            <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>{propertyFilter ? "Sort resident" : "Sort house"}</span>
+            <select
+              value={houseSort}
+              onChange={(e) => setHouseSort(e.target.value as HouseSort)}
+              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
+            >
+              <option value="house-asc">A-Z</option>
+              <option value="house-desc">Z-A</option>
+            </select>
+          </label>
           <Button
             type="button"
             variant="outline"

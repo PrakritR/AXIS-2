@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -63,13 +64,7 @@ function formatRangeLabel(isoStart: string, isoEnd: string): string {
   const start = new Date(isoStart);
   const end = new Date(isoEnd);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "Tour time";
-  return `${start.toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  })} - ${end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  return `${formatPacificDateTime(start)} - ${formatPacificDateTime(end).replace(/^\w{3} \d{1,2}, /, "")}`;
 }
 
 export async function POST(req: Request) {

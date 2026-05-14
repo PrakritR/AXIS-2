@@ -19,8 +19,6 @@ import { ManagerProperties } from "@/components/portal/manager-properties";
 import { ManagerResidents } from "@/components/portal/manager-residents";
 import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
 import { ManagerAllServicesPanel } from "@/components/portal/manager-all-services-panel";
-import { OwnerInboxPanel } from "@/components/portal/owner-inbox-panel";
-import { OwnerProperties } from "@/components/portal/owner-properties";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
 import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
@@ -200,7 +198,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "manager") {
-    if (section === "leases" || section === "work-orders") {
+    if (section === "work-orders") {
       redirect(`${def.basePath}/residents`);
     }
     if (section === "residents") {
@@ -277,7 +275,7 @@ export async function renderPortalSection(
 
   if (kind === "pro") {
     const useOwnerUi = proEffectiveRole === "owner";
-    if ((section === "leases" || section === "work-orders") && !useOwnerUi) {
+    if (section === "work-orders" && !useOwnerUi) {
       redirect(`${def.basePath}/residents`);
     }
 
@@ -305,11 +303,7 @@ export async function renderPortalSection(
       const inboxTab = tabParts[0]!;
       if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
       return subscriptionGated(
-        useOwnerUi ? (
-          <OwnerInboxPanel tabId={inboxTab} />
-        ) : (
-          <ManagerInbox tabId={inboxTab} />
-        ),
+        <ManagerInbox tabId={inboxTab} />,
         kind,
         "inbox",
         managerOwnerSubscriptionTier,
@@ -347,11 +341,7 @@ export async function renderPortalSection(
     }
     if (section === "properties") {
       return subscriptionGated(
-        useOwnerUi ? (
-          <OwnerProperties />
-        ) : (
-          <ManagerProperties />
-        ),
+        <ManagerProperties />,
         kind,
         "properties",
         managerOwnerSubscriptionTier,
@@ -391,7 +381,7 @@ export async function renderPortalSection(
       const inboxTab = tabParts[0]!;
       if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
       return subscriptionGated(
-        <OwnerInboxPanel tabId={inboxTab} />,
+        <ManagerInbox tabId={inboxTab} />,
         kind,
         "inbox",
         managerOwnerSubscriptionTier,
@@ -405,7 +395,7 @@ export async function renderPortalSection(
       return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
     }
     if (section === "properties") {
-      return subscriptionGated(<OwnerProperties />, kind, "properties", managerOwnerSubscriptionTier);
+      return subscriptionGated(<ManagerProperties />, kind, "properties", managerOwnerSubscriptionTier);
     }
     if (section === "applications") {
       return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);

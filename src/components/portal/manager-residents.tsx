@@ -117,6 +117,7 @@ import {
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
+import { formatPacificDate, formatPacificDateTime } from "@/lib/pacific-time";
 
 type ActiveResident = {
   id: string;
@@ -201,7 +202,7 @@ function fromDatetimeLocalValue(s: string): string | null {
 
 function formatScheduledLabel(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return formatPacificDateTime(d);
 }
 
 function ResidentWorkOrderCostEditor({
@@ -317,6 +318,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [reminderBusy, setReminderBusy] = useState(false);
   const [leaseReminderBusy, setLeaseReminderBusy] = useState(false);
   const [reminderPreview, setReminderPreview] = useState<{ res: ActiveResident; subject: string; body: string } | null>(null);
+  const [leaseReminderPreview, setLeaseReminderPreview] = useState<{
+    res: ActiveResident;
+    leaseId: string;
+    recipient: string;
+    subject: string;
+    body: string;
+  } | null>(null);
   const [signingLease, setSigningLease] = useState<LeasePipelineRow | null>(null);
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
   const [welcomeEmailBusyForResident, setWelcomeEmailBusyForResident] = useState<string | null>(null);
@@ -841,12 +849,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       showToast("Add a subject and message.");
       return;
     }
-    const when = new Date().toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    const when = formatPacificDateTime(new Date());
     // Save to manager's local sent box
     const next = [
       {
@@ -966,29 +969,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
   }
 
-  async function sendLeaseSigningReminder(res: ActiveResident, lease: LeasePipelineRow) {
+  async function sendLeaseSigningReminder(res: ActiveResident, leaseId: string, subject: string, body: string) {
     setLeaseReminderBusy(true);
     try {
-      const unit = lease.unit.trim() || "your unit";
-      const subject = `Reminder: sign your lease for ${unit}`;
-      const leaseStart = lease.application?.leaseStart?.trim();
-      const leaseEnd = lease.application?.leaseEnd?.trim();
-      const dateLine = leaseStart
-        ? leaseEnd
-          ? `Lease dates: ${leaseStart} to ${leaseEnd}`
-          : `Lease start date: ${leaseStart}`
-        : "";
-      const body = [
-        `Hi ${res.name.split(" ")[0] ?? res.name},`,
-        "",
-        `This is a reminder to review and sign your lease for ${unit} in your Axis resident portal.`,
-        dateLine,
-        "",
-        "If you have any questions before signing, reply in your Axis inbox and we will help.",
-        "",
-        "Axis Housing",
-      ].filter(Boolean).join("\n");
-
       const response = await fetch("/api/portal/send-inbox-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1008,7 +991,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         return;
       }
 
-      appendLeaseThreadMessage(lease.id, "manager", "Sent lease-signing reminder to resident.");
+      appendLeaseThreadMessage(leaseId, "manager", "Sent lease-signing reminder to resident.");
       setLeaseTick((n) => n + 1);
       if (data.skipped) {
         showToast("Reminder sent to Axis inbox (demo email, no external email sent).");
@@ -1020,6 +1003,41 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     } finally {
       setLeaseReminderBusy(false);
     }
+  }
+
+  function openLeaseSigningReminderPreview(res: ActiveResident, lease: LeasePipelineRow) {
+    const recipient = res.email.trim();
+    if (!recipient || !recipient.includes("@")) {
+      showToast("Resident email is missing or invalid.");
+      return;
+    }
+    const unit = lease.unit.trim() || "your unit";
+    const leaseStart = lease.application?.leaseStart?.trim();
+    const leaseEnd = lease.application?.leaseEnd?.trim();
+    const dateLine = leaseStart
+      ? leaseEnd
+        ? `Lease dates: ${leaseStart} to ${leaseEnd}`
+        : `Lease start date: ${leaseStart}`
+      : "";
+    const subject = `Reminder: sign your lease for ${unit}`;
+    const body = [
+      `Hi ${res.name.split(" ")[0] ?? res.name},`,
+      "",
+      `This is a reminder to review and sign your lease for ${unit} in your Axis resident portal.`,
+      dateLine,
+      "",
+      "If you have any questions before signing, reply in your Axis inbox and we will help.",
+      "",
+      "Axis Housing",
+    ].filter(Boolean).join("\n");
+
+    setLeaseReminderPreview({
+      res,
+      leaseId: lease.id,
+      recipient,
+      subject,
+      body,
+    });
   }
 
   function saveManualResident() {
@@ -1722,7 +1740,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           variant="outline"
                                           className="rounded-full px-3 py-1 text-xs"
                                           disabled={leaseReminderBusy}
-                                          onClick={() => void sendLeaseSigningReminder(selected, residentLease)}
+                                          onClick={() => openLeaseSigningReminderPreview(selected, residentLease)}
                                         >
                                           {leaseReminderBusy ? "Sending…" : "Send signing reminder"}
                                         </Button>
@@ -1939,7 +1957,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                               ) : (
                                                 <span className="text-xs text-slate-400">
                                                   {c.paidAt
-                                                    ? new Date(c.paidAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+                                                    ? formatPacificDate(c.paidAt, { month: "short", day: "numeric" })
                                                     : "—"}
                                                 </span>
                                               )}
@@ -1995,7 +2013,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             <div className="mt-1 flex flex-wrap gap-1">
                                               {req.price ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">{req.price}</span> : null}
                                               {needsReturn ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {req.deposit}</span> : null}
-                                              {req.returnByDate ? <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">Return by {new Date(req.returnByDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span> : null}
+                                              {req.returnByDate ? <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">Return by {formatPacificDate(req.returnByDate, { month: "short", day: "numeric" })}</span> : null}
                                             </div>
                                           </div>
                                           <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${statusColors[req.status] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
@@ -2665,6 +2683,48 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               }}
             >
               {reminderBusy ? "Sending…" : "Send reminder"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={leaseReminderPreview !== null}
+        title="Lease signing reminder — preview"
+        onClose={() => setLeaseReminderPreview(null)}
+      >
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
+            <p className="text-sm text-slate-900">{leaseReminderPreview?.recipient}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
+            <p className="text-sm text-slate-900">{leaseReminderPreview?.subject}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
+            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+              {leaseReminderPreview?.body}
+            </pre>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setLeaseReminderPreview(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              disabled={leaseReminderBusy}
+              onClick={() => {
+                if (!leaseReminderPreview) return;
+                const preview = leaseReminderPreview;
+                setLeaseReminderPreview(null);
+                void sendLeaseSigningReminder(preview.res, preview.leaseId, preview.subject, preview.body);
+              }}
+            >
+              {leaseReminderBusy ? "Sending…" : "Send reminder"}
             </Button>
           </div>
         </div>

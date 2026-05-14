@@ -528,8 +528,6 @@ function ManagerApplicationsContent() {
   const [rows, setRows] = useState<DemoApplicantRow[]>([]);
   const [portfolioTick, setPortfolioTick] = useState(0);
   const [roomSortDir, setRoomSortDir] = useState<"asc" | "desc">("asc");
-  const [welcomeEmailBusyFor, setWelcomeEmailBusyFor] = useState<string | null>(null);
-
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
     sync();
@@ -626,39 +624,6 @@ function ManagerApplicationsContent() {
     void syncPropertyPipelineFromServer().then(() => setPortfolioTick((n) => n + 1));
     showToast("Refreshed.");
   }, [showToast]);
-
-  const sendResidentWelcomeEmail = useCallback(
-    async (row: DemoApplicantRow) => {
-      setWelcomeEmailBusyFor(row.id);
-      try {
-        const result = await requestResidentWelcomeEmail(row);
-        if (result.status === "sent") {
-          showToast("Welcome email sent to the applicant.");
-          return;
-        }
-        if (result.status === "no_email") {
-          showToast("No email on file for this applicant.");
-          return;
-        }
-        if (result.mailtoHref) {
-          openMailtoHref(result.mailtoHref);
-          const err = (result.error ?? "").toLowerCase();
-          showToast(
-            err.includes("not configured") || err.includes("resend_api_key")
-              ? "Email provider not configured — opened a draft in your mail app. Set RESEND_API_KEY (and RESEND_FROM) to send automatically."
-              : `Could not send automatically (${result.error ?? "error"}). Opened a draft in your mail app.`,
-          );
-          return;
-        }
-        showToast(result.error ?? "Could not send welcome email.");
-      } catch {
-        showToast("Could not send welcome email.");
-      } finally {
-        setWelcomeEmailBusyFor(null);
-      }
-    },
-    [showToast],
-  );
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket) => {
     const row = rows.find((r) => r.id === id);
@@ -906,17 +871,6 @@ function ManagerApplicationsContent() {
                                 Move to pending
                               </Button>
                             )}
-                            {row.bucket === "approved" && row.email?.trim() ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN_PRIMARY}
-                                disabled={welcomeEmailBusyFor === row.id}
-                                onClick={() => void sendResidentWelcomeEmail(row)}
-                              >
-                                {welcomeEmailBusyFor === row.id ? "Sending…" : "Email portal setup"}
-                              </Button>
-                            ) : null}
                             <Button
                               type="button"
                               variant="outline"

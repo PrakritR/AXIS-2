@@ -2,9 +2,11 @@
 
 import { Fragment, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -56,7 +58,7 @@ function ThreadView({ row }: { row: LeasePipelineRow }) {
             }`}
           >
             <span className="font-semibold capitalize text-slate-700">{m.role}</span>
-            <span className="text-slate-400"> · {new Date(m.at).toLocaleString()}</span>
+            <span className="text-slate-400"> · {formatPacificDateTime(m.at)}</span>
             <p className="mt-1 whitespace-pre-wrap text-slate-700">{m.body}</p>
           </li>
         ))}
@@ -87,6 +89,12 @@ export function ManagerLeasesPipelinePanel({
   const [signingRow, setSigningRow] = useState<LeasePipelineRow | null>(null);
   const [emailBusyForRow, setEmailBusyForRow] = useState<string | null>(null);
   const [reminderBusyForRow, setReminderBusyForRow] = useState<string | null>(null);
+  const [leaseReminderPreview, setLeaseReminderPreview] = useState<{
+    row: LeasePipelineRow;
+    recipient: string;
+    subject: string;
+    body: string;
+  } | null>(null);
 
   function leaseReminderBody(row: LeasePipelineRow): string {
     const unit = row.unit.trim() || "your unit";
@@ -140,17 +148,9 @@ export function ManagerLeasesPipelinePanel({
     }
   }
 
-  async function sendLeaseSigningReminder(row: LeasePipelineRow) {
-    const recipient = row.residentEmail.trim();
-    if (!recipient || !recipient.includes("@")) {
-      showToast("Resident email is missing or invalid.");
-      return;
-    }
-
+  async function sendLeaseSigningReminder(row: LeasePipelineRow, recipient: string, subject: string, text: string) {
     setReminderBusyForRow(row.id);
     try {
-      const subject = `Reminder: sign your lease for ${row.unit}`;
-      const text = leaseReminderBody(row);
       const res = await fetch("/api/portal/send-inbox-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -186,6 +186,20 @@ export function ManagerLeasesPipelinePanel({
     } finally {
       setReminderBusyForRow(null);
     }
+  }
+
+  function openLeaseSigningReminderPreview(row: LeasePipelineRow) {
+    const recipient = row.residentEmail.trim();
+    if (!recipient || !recipient.includes("@")) {
+      showToast("Resident email is missing or invalid.");
+      return;
+    }
+    setLeaseReminderPreview({
+      row,
+      recipient,
+      subject: `Reminder: sign your lease for ${row.unit}`,
+      body: leaseReminderBody(row),
+    });
   }
 
   void refreshKey;
@@ -329,6 +343,47 @@ export function ManagerLeasesPipelinePanel({
           onClose={() => setSigningRow(null)}
         />
       ) : null}
+      <Modal
+        open={leaseReminderPreview !== null}
+        title="Lease signing reminder - preview"
+        onClose={() => setLeaseReminderPreview(null)}
+      >
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
+            <p className="text-sm text-slate-900">{leaseReminderPreview?.recipient}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
+            <p className="text-sm text-slate-900">{leaseReminderPreview?.subject}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
+            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+              {leaseReminderPreview?.body}
+            </pre>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setLeaseReminderPreview(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              disabled={Boolean(leaseReminderPreview?.row && reminderBusyForRow === leaseReminderPreview.row.id)}
+              onClick={() => {
+                if (!leaseReminderPreview) return;
+                const preview = leaseReminderPreview;
+                setLeaseReminderPreview(null);
+                void sendLeaseSigningReminder(preview.row, preview.recipient, preview.subject, preview.body);
+              }}
+            >
+              {leaseReminderPreview?.row && reminderBusyForRow === leaseReminderPreview.row.id ? "Sending…" : "Send reminder"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
       <input
         ref={uploadRef}
         type="file"
@@ -389,7 +444,7 @@ export function ManagerLeasesPipelinePanel({
                                 >
                                   {row.managerSignature.name}
                                 </span>
-                                <span className="ml-2 text-emerald-700">{new Date(row.managerSignature.signedAtIso).toLocaleString()}</span>
+                                <span className="ml-2 text-emerald-700">{formatPacificDateTime(row.managerSignature.signedAtIso)}</span>
                               </p>
                             ) : (
                               <p className="text-amber-700">Pending</p>
@@ -405,7 +460,7 @@ export function ManagerLeasesPipelinePanel({
                                 >
                                   {row.residentSignature.name}
                                 </span>
-                                <span className="ml-2 text-emerald-700">{new Date(row.residentSignature.signedAtIso).toLocaleString()}</span>
+                                <span className="ml-2 text-emerald-700">{formatPacificDateTime(row.residentSignature.signedAtIso)}</span>
                               </p>
                             ) : (
                               <p className="text-amber-700">Pending</p>
@@ -574,7 +629,7 @@ export function ManagerLeasesPipelinePanel({
                                   variant="outline"
                                   className={PORTAL_DETAIL_BTN}
                                   disabled={reminderBusyForRow === row.id}
-                                  onClick={() => void sendLeaseSigningReminder(row)}
+                                  onClick={() => openLeaseSigningReminderPreview(row)}
                                 >
                                   {reminderBusyForRow === row.id ? "Sending…" : "Send signing reminder"}
                                 </Button>

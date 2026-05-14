@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatPacificDate } from "@/lib/pacific-time";
 import { Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -64,7 +65,7 @@ function formatDate(iso: string) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return formatPacificDate(d, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {

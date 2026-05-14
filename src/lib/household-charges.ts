@@ -707,7 +707,18 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
   const prop = getPropertyById(propertyId);
   const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
   if (!sub) return { raw: "", amount: 0 };
-  const room = findRoomInSub(sub, choice, row.signedMonthlyRent);
+  // Try both assignedRoomChoice and roomChoice1 for ID lookup before falling back
+  let room = null;
+  for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
+    const t = c?.trim();
+    if (!t) continue;
+    const { listingRoomId } = parseRoomChoiceValue(t);
+    if (listingRoomId) {
+      const byId = sub.rooms.find((r) => r.id === listingRoomId);
+      if (byId) { room = byId; break; }
+    }
+  }
+  if (!room) room = findRoomInSub(sub, choice, row.signedMonthlyRent);
   const raw = room?.utilitiesEstimate?.trim() || "";
   return { raw, amount: parseMoneyAmount(raw) };
 }
@@ -1485,9 +1496,18 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId);
   }
   // Preserve paid charges — only wipe pending ones so they can be regenerated with correct amounts.
-  const rows = readAll().filter(
-    (charge) => !(charge.applicationId === applicationId && charge.kind !== "application_fee" && charge.status === "pending"),
-  );
+  // Also wipe pending recurring rent/utilities for this resident+property so updated amounts are used.
+  const emailLowerForFilter = residentEmail.trim().toLowerCase();
+  const rows = readAll().filter((charge) => {
+    if (charge.applicationId === applicationId && charge.kind !== "application_fee" && charge.status === "pending") return false;
+    if (
+      (charge.kind === "rent" || charge.kind === "utilities") &&
+      charge.status === "pending" &&
+      charge.residentEmail.trim().toLowerCase() === emailLowerForFilter &&
+      charge.propertyId === propertyId
+    ) return false;
+    return true;
+  });
   const existingKeys = new Set(rows.map((charge) => chargeBusinessKey(charge)));
   const created: HouseholdCharge[] = [];
 
@@ -1526,7 +1546,31 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     created.push(charge);
   };
 
-  const room = selectedRoom(row);
+  // Resolve room for proration — try both assignedRoomChoice and roomChoice1 for ID lookup,
+  // then fall back to rent match or single-room. Uses the sub already resolved above to avoid
+  // a second property lookup and to catch stale room IDs in assignedRoomChoice.
+  const room = (() => {
+    if (!sub) return selectedRoom(row);
+    for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
+      const trimmed = c?.trim();
+      if (!trimmed) continue;
+      const { listingRoomId } = parseRoomChoiceValue(trimmed);
+      if (listingRoomId) {
+        const byId = sub.rooms.find((r) => r.id === listingRoomId);
+        if (byId) return byId;
+      }
+    }
+    const signedRent = Number(row.signedMonthlyRent ?? 0);
+    if (signedRent > 0) {
+      const byRent = sub.rooms.filter((r) => r.monthlyRent === signedRent);
+      if (byRent.length === 1) return byRent[0] ?? null;
+    }
+    if (sub.rooms.length === 1) return sub.rooms[0] ?? null;
+    // Last resort: only one room is configured with daily_rate → it must be the right room
+    const drRooms = sub.rooms.filter((r) => r.prorateMethod === "daily_rate" && r.dailyRentRate && r.dailyRentRate > 0);
+    if (drRooms.length === 1) return drRooms[0] ?? null;
+    return null;
+  })();
   const prorateMethod = room?.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
   const dailyRentRate = room?.dailyRentRate;
   const dailyUtilitiesRate = room?.dailyUtilitiesRate;
@@ -1660,6 +1704,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     );
     if (staleIds.size > 0) writeAll(allNow.filter((c) => !staleIds.has(c.id)));
   }
+
+  // Always re-sync recurring charges so wiped monthly entries are recreated with current amounts.
+  syncAllRecurringRentCharges();
 
   return changed;
 }

@@ -19,15 +19,6 @@ function canSendResidentWelcome(role: string | null | undefined): boolean {
   return role === "admin" || role === "manager" || role === "owner" || role === "pro";
 }
 
-function publicOriginFromRequest(req: Request): string {
-  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim();
-  if (fromEnv) return fromEnv;
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
-  const proto = (req.headers.get("x-forwarded-proto") ?? "https").split(",")[0]?.trim() || "https";
-  if (!host) return "http://localhost:3000";
-  return `${proto}://${host}`;
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: Request) {
@@ -74,8 +65,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
-    const origin = publicOriginFromRequest(req);
-    const signupUrl = residentAccountCreationUrl(origin, axisId);
+    const signupUrl = residentAccountCreationUrl("", axisId);
     const text = buildResidentWelcomeEmailBody({
       residentName: residentName || undefined,
       axisId,
@@ -90,7 +80,7 @@ export async function POST(req: Request) {
       residentEmail: to,
       residentName: residentName || undefined,
       axisId,
-      origin,
+      origin: "",
     });
 
     const apiKey = process.env.RESEND_API_KEY?.trim();
@@ -133,6 +123,69 @@ export async function POST(req: Request) {
         },
         { status: 502 },
       );
+    }
+
+    // Deliver to portal inboxes: manager's Sent + resident's Unopened
+    try {
+      const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      const ts = Date.now();
+      const rand = Math.random().toString(36).slice(2, 6);
+      const senderName = user.email ?? "Axis Housing";
+      const preview = text.slice(0, 100).replace(/\n/g, " ");
+
+      // Manager's Sent record (no participant_email so the resident doesn't get this copy)
+      const managerThreadId = `welcome_${user.id}_${ts}_${rand}`;
+      await svc.from("portal_inbox_thread_records").upsert(
+        {
+          id: managerThreadId,
+          scope: "axis_portal_inbox_resident_v1",
+          owner_user_id: user.id,
+          participant_email: null,
+          thread_type: "portal_message",
+          row_data: {
+            id: managerThreadId,
+            folder: "sent",
+            from: senderName,
+            email: to,
+            subject: RESIDENT_WELCOME_EMAIL_SUBJECT,
+            preview,
+            body: text,
+            time: when,
+            unread: false,
+            scope: "axis_portal_inbox_resident_v1",
+          },
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      );
+
+      // Resident's Unopened record
+      const residentThreadId = `welcome_inbox_${ts}_${rand}`;
+      await svc.from("portal_inbox_thread_records").upsert(
+        {
+          id: residentThreadId,
+          scope: "axis_portal_inbox_resident_v1",
+          owner_user_id: null,
+          participant_email: to,
+          thread_type: "portal_message",
+          row_data: {
+            id: residentThreadId,
+            folder: "inbox",
+            from: senderName,
+            email: to,
+            subject: RESIDENT_WELCOME_EMAIL_SUBJECT,
+            preview,
+            body: text,
+            time: when,
+            unread: true,
+            scope: "axis_portal_inbox_resident_v1",
+          },
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      );
+    } catch {
+      /* non-critical — email already sent */
     }
 
     return NextResponse.json({ ok: true, id: payload.id ?? null });

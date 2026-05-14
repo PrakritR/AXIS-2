@@ -20,6 +20,11 @@ export const proPortal: PortalDefinition = {
       ],
     },
     {
+      section: "leases",
+      label: "Leases",
+      tabs: [],
+    },
+    {
       section: "payments",
       label: "Payments",
       tabs: [],

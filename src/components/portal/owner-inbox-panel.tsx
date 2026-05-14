@@ -20,6 +20,7 @@ import {
   syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 
 type InboxThread = {
   id: string;
@@ -130,12 +131,7 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
-      const when = new Date().toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
+      const when = formatPacificDateTime(new Date());
       if (p.includesAxisAdmin) {
         appendPortalMessageToAdminInbox({
           role: "owner",

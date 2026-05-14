@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
+import { formatPacificDate, formatPacificDateTime } from "@/lib/pacific-time";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
   SLOTS_PER_DAY,
@@ -78,7 +79,7 @@ function buildMonthCells(year: number, month: number): (number | null)[] {
 function formatWeekRangeMonSun(monday: Date): string {
   const sunday = addDays(monday, 6);
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-  return `${monday.toLocaleDateString(undefined, opts)}–${sunday.toLocaleDateString(undefined, { ...opts, year: "numeric" })}`;
+  return `${formatPacificDate(monday, opts)}–${formatPacificDate(sunday, { ...opts, year: "numeric" })}`;
 }
 
 function isInMonthPickRange(ds: string, pick: { start: string | null; end: string | null }): boolean {
@@ -91,12 +92,12 @@ function isInMonthPickRange(ds: string, pick: { start: string | null; end: strin
 
 function formatNavTitle(anchor: Date, mode: CalendarMode): string {
   if (mode === "month") {
-    return anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    return formatPacificDate(anchor, { month: "long", year: "numeric" });
   }
   if (mode === "week") {
     return formatWeekRangeMonSun(startOfWeekMonday(anchor));
   }
-  return anchor.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
+  return formatPacificDate(anchor, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
 }
 
 type DemoMeeting = {
@@ -132,7 +133,7 @@ function formatSlotEndLabel(slotIndexExclusive: number): string {
   const h24 = Math.floor(mins / 60);
   const m = mins % 60;
   const d = new Date(2000, 0, 1, h24, m);
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return formatPacificDateTime(d).replace(/^\w{3} \d{1,2}, /, "");
 }
 
 function localIsoForSlot(dateStr: string, slotIndex: number): string {

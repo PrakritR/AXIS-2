@@ -33,7 +33,7 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
       <PublicNavbar />
       <div className="shrink-0">
         <PortalTopBanners
-          planHref="/owner/plan"
+          planHref="/portal/plan"
           showPreviewBanner={showPreviewBanner}
           previewLabel={previewLabel}
           showPlanBanner={showPlanBanner}

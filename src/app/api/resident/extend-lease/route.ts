@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { formatPacificDate } from "@/lib/pacific-time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
@@ -80,7 +81,7 @@ function formatAvailabilityLabel(isoDate: string): string {
   const [y, m, d] = parts as [number, number, number];
   const dt = new Date(y, m - 1, d);
   if (Number.isNaN(dt.getTime())) return `Available from ${isoDate}`;
-  return `Available from ${dt.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}`;
+  return `Available from ${formatPacificDate(dt, { year: "numeric", month: "long", day: "numeric" })}`;
 }
 
 export async function POST(req: NextRequest) {

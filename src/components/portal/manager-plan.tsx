@@ -5,6 +5,7 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { formatPacificDate } from "@/lib/pacific-time";
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition } from "@/data/manager-plan-tiers";
 import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -334,7 +335,7 @@ export function ManagerPlan() {
 
   const periodEndLabel = (unix: number | null | undefined) => {
     if (unix == null || typeof unix !== "number" || !Number.isFinite(unix) || unix <= 0) return null;
-    return new Date(unix * 1000).toLocaleDateString(undefined, {
+    return formatPacificDate(new Date(unix * 1000), {
       month: "long",
       day: "numeric",
       year: "numeric",

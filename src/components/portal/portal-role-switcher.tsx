@@ -22,6 +22,7 @@ export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind })
         } else if (currentKind === "resident") {
           if (roles.includes("manager")) setOtherRole("manager");
           else if (roles.includes("owner")) setOtherRole("owner");
+          else if (roles.includes("pro")) setOtherRole("pro");
         }
       })
       .catch(() => {});
@@ -29,7 +30,7 @@ export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind })
 
   if (!otherRole) return null;
 
-  const label = otherRole === "resident" ? "Switch to Resident portal" : "Switch to Manager portal";
+  const label = otherRole === "resident" ? "Switch to Resident portal" : "Switch to Property portal";
 
   const switchPortal = async () => {
     setBusy(true);

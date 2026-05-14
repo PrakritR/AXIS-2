@@ -7,6 +7,7 @@ import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/componen
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { demoResidentInboxThreads } from "@/data/demo-portal";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
@@ -122,12 +123,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
-      const when = new Date().toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
+      const when = formatPacificDateTime(new Date());
       if (p.includesAxisAdmin) {
         appendPortalMessageToAdminInbox({
           role: "resident",
