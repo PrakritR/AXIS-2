@@ -497,11 +497,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     void hcTick;
     return readManagerApplicationRows()
       .filter((row) => row.bucket === "approved" && applicationVisibleToPortalUser(row, userId))
-      .filter((row) => {
-        if (isPreviousResidentRow(row)) return true;
-        const email = (row.email ?? "").trim().toLowerCase();
-        return row.manuallyAdded || !email || residentAccountEmails.has(email);
-      })
       .map((row) => {
         const propId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
         const prop = propId ? getPropertyById(propId) : null;
