@@ -332,6 +332,12 @@ export async function renderPortalSection(
       }
       return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
+    if (section === "leases") {
+      if (tabParts?.length) {
+        redirect(`${def.basePath}/${section}`);
+      }
+      return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
+    }
     if (section === "work-orders" || section === "services") {
       return subscriptionGated(<ManagerAllServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
     }
