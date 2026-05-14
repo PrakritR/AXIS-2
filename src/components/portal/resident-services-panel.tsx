@@ -319,70 +319,72 @@ export function ResidentServicesPanel() {
     if (residentEmail) setServiceRequests(readServiceRequestsForResident(residentEmail));
   }
 
-  function reloadOffers(email: string) {
-    const application = readManagerApplicationRows().find(
-      (r) => r.email?.trim().toLowerCase() === email,
-    );
+  // Memoize application lookup to avoid redundant scans
+  const residentApplication = useMemo(() => {
+    if (!residentEmail) return null;
+    return readManagerApplicationRows().find(
+      (r) => r.email?.trim().toLowerCase() === residentEmail,
+    ) ?? null;
+  }, [residentEmail, allRows]); // Use allRows as dependency since it updates when rows change
+
+  // Memoize offer loading based on resident application data
+  const offersForResident = useMemo(() => {
+    if (!residentApplication) return [];
     const propertyId =
-      application?.assignedPropertyId?.trim() ||
-      application?.propertyId?.trim() ||
-      application?.application?.propertyId?.trim() ||
+      residentApplication.assignedPropertyId?.trim() ||
+      residentApplication.propertyId?.trim() ||
+      residentApplication.application?.propertyId?.trim() ||
       "";
-    let managerUserId = application?.managerUserId?.trim() || "";
+    let managerUserId = residentApplication.managerUserId?.trim() || "";
     if (!managerUserId && propertyId) {
       managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
     }
 
-    let offers: ManagerAmenityOffer[];
     if (managerUserId) {
-      offers = readAmenityOffersForProperty(managerUserId, propertyId).filter((o) => o.available);
-      if (offers.length === 0) offers = readAmenityOffersForManager(managerUserId).filter((o) => o.available);
+      const offers = readAmenityOffersForProperty(managerUserId, propertyId).filter((o) => o.available);
+      if (offers.length > 0) return offers;
+      return readAmenityOffersForManager(managerUserId).filter((o) => o.available);
     } else if (propertyId) {
-      // managerUserId not resolved — scan all managers by propertyId
-      offers = readAllAmenityOffersForProperty(propertyId).filter((o) => o.available);
-    } else {
-      offers = [];
+      return readAllAmenityOffersForProperty(propertyId).filter((o) => o.available);
     }
-    setAvailableOffers(offers);
-  }
+    return [];
+  }, [residentApplication]);
 
   useEffect(() => {
+    setAvailableOffers(offersForResident);
+  }, [offersForResident]);
+
+  // Initial data sync — fire syncs sequentially to avoid overwhelming the server/browser
+  useEffect(() => {
     const sync = () => setAllRows(readManagerWorkOrderRows());
-    const syncOffers = () => reloadOffers(residentEmail);
     sync();
-    void syncManagerWorkOrdersFromServer().then(sync);
-    void syncManagerApplicationsFromServer().then(() => reloadOffers(residentEmail));
+    void syncManagerWorkOrdersFromServer()
+      .then(sync)
+      .then(() => syncManagerApplicationsFromServer())
+      .then(() => syncLeasePipelineFromServer());
+    
+    // Only listen to work order events; offers are now memoized based on application data
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
-    window.addEventListener("storage", sync);
-    window.addEventListener("storage", syncOffers);
     return () => {
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
-      window.removeEventListener("storage", sync);
-      window.removeEventListener("storage", syncOffers);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [residentEmail]);
+  }, []);
 
   useEffect(() => {
     reloadServiceRequests();
     const onSr = () => setSrTick((t) => t + 1);
     window.addEventListener(SERVICE_REQUESTS_EVENT, onSr);
-    window.addEventListener("storage", onSr);
     return () => {
       window.removeEventListener(SERVICE_REQUESTS_EVENT, onSr);
-      window.removeEventListener("storage", onSr);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [residentEmail]);
 
   useEffect(() => {
     const onLease = () => setLeaseTick((t) => t + 1);
-    void syncLeasePipelineFromServer().then(onLease);
     window.addEventListener(LEASE_PIPELINE_EVENT, onLease);
-    window.addEventListener("storage", onLease);
     return () => {
       window.removeEventListener(LEASE_PIPELINE_EVENT, onLease);
-      window.removeEventListener("storage", onLease);
     };
   }, []);
 
@@ -467,7 +469,7 @@ export function ResidentServicesPanel() {
   const resetService = () => { setSelectedOffer(null); setSNotes(""); setSReturnBy(""); };
 
   function getApplication() {
-    return readManagerApplicationRows().find((r) => r.email?.trim().toLowerCase() === residentEmail);
+    return residentApplication || readManagerApplicationRows().find((r) => r.email?.trim().toLowerCase() === residentEmail);
   }
 
   const submitMaintenance = () => {
