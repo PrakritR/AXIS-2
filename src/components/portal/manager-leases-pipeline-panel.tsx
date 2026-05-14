@@ -86,6 +86,29 @@ export function ManagerLeasesPipelinePanel({
   const [generatingRowId, setGeneratingRowId] = useState<string | null>(null);
   const [signingRow, setSigningRow] = useState<LeasePipelineRow | null>(null);
   const [emailBusyForRow, setEmailBusyForRow] = useState<string | null>(null);
+  const [reminderBusyForRow, setReminderBusyForRow] = useState<string | null>(null);
+
+  function leaseReminderBody(row: LeasePipelineRow): string {
+    const unit = row.unit.trim() || "your unit";
+    const leaseStart = row.application?.leaseStart?.trim();
+    const leaseEnd = row.application?.leaseEnd?.trim();
+    const dateLine = leaseStart
+      ? leaseEnd
+        ? `Lease dates: ${leaseStart} to ${leaseEnd}`
+        : `Lease start date: ${leaseStart}`
+      : "";
+    const lines = [
+      `Hi ${row.residentName || "there"},`,
+      "",
+      `This is a reminder to review and sign your lease for ${unit} in your Axis resident portal.`,
+      dateLine,
+      "",
+      "If you have any questions before signing, reply in your Axis inbox and we will help.",
+      "",
+      "Axis Housing",
+    ].filter(Boolean);
+    return lines.join("\n");
+  }
 
   async function sendAccountEmail(row: LeasePipelineRow) {
     if (emailBusyForRow) return;
@@ -114,6 +137,54 @@ export function ManagerLeasesPipelinePanel({
       showToast("Could not send account setup email.");
     } finally {
       setEmailBusyForRow(null);
+    }
+  }
+
+  async function sendLeaseSigningReminder(row: LeasePipelineRow) {
+    const recipient = row.residentEmail.trim();
+    if (!recipient || !recipient.includes("@")) {
+      showToast("Resident email is missing or invalid.");
+      return;
+    }
+
+    setReminderBusyForRow(row.id);
+    try {
+      const subject = `Reminder: sign your lease for ${row.unit}`;
+      const text = leaseReminderBody(row);
+      const res = await fetch("/api/portal/send-inbox-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          fromName: "Axis Housing Portal",
+          toEmails: [recipient],
+          subject,
+          text,
+          deliverToPortalInbox: true,
+        }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        skipped?: boolean;
+        error?: string;
+      };
+
+      if (!res.ok || !data.ok) {
+        showToast(data.error ?? "Could not send lease signing reminder.");
+        return;
+      }
+
+      appendLeaseThreadMessage(row.id, "manager", "Sent lease-signing reminder to resident.");
+      if (data.skipped) {
+        showToast("Reminder sent to Axis inbox (demo email, no external email sent).");
+      } else {
+        showToast("Lease-signing reminder sent via email and Axis inbox.");
+      }
+    } catch {
+      showToast("Could not send lease signing reminder.");
+    } finally {
+      setReminderBusyForRow(null);
     }
   }
 
@@ -497,14 +568,25 @@ export function ManagerLeasesPipelinePanel({
                               </Button>
                             ) : null}
                             {row.status === "Resident Signature Pending" ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => onMoveToManagerReview(row)}
-                              >
-                                Move to manager review
-                              </Button>
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={PORTAL_DETAIL_BTN}
+                                  disabled={reminderBusyForRow === row.id}
+                                  onClick={() => void sendLeaseSigningReminder(row)}
+                                >
+                                  {reminderBusyForRow === row.id ? "Sending…" : "Send signing reminder"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={PORTAL_DETAIL_BTN}
+                                  onClick={() => onMoveToManagerReview(row)}
+                                >
+                                  Move to manager review
+                                </Button>
+                              </>
                             ) : null}
                             {row.status !== "Fully Signed" ? (
                             <Button
