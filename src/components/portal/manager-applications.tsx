@@ -58,6 +58,10 @@ import {
   removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
+import {
+  deleteLeasePipelineRow,
+  readLeasePipeline,
+} from "@/lib/lease-pipeline-storage";
 
 function CosignerSection({ applicationId }: { applicationId: string }) {
   const subs = readCosignerSubmissionsForSignerAppId(applicationId);
@@ -770,6 +774,13 @@ function ManagerApplicationsContent() {
       }
       if (removedResidentAccess) {
         removeResidentHouseholdPaymentData(email);
+        // Delete associated leases when resident account is removed
+        const residentLeases = readLeasePipeline(userId).filter(
+          (row) => row.residentEmail.trim().toLowerCase() === email,
+        );
+        for (const leaseRow of residentLeases) {
+          deleteLeasePipelineRow(leaseRow.id);
+        }
       }
     }
 
