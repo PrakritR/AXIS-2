@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
-import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { removePortalAccess } from "@/lib/auth/remove-portal-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -25,28 +24,6 @@ async function purgeResidentDataByEmail(input: {
   applicationId?: string | null;
 }) {
   const { db, email } = input;
-  const appId = input.applicationId?.trim() ? normalizeApplicationAxisId(input.applicationId.trim()) : "";
-
-  const applicationVariants = appId ? [...new Set([appId, appId.replace(/^AXIS-/, "")].filter(Boolean))] : [];
-
-  const [appRecordsResult] = await Promise.all([
-    db.from("manager_application_records").select("id, resident_email, row_data"),
-  ]);
-
-  if (appRecordsResult.error) throw new Error(appRecordsResult.error.message);
-
-  const applicationIdsToDelete = new Set<string>();
-  for (const record of appRecordsResult.data ?? []) {
-    const residentEmail = String(record.resident_email ?? "").trim().toLowerCase();
-    const rowData = (record.row_data ?? {}) as { id?: string; email?: string };
-    const rowEmail = String(rowData.email ?? "").trim().toLowerCase();
-    const rowId = String(rowData.id ?? "").trim();
-    const normalizedRowId = rowId ? normalizeApplicationAxisId(rowId) : "";
-    const idMatch = applicationVariants.length > 0 && (applicationVariants.includes(record.id) || applicationVariants.includes(normalizedRowId));
-    if (residentEmail === email || rowEmail === email || idMatch) {
-      applicationIdsToDelete.add(record.id);
-    }
-  }
 
   const deleteOps = email ? [
     db.from("portal_household_charge_records").delete().eq("resident_email", email),
@@ -57,10 +34,6 @@ async function purgeResidentDataByEmail(input: {
     db.from("portal_outbound_mail_records").delete().eq("recipient_email", email),
     db.from("portal_resident_lease_upload_records").delete().eq("resident_email", email),
   ] : [];
-
-  if (applicationIdsToDelete.size > 0) {
-    deleteOps.push(db.from("manager_application_records").delete().in("id", [...applicationIdsToDelete]));
-  }
 
   const results = await Promise.all(deleteOps);
   const withError = results.find((result) => result.error);
