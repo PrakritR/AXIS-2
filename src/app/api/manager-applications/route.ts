@@ -82,7 +82,8 @@ export async function GET() {
     let query = db
       .from("manager_application_records")
       .select("id, row_data, updated_at")
-      .order("updated_at", { ascending: false });
+      .order("updated_at", { ascending: false })
+      .limit(500);
 
     if (!admin && role === "resident") {
       query = query.eq("resident_email", email);

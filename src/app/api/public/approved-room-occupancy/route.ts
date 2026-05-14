@@ -50,7 +50,8 @@ export async function GET() {
     const { data, error } = await db
       .from("manager_application_records")
       .select("row_data, updated_at")
-      .order("updated_at", { ascending: false });
+      .order("updated_at", { ascending: false })
+      .limit(500);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

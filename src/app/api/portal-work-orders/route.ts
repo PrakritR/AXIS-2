@@ -35,7 +35,8 @@ export async function GET() {
     let query = db
       .from("portal_work_order_records")
       .select("row_data, updated_at")
-      .order("updated_at", { ascending: false });
+      .order("updated_at", { ascending: false })
+      .limit(500);
 
     if (!admin && role === "resident") {
       query = query.eq("resident_email", email);

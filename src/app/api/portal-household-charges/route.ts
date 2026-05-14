@@ -46,11 +46,13 @@ export async function GET() {
     let chargeQuery = db
       .from("portal_household_charge_records")
       .select("id, row_data, updated_at")
-      .order("updated_at", { ascending: false });
+      .order("updated_at", { ascending: false })
+      .limit(500);
     let profileQuery = db
       .from("portal_recurring_rent_profile_records")
       .select("id, row_data, updated_at")
-      .order("updated_at", { ascending: false });
+      .order("updated_at", { ascending: false })
+      .limit(500);
 
     if (user.role === "admin") {
       // admin sees all

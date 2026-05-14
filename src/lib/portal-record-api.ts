@@ -45,7 +45,8 @@ export function createJsonRecordRoute(config: RecordConfig) {
         let query = ctx.db
           .from(config.table)
           .select(config.select ?? "id, row_data, updated_at")
-          .order(config.orderColumn ?? "updated_at", { ascending: false });
+          .order(config.orderColumn ?? "updated_at", { ascending: false })
+          .limit(500);
         if (config.scope) query = config.scope(query, ctx.user) as typeof query;
         const { data, error } = await query;
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -434,14 +434,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     ]).then(() => {
       if (!cancelled) {
         setPropertyTick((n) => n + 1);
+        setInboxTick((n) => n + 1);
+        setWorkOrderTick((n) => n + 1);
         setHcTick((n) => n + 1);
       }
-    });
-    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY).then(() => {
-      if (!cancelled) setInboxTick((n) => n + 1);
-    });
-    void syncManagerWorkOrdersFromServer().then(() => {
-      if (!cancelled) setWorkOrderTick((n) => n + 1);
     });
     return () => {
       cancelled = true;
