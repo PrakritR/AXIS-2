@@ -496,10 +496,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const residents = useMemo<ActiveResident[]>(() => {
     void hcTick;
     return readManagerApplicationRows()
-      .filter((row) => row.bucket === "approved" && row.email?.trim() && applicationVisibleToPortalUser(row, userId))
+      .filter((row) => row.bucket === "approved" && applicationVisibleToPortalUser(row, userId))
       .filter((row) => {
         if (isPreviousResidentRow(row)) return true;
-        return row.manuallyAdded || residentAccountEmails.has(row.email!.trim().toLowerCase());
+        const email = (row.email ?? "").trim().toLowerCase();
+        return row.manuallyAdded || !email || residentAccountEmails.has(email);
       })
       .map((row) => {
         const propId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
@@ -511,13 +512,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         const propertyLabel = (prop?.buildingName?.trim() || prop?.title?.trim()?.replace(/\s*·\s*\d+\s*rooms?\s*$/i, "") || row.property || "").trim();
         const leaseStart = (row.application?.leaseStart?.trim() || row.manualResidentDetails?.moveInDate?.trim() || "");
         const leaseEnd = (row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || "");
-        const emailKey = row.email!.trim().toLowerCase();
-        const hasAccount = residentAccountEmails.has(emailKey);
+        const emailKey = (row.email ?? "").trim().toLowerCase();
+        const hasAccount = emailKey ? residentAccountEmails.has(emailKey) : false;
         const portalSetup = hasAccount ? (portalSetupMap.get(emailKey) ?? false) : null;
         return {
           id: row.id,
           name: row.name,
-          email: row.email!.trim(),
+          email: (row.email ?? "").trim(),
           propertyId: propId,
           propertyLabel,
           roomLabel,
@@ -1340,10 +1341,18 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
     deleteServiceRequestsForResident(selectedResident.email);
 
-    const nextInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []).filter(
-      (thread) => thread.email.trim().toLowerCase() !== residentEmail,
-    );
+    const allInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
+    const deletedThreads = allInbox.filter((thread) => thread.email.trim().toLowerCase() === residentEmail);
+    const nextInbox = allInbox.filter((thread) => thread.email.trim().toLowerCase() !== residentEmail);
     persistInbox(MANAGER_INBOX_STORAGE_KEY, nextInbox);
+    for (const thread of deletedThreads) {
+      void fetch("/api/portal-inbox-threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: "delete", id: thread.id }),
+      }).catch(() => undefined);
+    }
 
     await syncManagerApplicationsFromServer({ force: true });
     setSelectedId(null);

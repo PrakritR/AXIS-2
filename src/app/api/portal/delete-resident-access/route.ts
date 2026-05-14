@@ -48,7 +48,7 @@ async function purgeResidentDataByEmail(input: {
     }
   }
 
-  const deleteOps = [
+  const deleteOps = email ? [
     db.from("portal_household_charge_records").delete().eq("resident_email", email),
     db.from("portal_recurring_rent_profile_records").delete().eq("resident_email", email),
     db.from("portal_lease_pipeline_records").delete().eq("resident_email", email),
@@ -56,7 +56,7 @@ async function purgeResidentDataByEmail(input: {
     db.from("portal_inbox_thread_records").delete().eq("participant_email", email),
     db.from("portal_outbound_mail_records").delete().eq("recipient_email", email),
     db.from("portal_resident_lease_upload_records").delete().eq("resident_email", email),
-  ];
+  ] : [];
 
   if (applicationIdsToDelete.size > 0) {
     deleteOps.push(db.from("manager_application_records").delete().in("id", [...applicationIdsToDelete]));
@@ -117,11 +117,11 @@ export async function POST(req: Request) {
       applicationId?: unknown;
     } | null;
     const email = normalizeEmail(body?.email);
-    if (!email) {
-      return NextResponse.json({ error: "Email is required." }, { status: 400 });
+    const applicationId = typeof body?.applicationId === "string" ? body.applicationId.trim() : "";
+    if (!email && !applicationId) {
+      return NextResponse.json({ error: "Email or applicationId is required." }, { status: 400 });
     }
     const purgeData = body?.purgeData === true;
-    const applicationId = typeof body?.applicationId === "string" ? body.applicationId.trim() : "";
 
     const svc = createSupabaseServiceRoleClient();
     const { data: requestor } = await svc.from("profiles").select("role").eq("id", user.id).maybeSingle();
