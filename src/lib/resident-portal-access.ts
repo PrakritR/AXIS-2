@@ -95,7 +95,19 @@ export async function loadResidentPortalAccessState(params: {
     .order("updated_at", { ascending: false });
 
   const latestApplication = readLatestApplication(applicationRows ?? [], email);
-  const applicationApproved = latestApplication.bucket === "approved";
+  let applicationApproved = latestApplication.bucket === "approved";
+
+  // Fallback: if no application found or status unclear, check the profile directly
+  // to see if the resident has been provisioned as approved
+  if (!applicationApproved && params.userId) {
+    const { data: profile } = await db
+      .from("profiles")
+      .select("application_approved")
+      .eq("id", params.userId)
+      .maybeSingle();
+    applicationApproved = Boolean(profile?.application_approved === true);
+  }
+
   const leaseAccessUnlocked = applicationApproved;
 
   return {
