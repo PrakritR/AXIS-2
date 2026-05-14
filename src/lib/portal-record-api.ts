@@ -65,23 +65,24 @@ export function createJsonRecordRoute(config: RecordConfig) {
         const ctx = await getUserContext();
         if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
         const body = (await req.json()) as {
-          action?: "upsert" | "delete" | "replace";
+          action?: "upsert" | "delete" | "deleteIds" | "replace";
           id?: string;
+          ids?: unknown[];
           row?: Record<string, unknown>;
           rows?: Record<string, unknown>[];
         };
-        if (body.action === "delete") {
-          const id = body.id?.trim();
-          if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-          let visibleQuery = ctx.db.from(config.table).select("id").eq("id", id).limit(1);
-          if (config.scope) visibleQuery = config.scope(visibleQuery, ctx.user) as typeof visibleQuery;
-          const { data: visible, error: visibleError } = await visibleQuery;
-          if (visibleError) return NextResponse.json({ error: visibleError.message }, { status: 500 });
-          if (!Array.isArray(visible) || visible.length === 0) {
-            return NextResponse.json({ error: "Record not found." }, { status: 404 });
+        if (body.action === "delete" || body.action === "deleteIds") {
+          const ids = body.action === "deleteIds"
+            ? (Array.isArray((body as { ids?: unknown }).ids) ? (body as { ids: unknown[] }).ids.map(String) : [])
+            : [body.id?.trim() ?? ""];
+          if (ids.length === 0 || ids.some((id) => !id)) return NextResponse.json({ error: "id required" }, { status: 400 });
+          for (const id of ids) {
+            let visibleQuery = ctx.db.from(config.table).select("id").eq("id", id).limit(1);
+            if (config.scope) visibleQuery = config.scope(visibleQuery, ctx.user) as typeof visibleQuery;
+            const { data: visible } = await visibleQuery;
+            if (!Array.isArray(visible) || visible.length === 0) continue;
+            await ctx.db.from(config.table).delete().eq("id", id);
           }
-          const { error } = await ctx.db.from(config.table).delete().eq("id", id);
-          if (error) return NextResponse.json({ error: error.message }, { status: 500 });
           return NextResponse.json({ ok: true });
         }
 

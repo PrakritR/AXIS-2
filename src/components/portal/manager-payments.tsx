@@ -92,7 +92,7 @@ export function ManagerPayments() {
   useEffect(() => {
     // Don't repeatedly sync applications on charge updates
     void syncPropertyPipelineFromServer().catch(() => undefined);
-  }, []);}
+  }, []);
 
   useEffect(() => {
     if (!authReady || !userId) return;
