@@ -631,13 +631,17 @@ function ManagerApplicationsContent() {
     const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket, stage: stageLabelForRow(r, nextBucket) } : r));
     persist(next);
     const updatedRow = next.find((r) => r.id === id) ?? row;
-    if (nextBucket === "approved") {
-      recordApprovedApplicationCharges(updatedRow, userId ?? null);
-    } else if (nextBucket === "pending") {
-      removeApprovedApplicationCharges(id, userId ?? null);
-      recordSubmittedApplicationFeeCharge(updatedRow, userId ?? null);
-    } else {
-      removeAllApplicationCharges(id, userId ?? null);
+    try {
+      if (nextBucket === "approved") {
+        recordApprovedApplicationCharges(updatedRow, userId ?? null);
+      } else if (nextBucket === "pending") {
+        removeApprovedApplicationCharges(id, userId ?? null);
+        recordSubmittedApplicationFeeCharge(updatedRow, userId ?? null);
+      } else {
+        removeAllApplicationCharges(id, userId ?? null);
+      }
+    } catch {
+      /* Keep approval flow moving even if charge reconciliation fails. */
     }
     if (row) {
       try {
