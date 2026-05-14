@@ -55,6 +55,10 @@ export function ResidentProfilePanel() {
           profile?.phone?.trim() ||
           matchingApplication?.application?.phone?.trim() ||
           "";
+        const resolvedEmName =
+          (profile?.emergency_contact_name as string | null)?.trim() || "";
+        const resolvedEmPhone =
+          (profile?.emergency_contact_phone as string | null)?.trim() || "";
 
         const meta = authUser?.user?.user_metadata as Record<string, unknown> | undefined;
         const metaAxis = typeof meta?.axis_id === "string" ? meta.axis_id : null;
@@ -63,6 +67,8 @@ export function ResidentProfilePanel() {
         setEmail(session.email ?? "");
         setName((current) => current || resolvedName);
         setPhone((current) => current || resolvedPhone);
+        setEmName((current) => current || resolvedEmName);
+        setEmPhone((current) => current || resolvedEmPhone);
         setAxisId(
           resolveResidentPortalAxisId({
             profileManagerId: profile?.manager_id,
@@ -109,11 +115,15 @@ export function ResidentProfilePanel() {
       showToast("Sign in to save profile.");
       return;
     }
+    if (!name.trim()) {
+      showToast("Name is required.");
+      return;
+    }
     try {
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase
         .from("profiles")
-        .update({ full_name: name.trim(), phone: phone.trim() })
+        .update({ full_name: name.trim(), phone: phone.trim(), emergency_contact_name: emName.trim(), emergency_contact_phone: emPhone.trim() })
         .eq("id", userId);
       if (error) {
         showToast("Could not save profile.");

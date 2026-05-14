@@ -107,6 +107,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     if (tabId === "unopened") return local.filter((t) => t.folder === "inbox" && t.unread);
     if (tabId === "opened") return local.filter((t) => t.folder === "inbox" && !t.unread);
     if (tabId === "sent") return local.filter((t) => t.folder === "sent");
+    if (tabId === "trash") return local.filter((t) => t.folder === "trash");
     return [];
   }, [local, tabId]);
 

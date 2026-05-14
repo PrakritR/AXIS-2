@@ -81,12 +81,18 @@ export function ManagerPayments() {
 
   useEffect(() => {
     const on = () => setApplicationTick((n) => n + 1);
+    // Only sync once on mount, not on every event to avoid excessive syncs
     void syncManagerApplicationsFromServer().then(on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
     };
   }, []);
+
+  useEffect(() => {
+    // Don't repeatedly sync applications on charge updates
+    void syncPropertyPipelineFromServer().catch(() => undefined);
+  }, []);}
 
   useEffect(() => {
     if (!authReady || !userId) return;
