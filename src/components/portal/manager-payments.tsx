@@ -190,13 +190,20 @@ export function ManagerPayments() {
 
   const activeResidentFilter = residentOptions.some((option) => option.id === residentFilter) ? residentFilter : "";
 
+  const rowsForCounts = useMemo(() => {
+    return mergedRows.filter((row) => {
+      if (propertyFilter && normalizePropertyLabel(row.propertyName) !== propertyFilter) return false;
+      return true;
+    });
+  }, [mergedRows, propertyFilter]);
+
   const counts = useMemo(() => {
     const c: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
-    for (const r of mergedRows) {
+    for (const r of rowsForCounts) {
       c[r.bucket] += 1;
     }
     return c;
-  }, [mergedRows]);
+  }, [rowsForCounts]);
 
   const tabs = useMemo(
     () => PAY_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),

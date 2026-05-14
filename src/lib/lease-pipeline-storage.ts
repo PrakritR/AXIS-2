@@ -217,6 +217,7 @@ function currentActorForStatus(status: LeaseWorkflowStatus): LeasePipelineRow["c
 }
 
 function stageLabelForStatus(status: LeaseWorkflowStatus): string {
+  if (status === "Fully Signed") return "Signed";
   return status;
 }
 
@@ -260,7 +261,8 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     generatedHtml: r.generatedHtml ?? null,
     managerUploadedPdf: r.managerUploadedPdf ?? null,
   });
-  const stageLabel = String(r.stageLabel ?? "").trim() || stageLabelForStatus(status);
+  const normalizedStageLabel = String(r.stageLabel ?? "").trim();
+  const stageLabel = status === "Fully Signed" ? "Signed" : normalizedStageLabel || stageLabelForStatus(status);
   const versionNumber =
     typeof r.versionNumber === "number" && Number.isFinite(r.versionNumber)
       ? Math.max(1, Math.floor(r.versionNumber))

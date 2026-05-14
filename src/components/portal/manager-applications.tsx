@@ -10,6 +10,9 @@ import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
+  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_TOOLBAR_LABEL,
+  PORTAL_TOOLBAR_SELECT,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
@@ -758,7 +761,7 @@ function ManagerApplicationsContent() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({ email, purgeData: true, applicationId: id }),
         });
         if (!res.ok) removedResidentAccess = false;
       } catch {
@@ -786,7 +789,18 @@ function ManagerApplicationsContent() {
             propertyValue={propertyFilter}
             onPropertyChange={(id) => setPropertyFilter(id)}
           />
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refreshTable}>
+          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+            <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort room</span>
+            <select
+              value={roomSortDir}
+              onChange={(e) => setRoomSortDir(e.target.value as "asc" | "desc")}
+              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
+            >
+              <option value="asc">A-Z</option>
+              <option value="desc">Z-A</option>
+            </select>
+          </label>
+          <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={refreshTable}>
             Refresh
           </Button>
         </>
@@ -805,15 +819,7 @@ function ManagerApplicationsContent() {
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 uppercase tracking-[0.14em] hover:text-slate-700"
-                    onClick={() => setRoomSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-                  >
-                    Room {roomSortDir === "asc" ? "↑" : "↓"}
-                  </button>
-                </th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
                 <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               </tr>
             </thead>

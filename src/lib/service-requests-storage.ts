@@ -123,6 +123,16 @@ export function deleteServiceRequest(id: string): void {
   writeAll(next);
 }
 
+export function deleteServiceRequestsForResident(residentEmail: string): number {
+  const email = residentEmail.trim().toLowerCase();
+  if (!email) return 0;
+  const all = readAll();
+  const next = all.filter((r) => r.residentEmail.trim().toLowerCase() !== email);
+  const removed = all.length - next.length;
+  if (removed > 0) writeAll(next);
+  return removed;
+}
+
 export function submitReturnPhoto(id: string, photoDataUrl: string): void {
   const all = readAll();
   const idx = all.findIndex((r) => r.id === id);

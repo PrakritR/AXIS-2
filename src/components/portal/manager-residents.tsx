@@ -11,8 +11,10 @@ import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_TOOLBAR_GROUP,
+  PORTAL_TOOLBAR_LABEL,
   PORTAL_TOOLBAR_PILL_BUTTON,
   PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
+  PORTAL_TOOLBAR_SELECT,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -46,7 +48,6 @@ import {
 } from "@/lib/household-charges";
 import {
   appendManagerApplicationRow,
-  deleteManagerApplicationFromServer,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
   upsertApplicationRowToServer,
@@ -100,6 +101,7 @@ import {
   markServiceRequestServicePaid,
   markServiceRequestDepositPaid,
   hasDeposit,
+  deleteServiceRequestsForResident,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
@@ -139,6 +141,7 @@ type ActiveResident = {
 };
 
 type ResidentsTabId = "current" | "previous";
+type ResidentsSort = "name-asc" | "name-desc";
 
 const PREVIOUS_RESIDENT_STAGE_TOKENS = ["moved out", "previous", "past", "former", "inactive"];
 
@@ -299,6 +302,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [srTick, setSrTick] = useState(0);
   const [inboxTick, setInboxTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [residentsSort, setResidentsSort] = useState<ResidentsSort>("name-asc");
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addChargeOpen, setAddChargeOpen] = useState(false);
@@ -604,14 +608,22 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     const base = propertyFilter
       ? inTab.filter((r) => r.propertyId === propertyFilter)
       : inTab;
+
+    const nameDirection = residentsSort === "name-asc" ? 1 : -1;
     return [...base].sort((a, b) => {
-      const propCmp = a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" });
-      if (propCmp !== 0) return propCmp;
+      if (!propertyFilter) {
+        const propCmp = a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" });
+        if (propCmp !== 0) return propCmp;
+      }
+
+      const nameCmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      if (nameCmp !== 0) return nameDirection * nameCmp;
+
       const aNum = parseInt(a.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
       const bNum = parseInt(b.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
       return aNum - bNum;
     });
-  }, [residents, residentsTab, propertyFilter]);
+  }, [residents, residentsTab, propertyFilter, residentsSort]);
 
   const currentResidentsCount = useMemo(() => residents.filter((resident) => !resident.isPrevious).length, [residents]);
   const previousResidentsCount = useMemo(() => residents.filter((resident) => resident.isPrevious).length, [residents]);
@@ -1282,9 +1294,28 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       return;
     }
 
-    const serverResult = await deleteManagerApplicationFromServer(selectedResident.id);
-    if (!serverResult.ok) {
-      showToast(serverResult.error ?? "Could not delete resident.");
+    let serverDeleteError: string | null = null;
+    try {
+      const res = await fetch("/api/portal/delete-resident-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          email: selectedResident.email,
+          purgeData: true,
+          applicationId: selectedResident.id,
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        serverDeleteError = body?.error ?? "Could not delete resident.";
+      }
+    } catch {
+      serverDeleteError = "Could not delete resident.";
+    }
+
+    if (serverDeleteError) {
+      showToast(serverDeleteError);
       return;
     }
 
@@ -1310,6 +1341,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       deleteManagerWorkOrderRow(workOrder.id);
     }
 
+    deleteServiceRequestsForResident(selectedResident.email);
+
     const nextInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []).filter(
       (thread) => thread.email.trim().toLowerCase() !== residentEmail,
     );
@@ -1321,7 +1354,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setLeaseTick((n) => n + 1);
     setWorkOrderTick((n) => n + 1);
     setInboxTick((n) => n + 1);
-    showToast("Resident deleted.");
+    showToast("Resident and all related portal data deleted.");
   }
 
   function markPaid(chargeId: string) {
@@ -1430,6 +1463,17 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               propertyValue={propertyFilter}
               onPropertyChange={setPropertyFilter}
             />
+            <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+              <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort resident</span>
+              <select
+                value={residentsSort}
+                onChange={(e) => setResidentsSort(e.target.value as ResidentsSort)}
+                className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
+              >
+                <option value="name-asc">A-Z</option>
+                <option value="name-desc">Z-A</option>
+              </select>
+            </label>
           </>
         }
       >
