@@ -112,6 +112,11 @@ import {
   syncPersistedInboxFromServer,
   type PersistedInboxThread,
 } from "@/lib/portal-inbox-storage";
+import {
+  RESIDENT_WELCOME_EMAIL_SUBJECT,
+  buildResidentWelcomeEmailBody,
+  residentAccountCreationUrl,
+} from "@/lib/resident-welcome-email";
 
 type ActiveResident = {
   id: string;
@@ -285,7 +290,7 @@ function chargeEditAmountValue(charge: HouseholdCharge): string {
 
 export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId }) {
   const { showToast } = useAppUi();
-  const { userId, ready: authReady } = useManagerUserId();
+  const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
   const [hcTick, setHcTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
@@ -309,9 +314,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageSubject, setMessageSubject] = useState("");
   const [messageBody, setMessageBody] = useState("");
+  const [reminderBusy, setReminderBusy] = useState(false);
+  const [leaseReminderBusy, setLeaseReminderBusy] = useState(false);
+  const [reminderPreview, setReminderPreview] = useState<{ res: ActiveResident; subject: string; body: string } | null>(null);
   const [signingLease, setSigningLease] = useState<LeasePipelineRow | null>(null);
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
   const [welcomeEmailBusyForResident, setWelcomeEmailBusyForResident] = useState<string | null>(null);
+  const [welcomePreviewFor, setWelcomePreviewFor] = useState<ActiveResident | null>(null);
+  const [welcomePreviewContent, setWelcomePreviewContent] = useState("");
 
   // Add resident manually
   const [addResidentOpen, setAddResidentOpen] = useState(false);
@@ -823,7 +833,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
   }
 
-  function sendResidentMessage() {
+  async function sendResidentMessage() {
     if (!selected) return;
     const subject = messageSubject.trim();
     const body = messageBody.trim();
@@ -837,6 +847,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       hour: "numeric",
       minute: "2-digit",
     });
+    // Save to manager's local sent box
     const next = [
       {
         id: `sent_${Date.now()}`,
@@ -856,7 +867,28 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setMessageBody("");
     setMessageOpen(false);
     setInboxTick((n) => n + 1);
-    showToast("Message saved to this resident thread.");
+    // Deliver to portal inbox (server) AND send real email; then refresh so resident panel shows message
+    try {
+      await fetch("/api/portal/send-inbox-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          fromName: managerEmail ?? "Property Manager",
+          toEmails: [selected.email],
+          subject,
+          text: body,
+          deliverToPortalInbox: true,
+        }),
+      });
+      // Force-refresh inbox from server so the resident panel picks up the new thread
+      const fresh = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
+      persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
+      setInboxTick((n) => n + 1);
+    } catch {
+      /* local save already succeeded; server sync optional */
+    }
+    showToast("Message sent to resident.");
   }
 
   async function sendResidentAccountEmail(res: ActiveResident) {
@@ -889,6 +921,104 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       showToast("Could not send account setup email.");
     } finally {
       setWelcomeEmailBusyForResident(null);
+    }
+  }
+
+  function openPaymentReminderPreview(res: ActiveResident, pendingCharges: HouseholdCharge[]) {
+    if (pendingCharges.length === 0) { showToast("No pending charges to remind about."); return; }
+    const total = pendingCharges.reduce((sum, c) => sum + (parseMoneyAmount(c.balanceLabel) || parseMoneyAmount(c.amountLabel)), 0);
+    const lines = pendingCharges.map((c) => `  • ${c.title}: ${c.balanceLabel}${c.dueDateLabel ? ` (due ${c.dueDateLabel})` : ""}`).join("\n");
+    const subject = "Payment reminder — outstanding balance";
+    const body = [
+      `Hi ${res.name.split(" ")[0] ?? res.name},`,
+      "",
+      "This is a reminder that you have the following outstanding payment(s):",
+      "",
+      lines,
+      "",
+      `Total due: $${total.toFixed(2)}`,
+      "",
+      "Please log into your resident portal to view details and submit payment.",
+      "",
+      "— Axis Housing",
+    ].join("\n");
+    setReminderPreview({ res, subject, body });
+  }
+
+  async function doSendPaymentReminder(res: ActiveResident, subject: string, body: string) {
+    setReminderPreview(null);
+    setReminderBusy(true);
+    try {
+      await fetch("/api/portal/send-inbox-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ fromName: managerEmail ?? "Property Manager", toEmails: [res.email], subject, text: body, deliverToPortalInbox: true }),
+      });
+      const fresh = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
+      persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
+      setInboxTick((n) => n + 1);
+      showToast("Payment reminder sent to resident.");
+    } catch {
+      showToast("Could not send payment reminder.");
+    } finally {
+      setReminderBusy(false);
+    }
+  }
+
+  async function sendLeaseSigningReminder(res: ActiveResident, lease: LeasePipelineRow) {
+    setLeaseReminderBusy(true);
+    try {
+      const unit = lease.unit.trim() || "your unit";
+      const subject = `Reminder: sign your lease for ${unit}`;
+      const leaseStart = lease.application?.leaseStart?.trim();
+      const leaseEnd = lease.application?.leaseEnd?.trim();
+      const dateLine = leaseStart
+        ? leaseEnd
+          ? `Lease dates: ${leaseStart} to ${leaseEnd}`
+          : `Lease start date: ${leaseStart}`
+        : "";
+      const body = [
+        `Hi ${res.name.split(" ")[0] ?? res.name},`,
+        "",
+        `This is a reminder to review and sign your lease for ${unit} in your Axis resident portal.`,
+        dateLine,
+        "",
+        "If you have any questions before signing, reply in your Axis inbox and we will help.",
+        "",
+        "Axis Housing",
+      ].filter(Boolean).join("\n");
+
+      const response = await fetch("/api/portal/send-inbox-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          fromName: managerEmail ?? "Property Manager",
+          toEmails: [res.email],
+          subject,
+          text: body,
+          deliverToPortalInbox: true,
+        }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as { ok?: boolean; skipped?: boolean; error?: string };
+      if (!response.ok || !data.ok) {
+        showToast(data.error ?? "Could not send lease signing reminder.");
+        return;
+      }
+
+      appendLeaseThreadMessage(lease.id, "manager", "Sent lease-signing reminder to resident.");
+      setLeaseTick((n) => n + 1);
+      if (data.skipped) {
+        showToast("Reminder sent to Axis inbox (demo email, no external email sent).");
+      } else {
+        showToast("Lease-signing reminder sent via email and Axis inbox.");
+      }
+    } catch {
+      showToast("Could not send lease signing reminder.");
+    } finally {
+      setLeaseReminderBusy(false);
     }
   }
 
@@ -1353,17 +1483,19 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Account</p>
                                 <div className="flex flex-wrap items-center gap-2">
-                                  {!residentAccountEmails.has(selected.email.trim().toLowerCase()) ? (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
-                                      disabled={welcomeEmailBusyForResident === selected.id}
-                                      onClick={() => void sendResidentAccountEmail(selected)}
-                                    >
-                                      {welcomeEmailBusyForResident === selected.id ? "Sending…" : "Email account setup"}
-                                    </Button>
-                                  ) : null}
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
+                                    onClick={() => {
+                                      const signupUrl = residentAccountCreationUrl(window.location.origin, selected.axisId);
+                                      const previewBody = buildResidentWelcomeEmailBody({ residentName: selected.name, axisId: selected.axisId, signupUrl });
+                                      setWelcomePreviewContent(previewBody);
+                                      setWelcomePreviewFor(selected);
+                                    }}
+                                  >
+                                    Email account setup
+                                  </Button>
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -1377,27 +1509,34 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     variant="outline"
                                     className="rounded-full px-3 py-1 text-xs"
                                     onClick={() => {
-                                      const row = readManagerApplicationRows().find((r) => r.id === selected.id);
-                                      if (!row) { showToast("Resident not found."); return; }
-                                      // Regenerate payment charges from current listing settings
-                                      recordApprovedApplicationCharges(row, userId ?? null);
-                                      setHcTick((n) => n + 1);
-                                      // Regenerate any unsigned leases
-                                      const email = row.email?.trim().toLowerCase() ?? "";
-                                      if (email && row.application) {
-                                        const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
-                                          (lr) =>
-                                            lr.residentEmail.trim().toLowerCase() === email &&
-                                            !hasAnyLeaseSignature(lr) &&
-                                            lr.status !== "Voided",
-                                        );
-                                        for (const lr of leasesToRegen) {
-                                          updateLeasePipelineRow(lr.id, { application: { ...(lr.application ?? {}), ...row.application } });
-                                          generateLeaseHtmlForRow(lr.id);
+                                      void (async () => {
+                                        // Force-sync latest listing & application data before regenerating
+                                        await Promise.all([
+                                          syncPropertyPipelineFromServer({ force: true }),
+                                          syncManagerApplicationsFromServer({ force: true }),
+                                        ]);
+                                        const row = readManagerApplicationRows().find((r) => r.id === selected.id);
+                                        if (!row) { showToast("Resident not found."); return; }
+                                        // Regenerate payment charges from current listing settings
+                                        recordApprovedApplicationCharges(row, userId ?? null);
+                                        setHcTick((n) => n + 1);
+                                        // Regenerate any unsigned leases
+                                        const email = row.email?.trim().toLowerCase() ?? "";
+                                        if (email && row.application) {
+                                          const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
+                                            (lr) =>
+                                              lr.residentEmail.trim().toLowerCase() === email &&
+                                              !hasAnyLeaseSignature(lr) &&
+                                              lr.status !== "Voided",
+                                          );
+                                          for (const lr of leasesToRegen) {
+                                            updateLeasePipelineRow(lr.id, { application: { ...(lr.application ?? {}), ...row.application } });
+                                            generateLeaseHtmlForRow(lr.id);
+                                          }
+                                          if (leasesToRegen.length > 0) setLeaseTick((n) => n + 1);
                                         }
-                                        if (leasesToRegen.length > 0) setLeaseTick((n) => n + 1);
-                                      }
-                                      showToast("Payments and lease regenerated from current listing settings.");
+                                        showToast("Payments and lease regenerated from current listing settings.");
+                                      })();
                                     }}
                                   >
                                     Regenerate
@@ -1577,22 +1716,33 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         Send to resident
                                       </Button>
                                     ) : residentLease.status === "Resident Signature Pending" ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="rounded-full px-3 py-1 text-xs"
-                                        onClick={() => {
-                                          appendLeaseThreadMessage(residentLease.id, "manager", "Moved lease back to manager review.");
-                                          if (sendLeaseBackToManager(residentLease.id)) {
-                                            setLeaseTick((n) => n + 1);
-                                            showToast("Lease moved to Manager Review.");
-                                          } else {
-                                            showToast("Could not move this lease back right now.");
-                                          }
-                                        }}
-                                      >
-                                        Move to manager review
-                                      </Button>
+                                      <>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className="rounded-full px-3 py-1 text-xs"
+                                          disabled={leaseReminderBusy}
+                                          onClick={() => void sendLeaseSigningReminder(selected, residentLease)}
+                                        >
+                                          {leaseReminderBusy ? "Sending…" : "Send signing reminder"}
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className="rounded-full px-3 py-1 text-xs"
+                                          onClick={() => {
+                                            appendLeaseThreadMessage(residentLease.id, "manager", "Moved lease back to manager review.");
+                                            if (sendLeaseBackToManager(residentLease.id)) {
+                                              setLeaseTick((n) => n + 1);
+                                              showToast("Lease moved to Manager Review.");
+                                            } else {
+                                              showToast("Could not move this lease back right now.");
+                                            }
+                                          }}
+                                        >
+                                          Move to manager review
+                                        </Button>
+                                      </>
                                     ) : null}
                                     <label className="inline-flex cursor-pointer items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-800 hover:bg-slate-50">
                                       {uploadingLeaseRowId === residentLease.id ? "Uploading..." : "Upload PDF"}
@@ -1686,14 +1836,27 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             <div className="rounded-2xl border border-slate-200 bg-white p-4">
                               <div className="flex items-center justify-between gap-3">
                                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Charges</p>
-                                <Button
-                                  type="button"
-                                  variant="primary"
-                                  className="rounded-full px-3 py-1 text-xs"
-                                  onClick={openAddCharge}
-                                >
-                                  Add charge
-                                </Button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {chargeCounts.pending > 0 ? (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="rounded-full px-3 py-1 text-xs"
+                                      disabled={reminderBusy}
+                                      onClick={() => openPaymentReminderPreview(selected, residentCharges.filter((c) => c.status === "pending"))}
+                                    >
+                                      {reminderBusy ? "Sending…" : "Send reminder"}
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    type="button"
+                                    variant="primary"
+                                    className="rounded-full px-3 py-1 text-xs"
+                                    onClick={openAddCharge}
+                                  >
+                                    Add charge
+                                  </Button>
+                                </div>
                               </div>
                               <div className="mt-3 flex gap-2">
                                 {(["pending", "paid"] as const).map((t) => (
@@ -2420,6 +2583,88 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
             </Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={submitCharge}>
               {editChargeId ? "Save changes" : "Add charge"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={welcomePreviewFor !== null}
+        title="Email account setup — preview"
+        onClose={() => setWelcomePreviewFor(null)}
+      >
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
+            <p className="text-sm text-slate-900">{welcomePreviewFor?.email}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
+            <p className="text-sm text-slate-900">{RESIDENT_WELCOME_EMAIL_SUBJECT}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
+            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+              {welcomePreviewContent}
+            </pre>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setWelcomePreviewFor(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              disabled={welcomeEmailBusyForResident === welcomePreviewFor?.id}
+              onClick={() => {
+                if (!welcomePreviewFor) return;
+                const res = welcomePreviewFor;
+                setWelcomePreviewFor(null);
+                void sendResidentAccountEmail(res);
+              }}
+            >
+              {welcomeEmailBusyForResident === welcomePreviewFor?.id ? "Sending…" : "Send email"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={reminderPreview !== null}
+        title="Payment reminder — preview"
+        onClose={() => setReminderPreview(null)}
+      >
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
+            <p className="text-sm text-slate-900">{reminderPreview?.res.email}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
+            <p className="text-sm text-slate-900">{reminderPreview?.subject}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
+            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+              {reminderPreview?.body}
+            </pre>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setReminderPreview(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              disabled={reminderBusy}
+              onClick={() => {
+                if (!reminderPreview) return;
+                void doSendPaymentReminder(reminderPreview.res, reminderPreview.subject, reminderPreview.body);
+              }}
+            >
+              {reminderBusy ? "Sending…" : "Send reminder"}
             </Button>
           </div>
         </div>
