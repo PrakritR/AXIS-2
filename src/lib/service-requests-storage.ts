@@ -1,3 +1,11 @@
+import {
+  createManagerCharge,
+  deleteHouseholdCharge,
+  markHouseholdChargePaid,
+  parseMoneyAmount,
+} from "@/lib/household-charges";
+import { getPropertyById } from "@/lib/rental-application/data";
+
 export const SERVICE_REQUESTS_EVENT = "axis:service-requests";
 const KEY = "axis_service_requests_v1";
 
@@ -30,10 +38,27 @@ export type ServiceRequest = {
   depositPaid: boolean;
   servicePaidAt?: string;
   depositPaidAt?: string;
+  serviceChargeId?: string;
+  depositChargeId?: string;
   // Return
   returnPhotoDataUrl?: string;
   returnedAt?: string;
 };
+
+function toPositiveDollarAmount(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parsed = parseMoneyAmount(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function resolvePropertyLabel(propertyId: string): string {
+  const resolved = getPropertyById(propertyId.trim());
+  if (!resolved) return "Property";
+  const street = resolved.address.split(",")[0]?.trim();
+  return street || resolved.buildingName || resolved.title || "Property";
+}
 
 function readAll(): ServiceRequest[] {
   if (typeof window === "undefined") return [];
@@ -78,11 +103,53 @@ export function approveServiceRequest(id: string, managerNote?: string): void {
   const all = readAll();
   const idx = all.findIndex((r) => r.id === id);
   if (idx === -1) return;
+  const row = all[idx]!;
+  const propertyLabel = resolvePropertyLabel(row.propertyId);
+
+  let serviceChargeId = row.serviceChargeId;
+  let depositChargeId = row.depositChargeId;
+
+  if (!serviceChargeId) {
+    const serviceAmount = toPositiveDollarAmount(row.price);
+    if (serviceAmount) {
+      const createdServiceCharge = createManagerCharge({
+        residentEmail: row.residentEmail,
+        residentName: row.residentName,
+        propertyId: row.propertyId,
+        propertyLabel,
+        managerUserId: row.managerUserId,
+        title: `${row.offerName} service fee`,
+        amount: serviceAmount,
+        blocksLeaseUntilPaid: false,
+      });
+      if (createdServiceCharge) serviceChargeId = createdServiceCharge.id;
+    }
+  }
+
+  if (!depositChargeId) {
+    const depositAmount = toPositiveDollarAmount(row.deposit);
+    if (depositAmount) {
+      const createdDepositCharge = createManagerCharge({
+        residentEmail: row.residentEmail,
+        residentName: row.residentName,
+        propertyId: row.propertyId,
+        propertyLabel,
+        managerUserId: row.managerUserId,
+        title: `${row.offerName} refundable deposit`,
+        amount: depositAmount,
+        blocksLeaseUntilPaid: false,
+      });
+      if (createdDepositCharge) depositChargeId = createdDepositCharge.id;
+    }
+  }
+
   all[idx] = {
-    ...all[idx]!,
+    ...row,
     status: "approved",
     approvedAt: new Date().toISOString(),
-    managerNote: managerNote?.trim() || all[idx]!.managerNote,
+    managerNote: managerNote?.trim() || row.managerNote,
+    serviceChargeId,
+    depositChargeId,
   };
   writeAll(all);
 }
@@ -104,7 +171,11 @@ export function markServiceRequestServicePaid(id: string): void {
   const all = readAll();
   const idx = all.findIndex((r) => r.id === id);
   if (idx === -1) return;
-  all[idx] = { ...all[idx]!, servicePaid: true, servicePaidAt: new Date().toISOString() };
+  const row = all[idx]!;
+  if (row.serviceChargeId) {
+    markHouseholdChargePaid(row.serviceChargeId, row.managerUserId ?? null);
+  }
+  all[idx] = { ...row, servicePaid: true, servicePaidAt: new Date().toISOString() };
   writeAll(all);
 }
 
@@ -118,6 +189,13 @@ export function markServiceRequestDepositPaid(id: string): void {
 
 export function deleteServiceRequest(id: string): void {
   const all = readAll();
+  const target = all.find((r) => r.id === id);
+  if (target?.serviceChargeId && !target.servicePaid) {
+    deleteHouseholdCharge(target.serviceChargeId, target.managerUserId ?? null);
+  }
+  if (target?.depositChargeId && !target.depositPaid) {
+    deleteHouseholdCharge(target.depositChargeId, target.managerUserId ?? null);
+  }
   const next = all.filter((r) => r.id !== id);
   if (next.length === all.length) return;
   writeAll(next);
