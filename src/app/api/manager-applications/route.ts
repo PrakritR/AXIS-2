@@ -51,8 +51,20 @@ async function persistNormalizedRow(db: ReturnType<typeof createSupabaseServiceR
     { onConflict: "id" },
   );
   if (row.bucket === "approved") {
-    const provisioned = await provisionApprovedResidentAccount(db, row);
-    if (!provisioned.ok) throw new Error(provisioned.error);
+    try {
+      const provisioned = await provisionApprovedResidentAccount(db, row);
+      if (!provisioned.ok) {
+        console.error("Approved application persisted but resident provisioning failed:", {
+          applicationId: row.id,
+          error: provisioned.error,
+        });
+      }
+    } catch (error) {
+      console.error("Approved application persisted but resident provisioning crashed:", {
+        applicationId: row.id,
+        error: error instanceof Error ? error.message : "Unknown provisioning error",
+      });
+    }
   }
 }
 
