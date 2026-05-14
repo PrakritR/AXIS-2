@@ -659,9 +659,20 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const residentLease = useMemo<LeasePipelineRow | null>(() => {
     void leaseTick;
     if (!selected?.email) return null;
+    const selectedAxisId = normalizeApplicationAxisId(selected.id);
     const email = selected.email.trim().toLowerCase();
-    const rows = readLeasePipeline(userId).filter((row) => row.residentEmail.trim().toLowerCase() === email);
+    const allRows = readLeasePipeline(userId);
+    const rows = allRows.filter((row) => {
+      const rowAxisId = row.axisId?.trim() ? normalizeApplicationAxisId(row.axisId) : "";
+      if (rowAxisId && rowAxisId === selectedAxisId) return true;
+      return row.residentEmail.trim().toLowerCase() === email;
+    });
     rows.sort((a, b) => {
+      const aAxisMatch = (a.axisId?.trim() ? normalizeApplicationAxisId(a.axisId) : "") === selectedAxisId;
+      const bAxisMatch = (b.axisId?.trim() ? normalizeApplicationAxisId(b.axisId) : "") === selectedAxisId;
+      const axisDelta = Number(bAxisMatch) - Number(aAxisMatch);
+      if (axisDelta !== 0) return axisDelta;
+
       const visibleDelta = Number(residentCanViewLeaseRow(b)) - Number(residentCanViewLeaseRow(a));
       if (visibleDelta !== 0) return visibleDelta;
       const rank = (row: LeasePipelineRow) => {
