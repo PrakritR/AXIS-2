@@ -93,15 +93,33 @@ export async function GET() {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const byId = new Map<string, DemoApplicantRow>();
+    const rowsNeedingNormalization: Array<{ recordId: string; row: DemoApplicantRow }> = [];
     for (const record of data ?? []) {
       if (!record.row_data) continue;
       const row = normalizeRow(record.row_data as DemoApplicantRow);
       byId.set(row.id, { ...byId.get(row.id), ...row });
       if (record.id !== row.id || (record.row_data as DemoApplicantRow).id !== row.id) {
-        await persistNormalizedRow(db, record.id, row);
+        rowsNeedingNormalization.push({ recordId: record.id, row });
       }
     }
+    await Promise.allSettled(rowsNeedingNormalization.map(({ recordId, row }) => persistNormalizedRow(db, recordId, row)));
+
     const rows = [...byId.values()];
+
+    // Provision approved residents that were never provisioned (e.g. restored via SQL migration).
+    // One batch profiles query finds which are missing; parallel provisioning handles only those.
+    // This runs synchronously so accounts exist by the time the client fetches portal statuses.
+    const approved = rows.filter((r) => r.bucket === "approved" && r.email?.trim().includes("@"));
+    if (approved.length > 0) {
+      const emails = [...new Set(approved.map((r) => r.email!.trim().toLowerCase()))];
+      const { data: existing } = await db.from("profiles").select("email").in("email", emails);
+      const existingSet = new Set((existing ?? []).map((p) => (p.email ?? "").trim().toLowerCase()).filter(Boolean));
+      const unprovisioned = approved.filter((r) => !existingSet.has(r.email!.trim().toLowerCase()));
+      if (unprovisioned.length > 0) {
+        await Promise.allSettled(unprovisioned.map((row) => provisionApprovedResidentAccount(db, row).catch(() => undefined)));
+      }
+    }
+
     return NextResponse.json({ rows });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load applications.";
