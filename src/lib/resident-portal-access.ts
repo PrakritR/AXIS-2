@@ -94,18 +94,42 @@ export async function loadResidentPortalAccessState(params: {
     .eq("resident_email", email)
     .order("updated_at", { ascending: false });
 
-  const latestApplication = readLatestApplication(applicationRows ?? [], email);
+  let latestApplication = readLatestApplication(applicationRows ?? [], email);
   let applicationApproved = latestApplication.bucket === "approved";
 
-  // Fallback: if no application found or status unclear, check the profile directly
-  // to see if the resident has been provisioned as approved
-  if (!applicationApproved && params.userId) {
+  // Fallback 1: resolve by Axis ID when auth/profile email differs from submitted application email.
+  // The legacy `profiles.manager_id` stores the resident's public Axis ID for provisioned accounts.
+  if ((!latestApplication.id || !applicationApproved) && params.userId) {
     const { data: profile } = await db
       .from("profiles")
-      .select("application_approved")
+      .select("application_approved, manager_id")
       .eq("id", params.userId)
       .maybeSingle();
-    applicationApproved = Boolean(profile?.application_approved === true);
+
+    const profileAxisId = typeof profile?.manager_id === "string" ? profile.manager_id.trim() : "";
+    if (profileAxisId && profileAxisId.toUpperCase().startsWith("AXIS-")) {
+      const { data: axisRecord } = await db
+        .from("manager_application_records")
+        .select("row_data, updated_at")
+        .eq("id", profileAxisId)
+        .maybeSingle();
+
+      if (axisRecord?.row_data && typeof axisRecord.row_data === "object" && !Array.isArray(axisRecord.row_data)) {
+        const axisRow = axisRecord.row_data as Record<string, unknown>;
+        latestApplication = {
+          id: typeof axisRow.id === "string" ? axisRow.id.trim() || null : null,
+          bucket: typeof axisRow.bucket === "string" ? axisRow.bucket.trim().toLowerCase() || null : null,
+          stage: typeof axisRow.stage === "string" ? axisRow.stage.trim() || null : null,
+          property: typeof axisRow.property === "string" ? axisRow.property.trim() || null : null,
+        };
+        applicationApproved = latestApplication.bucket === "approved";
+      }
+    }
+
+    // Fallback 2: trust explicit profile approval when application row cannot be resolved.
+    if (!applicationApproved) {
+      applicationApproved = Boolean(profile?.application_approved === true);
+    }
   }
 
   const leaseAccessUnlocked = applicationApproved;
