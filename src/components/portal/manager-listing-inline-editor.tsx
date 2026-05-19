@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   ManagerBathroomRoomAccessKind,
   ManagerBathroomSubmission,
@@ -33,6 +33,16 @@ import {
 import type { PortalListingNote } from "@/lib/portal-listing-notes";
 import { getPortalListingNote, savePortalListingNote } from "@/lib/portal-listing-notes";
 import { uploadListingImageFiles, uploadListingVideoFile } from "@/lib/listing-media-client";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { Modal } from "@/components/ui/modal";
+import {
+  readAmenityOffersForProperty,
+  saveAmenityOffer,
+  deleteAmenityOffer,
+  toggleAmenityOfferAvailability,
+  type ManagerAmenityOffer,
+} from "@/lib/manager-amenity-catalog-storage";
+import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 
 // ─── shared style constants ──────────────────────────────────────────────────
 
@@ -299,12 +309,14 @@ export function ManagerListingInlineEditor({
   onSaveSub,
   showToast,
   isListed,
+  listingId,
 }: {
   sub: ManagerListingSubmissionV1;
   noteKey: string | null;
   onSaveSub: (updated: ManagerListingSubmissionV1) => void;
   showToast: (msg: string) => void;
   isListed?: boolean;
+  listingId?: string | null;
 }) {
   // ── section editing states ────────────────────────────────────────────────
   const [editingSection, setEditingSection] = useState<string | null>(null);
@@ -343,6 +355,56 @@ export function ManagerListingInlineEditor({
   const [houseEditing, setHouseEditing] = useState(false);
   const [houseDraft, setHouseDraft] = useState<PortalListingNote>({});
   const locationLevelOptions = useMemo(() => locationOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
+
+  // ── services state ────────────────────────────────────────────────────────
+  const { userId } = useManagerUserId();
+  const [serviceOffers, setServiceOffers] = useState<ManagerAmenityOffer[]>([]);
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
+  const [editingOffer, setEditingOffer] = useState<ManagerAmenityOffer | null>(null);
+  const [serviceForm, setServiceForm] = useState({
+    name: "", description: "", price: "", deposit: "", restrictToResidents: false, selectedEmails: [] as string[],
+  });
+
+  useEffect(() => {
+    if (userId && listingId) setServiceOffers(readAmenityOffersForProperty(userId, listingId));
+  }, [userId, listingId]);
+
+  const reloadOffers = useCallback(() => {
+    if (userId && listingId) setServiceOffers(readAmenityOffersForProperty(userId, listingId));
+  }, [userId, listingId]);
+
+  const propertyResidents = useMemo(() => {
+    if (!listingId) return [];
+    return readManagerApplicationRows().filter(
+      (r) => r.bucket === "approved" && r.email?.trim() &&
+        (r.assignedPropertyId?.trim() === listingId || r.propertyId?.trim() === listingId ||
+         r.application?.propertyId?.trim() === listingId),
+    );
+  }, [listingId]);
+
+  const handleSaveService = useCallback(() => {
+    if (!serviceForm.name.trim() || !userId) return;
+    const offer: ManagerAmenityOffer = {
+      id: editingOffer?.id ?? `offer-${Date.now()}`,
+      name: serviceForm.name.trim(),
+      description: serviceForm.description.trim(),
+      price: serviceForm.price.trim(),
+      deposit: serviceForm.deposit.trim(),
+      category: "",
+      available: editingOffer?.available ?? true,
+      managerUserId: userId,
+      propertyId: listingId ?? undefined,
+      residentEmails: serviceForm.restrictToResidents && serviceForm.selectedEmails.length
+        ? serviceForm.selectedEmails
+        : undefined,
+      createdAt: editingOffer?.createdAt ?? new Date().toISOString(),
+    };
+    saveAmenityOffer(offer);
+    reloadOffers();
+    setServiceModalOpen(false);
+    setEditingOffer(null);
+    setServiceForm({ name: "", description: "", price: "", deposit: "", restrictToResidents: false, selectedEmails: [] });
+  }, [serviceForm, editingOffer, userId, listingId, reloadOffers]);
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const saveSub = useCallback(
@@ -675,6 +737,7 @@ export function ManagerListingInlineEditor({
   // ─── RENDER ───────────────────────────────────────────────────────────────
 
   return (
+    <>
     <div className="space-y-0">
       {/* ── PROPERTY BASICS ── */}
       <div className={`${SECTION_WRAP} border-slate-200`}>
@@ -2357,6 +2420,136 @@ export function ManagerListingInlineEditor({
           )}
         </div>
       ) : null}
+
+      {/* ── SERVICES ── */}
+      <div className={`${SECTION_WRAP} border-slate-200`}>
+        <SectionHeader
+          title="Services offered"
+          color="slate"
+          isEditing={false}
+          editLabel="+ Add"
+          onEdit={() => {
+            setEditingOffer(null);
+            setServiceForm({ name: "", description: "", price: "", deposit: "", restrictToResidents: false, selectedEmails: [] });
+            setServiceModalOpen(true);
+          }}
+        />
+        <div className="p-4">
+          {serviceOffers.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {serviceOffers.map((offer) => (
+                <div key={offer.id} className={`flex flex-col rounded-2xl border bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.05)] ${offer.available ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-900">{offer.name}</p>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${offer.available ? "bg-emerald-50 text-emerald-700 ring-emerald-200/80" : "bg-slate-100 text-slate-500 ring-slate-200/80"}`}>
+                      {offer.available ? "Active" : "Paused"}
+                    </span>
+                  </div>
+                  {offer.price ? <span className="mt-1 text-xs font-medium text-slate-500">{offer.price}</span> : null}
+                  {offer.description ? <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{offer.description}</p> : null}
+                  {offer.residentEmails?.length ? (
+                    <p className="mt-1.5 text-[10px] text-slate-400">Visible to {offer.residentEmails.length} resident{offer.residentEmails.length === 1 ? "" : "s"} only</p>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
+                    <button type="button" onClick={() => {
+                      setEditingOffer(offer);
+                      setServiceForm({
+                        name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "",
+                        restrictToResidents: Boolean(offer.residentEmails?.length),
+                        selectedEmails: offer.residentEmails ?? [],
+                      });
+                      setServiceModalOpen(true);
+                    }} className={EDIT_BTN_OFF}>Edit</button>
+                    <button type="button" onClick={() => { if (userId) { toggleAmenityOfferAvailability(offer.id, userId); reloadOffers(); } }} className={EDIT_BTN_OFF}>
+                      {offer.available ? "Pause" : "Resume"}
+                    </button>
+                    <button type="button" onClick={() => { if (userId) { deleteAmenityOffer(offer.id, userId); reloadOffers(); } }} className="rounded-full border border-rose-200 bg-white px-3 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-10 text-center">
+              <p className="text-sm font-medium text-slate-600">No services yet</p>
+              <p className="mt-1 max-w-xs text-xs text-slate-400">Add optional paid or free services residents can request — like weekly cleaning, linen sets, or storage.</p>
+              <button type="button" onClick={() => { setEditingOffer(null); setServiceForm({ name: "", description: "", price: "", deposit: "", restrictToResidents: false, selectedEmails: [] }); setServiceModalOpen(true); }} className={`mt-4 ${ADD_BTN}`}>+ Add service</button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
+
+    <Modal
+      open={serviceModalOpen}
+      title={editingOffer ? "Edit service" : "Add service"}
+      onClose={() => setServiceModalOpen(false)}
+      panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+    >
+      <div className="grid gap-3">
+        <div>
+          <p className="mb-1 text-[11px] font-medium text-slate-600">Service name *</p>
+          <input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Weekly cleaning, Linen set" className={INPUT} />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-slate-600">Price</p>
+            <input value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: e.target.value }))} placeholder="e.g. $25, Free" className={INPUT} />
+          </div>
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-slate-600">Deposit (optional)</p>
+            <input value={serviceForm.deposit} onChange={(e) => setServiceForm((f) => ({ ...f, deposit: e.target.value }))} placeholder="e.g. $50" className={INPUT} />
+          </div>
+        </div>
+        <div>
+          <p className="mb-1 text-[11px] font-medium text-slate-600">Description</p>
+          <textarea rows={3} value={serviceForm.description} onChange={(e) => setServiceForm((f) => ({ ...f, description: e.target.value }))} placeholder="What's included, how it works…" className={TEXTAREA} />
+        </div>
+        {propertyResidents.length > 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={serviceForm.restrictToResidents}
+                onChange={(e) => setServiceForm((f) => ({ ...f, restrictToResidents: e.target.checked, selectedEmails: e.target.checked ? f.selectedEmails : [] }))}
+              />
+              Restrict to specific residents
+            </label>
+            {serviceForm.restrictToResidents ? (
+              <div className="mt-2 space-y-1.5 pl-6">
+                {propertyResidents.map((r) => {
+                  const email = r.email!.trim().toLowerCase();
+                  return (
+                    <label key={r.id} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={serviceForm.selectedEmails.includes(email)}
+                        onChange={(e) => setServiceForm((f) => ({
+                          ...f,
+                          selectedEmails: e.target.checked
+                            ? [...f.selectedEmails, email]
+                            : f.selectedEmails.filter((x) => x !== email),
+                        }))}
+                      />
+                      {r.name || email}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+        <button type="button" className={CANCEL_BTN} onClick={() => setServiceModalOpen(false)}>Cancel</button>
+        <button type="button" className={SAVE_BTN} onClick={handleSaveService} disabled={!serviceForm.name.trim()}>
+          {editingOffer ? "Save changes" : "Add service"}
+        </button>
+      </div>
+    </Modal>
+    </>
   );
 }

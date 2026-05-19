@@ -435,6 +435,7 @@ function ManagerPropertyInlineDetails({
             onSaveSub={handleSaveSub}
             showToast={showToast}
             isListed={bucket === 2}
+            listingId={portalSub?.saveId ?? null}
           />
         </div>
       ) : null}

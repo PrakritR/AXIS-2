@@ -8,6 +8,7 @@ export type ManagerAmenityOffer = {
   available: boolean;
   managerUserId: string;
   propertyId?: string;
+  residentEmails?: string[];
   createdAt: string;
 };
 

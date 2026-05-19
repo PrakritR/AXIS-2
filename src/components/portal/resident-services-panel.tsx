@@ -344,15 +344,21 @@ export function ResidentServicesPanel() {
       managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
     }
 
+    const visibleToResident = (o: { available: boolean; residentEmails?: string[] }) => {
+      if (!o.available) return false;
+      if (!o.residentEmails?.length) return true;
+      return o.residentEmails.some((e) => e.trim().toLowerCase() === residentEmail);
+    };
+
     if (managerUserId) {
-      const offers = readAmenityOffersForProperty(managerUserId, propertyId).filter((o) => o.available);
+      const offers = readAmenityOffersForProperty(managerUserId, propertyId).filter(visibleToResident);
       if (offers.length > 0) return offers;
-      return readAmenityOffersForManager(managerUserId).filter((o) => o.available);
+      return readAmenityOffersForManager(managerUserId).filter(visibleToResident);
     } else if (propertyId) {
-      return readAllAmenityOffersForProperty(propertyId).filter((o) => o.available);
+      return readAllAmenityOffersForProperty(propertyId).filter(visibleToResident);
     }
     return [];
-  }, [residentApplication]);
+  }, [residentApplication, residentEmail]);
 
   useEffect(() => {
     setAvailableOffers(offersForResident);
