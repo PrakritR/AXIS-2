@@ -99,8 +99,6 @@ export type RecurringRentProfile = {
   venmoContact?: string;
 };
 
-const UPCOMING_CHARGE_VISIBILITY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-
 function isBrowser() {
   return typeof window !== "undefined";
 }
@@ -478,30 +476,9 @@ function dueLabelForLeaseStart(leaseStart?: string | null): string {
 }
 
 function shouldDisplayChargeInPayments(charge: HouseholdCharge, now = new Date()): boolean {
-  if (charge.status === "paid") return true;
-  switch (charge.kind) {
-    case "rent": {
-      const due = recurringRentDueDate(charge.rentMonth, charge.dueDay);
-      if (!due) return true;
-      return due.getTime() - now.getTime() <= UPCOMING_CHARGE_VISIBILITY_WINDOW_MS;
-    }
-    case "utilities": {
-      if (charge.rentMonth && charge.recurringRentProfileId) {
-        const due = recurringRentDueDate(charge.rentMonth, charge.dueDay);
-        if (!due) return true;
-        return due.getTime() - now.getTime() <= UPCOMING_CHARGE_VISIBILITY_WINDOW_MS;
-      }
-      return true;
-    }
-    case "prorated_last_month_rent":
-    case "prorated_last_month_utilities": {
-      const due = parseDueDateLabelToDate(charge.dueDateLabel);
-      if (!due) return true;
-      return due.getTime() - now.getTime() <= UPCOMING_CHARGE_VISIBILITY_WINDOW_MS;
-    }
-    default:
-      return true;
-  }
+  void charge;
+  void now;
+  return true;
 }
 
 export function chargeDueLabel(charge: HouseholdCharge): string {
@@ -992,10 +969,7 @@ function syncAllRecurringRentCharges(): boolean {
     const currentMonth = monthKeyFromDate(now);
     const nextMonth = addMonthsToMonthKey(currentMonth, 1);
     const monthsToGenerate = new Set<string>(monthsBetweenInclusive(profileStartMonth, currentMonth));
-    const nextMonthDue = recurringRentDueDate(nextMonth, dueDay);
-    if (nextMonthDue && nextMonthDue.getTime() - now.getTime() <= UPCOMING_CHARGE_VISIBILITY_WINDOW_MS) {
-      monthsToGenerate.add(nextMonth);
-    }
+    monthsToGenerate.add(nextMonth);
 
     for (const rentMonth of [...monthsToGenerate].sort()) {
       const [candidateYear, candidateMonthNum] = rentMonth.split("-").map(Number);

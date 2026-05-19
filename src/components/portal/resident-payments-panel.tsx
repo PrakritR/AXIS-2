@@ -28,6 +28,7 @@ import {
   syncHouseholdChargesFromServer,
   type HouseholdCharge,
 } from "@/lib/household-charges";
+import { syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 
 type PayTab = "pending" | "paid";
 
@@ -71,7 +72,10 @@ export function ResidentPaymentsPanel() {
   useEffect(() => {
     if (!session.ready) return;
     if (session.userId && email) linkHouseholdChargesToResidentUser(email, session.userId);
-    void syncHouseholdChargesFromServer(true).finally(refresh);
+    void (async () => {
+      await syncManagerApplicationsFromServer({ force: true });
+      await syncHouseholdChargesFromServer(true);
+    })().finally(refresh);
   }, [email, refresh, session.ready, session.userId]);
 
   const charges = useMemo(() => {
@@ -114,7 +118,10 @@ export function ResidentPaymentsPanel() {
           variant="outline"
           className="shrink-0 rounded-full"
           onClick={() => {
-            void syncHouseholdChargesFromServer(true).then(() => {
+            void (async () => {
+              await syncManagerApplicationsFromServer({ force: true });
+              await syncHouseholdChargesFromServer(true);
+            })().then(() => {
               refresh();
               showToast("Refreshed payments.");
             });

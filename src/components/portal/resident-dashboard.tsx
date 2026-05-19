@@ -136,6 +136,7 @@ export function ResidentDashboard({
 
   useEffect(() => {
     void Promise.allSettled([
+      syncManagerApplicationsFromServer({ force: true }),
       syncLeasePipelineFromServer(),
       syncManagerWorkOrdersFromServer(),
       syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY),
