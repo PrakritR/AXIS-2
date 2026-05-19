@@ -99,6 +99,14 @@ export type RecurringRentProfile = {
   venmoContact?: string;
 };
 
+type LeaseBoundaryProration = {
+  prorated: boolean;
+  factor: number;
+  billableDays: number;
+  daysInMonth: number;
+  dueDateLabel?: string;
+};
+
 function isBrowser() {
   return typeof window !== "undefined";
 }
@@ -133,6 +141,22 @@ function persistHouseholdStateToSession() {
   } catch {
     /* ignore */
   }
+}
+
+function mergeServerAuthoritativeCharges(serverCharges: HouseholdCharge[], localCharges: HouseholdCharge[]) {
+  const serverIds = new Set(serverCharges.map((charge) => charge.id));
+  const serverKeys = new Set(serverCharges.map((charge) => chargeBusinessKey(charge)));
+  const localOnly = localCharges.filter((charge) => !serverIds.has(charge.id) && !serverKeys.has(chargeBusinessKey(charge)));
+  return dedupeCharges([...serverCharges, ...localOnly]);
+}
+
+function mergeServerAuthoritativeRentProfiles(serverProfiles: RecurringRentProfile[], localProfiles: RecurringRentProfile[]) {
+  const serverIds = new Set(serverProfiles.map((profile) => profile.id));
+  const serverKeys = new Set(serverProfiles.map((profile) => recurringRentProfileKey(profile)));
+  const localOnly = localProfiles.filter(
+    (profile) => !serverIds.has(profile.id) && !serverKeys.has(recurringRentProfileKey(profile)),
+  );
+  return dedupeRecurringRentProfiles([...serverProfiles, ...localOnly]);
 }
 
 function emit() {
@@ -176,13 +200,13 @@ export async function syncHouseholdChargesFromServer(force = false): Promise<{
       const serverCharges = Array.isArray(body.charges) ? body.charges : [];
       const serverProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
       hydrateHouseholdStateFromSession();
-      const serverChargeIds = new Set(serverCharges.map((c) => c.id));
-      const serverProfileIds = new Set(serverProfiles.map((p) => p.id));
-      const hasLocalOnlyCharges = memoryCharges.some((c) => !serverChargeIds.has(c.id));
-      const hasLocalOnlyProfiles = memoryRentProfiles.some((p) => !serverProfileIds.has(p.id));
-      // Server is source of truth for status; merge local-only items (not yet synced) on top
-      memoryCharges = dedupeCharges([...serverCharges, ...memoryCharges]);
-      memoryRentProfiles = dedupeRecurringRentProfiles([...serverProfiles, ...memoryRentProfiles]);
+      const mergedCharges = mergeServerAuthoritativeCharges(serverCharges, memoryCharges);
+      const mergedProfiles = mergeServerAuthoritativeRentProfiles(serverProfiles, memoryRentProfiles);
+      const hasLocalOnlyCharges = mergedCharges.length > serverCharges.length;
+      const hasLocalOnlyProfiles = mergedProfiles.length > serverProfiles.length;
+      // Server is source of truth for rows it already knows about; preserve only truly local-only items.
+      memoryCharges = mergedCharges;
+      memoryRentProfiles = mergedProfiles;
       persistHouseholdStateToSession();
       // Backfill server with any local-only rows (created before API was wired, or from offline edits)
       if (hasLocalOnlyCharges || hasLocalOnlyProfiles) {
@@ -622,6 +646,25 @@ function leaseStartProration(leaseStart: string | undefined): { prorated: boolea
   };
 }
 
+function leaseEndProration(leaseEnd: string | undefined): LeaseBoundaryProration {
+  if (!leaseEnd?.trim()) return { prorated: false, factor: 1, billableDays: 0, daysInMonth: 0 };
+  const [yearRaw, monthRaw, dayRaw] = leaseEnd.split("-").map(Number);
+  if (!yearRaw || !monthRaw || !dayRaw) return { prorated: false, factor: 1, billableDays: 0, daysInMonth: 0 };
+  const daysInMonth = new Date(yearRaw, monthRaw, 0).getDate();
+  if (!Number.isFinite(daysInMonth) || daysInMonth <= 0 || dayRaw >= daysInMonth) {
+    return { prorated: false, factor: 1, billableDays: daysInMonth, daysInMonth };
+  }
+  const leaseEndDate = new Date(yearRaw, monthRaw - 1, dayRaw);
+  const reminderDate = new Date(leaseEndDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+  return {
+    prorated: true,
+    factor: dayRaw / daysInMonth,
+    billableDays: dayRaw,
+    daysInMonth,
+    dueDateLabel: `By ${reminderDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`,
+  };
+}
+
 function firstMonthRentChargeForLeaseStart(
   monthlyRent: number,
   leaseStart: string | undefined,
@@ -649,6 +692,39 @@ function firstMonthRentChargeForLeaseStart(
         : `Prorated first month's rent (${proration.label})`
       : "First month's rent",
     proration,
+  };
+}
+
+function lastMonthChargeForLeaseEnd(
+  monthlyAmount: number,
+  leaseEnd: string | undefined,
+  chargeLabel: "rent" | "utilities",
+  prorateMethod?: "auto" | "daily_rate",
+  dailyRate?: number,
+): {
+  kind: HouseholdChargeKind;
+  amount: number;
+  title: string;
+  dueDateLabel?: string;
+} | null {
+  const proration = leaseEndProration(leaseEnd);
+  if (!proration.prorated) return null;
+  const useDailyRate = prorateMethod === "daily_rate" && dailyRate != null && dailyRate > 0;
+  const amount = useDailyRate
+    ? Number((proration.billableDays * dailyRate).toFixed(2))
+    : Number((monthlyAmount * proration.factor).toFixed(2));
+  const title = chargeLabel === "rent"
+    ? useDailyRate
+      ? `Prorated last month's rent (${proration.billableDays} days × $${dailyRate}/day)`
+      : "Prorated last month's rent"
+    : useDailyRate
+      ? `Prorated last month's utilities (${proration.billableDays} days × $${dailyRate}/day)`
+      : "Prorated last month's utilities";
+  return {
+    kind: chargeLabel === "rent" ? "prorated_last_month_rent" : "prorated_last_month_utilities",
+    amount,
+    title,
+    dueDateLabel: proration.dueDateLabel,
   };
 }
 
@@ -1576,24 +1652,30 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     );
   }
 
-  // Prorated last month rent/utilities — created upfront so residents see the full charge picture on approval.
   const leaseEnd = row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || undefined;
-  if (leaseEnd && rentAmount > 0) {
-    const [leEndY, leEndM, leEndD] = leaseEnd.split("-").map(Number);
-    if (leEndY && leEndM && leEndD) {
-      const daysInLeEndMonth = new Date(leEndY, leEndM, 0).getDate();
-      if (leEndD < daysInLeEndMonth) {
-        const lastMonthRentAmt = Number(((rentAmount * leEndD) / daysInLeEndMonth).toFixed(2));
-        const leEndDate = new Date(leEndY, leEndM - 1, leEndD);
-        const leEndReminderDate = new Date(leEndDate.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const leEndDueLabel = `By ${leEndReminderDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
-        pushCharge("prorated_last_month_rent", lastMonthRentAmt, chargeTitle("prorated_last_month_rent"), false, leEndDueLabel);
-        if (utilities.amount > 0) {
-          const lastMonthUtilAmt = Number(((utilities.amount * leEndD) / daysInLeEndMonth).toFixed(2));
-          pushCharge("prorated_last_month_utilities", lastMonthUtilAmt, chargeTitle("prorated_last_month_utilities"), false, leEndDueLabel);
-        }
-      }
-    }
+  const lastMonthRentCharge = rentAmount > 0
+    ? lastMonthChargeForLeaseEnd(rentAmount, leaseEnd, "rent", prorateMethod, dailyRentRate)
+    : null;
+  if (lastMonthRentCharge) {
+    pushCharge(
+      lastMonthRentCharge.kind,
+      lastMonthRentCharge.amount,
+      lastMonthRentCharge.title,
+      false,
+      lastMonthRentCharge.dueDateLabel,
+    );
+  }
+  const lastMonthUtilitiesCharge = utilities.amount > 0
+    ? lastMonthChargeForLeaseEnd(utilities.amount, leaseEnd, "utilities", prorateMethod, dailyUtilitiesRate)
+    : null;
+  if (lastMonthUtilitiesCharge) {
+    pushCharge(
+      lastMonthUtilitiesCharge.kind,
+      lastMonthUtilitiesCharge.amount,
+      lastMonthUtilitiesCharge.title,
+      false,
+      lastMonthUtilitiesCharge.dueDateLabel,
+    );
   }
 
   const securityDeposit = savedAmount(
@@ -1623,9 +1705,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   }
 
   const next = dedupeCharges([...rows, ...created]);
-  const changed =
-    next.length !== before.length ||
-    JSON.stringify(next.map((charge) => charge.id).sort()) !== JSON.stringify(before.map((charge) => charge.id).sort());
+  const changed = chargesChanged(before, next);
   if (changed) writeAll(next);
 
   // Set up recurring monthly rent (+ utilities) starting the month after move-in.
