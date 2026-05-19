@@ -143,11 +143,31 @@ function persistHouseholdStateToSession() {
   }
 }
 
-function mergeServerAuthoritativeCharges(serverCharges: HouseholdCharge[], localCharges: HouseholdCharge[]) {
-  const serverIds = new Set(serverCharges.map((charge) => charge.id));
-  const serverKeys = new Set(serverCharges.map((charge) => chargeBusinessKey(charge)));
-  const localOnly = localCharges.filter((charge) => !serverIds.has(charge.id) && !serverKeys.has(chargeBusinessKey(charge)));
-  return dedupeCharges([...serverCharges, ...localOnly]);
+function mergeServerAuthoritativeCharges(serverCharges: HouseholdCharge[], localCharges: HouseholdCharge[]): {
+  merged: HouseholdCharge[];
+  hasUpdated: boolean;
+} {
+  const localById = new Map(localCharges.map((c) => [c.id, c]));
+  const serverIds = new Set(serverCharges.map((c) => c.id));
+  const serverKeys = new Set(serverCharges.map((c) => chargeBusinessKey(c)));
+  let hasUpdated = false;
+
+  // For each server charge, prefer the local version (fresher amounts/titles) but inherit
+  // paid status from the server — the server is the source of truth for payment transitions.
+  const reconciled: HouseholdCharge[] = serverCharges.map((sc) => {
+    const local = localById.get(sc.id);
+    if (!local) return sc;
+    if (sc.status === "paid" && local.status !== "paid") {
+      return { ...local, status: "paid" as const, paidAt: sc.paidAt, balanceLabel: "$0.00" };
+    }
+    // If amounts differ, local wins — signal that we need to push the update to the server.
+    if (local.amountLabel !== sc.amountLabel || local.title !== sc.title) hasUpdated = true;
+    return local;
+  });
+
+  // Append local-only charges (not present on server at all).
+  const localOnly = localCharges.filter((c) => !serverIds.has(c.id) && !serverKeys.has(chargeBusinessKey(c)));
+  return { merged: dedupeCharges([...reconciled, ...localOnly]), hasUpdated };
 }
 
 function mergeServerAuthoritativeRentProfiles(serverProfiles: RecurringRentProfile[], localProfiles: RecurringRentProfile[]) {
@@ -200,16 +220,16 @@ export async function syncHouseholdChargesFromServer(force = false): Promise<{
       const serverCharges = Array.isArray(body.charges) ? body.charges : [];
       const serverProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
       hydrateHouseholdStateFromSession();
-      const mergedCharges = mergeServerAuthoritativeCharges(serverCharges, memoryCharges);
+      const { merged: mergedCharges, hasUpdated: hasUpdatedCharges } = mergeServerAuthoritativeCharges(serverCharges, memoryCharges);
       const mergedProfiles = mergeServerAuthoritativeRentProfiles(serverProfiles, memoryRentProfiles);
       const hasLocalOnlyCharges = mergedCharges.length > serverCharges.length;
       const hasLocalOnlyProfiles = mergedProfiles.length > serverProfiles.length;
-      // Server is source of truth for rows it already knows about; preserve only truly local-only items.
+      // Server is source of truth for payment status; local is source of truth for amounts/titles.
       memoryCharges = mergedCharges;
       memoryRentProfiles = mergedProfiles;
       persistHouseholdStateToSession();
-      // Backfill server with any local-only rows (created before API was wired, or from offline edits)
-      if (hasLocalOnlyCharges || hasLocalOnlyProfiles) {
+      // Push to server if we have local-only rows or local amounts that differ from what the server stored.
+      if (hasLocalOnlyCharges || hasLocalOnlyProfiles || hasUpdatedCharges) {
         postHouseholdPayload({ action: "replace", charges: memoryCharges, rentProfiles: memoryRentProfiles });
       }
       reconcileApprovedResidentPaymentSchedules(null);
