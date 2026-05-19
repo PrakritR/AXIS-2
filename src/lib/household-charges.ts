@@ -1548,6 +1548,19 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
 
   const prop = getPropertyById(propertyId);
   const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+
+  // If the property/listing data is not available in this browser context (e.g. the resident's
+  // portal, which doesn't have the manager's listing catalog), we cannot determine the correct
+  // proration method. Preserve any charges the manager already computed rather than regenerating
+  // them with the wrong (auto) method, which would overwrite daily-rate amounts on the server.
+  if (!prop) {
+    const existingAppCharges = readAll().filter(
+      (c) => c.applicationId === applicationId && c.kind !== "application_fee",
+    );
+    if (existingAppCharges.length > 0) return false;
+    // No charges exist yet — fall through so we at least create basic charges.
+  }
+
   const allowListingDefaults = !row.manuallyAdded;
   const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Resident";
   const propertyLabel = prop?.title ?? row.property ?? "Listing";
