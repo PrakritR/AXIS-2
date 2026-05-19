@@ -144,6 +144,20 @@ export function deleteManagerWorkOrderRow(id: string): boolean {
   return true;
 }
 
+export function deleteManagerWorkOrdersForResident(residentEmail: string): number {
+  if (!canUseStorage()) return 0;
+  const email = residentEmail.trim().toLowerCase();
+  if (!email) return 0;
+  const rows = readManagerWorkOrderRows();
+  const removedRows = rows.filter((row) => (row.residentEmail ?? "").trim().toLowerCase() === email);
+  if (removedRows.length === 0) return 0;
+  for (const row of removedRows) {
+    removePendingWorkOrderChargesForWorkOrder(row.id);
+  }
+  writeManagerWorkOrderRows(rows.filter((row) => (row.residentEmail ?? "").trim().toLowerCase() !== email));
+  return removedRows.length;
+}
+
 export function resetManagerWorkOrderRows(): void {
   memoryRows = [];
   if (canUseStorage()) window.sessionStorage.removeItem(MANAGER_WORK_ORDERS_SESSION_KEY);

@@ -23,7 +23,7 @@ async function purgeResidentDataByEmail(input: {
   email: string;
   applicationId?: string | null;
 }) {
-  const { db, email } = input;
+  const { db, email, applicationId } = input;
 
   const deleteOps = email ? [
     db.from("portal_household_charge_records").delete().eq("resident_email", email),
@@ -34,6 +34,15 @@ async function purgeResidentDataByEmail(input: {
     db.from("portal_outbound_mail_records").delete().eq("recipient_email", email),
     db.from("portal_resident_lease_upload_records").delete().eq("resident_email", email),
   ] : [];
+
+  if (applicationId) {
+    deleteOps.push(db.from("manager_application_records").delete().eq("id", applicationId));
+    deleteOps.push(db.from("portal_household_charge_records").delete().filter("row_data->>applicationId", "eq", applicationId));
+    deleteOps.push(db.from("portal_lease_pipeline_records").delete().filter("row_data->>axisId", "eq", applicationId));
+  }
+  if (email) {
+    deleteOps.push(db.from("manager_application_records").delete().eq("resident_email", email));
+  }
 
   const results = await Promise.all(deleteOps);
   const withError = results.find((result) => result.error);

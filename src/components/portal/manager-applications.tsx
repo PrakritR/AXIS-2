@@ -60,8 +60,16 @@ import {
 } from "@/lib/household-charges";
 import {
   deleteLeasePipelineRow,
+  deleteLeasePipelineRowsForResident,
   readLeasePipeline,
 } from "@/lib/lease-pipeline-storage";
+import {
+  deleteManagerWorkOrderRow,
+  deleteManagerWorkOrdersForResident,
+  readManagerWorkOrderRows,
+} from "@/lib/manager-work-orders-storage";
+import { deleteServiceRequestsForResident } from "@/lib/service-requests-storage";
+import { loadPersistedInbox, MANAGER_INBOX_STORAGE_KEY, persistInbox } from "@/lib/portal-inbox-storage";
 
 function CosignerSection({ applicationId }: { applicationId: string }) {
   const subs = readCosignerSubmissionsForSignerAppId(applicationId);
@@ -774,12 +782,22 @@ function ManagerApplicationsContent() {
       }
       if (removedResidentAccess) {
         removeResidentHouseholdPaymentData(email);
-        // Delete associated leases when resident account is removed
-        const residentLeases = readLeasePipeline(userId).filter(
-          (row) => row.residentEmail.trim().toLowerCase() === email,
+        deleteLeasePipelineRowsForResident(email, id);
+        deleteManagerWorkOrdersForResident(email);
+        deleteServiceRequestsForResident(email);
+        const allInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
+        const deletedThreads = allInbox.filter((thread) => thread.email.trim().toLowerCase() === email);
+        persistInbox(
+          MANAGER_INBOX_STORAGE_KEY,
+          allInbox.filter((thread) => thread.email.trim().toLowerCase() !== email),
         );
-        for (const leaseRow of residentLeases) {
-          deleteLeasePipelineRow(leaseRow.id);
+        for (const thread of deletedThreads) {
+          void fetch("/api/portal-inbox-threads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ action: "delete", id: thread.id }),
+          }).catch(() => undefined);
         }
       }
     }

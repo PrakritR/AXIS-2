@@ -710,6 +710,25 @@ export function deleteLeasePipelineRow(id: string): boolean {
   return true;
 }
 
+export function deleteLeasePipelineRowsForResident(residentEmail: string, axisId?: string | null): number {
+  const email = residentEmail.trim().toLowerCase();
+  const normalizedAxisId = axisId?.trim() || "";
+  if (!email && !normalizedAxisId) return 0;
+  const rows = readLeasePipeline();
+  const removedRows = rows.filter((row) => {
+    const rowEmail = row.residentEmail.trim().toLowerCase();
+    return (email && rowEmail === email) || (normalizedAxisId && row.axisId?.trim() === normalizedAxisId);
+  });
+  if (removedRows.length === 0) return 0;
+  for (const row of removedRows) {
+    if (String(row.residentEmail ?? "").trim()) {
+      clearUploadedOwnLease(row.residentEmail);
+    }
+  }
+  write(rows.filter((row) => !removedRows.includes(row)));
+  return removedRows.length;
+}
+
 export function updateLeasePipelineRow(id: string, patch: Partial<LeasePipelineRow>): boolean {
   const rows = readLeasePipeline();
   const idx = rows.findIndex((r) => r.id === id);
