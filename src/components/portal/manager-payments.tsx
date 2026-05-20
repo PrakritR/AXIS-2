@@ -100,6 +100,21 @@ export function ManagerPayments() {
 
   useEffect(() => {
     if (!authReady || !userId) return;
+    let cancelled = false;
+    void fetch("/api/portal/purge-orphaned-records", { method: "POST", credentials: "include" })
+      .then(async (res) => {
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as { deleted?: Record<string, number> };
+        const total = Object.values(body.deleted ?? {}).reduce((a, b) => a + b, 0);
+        if (total === 0) return;
+        void syncHouseholdChargesFromServer(true).then(() => { if (!cancelled) setHcTick((n) => n + 1); });
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [authReady, userId]);
+
+  useEffect(() => {
+    if (!authReady || !userId) return;
     const visibleApprovedCount = readManagerApplicationRows().filter(
       (row) => row.bucket === "approved" && applicationVisibleToPortalUser(row, userId),
     ).length;
@@ -195,9 +210,10 @@ export function ManagerPayments() {
   const rowsForCounts = useMemo(() => {
     return mergedRows.filter((row) => {
       if (propertyFilter && normalizePropertyLabel(row.propertyName) !== propertyFilter) return false;
+      if (activeResidentFilter && row.residentName !== activeResidentFilter) return false;
       return true;
     });
-  }, [mergedRows, propertyFilter]);
+  }, [mergedRows, propertyFilter, activeResidentFilter]);
 
   const counts = useMemo(() => {
     const c: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
