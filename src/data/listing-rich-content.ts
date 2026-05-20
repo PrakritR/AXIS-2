@@ -1,7 +1,6 @@
 import { listingRichFromManagerSubmission } from "@/data/listing-rich-from-submission";
 import { parseMonthlyRent } from "@/lib/listings-search";
 import { applyApprovedAvailabilityToRichContent } from "@/lib/rental-application/data";
-import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import type { MockProperty } from "./types";
 
 export type ListingRoomModal = {
@@ -499,15 +498,10 @@ const defaultBundles: BundleCard[] = [
 export function getListingRichContent(property: MockProperty): ListingRichContent {
   if (property.listingSubmission?.v === 1) {
     try {
-      let rich = applyApprovedAvailabilityToRichContent(
+      const rich = applyApprovedAvailabilityToRichContent(
         property,
         listingRichFromManagerSubmission(property, property.listingSubmission),
       );
-      if (property.managerUserId) {
-        const note = getPortalListingNote(`${property.managerUserId}:${property.id}`);
-        const portalRules = note.houseRulesText?.trim();
-        if (portalRules) rich = { ...rich, houseRulesBody: portalRules };
-      }
       return rich;
     } catch {
       /* Corrupt or partial submission in localStorage — fall back to generic layout. */

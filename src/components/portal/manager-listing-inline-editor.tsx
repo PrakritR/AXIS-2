@@ -2380,8 +2380,8 @@ export function ManagerListingInlineEditor({
                   setHouseEditing(false);
                 } else {
                   setHouseDraft({
-                    houseDescription: portalNote.houseDescription ?? sub.houseDescription ?? "",
-                    houseRulesText: portalNote.houseRulesText ?? sub.houseRulesText ?? "",
+                    houseDescription: sub.houseDescription ?? portalNote.houseDescription ?? "",
+                    houseRulesText: sub.houseRulesText ?? portalNote.houseRulesText ?? "",
                     generalHouseInfo: sub.generalHouseInfo ?? "",
                   });
                   setHouseEditing(true);
@@ -2437,9 +2437,9 @@ export function ManagerListingInlineEditor({
           ) : (
             <div className="divide-y divide-slate-100">
               {[
-                { label: "Description", value: portalNote.houseDescription ?? sub.houseDescription, badge: "Manager only" },
-                { label: "House rules", value: portalNote.houseRulesText ?? sub.houseRulesText, badge: null },
-                { label: "General info", value: portalNote.generalHouseInfo ?? sub.generalHouseInfo, badge: "Residents only" },
+                { label: "Description", value: sub.houseDescription ?? portalNote.houseDescription, badge: "Manager only" },
+                { label: "House rules", value: sub.houseRulesText ?? portalNote.houseRulesText, badge: null },
+                { label: "General info", value: sub.generalHouseInfo ?? portalNote.generalHouseInfo, badge: "Residents only" },
               ]
                 .filter(({ value }) => value?.trim())
                 .map(({ label, value, badge }) => (
@@ -2453,7 +2453,7 @@ export function ManagerListingInlineEditor({
                     <p className="whitespace-pre-wrap text-sm text-slate-700">{value}</p>
                   </div>
                 ))}
-              {!(portalNote.houseDescription ?? sub.houseDescription)?.trim() && !(portalNote.houseRulesText ?? sub.houseRulesText)?.trim() && !(portalNote.generalHouseInfo ?? sub.generalHouseInfo)?.trim() ? (
+              {!(sub.houseDescription ?? portalNote.houseDescription)?.trim() && !(sub.houseRulesText ?? portalNote.houseRulesText)?.trim() && !(sub.generalHouseInfo ?? portalNote.generalHouseInfo)?.trim() ? (
                 <p className="px-4 py-3 text-sm text-slate-400">No house details yet — click Edit to add.</p>
               ) : null}
             </div>

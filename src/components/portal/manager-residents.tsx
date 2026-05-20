@@ -1108,16 +1108,26 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     const row = readManagerApplicationRows().find((r) => r.id === selected.id);
     const propId = row?.assignedPropertyId?.trim() || row?.propertyId?.trim() || selected.propertyId;
     const parts: string[] = [];
-    // Read portal note (house description contains gate codes, etc.)
-    try {
-      const notesRaw = typeof window !== "undefined" ? localStorage.getItem("axis_portal_notes_v1") : null;
-      if (notesRaw) {
-        const notesStore = JSON.parse(notesRaw) as Record<string, { houseDescription?: string }>;
-        const noteKey = `${userId}:${propId}`;
-        const houseDesc = notesStore[noteKey]?.houseDescription?.trim();
-        if (houseDesc) parts.push(houseDesc);
+    // Get house description — prefer server submission, fall back to localStorage
+    if (propId) {
+      const property = getPropertyById(propId);
+      let houseDesc: string | undefined;
+      if (property?.listingSubmission?.v === 1) {
+        const sub = normalizeManagerListingSubmissionV1(property.listingSubmission);
+        houseDesc = sub.houseDescription?.trim();
       }
-    } catch { /* ignore */ }
+      if (!houseDesc) {
+        try {
+          const notesRaw = typeof window !== "undefined" ? localStorage.getItem("axis_portal_notes_v1") : null;
+          if (notesRaw) {
+            const notesStore = JSON.parse(notesRaw) as Record<string, { houseDescription?: string }>;
+            const noteKey = `${userId}:${propId}`;
+            houseDesc = notesStore[noteKey]?.houseDescription?.trim();
+          }
+        } catch { /* ignore */ }
+      }
+      if (houseDesc) parts.push(houseDesc);
+    }
     // Get room description from listing submission
     if (propId) {
       const property = getPropertyById(propId);
