@@ -38,6 +38,7 @@ import { Modal } from "@/components/ui/modal";
 import {
   readAmenityOffersForProperty,
   readAmenityOffersForManager,
+  readAllAmenityOffersForProperty,
   saveAmenityOffer,
   deleteAmenityOffer,
   toggleAmenityOfferAvailability,
@@ -390,7 +391,7 @@ export function ManagerListingInlineEditor({
     if (!userId) return;
     setServiceOffers(
       listingId
-        ? readAmenityOffersForProperty(userId, listingId)
+        ? readAllAmenityOffersForProperty(listingId)
         : readAmenityOffersForManager(userId),
     );
   }, [userId, listingId]);
@@ -399,7 +400,7 @@ export function ManagerListingInlineEditor({
     if (!userId) return;
     setServiceOffers(
       listingId
-        ? readAmenityOffersForProperty(userId, listingId)
+        ? readAllAmenityOffersForProperty(listingId)
         : readAmenityOffersForManager(userId),
     );
   }, [userId, listingId]);
@@ -2477,7 +2478,9 @@ export function ManagerListingInlineEditor({
         <div className="p-4">
           {serviceOffers.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              {serviceOffers.map((offer) => (
+              {serviceOffers.map((offer) => {
+                const isOwned = offer.managerUserId === userId;
+                return (
                 <div key={offer.id} className={`flex flex-col rounded-2xl border bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.05)] ${offer.available ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-semibold text-slate-900">{offer.name}</p>
@@ -2490,25 +2493,28 @@ export function ManagerListingInlineEditor({
                   {offer.residentEmails?.length ? (
                     <p className="mt-1.5 text-[10px] text-slate-400">Visible to {offer.residentEmails.length} resident{offer.residentEmails.length === 1 ? "" : "s"} only</p>
                   ) : null}
-                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
-                    <button type="button" onClick={() => {
-                      setEditingOffer(offer);
-                      setServiceForm({
-                        name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "",
-                        restrictToResidents: Boolean(offer.residentEmails?.length),
-                        selectedEmails: offer.residentEmails ?? [],
-                      });
-                      setServiceModalOpen(true);
-                    }} className={EDIT_BTN_OFF}>Edit</button>
-                    <button type="button" onClick={() => { if (userId) { toggleAmenityOfferAvailability(offer.id, userId); reloadOffers(); } }} className={EDIT_BTN_OFF}>
-                      {offer.available ? "Pause" : "Resume"}
-                    </button>
-                    <button type="button" onClick={() => { if (userId) { deleteAmenityOffer(offer.id, userId); reloadOffers(); } }} className="rounded-full border border-rose-200 bg-white px-3 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">
-                      Remove
-                    </button>
-                  </div>
+                  {isOwned ? (
+                    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
+                      <button type="button" onClick={() => {
+                        setEditingOffer(offer);
+                        setServiceForm({
+                          name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "",
+                          restrictToResidents: Boolean(offer.residentEmails?.length),
+                          selectedEmails: offer.residentEmails ?? [],
+                        });
+                        setServiceModalOpen(true);
+                      }} className={EDIT_BTN_OFF}>Edit</button>
+                      <button type="button" onClick={() => { if (userId) { toggleAmenityOfferAvailability(offer.id, userId); reloadOffers(); } }} className={EDIT_BTN_OFF}>
+                        {offer.available ? "Pause" : "Resume"}
+                      </button>
+                      <button type="button" onClick={() => { if (userId) { deleteAmenityOffer(offer.id, userId); reloadOffers(); } }} className="rounded-full border border-rose-200 bg-white px-3 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">
+                        Remove
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-10 text-center">

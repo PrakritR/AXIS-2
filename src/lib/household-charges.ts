@@ -1380,12 +1380,25 @@ export function linkHouseholdChargesToResidentUser(email: string, userId: string
 
 export function readChargesForResident(email: string, userId: string | null): HouseholdCharge[] {
   const e = email.trim().toLowerCase();
+  const profiles = readRentProfiles();
+  const profileById = new Map(profiles.map((p) => [p.id, p]));
+
   return dedupeCharges(readAll())
     .filter((r) => {
       if (userId && r.residentUserId === userId) return true;
       return Boolean(e && r.residentEmail.trim().toLowerCase() === e);
     })
-    .filter((charge) => shouldDisplayChargeInPayments(charge));
+    .filter((charge) => shouldDisplayChargeInPayments(charge))
+    .filter((charge) => {
+      // Mirror the stale-charge boundary used in syncAllRecurringRentCharges:
+      // hide orphaned pending recurring charges that predate the profile's first full month.
+      if (charge.status === "paid") return true;
+      if (!charge.recurringRentProfileId || !charge.rentMonth) return true;
+      if (charge.kind !== "rent" && charge.kind !== "utilities") return true;
+      const prof = profileById.get(charge.recurringRentProfileId);
+      if (!prof?.startMonth) return true;
+      return charge.rentMonth >= prof.startMonth;
+    });
 }
 
 /**

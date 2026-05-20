@@ -30,7 +30,11 @@
       "Bash(git -C /Users/prakritramachandran/axis-2 diff src/components/portal/manager-house-properties-panel.tsx)",
       "Bash(git -C /Users/prakritramachandran/axis-2 diff src/components/portal/manager-listing-inline-editor.tsx)",
       "Bash(git -C /Users/prakritramachandran/axis-2 show a52929a -- src/components/portal/manager-listing-inline-editor.tsx)",
-      "Bash(git -C /Users/prakritramachandran/axis-2 diff .claude/settings.json)"
+      "Bash(git -C /Users/prakritramachandran/axis-2 diff .claude/settings.json)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 show b508286 --stat)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 add src/app/api/portal/purge-orphaned-records/route.ts src/components/portal/manager-residents.tsx)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 push)",
+      "Read(//Users/prakritramachandran/.claude/plans/**)"
     ]
   }
 }
