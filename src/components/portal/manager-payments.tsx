@@ -285,7 +285,7 @@ export function ManagerPayments() {
               setPropertyFilter(nextProperty);
               setResidentFilter("");
             }}
-            residents
+            residents={true}
             residentOptions={residentOptions}
             residentValue={activeResidentFilter}
             onResidentChange={setResidentFilter}
