@@ -205,7 +205,10 @@ function mirrorRentProfiles(rows: RecurringRentProfile[]) {
   postHouseholdPayload({ action: "replace", charges: readAll(), rentProfiles: rows });
 }
 
-export async function syncHouseholdChargesFromServer(force = false): Promise<{
+export async function syncHouseholdChargesFromServer(
+  force = false,
+  { skipReconcile = false }: { skipReconcile?: boolean } = {},
+): Promise<{
   charges: HouseholdCharge[];
   rentProfiles: RecurringRentProfile[];
 }> {
@@ -232,14 +235,18 @@ export async function syncHouseholdChargesFromServer(force = false): Promise<{
       if (hasLocalOnlyCharges || hasLocalOnlyProfiles || hasUpdatedCharges) {
         postHouseholdPayload({ action: "replace", charges: memoryCharges, rentProfiles: memoryRentProfiles });
       }
-      reconcileApprovedResidentPaymentSchedules(null);
-      syncAllRecurringRentCharges();
+      if (!skipReconcile) {
+        reconcileApprovedResidentPaymentSchedules(null);
+        syncAllRecurringRentCharges();
+      }
       return { charges: readAll(), rentProfiles: readRentProfiles() };
     })
     .catch(() => {
       hydrateHouseholdStateFromSession();
-      reconcileApprovedResidentPaymentSchedules(null);
-      syncAllRecurringRentCharges();
+      if (!skipReconcile) {
+        reconcileApprovedResidentPaymentSchedules(null);
+        syncAllRecurringRentCharges();
+      }
       return { charges: readAll(), rentProfiles: readRentProfiles() };
     });
   const result = await householdChargesSyncPromise;

@@ -74,7 +74,7 @@ export function ResidentPaymentsPanel() {
     if (session.userId && email) linkHouseholdChargesToResidentUser(email, session.userId);
     void (async () => {
       await syncManagerApplicationsFromServer({ force: true });
-      await syncHouseholdChargesFromServer(true);
+      await syncHouseholdChargesFromServer(true, { skipReconcile: true });
     })().finally(refresh);
   }, [email, refresh, session.ready, session.userId]);
 
@@ -120,7 +120,7 @@ export function ResidentPaymentsPanel() {
           onClick={() => {
             void (async () => {
               await syncManagerApplicationsFromServer({ force: true });
-              await syncHouseholdChargesFromServer(true);
+              await syncHouseholdChargesFromServer(true, { skipReconcile: true });
             })().then(() => {
               refresh();
               showToast("Refreshed payments.");

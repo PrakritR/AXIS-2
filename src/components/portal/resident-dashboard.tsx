@@ -140,7 +140,7 @@ export function ResidentDashboard({
       syncLeasePipelineFromServer(),
       syncManagerWorkOrdersFromServer(),
       syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY),
-      syncHouseholdChargesFromServer(),
+      syncHouseholdChargesFromServer(false, { skipReconcile: true }),
     ]).then(bump);
     window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
