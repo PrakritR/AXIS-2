@@ -744,7 +744,12 @@ export function ManagerListingInlineEditor({
       houseRulesText: houseDraft.houseRulesText,
       generalHouseInfo: houseDraft.generalHouseInfo,
     });
-    saveSub({ ...sub, generalHouseInfo: houseDraft.generalHouseInfo ?? "" }, "House details saved.");
+    saveSub({
+      ...sub,
+      houseDescription: houseDraft.houseDescription ?? "",
+      houseRulesText: houseDraft.houseRulesText ?? "",
+      generalHouseInfo: houseDraft.generalHouseInfo ?? "",
+    }, "House details saved.");
     setHouseEditing(false);
     setNotesTick((t) => t + 1);
   };
@@ -2355,8 +2360,8 @@ export function ManagerListingInlineEditor({
                   setHouseEditing(false);
                 } else {
                   setHouseDraft({
-                    houseDescription: portalNote.houseDescription ?? "",
-                    houseRulesText: portalNote.houseRulesText ?? "",
+                    houseDescription: portalNote.houseDescription ?? sub.houseDescription ?? "",
+                    houseRulesText: portalNote.houseRulesText ?? sub.houseRulesText ?? "",
                     generalHouseInfo: sub.generalHouseInfo ?? "",
                   });
                   setHouseEditing(true);
@@ -2412,8 +2417,8 @@ export function ManagerListingInlineEditor({
           ) : (
             <div className="divide-y divide-slate-100">
               {[
-                { label: "Description", value: portalNote.houseDescription, badge: "Manager only" },
-                { label: "Rules", value: portalNote.houseRulesText, badge: null },
+                { label: "Description", value: portalNote.houseDescription ?? sub.houseDescription, badge: "Manager only" },
+                { label: "Rules", value: portalNote.houseRulesText ?? sub.houseRulesText, badge: null },
                 { label: "General info", value: portalNote.generalHouseInfo ?? sub.generalHouseInfo, badge: "Residents only" },
               ]
                 .filter(({ value }) => value?.trim())
@@ -2428,7 +2433,7 @@ export function ManagerListingInlineEditor({
                     <p className="whitespace-pre-wrap text-sm text-slate-700">{value}</p>
                   </div>
                 ))}
-              {!portalNote.houseDescription?.trim() && !portalNote.houseRulesText?.trim() && !(portalNote.generalHouseInfo ?? sub.generalHouseInfo)?.trim() ? (
+              {!(portalNote.houseDescription ?? sub.houseDescription)?.trim() && !(portalNote.houseRulesText ?? sub.houseRulesText)?.trim() && !(portalNote.generalHouseInfo ?? sub.generalHouseInfo)?.trim() ? (
                 <p className="px-4 py-3 text-sm text-slate-400">No house details yet — click Edit to add.</p>
               ) : null}
             </div>
