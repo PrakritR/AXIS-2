@@ -489,6 +489,40 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     };
   }, [userId, hcTick, propertyTick]);
 
+  // Silently purge server-side orphaned records for deleted residents on mount.
+  useEffect(() => {
+    if (!authReady || !userId) return;
+    let cancelled = false;
+    void fetch("/api/portal/purge-orphaned-records", {
+      method: "POST",
+      credentials: "include",
+    })
+      .then(async (res) => {
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as { deleted?: Record<string, number> };
+        const total = Object.values(body.deleted ?? {}).reduce((a, b) => a + b, 0);
+        if (total === 0) return;
+        void syncHouseholdChargesFromServer(true).then(() => { if (!cancelled) setHcTick((n) => n + 1); });
+        void syncLeasePipelineFromServer(userId, { force: true }).then(() => { if (!cancelled) setLeaseTick((n) => n + 1); });
+        void syncManagerWorkOrdersFromServer({ force: true }).then(() => { if (!cancelled) setWorkOrderTick((n) => n + 1); });
+        void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then(() => { if (!cancelled) setInboxTick((n) => n + 1); });
+        const activeEmails = new Set(
+          readManagerApplicationRows()
+            .map((r) => r.email?.trim().toLowerCase())
+            .filter((e): e is string => Boolean(e)),
+        );
+        for (const sr of readServiceRequestsForManager(userId)) {
+          if (!activeEmails.has(sr.residentEmail.trim().toLowerCase())) {
+            deleteServiceRequestsForResident(sr.residentEmail);
+          }
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, userId]);
+
   const residents = useMemo<ActiveResident[]>(() => {
     void hcTick;
     return readManagerApplicationRows()
