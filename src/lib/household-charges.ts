@@ -223,11 +223,21 @@ export async function syncHouseholdChargesFromServer(
       const serverCharges = Array.isArray(body.charges) ? body.charges : [];
       const serverProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
       hydrateHouseholdStateFromSession();
-      const { merged: mergedCharges, hasUpdated: hasUpdatedCharges } = mergeServerAuthoritativeCharges(serverCharges, memoryCharges);
+      let mergedCharges: HouseholdCharge[];
+      let hasUpdatedCharges = false;
+      if (skipReconcile) {
+        // Resident portal: residents never generate charges locally, so server amounts are
+        // always correct. Using the local-wins merge would lock stale session data in place
+        // whenever the manager updates charge amounts (e.g. switching proration methods).
+        mergedCharges = dedupeCharges(serverCharges);
+      } else {
+        const result = mergeServerAuthoritativeCharges(serverCharges, memoryCharges);
+        mergedCharges = result.merged;
+        hasUpdatedCharges = result.hasUpdated;
+      }
       const mergedProfiles = mergeServerAuthoritativeRentProfiles(serverProfiles, memoryRentProfiles);
       const hasLocalOnlyCharges = mergedCharges.length > serverCharges.length;
       const hasLocalOnlyProfiles = mergedProfiles.length > serverProfiles.length;
-      // Server is source of truth for payment status; local is source of truth for amounts/titles.
       memoryCharges = mergedCharges;
       memoryRentProfiles = mergedProfiles;
       persistHouseholdStateToSession();
