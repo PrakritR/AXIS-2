@@ -45,6 +45,7 @@ export async function POST() {
     }
 
     const deleted: Record<string, number> = {};
+    const orphanedEmails = new Set<string>();
 
     // Tables keyed by manager_user_id with resident_email
     const managerTables = [
@@ -65,7 +66,11 @@ export async function POST() {
           const email = typeof r[emailCol] === "string" ? r[emailCol].trim().toLowerCase() : "";
           return email && !activeEmails.has(email);
         })
-        .map((r) => r.id as string)
+        .map((r) => {
+          const email = typeof r[emailCol] === "string" ? r[emailCol].trim().toLowerCase() : "";
+          if (email) orphanedEmails.add(email);
+          return r.id as string;
+        })
         .filter(Boolean);
 
       if (orphanIds.length > 0) {
@@ -85,7 +90,11 @@ export async function POST() {
         const email = typeof r.participant_email === "string" ? r.participant_email.trim().toLowerCase() : "";
         return email && !activeEmails.has(email);
       })
-      .map((r) => r.id as string)
+      .map((r) => {
+        const email = typeof r.participant_email === "string" ? r.participant_email.trim().toLowerCase() : "";
+        if (email) orphanedEmails.add(email);
+        return r.id as string;
+      })
       .filter(Boolean);
 
     if (orphanInboxIds.length > 0) {
@@ -93,7 +102,7 @@ export async function POST() {
     }
     deleted["portal_inbox_thread_records"] = orphanInboxIds.length;
 
-    return NextResponse.json({ ok: true, deleted });
+    return NextResponse.json({ ok: true, deleted, purgedEmails: [...orphanedEmails] });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to purge orphaned records.";
     return NextResponse.json({ error: message }, { status: 500 });

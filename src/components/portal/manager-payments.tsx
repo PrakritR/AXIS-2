@@ -18,6 +18,7 @@ import {
   HOUSEHOLD_CHARGES_EVENT,
   readChargesForManager,
   reconcileApprovedResidentPaymentSchedules,
+  removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -104,9 +105,13 @@ export function ManagerPayments() {
     void fetch("/api/portal/purge-orphaned-records", { method: "POST", credentials: "include" })
       .then(async (res) => {
         if (!res.ok || cancelled) return;
-        const body = (await res.json()) as { deleted?: Record<string, number> };
+        const body = (await res.json()) as { deleted?: Record<string, number>; purgedEmails?: string[] };
         const total = Object.values(body.deleted ?? {}).reduce((a, b) => a + b, 0);
         if (total === 0) return;
+        // Clear local cache first so the re-sync doesn't push orphaned charges back to server
+        for (const email of body.purgedEmails ?? []) {
+          removeResidentHouseholdPaymentData(email);
+        }
         void syncHouseholdChargesFromServer(true).then(() => { if (!cancelled) setHcTick((n) => n + 1); });
       })
       .catch(() => undefined);
