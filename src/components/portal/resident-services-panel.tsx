@@ -40,7 +40,6 @@ import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@
 import {
   AMENITY_CATALOG_EVENT,
   readAmenityOffersForProperty,
-  readAllAmenityOffersForProperty,
   type ManagerAmenityOffer,
 } from "@/lib/manager-amenity-catalog-storage";
 import { getPropertyById } from "@/lib/rental-application/data";
@@ -368,12 +367,8 @@ export function ResidentServicesPanel({
 
     if (!propertyId) return [];
 
-    if (managerUserId) {
-      return readAmenityOffersForProperty(managerUserId, propertyId).filter(visibleToResident);
-    } else if (propertyId) {
-      return readAllAmenityOffersForProperty(propertyId).filter(visibleToResident);
-    }
-    return [];
+    if (!managerUserId) return [];
+    return readAmenityOffersForProperty(managerUserId, propertyId).filter(visibleToResident);
   }, [residentApplication, residentEmail, offerTick]);
 
   useEffect(() => {
