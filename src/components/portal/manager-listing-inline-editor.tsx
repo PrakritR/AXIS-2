@@ -739,7 +739,11 @@ export function ManagerListingInlineEditor({
   // ── SECTION: HOUSE DETAILS (PORTAL NOTE) ─────────────────────────────────
   const saveHouseDetails = () => {
     if (!noteKey) return;
-    savePortalListingNote(noteKey, { houseDescription: houseDraft.houseDescription, houseRulesText: houseDraft.houseRulesText });
+    savePortalListingNote(noteKey, {
+      houseDescription: houseDraft.houseDescription,
+      houseRulesText: houseDraft.houseRulesText,
+      generalHouseInfo: houseDraft.generalHouseInfo,
+    });
     saveSub({ ...sub, generalHouseInfo: houseDraft.generalHouseInfo ?? "" }, "House details saved.");
     setHouseEditing(false);
     setNotesTick((t) => t + 1);
@@ -2410,7 +2414,7 @@ export function ManagerListingInlineEditor({
               {[
                 { label: "Description", value: portalNote.houseDescription, badge: "Manager only" },
                 { label: "Rules", value: portalNote.houseRulesText, badge: null },
-                { label: "General info", value: sub.generalHouseInfo, badge: "Residents only" },
+                { label: "General info", value: portalNote.generalHouseInfo ?? sub.generalHouseInfo, badge: "Residents only" },
               ]
                 .filter(({ value }) => value?.trim())
                 .map(({ label, value, badge }) => (
@@ -2424,7 +2428,7 @@ export function ManagerListingInlineEditor({
                     <p className="whitespace-pre-wrap text-sm text-slate-700">{value}</p>
                   </div>
                 ))}
-              {!portalNote.houseDescription?.trim() && !portalNote.houseRulesText?.trim() && !sub.generalHouseInfo?.trim() ? (
+              {!portalNote.houseDescription?.trim() && !portalNote.houseRulesText?.trim() && !(portalNote.generalHouseInfo ?? sub.generalHouseInfo)?.trim() ? (
                 <p className="px-4 py-3 text-sm text-slate-400">No house details yet — click Edit to add.</p>
               ) : null}
             </div>

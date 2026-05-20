@@ -186,6 +186,7 @@ function ManagerPropertyInlineDetails({
 }) {
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
   const listingId = row?.listingId;
+  const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 
   const portalSub = useMemo<{ sub: ManagerListingSubmissionV1; saveMode: "pending" | "listing"; saveId: string } | null>(() => {
     if (!managerUserId || !row) return null;
@@ -204,10 +205,10 @@ function ManagerPropertyInlineDetails({
     return null;
   }, [managerUserId, row, bucket]);
 
-  // noteKey is stable per listing — used as the portal notes store key.
+  // noteKey is stable per listing — derived from row identifiers so it doesn't depend on portalSub.
   const noteKey = useMemo(
-    () => (managerUserId && portalSub ? `${managerUserId}:${portalSub.saveId}` : null),
-    [managerUserId, portalSub],
+    () => (managerUserId && stablePropertyId ? `${managerUserId}:${stablePropertyId}` : null),
+    [managerUserId, stablePropertyId],
   );
 
   // Keep a local copy of the submission so inline edits show immediately.
@@ -221,13 +222,13 @@ function ManagerPropertyInlineDetails({
 
   const handleSaveSub = useCallback(
     (updated: ManagerListingSubmissionV1) => {
+      setLocalSub(updated);
       if (!managerUserId || !portalSub) return;
       if (portalSub.saveMode === "pending") {
         updatePendingManagerProperty(portalSub.saveId, updated, managerUserId);
       } else {
         updateExtraListingFromSubmission(portalSub.saveId, managerUserId, updated);
       }
-      setLocalSub(updated);
       onUpdated();
     },
     [managerUserId, portalSub, onUpdated],
