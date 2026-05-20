@@ -1,0 +1,95 @@
+export const MOVE_IN_REMINDER_SUBJECT = "Your move-in is tomorrow — here's what you need to know";
+
+const PORTAL_URL = "https://www.axis-seattle-housing.com/portal";
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+export function buildMoveInReminderText(params: {
+  residentName?: string;
+  propertyLabel: string;
+  addressLine: string;
+  moveInDateLabel: string;
+  instructions: string | null;
+  generalHouseInfo: string | null;
+}): string {
+  const greeting = params.residentName?.trim() ? `Hi ${params.residentName.trim()},` : "Hi,";
+  const lines = [
+    greeting,
+    "",
+    `Your move-in at ${params.propertyLabel} is tomorrow, ${params.moveInDateLabel}.`,
+  ];
+
+  if (params.addressLine) {
+    lines.push("", `Address: ${params.addressLine}`);
+  }
+
+  if (params.instructions) {
+    lines.push("", "Move-in instructions:", params.instructions);
+  }
+
+  if (params.generalHouseInfo) {
+    lines.push("", "House info:", params.generalHouseInfo);
+  }
+
+  lines.push(
+    "",
+    "Visit your resident portal to review your lease, charges, and any additional details:",
+    PORTAL_URL,
+    "",
+    "See you soon!",
+    "",
+    "— Axis Housing",
+  );
+
+  return lines.join("\n");
+}
+
+export function buildMoveInReminderHtml(params: {
+  residentName?: string;
+  propertyLabel: string;
+  addressLine: string;
+  moveInDateLabel: string;
+  instructions: string | null;
+  generalHouseInfo: string | null;
+}): string {
+  const greeting = params.residentName?.trim()
+    ? `Hi ${escapeHtml(params.residentName.trim())},`
+    : "Hi,";
+
+  const addressRow = params.addressLine
+    ? `<p style="margin:0 0 12px 0"><strong>Address:</strong> ${escapeHtml(params.addressLine)}</p>`
+    : "";
+
+  const instructionsSection = params.instructions
+    ? `<p style="margin:0 0 4px 0"><strong>Move-in instructions:</strong></p>
+<p style="margin:0 0 12px 0;white-space:pre-wrap">${escapeHtml(params.instructions)}</p>`
+    : "";
+
+  const houseInfoSection = params.generalHouseInfo
+    ? `<p style="margin:0 0 4px 0"><strong>House info:</strong></p>
+<p style="margin:0 0 12px 0;white-space:pre-wrap">${escapeHtml(params.generalHouseInfo)}</p>`
+    : "";
+
+  const ctaButton = `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0 8px 0">
+<tr>
+<td style="border-radius:10px;background:#2563eb">
+<a href="${escapeHtml(PORTAL_URL)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;line-height:1.2">Open resident portal</a>
+</td>
+</tr>
+</table>`;
+
+  return `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:24px;font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;font-size:15px;background:#f8fafc">
+<div style="max-width:36rem;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px 28px 32px;border:1px solid #e2e8f0">
+<p style="margin:0 0 12px 0">${greeting}</p>
+<p style="margin:0 0 12px 0">Your move-in at <strong>${escapeHtml(params.propertyLabel)}</strong> is tomorrow, <strong>${escapeHtml(params.moveInDateLabel)}</strong>.</p>
+${addressRow}${instructionsSection}${houseInfoSection}${ctaButton}
+<p style="margin:0 0 12px 0">Visit your resident portal to review your lease, charges, and any additional details.</p>
+<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">See you soon! — Axis Housing</p>
+</div>
+</body>
+</html>`;
+}
