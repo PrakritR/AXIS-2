@@ -205,10 +205,7 @@ export function ManagerPayments() {
     for (const app of applications) {
       // If property filter is active, only include residents from that property
       if (propertyFilter) {
-        const appPropertyName = app.assignedPropertyLabel?.trim() || 
-                                 app.property?.trim() || 
-                                 app.application?.propertyName?.trim() || 
-                                 "";
+        const appPropertyName = app.property?.trim() || "";
         if (normalizePropertyLabel(appPropertyName) !== propertyFilter) continue;
       }
       
