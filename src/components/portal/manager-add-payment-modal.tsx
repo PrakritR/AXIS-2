@@ -5,12 +5,8 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Input, Select } from "@/components/ui/input";
-import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
-import { addCustomManagerPaymentRow } from "@/lib/demo-manager-payment-ledger";
-
-function formatUsd(amount: number): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
-}
+import type { ManagerPaymentBucket } from "@/data/demo-portal";
+import { createManagerCharge } from "@/lib/household-charges";
 
 function dueLabelFromIso(iso: string): string {
   const d = new Date(`${iso}T12:00:00`);
@@ -18,81 +14,22 @@ function dueLabelFromIso(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function rowFromForm(input: {
-  propertyName: string;
-  roomNumber: string;
-  residentName: string;
-  chargeTitle: string;
-  amountNum: number;
-  dueIso: string;
-  bucket: ManagerPaymentBucket;
-}): DemoManagerPaymentLedgerRow {
-  const lineAmount = formatUsd(input.amountNum);
-  const dueDate = dueLabelFromIso(input.dueIso);
-
-  if (input.bucket === "paid") {
-    return {
-      id: `mgr-pay-${crypto.randomUUID()}`,
-      propertyName: input.propertyName.trim(),
-      roomNumber: input.roomNumber.trim(),
-      residentName: input.residentName.trim(),
-      chargeTitle: input.chargeTitle.trim(),
-      lineAmount,
-      amountPaid: lineAmount,
-      balanceDue: "$0.00",
-      dueDate,
-      bucket: "paid",
-      statusLabel: "Paid",
-      notes: "Added manually from Axis Property Portal.",
-    };
-  }
-
-  if (input.bucket === "overdue") {
-    return {
-      id: `mgr-pay-${crypto.randomUUID()}`,
-      propertyName: input.propertyName.trim(),
-      roomNumber: input.roomNumber.trim(),
-      residentName: input.residentName.trim(),
-      chargeTitle: input.chargeTitle.trim(),
-      lineAmount,
-      amountPaid: "$0.00",
-      balanceDue: lineAmount,
-      dueDate,
-      bucket: "overdue",
-      statusLabel: "Overdue",
-      notes: "Added manually from Axis Property Portal.",
-    };
-  }
-
-  return {
-    id: `mgr-pay-${crypto.randomUUID()}`,
-    propertyName: input.propertyName.trim(),
-    roomNumber: input.roomNumber.trim(),
-    residentName: input.residentName.trim(),
-    chargeTitle: input.chargeTitle.trim(),
-    lineAmount,
-    amountPaid: "$0.00",
-    balanceDue: lineAmount,
-    dueDate,
-    bucket: "pending",
-    statusLabel: "Pending",
-    notes: "Added manually from Axis Property Portal.",
-  };
-}
-
 export function ManagerAddPaymentModal({
   open,
   onClose,
   onSubmitted,
+  managerUserId,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmitted: () => void;
+  managerUserId: string | null;
 }) {
   const { showToast } = useAppUi();
   const [propertyName, setPropertyName] = useState("");
   const [roomNumber, setRoomNumber] = useState("");
   const [residentName, setResidentName] = useState("");
+  const [residentEmail, setResidentEmail] = useState("");
   const [chargeTitle, setChargeTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [dueIso, setDueIso] = useState(() => new Date().toISOString().slice(0, 10));
@@ -102,6 +39,7 @@ export function ManagerAddPaymentModal({
     setPropertyName("");
     setRoomNumber("");
     setResidentName("");
+    setResidentEmail("");
     setChargeTitle("");
     setAmount("");
     setDueIso(new Date().toISOString().slice(0, 10));
@@ -115,28 +53,44 @@ export function ManagerAddPaymentModal({
 
   const submit = () => {
     const amountNum = Number.parseFloat(amount);
+    const email = residentEmail.trim();
     if (
       !propertyName.trim() ||
-      !roomNumber.trim() ||
       !residentName.trim() ||
+      !email ||
+      !email.includes("@") ||
       !chargeTitle.trim() ||
       !Number.isFinite(amountNum) ||
       amountNum <= 0
     ) {
-      showToast("Enter property, room, resident, charge, and a positive amount.");
+      showToast("Enter property, resident name, resident email, charge title, and a positive amount.");
       return;
     }
-    addCustomManagerPaymentRow(
-      rowFromForm({
-        propertyName,
-        roomNumber,
-        residentName,
-        chargeTitle,
-        amountNum,
-        dueIso,
-        bucket,
-      }),
-    );
+
+    // Derive a stable propertyId slug from the property name so charges group correctly.
+    const propertyId = `prop_mgr_${propertyName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+
+    const titleWithRoom = roomNumber.trim()
+      ? `${chargeTitle.trim()} — Unit ${roomNumber.trim()}`
+      : chargeTitle.trim();
+
+    const result = createManagerCharge({
+      residentEmail: email,
+      residentName: residentName.trim(),
+      propertyId,
+      propertyLabel: propertyName.trim(),
+      managerUserId,
+      title: titleWithRoom,
+      amount: amountNum,
+      dueDateLabel: dueLabelFromIso(dueIso),
+      initialStatus: bucket === "paid" ? "paid" : "pending",
+    });
+
+    if (!result) {
+      showToast("Could not add charge. Check all fields.");
+      return;
+    }
+
     reset();
     onSubmitted();
   };
@@ -158,8 +112,18 @@ export function ManagerAddPaymentModal({
           <Input value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} placeholder="2A" autoComplete="off" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-slate-700">Resident</span>
+          <span className="font-medium text-slate-700">Resident name</span>
           <Input value={residentName} onChange={(e) => setResidentName(e.target.value)} placeholder="Alex Chen" autoComplete="off" />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium text-slate-700">Resident email</span>
+          <Input
+            type="email"
+            value={residentEmail}
+            onChange={(e) => setResidentEmail(e.target.value)}
+            placeholder="alex@example.com"
+            autoComplete="off"
+          />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium text-slate-700">Charge</span>
@@ -182,7 +146,7 @@ export function ManagerAddPaymentModal({
           <Input type="date" value={dueIso} onChange={(e) => setDueIso(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-slate-700">Bucket</span>
+          <span className="font-medium text-slate-700">Status</span>
           <Select value={bucket} onChange={(e) => setBucket(e.target.value as ManagerPaymentBucket)}>
             <option value="pending">Pending</option>
             <option value="overdue">Overdue</option>

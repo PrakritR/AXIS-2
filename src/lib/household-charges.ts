@@ -2093,9 +2093,12 @@ export function createManagerCharge(input: {
   title: string;
   amount: number;
   blocksLeaseUntilPaid?: boolean;
+  dueDateLabel?: string;
+  initialStatus?: "pending" | "paid";
 }): HouseholdCharge | null {
   const email = input.residentEmail.trim();
   if (!email || !Number.isFinite(input.amount) || input.amount <= 0) return null;
+  const isPaid = input.initialStatus === "paid";
   const balance = `$${input.amount.toFixed(2)}`;
   const charge: HouseholdCharge = {
     id: `hc_mgr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -2109,8 +2112,10 @@ export function createManagerCharge(input: {
     kind: "work_order_charge",
     title: input.title.trim() || "Manager charge",
     amountLabel: balance,
-    balanceLabel: balance,
-    status: "pending",
+    balanceLabel: isPaid ? "$0.00" : balance,
+    status: isPaid ? "paid" : "pending",
+    paidAt: isPaid ? new Date().toISOString() : undefined,
+    dueDateLabel: input.dueDateLabel?.trim() || undefined,
     blocksLeaseUntilPaid: input.blocksLeaseUntilPaid ?? false,
   };
   writeAll([...readAll(), charge]);

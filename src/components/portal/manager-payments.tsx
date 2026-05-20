@@ -13,7 +13,6 @@ import {
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
-import { mergeManagerPaymentLedger } from "@/lib/demo-manager-payment-ledger";
 import {
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
@@ -149,10 +148,9 @@ export function ManagerPayments() {
   const mergedRows = useMemo(() => {
     void ledgerDataVersion;
     const applications = readManagerApplicationRows();
-    return [
-      ...readChargesForManager(userId)
-        .filter((charge) => !shouldExcludePaymentAccount(charge.residentName, charge.residentEmail))
-        .map((charge) => {
+    return readChargesForManager(userId)
+      .filter((charge) => !shouldExcludePaymentAccount(charge.residentName, charge.residentEmail))
+      .map((charge) => {
         const ledgerRow = householdChargeToLedgerRow(charge);
         const chargeEmail = charge.residentEmail.trim().toLowerCase();
         const application = applications.find((row) => {
@@ -164,9 +162,7 @@ export function ManagerPayments() {
         const roomChoice = application?.assignedRoomChoice?.trim() || application?.application?.roomChoice1?.trim() || "";
         const roomLabel = getRoomChoiceLabel(roomChoice).split(" · ")[0]?.trim() || "";
         return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
-      }),
-      ...mergeManagerPaymentLedger().filter((row) => !shouldExcludePaymentAccount(row.residentName)),
-    ];
+      });
   }, [userId, ledgerDataVersion]);
 
   const propertyOptions = useMemo(() => {
@@ -326,9 +322,11 @@ export function ManagerPayments() {
       <ManagerAddPaymentModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
+        managerUserId={userId ?? null}
         onSubmitted={() => {
           showToast("Payment line added.");
           setAddOpen(false);
+          setHcTick((n) => n + 1);
         }}
       />
 
