@@ -69,6 +69,7 @@ import {
 import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
+  deleteLeasePipelineRowsForResident,
   generateLeaseHtmlForRow,
   managerSignLease,
   LEASE_PIPELINE_EVENT,
@@ -88,6 +89,7 @@ import {
 } from "@/lib/lease-pipeline-storage";
 import {
   MANAGER_WORK_ORDERS_EVENT,
+  deleteManagerWorkOrdersForResident,
   readManagerWorkOrderRows,
   syncManagerWorkOrdersFromServer,
   updateManagerWorkOrder,
@@ -497,25 +499,45 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     void fetch("/api/portal/purge-orphaned-records", {
       method: "POST",
       credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "current_only" }),
     })
       .then(async (res) => {
         if (!res.ok || cancelled) return;
-        const body = (await res.json()) as { deleted?: Record<string, number> };
+        const body = (await res.json()) as { deleted?: Record<string, number>; purgedEmails?: string[] };
         const total = Object.values(body.deleted ?? {}).reduce((a, b) => a + b, 0);
         if (total === 0) return;
+        await syncManagerApplicationsFromServer({ force: true });
         void syncHouseholdChargesFromServer(true).then(() => { if (!cancelled) setHcTick((n) => n + 1); });
         void syncLeasePipelineFromServer(userId, { force: true }).then(() => { if (!cancelled) setLeaseTick((n) => n + 1); });
         void syncManagerWorkOrdersFromServer({ force: true }).then(() => { if (!cancelled) setWorkOrderTick((n) => n + 1); });
         void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then(() => { if (!cancelled) setInboxTick((n) => n + 1); });
         const activeEmails = new Set(
           readManagerApplicationRows()
+            .filter((row) => row.bucket === "approved" && !isPreviousResidentRow(row))
             .map((r) => r.email?.trim().toLowerCase())
             .filter((e): e is string => Boolean(e)),
         );
+        const purgedEmails = (body.purgedEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean);
+        const purgedEmailSet = new Set(purgedEmails);
         for (const sr of readServiceRequestsForManager(userId)) {
           if (!activeEmails.has(sr.residentEmail.trim().toLowerCase())) {
             deleteServiceRequestsForResident(sr.residentEmail);
           }
+        }
+        for (const email of purgedEmailSet) {
+          removeResidentHouseholdPaymentData(email);
+          deleteManagerWorkOrdersForResident(email);
+          deleteLeasePipelineRowsForResident(email);
+          deleteServiceRequestsForResident(email);
+        }
+        const inboxRows = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
+        const filteredInbox = inboxRows.filter((thread) => {
+          const participant = thread.email?.trim().toLowerCase() || "";
+          return participant ? !purgedEmailSet.has(participant) : true;
+        });
+        if (filteredInbox.length !== inboxRows.length) {
+          persistInbox(MANAGER_INBOX_STORAGE_KEY, filteredInbox);
         }
       })
       .catch(() => undefined);
