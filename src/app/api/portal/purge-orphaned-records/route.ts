@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { hasMoveOutDatePassed, isPreviousResidentStage } from "@/lib/current-resident";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -8,8 +9,6 @@ export const runtime = "nodejs";
 function canManage(role: string, isAdmin: boolean) {
   return isAdmin || role === "manager" || role === "owner";
 }
-
-const PREVIOUS_RESIDENT_STAGE_TOKENS = ["moved out", "previous", "past", "former", "inactive"];
 
 function isCurrentResidentRow(row: unknown): boolean {
   if (!row || typeof row !== "object") return false;
@@ -20,27 +19,20 @@ function isCurrentResidentRow(row: unknown): boolean {
   };
   const bucket = typeof record.bucket === "string" ? record.bucket.trim().toLowerCase() : "";
   if (bucket !== "approved") return false;
-
   const moveOutRaw =
     record.manualResidentDetails && typeof record.manualResidentDetails === "object"
       ? record.manualResidentDetails.moveOutDate
       : undefined;
-  const moveOut = typeof moveOutRaw === "string" ? moveOutRaw.trim() : "";
-  if (moveOut) {
-    const moveOutDate = new Date(`${moveOut}T23:59:59`);
-    if (!Number.isNaN(moveOutDate.getTime()) && moveOutDate.getTime() < Date.now()) {
-      return false;
-    }
-  }
-
-  const stage = typeof record.stage === "string" ? record.stage.trim().toLowerCase() : "";
-  return !PREVIOUS_RESIDENT_STAGE_TOKENS.some((token) => stage.includes(token));
+  const moveOut = typeof moveOutRaw === "string" ? moveOutRaw : undefined;
+  if (hasMoveOutDatePassed(moveOut)) return false;
+  const stage = typeof record.stage === "string" ? record.stage : undefined;
+  return !isPreviousResidentStage(stage);
 }
 
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => null)) as { mode?: unknown } | null;
-    const mode = typeof body?.mode === "string" ? body.mode.trim().toLowerCase() : "orphaned";
+    const mode = typeof body?.mode === "string" ? body.mode.trim().toLowerCase() : "current_only";
     const currentOnly = mode === "current_only";
 
     const auth = await createSupabaseServerClient();

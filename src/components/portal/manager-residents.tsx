@@ -57,6 +57,7 @@ import {
   normalizeApplicationAxisId,
 } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
+import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
@@ -146,8 +147,6 @@ type ActiveResident = {
 type ResidentsTabId = "current" | "previous";
 type ResidentsSort = "name-asc" | "name-desc";
 
-const PREVIOUS_RESIDENT_STAGE_TOKENS = ["moved out", "previous", "past", "former", "inactive"];
-
 function shortDateLabel(iso: string): string {
   const parts = iso.trim().split("-").map(Number);
   if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) return iso;
@@ -157,15 +156,7 @@ function shortDateLabel(iso: string): string {
 }
 
 function isPreviousResidentRow(row: DemoApplicantRow): boolean {
-  const moveOut = row.manualResidentDetails?.moveOutDate?.trim();
-  if (moveOut) {
-    const moveOutDate = new Date(`${moveOut}T23:59:59`);
-    if (!Number.isNaN(moveOutDate.getTime()) && moveOutDate.getTime() < Date.now()) {
-      return true;
-    }
-  }
-  const stage = row.stage.trim().toLowerCase();
-  return PREVIOUS_RESIDENT_STAGE_TOKENS.some((token) => stage.includes(token));
+  return !isCurrentResidentApplicationRow(row);
 }
 
 const AR_LEASE_TERM_CUSTOM = "__custom__";

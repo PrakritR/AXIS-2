@@ -102,17 +102,27 @@ export function ManagerPayments() {
   useEffect(() => {
     if (!authReady || !userId) return;
     let cancelled = false;
-    void fetch("/api/portal/purge-orphaned-records", { method: "POST", credentials: "include" })
+    void fetch("/api/portal/purge-orphaned-records", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "current_only" }),
+    })
       .then(async (res) => {
         if (!res.ok || cancelled) return;
         const body = (await res.json()) as { deleted?: Record<string, number>; purgedEmails?: string[] };
         const total = Object.values(body.deleted ?? {}).reduce((a, b) => a + b, 0);
         if (total === 0) return;
+        await syncManagerApplicationsFromServer({ force: true });
         // Clear local cache first so the re-sync doesn't push orphaned charges back to server
         for (const email of body.purgedEmails ?? []) {
           removeResidentHouseholdPaymentData(email);
         }
-        void syncHouseholdChargesFromServer(true).then(() => { if (!cancelled) setHcTick((n) => n + 1); });
+        void syncHouseholdChargesFromServer(true).then(() => {
+          if (cancelled) return;
+          setApplicationTick((n) => n + 1);
+          setHcTick((n) => n + 1);
+        });
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
