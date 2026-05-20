@@ -2070,11 +2070,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                 </>
                                               ) : (
                                                 <>
-                                                  <span className="text-xs text-slate-400">
-                                                    {c.paidAt
-                                                      ? formatPacificDate(c.paidAt, { month: "short", day: "numeric" })
-                                                      : "—"}
-                                                  </span>
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="rounded-full px-2 py-0.5 text-xs"
+                                                    onClick={() => openEditCharge(c)}
+                                                  >
+                                                    Edit
+                                                  </Button>
                                                   <Button
                                                     type="button"
                                                     variant="outline"
