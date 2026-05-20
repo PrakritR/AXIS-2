@@ -39,8 +39,8 @@ import {
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
   syncPropertyPipelineFromServer,
-  updateExtraListingFromSubmission,
-  updatePendingManagerProperty,
+  updateExtraListingFromSubmissionOnServer,
+  updatePendingManagerPropertyOnServer,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import {
@@ -252,16 +252,23 @@ function ManagerPropertyInlineDetails({
     (updated: ManagerListingSubmissionV1) => {
       setLocalSub(updated);
       if (!managerUserId || !portalSub) return;
-      if (portalSub.saveMode === "pending") {
-        updatePendingManagerProperty(portalSub.saveId, updated, managerUserId);
-      } else if (portalSub.saveMode === "requestChange") {
-        updateRequestChangeProperty(portalSub.saveId, managerUserId, updated);
-      } else {
-        updateExtraListingFromSubmission(portalSub.saveId, managerUserId, updated);
-      }
-      onUpdated();
+      void (async () => {
+        let ok = false;
+        if (portalSub.saveMode === "pending") {
+          ok = await updatePendingManagerPropertyOnServer(portalSub.saveId, updated, managerUserId);
+        } else if (portalSub.saveMode === "requestChange") {
+          ok = updateRequestChangeProperty(portalSub.saveId, managerUserId, updated);
+        } else {
+          ok = await updateExtraListingFromSubmissionOnServer(portalSub.saveId, managerUserId, updated);
+        }
+        if (!ok) {
+          showToast("Could not save property changes.");
+          return;
+        }
+        onUpdated();
+      })();
     },
-    [managerUserId, portalSub, onUpdated],
+    [managerUserId, onUpdated, portalSub, showToast],
   );
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
