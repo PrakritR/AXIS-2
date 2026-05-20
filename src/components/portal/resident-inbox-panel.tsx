@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { demoResidentInboxThreads } from "@/data/demo-portal";
@@ -119,8 +120,49 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
-    showToast("Marked as read.");
+    showToast("Marked as read — view in Opened tab.");
   };
+
+  const markUnread = useCallback(
+    (id: string) => {
+      setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: true } : t)));
+      showToast("Marked as unread.");
+    },
+    [showToast],
+  );
+
+  const moveToTrash = useCallback(
+    (id: string) => {
+      setLocal((prev) => prev.map((t) => (t.id === id ? { ...t, folder: "trash" as const } : t)));
+      setExpandedId(null);
+      showToast("Moved to trash.");
+    },
+    [showToast],
+  );
+
+  const restoreFromTrash = useCallback(
+    (id: string) => {
+      setLocal((prev) => prev.map((t) => (t.id === id ? { ...t, folder: "inbox" as const } : t)));
+      setExpandedId(null);
+      showToast("Restored to inbox.");
+    },
+    [showToast],
+  );
+
+  const deleteForever = useCallback(
+    (id: string) => {
+      setLocal((prev) => prev.filter((t) => t.id !== id));
+      setExpandedId(null);
+      showToast("Deleted permanently.");
+    },
+    [showToast],
+  );
+
+  const emptyTrash = useCallback(() => {
+    setLocal((prev) => prev.filter((t) => t.folder !== "trash"));
+    setExpandedId(null);
+    showToast("Trash emptied.");
+  }, [showToast]);
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
@@ -163,7 +205,9 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           [],
         );
       }
-      setLocal((prev) => [row, ...prev]);
+      // Persist synchronously before navigation so the sent message survives the route change
+      appendPersistedInboxThread(RESIDENT_INBOX_STORAGE_KEY, row, RESIDENT_INBOX_THREAD_FALLBACK);
+      setLocal(loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[]);
       setComposeOpen(false);
       showToast(
         p.includesAxisAdmin && !p.includesDirectoryRecipients
@@ -171,7 +215,6 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           : "Message sent.",
       );
       router.push("/resident/inbox/sent");
-      router.refresh();
     },
     [router, showToast],
   );
@@ -183,12 +226,62 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     });
   };
 
+  const renderExtraActions = useCallback(
+    (row: PortalInboxTableRow) => {
+      if (tabId === "trash") {
+        return (
+          <>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => restoreFromTrash(row.id)}>
+              Restore
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={`${PORTAL_DETAIL_BTN} text-red-700 hover:bg-red-50`}
+              onClick={() => deleteForever(row.id)}
+            >
+              Delete forever
+            </Button>
+          </>
+        );
+      }
+      if (tabId === "opened") {
+        return (
+          <>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markUnread(row.id)}>
+              Mark unread
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={`${PORTAL_DETAIL_BTN} text-red-700 hover:bg-red-50`}
+              onClick={() => moveToTrash(row.id)}
+            >
+              Trash
+            </Button>
+          </>
+        );
+      }
+      return (
+        <Button
+          type="button"
+          variant="outline"
+          className={`${PORTAL_DETAIL_BTN} text-red-700 hover:bg-red-50`}
+          onClick={() => moveToTrash(row.id)}
+        >
+          Trash
+        </Button>
+      );
+    },
+    [tabId, moveToTrash, restoreFromTrash, deleteForever, markUnread],
+  );
+
   const emptyCopy =
     tabId === "trash"
-      ? "Nothing to show yet"
-      : tabId === "sent" && rowsForTab.length === 0
+      ? "Trash is empty"
+      : tabId === "sent"
         ? "No sent messages yet"
-        : tabId === "opened" && rowsForTab.length === 0
+        : tabId === "opened"
           ? "No opened messages yet"
           : "No messages yet";
 
@@ -200,6 +293,16 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setComposeOpen(true)}>
             New message
           </Button>
+          {tabId === "trash" && counts.trash > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full text-red-700 hover:bg-red-50"
+              onClick={emptyTrash}
+            >
+              Empty trash
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refreshInbox}>
             Refresh
           </Button>
@@ -223,9 +326,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         senderEmail="resident@example.com"
       />
 
-      {tabId === "trash" ? (
-        <PortalInboxEmptyState title={emptyCopy} />
-      ) : rowsForTab.length === 0 ? (
+      {rowsForTab.length === 0 ? (
         <PortalInboxEmptyState
           title={emptyCopy}
           hint={
@@ -242,6 +343,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           getDetailBody={(row) => bodyById[row.id]}
           expandedId={expandedId}
           onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+          renderExtraActions={renderExtraActions}
         />
       )}
     </ManagerPortalPageShell>
