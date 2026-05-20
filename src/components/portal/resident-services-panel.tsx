@@ -36,7 +36,13 @@ import {
   writeManagerWorkOrderRows,
 } from "@/lib/manager-work-orders-storage";
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
-import { readAmenityOffersForManager, readAmenityOffersForProperty, readAllAmenityOffersForProperty, type ManagerAmenityOffer } from "@/lib/manager-amenity-catalog-storage";
+import {
+  AMENITY_CATALOG_EVENT,
+  readAmenityOffersForManager,
+  readAmenityOffersForProperty,
+  readAllAmenityOffersForProperty,
+  type ManagerAmenityOffer,
+} from "@/lib/manager-amenity-catalog-storage";
 import { getPropertyById } from "@/lib/rental-application/data";
 import {
   SERVICE_REQUESTS_EVENT,
@@ -146,7 +152,7 @@ function ServiceRequestCard({
     if (!window.confirm("Delete this service request? This cannot be undone.")) return;
     deleteServiceRequest(req.id);
     onDelete();
-    showToast("Service request deleted.");
+    showToast("Request deleted.");
   }
 
   return (
@@ -198,7 +204,7 @@ function ServiceRequestCard({
           <div className="space-y-1.5">
             {req.price ? (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-700">Service fee</span>
+                <span className="text-xs text-slate-700">Request fee</span>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.servicePaid ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
                   {req.servicePaid ? `Paid · ${req.price}` : `Pending · ${req.price}`}
                 </span>
@@ -310,6 +316,7 @@ export function ResidentServicesPanel() {
   const [allRows, setAllRows] = useState<DemoManagerWorkOrderRow[]>([]);
   const [availableOffers, setAvailableOffers] = useState<ManagerAmenityOffer[]>([]);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
+  const [offerTick, setOfferTick] = useState(0);
   const [srTick, setSrTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
   const [appTick, setAppTick] = useState(0);
@@ -334,6 +341,7 @@ export function ResidentServicesPanel() {
 
   // Memoize offer loading based on resident application data
   const offersForResident = useMemo(() => {
+    void offerTick;
     if (!residentApplication) return [];
     const propertyId =
       residentApplication.assignedPropertyId?.trim() ||
@@ -359,7 +367,7 @@ export function ResidentServicesPanel() {
       return readAllAmenityOffersForProperty(propertyId).filter(visibleToResident);
     }
     return [];
-  }, [residentApplication, residentEmail]);
+  }, [residentApplication, residentEmail, offerTick]);
 
   useEffect(() => {
     setAvailableOffers(offersForResident);
@@ -368,6 +376,7 @@ export function ResidentServicesPanel() {
   // Initial data sync — fire syncs sequentially to avoid overwhelming the server/browser
   useEffect(() => {
     const sync = () => setAllRows(readManagerWorkOrderRows());
+    const onOffers = () => setOfferTick((t) => t + 1);
     sync();
     void syncManagerWorkOrdersFromServer()
       .then(sync)
@@ -375,10 +384,11 @@ export function ResidentServicesPanel() {
       .then(() => setAppTick((t) => t + 1))
       .then(() => syncLeasePipelineFromServer());
     
-    // Only listen to work order events; offers are now memoized based on application data
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
+    window.addEventListener(AMENITY_CATALOG_EVENT, onOffers);
     return () => {
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
+      window.removeEventListener(AMENITY_CATALOG_EVENT, onOffers);
     };
   }, []);
 
@@ -486,7 +496,7 @@ export function ResidentServicesPanel() {
 
   const submitMaintenance = () => {
     if (!servicesUnlocked) {
-      showToast("Services unlock after your lease is fully signed.");
+      showToast("Requests unlock after your lease is fully signed.");
       return;
     }
     if (!mTitle.trim()) { showToast("Add a title first."); return; }
@@ -523,7 +533,7 @@ export function ResidentServicesPanel() {
 
   const submitService = () => {
     if (!servicesUnlocked) {
-      showToast("Services unlock after your lease is fully signed.");
+      showToast("Requests unlock after your lease is fully signed.");
       return;
     }
     if (!selectedOffer) { showToast("Select a service first."); return; }
@@ -579,7 +589,7 @@ export function ResidentServicesPanel() {
             disabled={!servicesUnlocked}
             onClick={() => {
               if (!servicesUnlocked) {
-                showToast("Services unlock after your lease is fully signed.");
+                showToast("Requests unlock after your lease is fully signed.");
                 return;
               }
               setModalMode("maintenance");
@@ -593,13 +603,13 @@ export function ResidentServicesPanel() {
             disabled={!servicesUnlocked}
             onClick={() => {
               if (!servicesUnlocked) {
-                showToast("Services unlock after your lease is fully signed.");
+                showToast("Requests unlock after your lease is fully signed.");
                 return;
               }
               setModalMode("service");
             }}
           >
-            Request a service
+            Submit request
           </Button>
         </div>
       }
@@ -609,14 +619,14 @@ export function ResidentServicesPanel() {
 
       {!servicesUnlocked ? (
         <div className="mb-6 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-4 text-sm text-amber-950">
-          Services are locked until your lease is fully signed by you and your manager.
+          Requests are locked until your lease is fully signed by you and your manager.
         </div>
       ) : null}
 
       {/* Active service requests */}
       {activeServiceRequests.length > 0 ? (
         <div className="mb-6">
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Active Services</p>
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Active requests</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {activeServiceRequests.map((req) => (
               <ServiceRequestCard
@@ -825,21 +835,21 @@ export function ResidentServicesPanel() {
         </div>
       </Modal>
 
-      {/* Service request modal */}
+      {/* Request modal */}
       <Modal
         open={modalMode === "service"}
-        title="Request a service"
+        title="Submit request"
         onClose={() => { setModalMode("none"); resetService(); }}
         panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
       >
         {availableOffers.length === 0 ? (
           <div className="py-8 text-center">
-            <p className="text-sm font-medium text-slate-700">No services available yet</p>
-            <p className="mt-1 text-xs text-slate-500">Your property manager hasn&apos;t added any service offerings. Check back later.</p>
+            <p className="text-sm font-medium text-slate-700">No request options available yet</p>
+            <p className="mt-1 text-xs text-slate-500">Your property manager hasn&apos;t added any request options yet. Check back later.</p>
           </div>
         ) : (
           <>
-            <p className="text-xs text-slate-500">Select a service from your manager&apos;s catalog. If a deposit is required, you&apos;ll also need to set a return date.</p>
+            <p className="text-xs text-slate-500">Select a request option from your manager&apos;s catalog. If a deposit is required, you&apos;ll also need to set a return date.</p>
             <div className="mt-4 space-y-2">
               {availableOffers.map((offer) => (
                 <button

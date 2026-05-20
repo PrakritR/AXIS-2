@@ -357,6 +357,26 @@ export function ManagerListingInlineEditor({
   const [houseDraft, setHouseDraft] = useState<PortalListingNote>({});
   const locationLevelOptions = useMemo(() => locationOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
 
+  // Silently migrate localStorage-only house details to the server on first open.
+  const _syncedNoteKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!noteKey || _syncedNoteKeyRef.current === noteKey) return;
+    const localRules = portalNote.houseRulesText?.trim();
+    const localDesc  = portalNote.houseDescription?.trim();
+    if (!localRules && !localDesc) return;
+    if (
+      (localRules || "") === (sub.houseRulesText?.trim() || "") &&
+      (localDesc  || "") === (sub.houseDescription?.trim() || "")
+    ) return;
+    _syncedNoteKeyRef.current = noteKey;
+    onSaveSub({
+      ...sub,
+      houseDescription: localDesc  || sub.houseDescription  || "",
+      houseRulesText:   localRules || sub.houseRulesText    || "",
+    });
+  }, [noteKey, portalNote.houseRulesText, portalNote.houseDescription,
+      sub.houseRulesText, sub.houseDescription, sub, onSaveSub]);
+
   // ── services state ────────────────────────────────────────────────────────
   const { userId } = useManagerUserId();
   const [serviceOffers, setServiceOffers] = useState<ManagerAmenityOffer[]>([]);
@@ -2418,7 +2438,7 @@ export function ManagerListingInlineEditor({
             <div className="divide-y divide-slate-100">
               {[
                 { label: "Description", value: portalNote.houseDescription ?? sub.houseDescription, badge: "Manager only" },
-                { label: "Rules", value: portalNote.houseRulesText ?? sub.houseRulesText, badge: null },
+                { label: "House rules", value: portalNote.houseRulesText ?? sub.houseRulesText, badge: null },
                 { label: "General info", value: portalNote.generalHouseInfo ?? sub.generalHouseInfo, badge: "Residents only" },
               ]
                 .filter(({ value }) => value?.trim())
@@ -2441,10 +2461,10 @@ export function ManagerListingInlineEditor({
         </div>
       ) : null}
 
-      {/* ── SERVICES ── */}
+      {/* ── REQUEST OPTIONS ── */}
       <div className={`${SECTION_WRAP} border-slate-200`}>
         <SectionHeader
-          title="Services offered"
+          title="Requests"
           color="slate"
           isEditing={false}
           editLabel="+ Add"
@@ -2492,84 +2512,84 @@ export function ManagerListingInlineEditor({
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-10 text-center">
-              <p className="text-sm font-medium text-slate-600">No services yet</p>
-              <p className="mt-1 max-w-xs text-xs text-slate-400">Add optional paid or free services residents can request — like weekly cleaning, linen sets, or storage.</p>
-              <button type="button" onClick={() => { setEditingOffer(null); setServiceForm({ name: "", description: "", price: "", deposit: "", restrictToResidents: false, selectedEmails: [] }); setServiceModalOpen(true); }} className={`mt-4 ${ADD_BTN}`}>+ Add service</button>
+              <p className="text-sm font-medium text-slate-600">No request options yet</p>
+              <p className="mt-1 max-w-xs text-xs text-slate-400">Add optional paid or free requests residents can choose in their Requests portal section, like weekly cleaning, linen sets, parking, or storage.</p>
+              <button type="button" onClick={() => { setEditingOffer(null); setServiceForm({ name: "", description: "", price: "", deposit: "", restrictToResidents: false, selectedEmails: [] }); setServiceModalOpen(true); }} className={`mt-4 ${ADD_BTN}`}>+ Add request</button>
             </div>
           )}
         </div>
       </div>
     </div>
 
-    <Modal
-      open={serviceModalOpen}
-      title={editingOffer ? "Edit service" : "Add service"}
-      onClose={() => setServiceModalOpen(false)}
-      panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
-    >
-      <div className="grid gap-3">
-        <div>
-          <p className="mb-1 text-[11px] font-medium text-slate-600">Service name *</p>
-          <input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Weekly cleaning, Linen set" className={INPUT} />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+      <Modal
+        open={serviceModalOpen}
+        title={editingOffer ? "Edit request option" : "Add request option"}
+        onClose={() => setServiceModalOpen(false)}
+        panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+      >
+        <div className="grid gap-3">
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Price</p>
-            <input value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: e.target.value }))} placeholder="e.g. $25, Free" className={INPUT} />
+            <p className="mb-1 text-[11px] font-medium text-slate-600">Request name *</p>
+            <input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Weekly cleaning, Linen set" className={INPUT} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-slate-600">Price</p>
+              <input value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: e.target.value }))} placeholder="e.g. $25, Free" className={INPUT} />
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-slate-600">Deposit (optional)</p>
+              <input value={serviceForm.deposit} onChange={(e) => setServiceForm((f) => ({ ...f, deposit: e.target.value }))} placeholder="e.g. $50" className={INPUT} />
+            </div>
           </div>
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Deposit (optional)</p>
-            <input value={serviceForm.deposit} onChange={(e) => setServiceForm((f) => ({ ...f, deposit: e.target.value }))} placeholder="e.g. $50" className={INPUT} />
+            <p className="mb-1 text-[11px] font-medium text-slate-600">Description</p>
+            <textarea rows={3} value={serviceForm.description} onChange={(e) => setServiceForm((f) => ({ ...f, description: e.target.value }))} placeholder="What's included, how it works…" className={TEXTAREA} />
           </div>
+          {propertyResidents.length > 0 ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={serviceForm.restrictToResidents}
+                  onChange={(e) => setServiceForm((f) => ({ ...f, restrictToResidents: e.target.checked, selectedEmails: e.target.checked ? f.selectedEmails : [] }))}
+                />
+                Restrict to specific residents
+              </label>
+              {serviceForm.restrictToResidents ? (
+                <div className="mt-2 space-y-1.5 pl-6">
+                  {propertyResidents.map((r) => {
+                    const email = r.email!.trim().toLowerCase();
+                    return (
+                      <label key={r.id} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={serviceForm.selectedEmails.includes(email)}
+                          onChange={(e) => setServiceForm((f) => ({
+                            ...f,
+                            selectedEmails: e.target.checked
+                              ? [...f.selectedEmails, email]
+                              : f.selectedEmails.filter((x) => x !== email),
+                          }))}
+                        />
+                        {r.name || email}
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        <div>
-          <p className="mb-1 text-[11px] font-medium text-slate-600">Description</p>
-          <textarea rows={3} value={serviceForm.description} onChange={(e) => setServiceForm((f) => ({ ...f, description: e.target.value }))} placeholder="What's included, how it works…" className={TEXTAREA} />
+        <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+          <button type="button" className={CANCEL_BTN} onClick={() => setServiceModalOpen(false)}>Cancel</button>
+          <button type="button" className={SAVE_BTN} onClick={handleSaveService} disabled={!serviceForm.name.trim()}>
+            {editingOffer ? "Save changes" : "Add request"}
+          </button>
         </div>
-        {propertyResidents.length > 0 ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
-                checked={serviceForm.restrictToResidents}
-                onChange={(e) => setServiceForm((f) => ({ ...f, restrictToResidents: e.target.checked, selectedEmails: e.target.checked ? f.selectedEmails : [] }))}
-              />
-              Restrict to specific residents
-            </label>
-            {serviceForm.restrictToResidents ? (
-              <div className="mt-2 space-y-1.5 pl-6">
-                {propertyResidents.map((r) => {
-                  const email = r.email!.trim().toLowerCase();
-                  return (
-                    <label key={r.id} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300"
-                        checked={serviceForm.selectedEmails.includes(email)}
-                        onChange={(e) => setServiceForm((f) => ({
-                          ...f,
-                          selectedEmails: e.target.checked
-                            ? [...f.selectedEmails, email]
-                            : f.selectedEmails.filter((x) => x !== email),
-                        }))}
-                      />
-                      {r.name || email}
-                    </label>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
-        <button type="button" className={CANCEL_BTN} onClick={() => setServiceModalOpen(false)}>Cancel</button>
-        <button type="button" className={SAVE_BTN} onClick={handleSaveService} disabled={!serviceForm.name.trim()}>
-          {editingOffer ? "Save changes" : "Add service"}
-        </button>
-      </div>
-    </Modal>
+      </Modal>
     </>
   );
 }

@@ -15,8 +15,10 @@ import {
   submitManagerPendingProperty,
   takePendingManagerProperty,
   type ManagerPendingPropertyRow,
+  type ManagerPropertyDraftInput,
 } from "@/lib/demo-property-pipeline";
-import { legacyAdminFieldsToSubmission, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
+import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import type { ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 
 /** Admin-wide queue (all managers). Manager portal passes `forManagerUserId` for isolated side-buckets. */
@@ -311,6 +313,7 @@ export function approveFromRequestChange(adminRefId: string, forManagerUserId?: 
     ? buildMockPropertyFromDraft({ ...row, id: listingId, submittedAt: new Date().toISOString(), submission: row.submission, submittedByUserId: row.managerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID }, listingId)
     : buildMockPropertyFromAdminRow(row, listingId);
   const owner = row.managerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
+  migrateAmenityOffersPropertyId(owner, adminRefId, listingId);
   appendExtraListing({ ...prop, managerUserId: owner, adminPublishLive: true }, owner);
   writeSideStorage({ ...side, requestChange: nextRc }, forManagerUserId);
   deleteMirroredPropertyRecord(adminRefId);
@@ -342,6 +345,50 @@ export function returnRequestChangeToPending(adminRefId: string, forManagerUserI
   submitManagerPendingProperty(legacyAdminFieldsToSubmission(row), uid);
   writeSideStorage({ ...side, requestChange: nextRc }, forManagerUserId);
   deleteMirroredPropertyRecord(adminRefId);
+  return true;
+}
+
+export function updateRequestChangeProperty(
+  adminRefId: string,
+  forManagerUserId: string | null,
+  input: ManagerPropertyDraftInput,
+): boolean {
+  const side = readSide(forManagerUserId);
+  const idx = side.requestChange.findIndex((r) => r.adminRefId === adminRefId);
+  if (idx === -1) return false;
+  const row = side.requestChange[idx]!;
+  const listingId = row.listingId?.trim() || adminRefId;
+  const owner = row.managerUserId ?? forManagerUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
+
+  const prop = buildMockPropertyFromDraft(
+    {
+      ...row,
+      id: listingId,
+      submittedAt: new Date().toISOString(),
+      submission: input,
+      submittedByUserId: row.managerUserId ?? owner,
+    },
+    listingId,
+  );
+
+  const nextRow = mockToAdminRow(prop, listingId);
+  side.requestChange[idx] = {
+    ...nextRow,
+    adminRefId,
+    managerUserId: row.managerUserId,
+    editRequestNote: row.editRequestNote,
+    submission: normalizeManagerListingSubmissionV1(input),
+    listingId,
+  };
+
+  writeSideStorage(side, forManagerUserId);
+  mirrorAdminPropertyRecord({
+    id: adminRefId,
+    managerUserId: owner,
+    status: "request_change",
+    rowData: side.requestChange[idx],
+    editRequestNote: row.editRequestNote,
+  });
   return true;
 }
 

@@ -21,7 +21,16 @@
       "Bash(node -e ' *)",
       "Read(//Users/pakritramachandran/axis-2/src/lib/**)",
       "Bash(git -C /Users/prakritramachandran/axis-2 show ae4e113 --stat)",
-      "Bash(git -C /Users/prakritramachandran/axis-2 show ae4e113 -- src/lib/household-charges.ts)"
+      "Bash(git -C /Users/prakritramachandran/axis-2 show ae4e113 -- src/lib/household-charges.ts)",
+      "Bash(awk '/^export function ManagerListingInlineEditor/,/^export / {if \\(/^  return \\\\\\(/\\) {print NR\": \"$0; found=1} else if \\(found && /^  \\\\\\);/\\) {print NR\": \"$0; found=0}}' /Users/prakritramachandran/axis-2/src/components/portal/manager-listing-inline-editor.tsx)",
+      "Bash(grep -rn '\"House rules\"\\\\|\"HOUSE RULES\"\\\\|`House rules`\\\\|house rules\\\\|houseRules' /Users/prakritramachandran/axis-2/src/components --include=\"*.tsx\")",
+      "Bash(git -C /Users/prakritramachandran/axis-2 show a52929a --stat)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 diff src/lib/portals/pro.ts src/lib/portals/resident.ts)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 diff src/components/portal/resident-move-in-panel.tsx)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 diff src/components/portal/manager-house-properties-panel.tsx)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 diff src/components/portal/manager-listing-inline-editor.tsx)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 show a52929a -- src/components/portal/manager-listing-inline-editor.tsx)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 diff .claude/settings.json)"
     ]
   }
 }

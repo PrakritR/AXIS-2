@@ -69,7 +69,7 @@ export function ManagerServicesPanel() {
   };
 
   const handleSave = () => {
-    if (!form.name.trim()) { showToast("Service name is required."); return; }
+    if (!form.name.trim()) { showToast("Request name is required."); return; }
     if (!managerUserId) { showToast("Sign in first."); return; }
     const offer: ManagerAmenityOffer = {
       id: editingOffer?.id ?? `offer-${Date.now()}`,
@@ -85,7 +85,7 @@ export function ManagerServicesPanel() {
     };
     saveAmenityOffer(offer);
     reload();
-    showToast(editingOffer ? "Service updated." : "Service added to catalog.");
+    showToast(editingOffer ? "Request option updated." : "Request option added to catalog.");
     setModalOpen(false);
   };
 
@@ -94,23 +94,23 @@ export function ManagerServicesPanel() {
     if (!managerUserId) return;
     deleteAmenityOffer(offer.id, managerUserId);
     reload();
-    showToast("Service removed.");
+    showToast("Request option removed.");
   };
 
   const handleToggle = (offer: ManagerAmenityOffer) => {
     if (!managerUserId) return;
     toggleAmenityOfferAvailability(offer.id, managerUserId);
     reload();
-    showToast(offer.available ? "Service paused — residents won't see it." : "Service is now available to residents.");
+    showToast(offer.available ? "Request option paused — residents won't see it." : "Request option is now available to residents.");
   };
 
   return (
     <>
       <ManagerPortalPageShell
-        title="Service catalog"
+        title="Request catalog"
         titleAside={
           <Button type="button" className="shrink-0 rounded-full" onClick={openCreate}>
-            Add service
+            Add request
           </Button>
         }
         filterRow={null}
@@ -131,15 +131,15 @@ export function ManagerServicesPanel() {
               </div>
             )}
             {!selectedPropertyId ? (
-              <p className="py-8 text-center text-sm text-slate-400">Select a property to manage its service catalog.</p>
+              <p className="py-8 text-center text-sm text-slate-400">Select a property to manage its request options.</p>
             ) : offers.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
-                <p className="text-sm font-medium text-slate-600">No services yet</p>
+                <p className="text-sm font-medium text-slate-600">No request options yet</p>
                 <p className="mt-1 max-w-xs text-xs text-slate-400">
-                  Add services — like cleaning, linen sets, or other amenities — that residents can request directly from their portal.
+                  Add request options — like cleaning, linen sets, parking, or other amenities — that residents can choose directly from their portal.
                 </p>
                 <Button type="button" className="mt-5 rounded-full" onClick={openCreate}>
-                  Add first service
+                  Add first request
                 </Button>
               </div>
             ) : (
@@ -212,13 +212,13 @@ export function ManagerServicesPanel() {
 
       <Modal
         open={modalOpen}
-        title={editingOffer ? "Edit service" : "Add service"}
+        title={editingOffer ? "Edit request option" : "Add request option"}
         onClose={() => setModalOpen(false)}
         panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
       >
         <div className="grid gap-3">
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Service name</p>
+            <p className="mb-1 text-[11px] font-medium text-slate-600">Request name</p>
             <Input
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -262,7 +262,7 @@ export function ManagerServicesPanel() {
             Cancel
           </Button>
           <Button type="button" className="rounded-full" onClick={handleSave}>
-            {editingOffer ? "Save changes" : "Add service"}
+            {editingOffer ? "Save changes" : "Add request"}
           </Button>
         </div>
       </Modal>

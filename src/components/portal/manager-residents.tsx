@@ -2026,8 +2026,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             <div className="rounded-2xl border border-slate-200 bg-white p-4">
                               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                                 <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Services</p>
-                                  <p className="mt-1 text-sm text-slate-500">All service requests and maintenance work orders from this resident.</p>
+                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Requests</p>
+                                  <p className="mt-1 text-sm text-slate-500">All requests and maintenance work orders from this resident.</p>
                                 </div>
                                 {residentServiceRequests.filter((r) => r.status === "pending").length > 0 ? (
                                   <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-amber-300/60">
@@ -2036,7 +2036,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 ) : null}
                               </div>
                               {residentServiceRequests.length === 0 && residentWorkOrders.length === 0 ? (
-                                <p className="text-sm text-slate-500">No services or work orders for this resident yet.</p>
+                                <p className="text-sm text-slate-500">No requests or work orders for this resident yet.</p>
                               ) : (
                                 <div className="space-y-4">
                               {residentServiceRequests.length > 0 ? (

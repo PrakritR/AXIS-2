@@ -8,7 +8,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 const LOGIN_TIMEOUT_MS = 6000;
 
@@ -72,6 +72,7 @@ function SignInForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -126,6 +127,11 @@ function SignInForm() {
       if (!user) {
         throw new Error("No active session.");
       }
+      if (rememberEmail) {
+        window.localStorage.setItem("axis:remembered-login-email", email.trim());
+      } else {
+        window.localStorage.removeItem("axis:remembered-login-email");
+      }
       didRedirect = true;
       window.location.replace(continueHref(nextPath));
     } catch (e) {
@@ -144,6 +150,18 @@ function SignInForm() {
   };
 
   const busy = isSigningIn || isLoadingPortal;
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("axis:remembered-login-email");
+      if (stored) {
+        setEmail(stored);
+        setRememberEmail(true);
+      }
+    } catch {
+      // ignore localStorage failures
+    }
+  }, []);
 
   return (
     <AuthCard>
@@ -175,6 +193,19 @@ function SignInForm() {
             onChange={(e) => setPassword(e.target.value)}
             disabled={busy}
           />
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="remember-email"
+            checked={rememberEmail}
+            disabled={busy}
+            onChange={(event) => setRememberEmail(event.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+          />
+          <label htmlFor="remember-email" className="text-sm text-slate-600">
+            Remember my email for next time
+          </label>
         </div>
       </div>
 

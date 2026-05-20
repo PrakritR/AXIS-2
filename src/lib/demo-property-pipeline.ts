@@ -1,4 +1,5 @@
 import type { MockProperty } from "@/data/types";
+import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { parseRecordOfArrays } from "@/lib/safe-local-storage";
@@ -725,6 +726,7 @@ export function approvePendingManagerProperty(pendingId: string): MockProperty |
   const listingId = `mgr-${slugPart(row.buildingName)}-${slugPart(row.unitLabel)}-${pendingId.slice(-6)}`;
   const prop: MockProperty = { ...buildMockPropertyFromDraft(row, listingId), adminPublishLive: true };
   const owner = row.submittedByUserId ?? LEGACY_MANAGER_SCOPE_USER_ID;
+  migrateAmenityOffersPropertyId(owner, pendingId, listingId);
   appendExtraListing(prop, owner);
   return prop;
 }

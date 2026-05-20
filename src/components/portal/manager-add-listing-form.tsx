@@ -252,7 +252,7 @@ const LISTING_FORM_STEPS = [
   { id: "spaces",    label: "Shared spaces",  icon: "🪑" },
   { id: "lease",     label: "Lease & pricing",icon: "💰" },
   { id: "media",     label: "Media",          icon: "📷" },
-  { id: "services",  label: "Services",       icon: "🛎" },
+  { id: "services",  label: "Requests",       icon: "🛎" },
   { id: "finish",    label: "Submit",         icon: "✅" },
 ] as const;
 
@@ -265,7 +265,7 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
   spaces:    "Kitchen, laundry, lounge, outdoor — location, amenities, room access, plus optional photos/video.",
   lease:     "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
   media:     "Hero images and optional full-house walkthrough video at the top of your public listing.",
-  services:  "Add the services residents can request directly from their portal — cleaning, linens, and more.",
+  services:  "Add the requests residents can choose directly from their portal — cleaning, linens, and more.",
   finish:    "Sidebar quick facts, building amenities, and final submit.",
 };
 
@@ -3177,12 +3177,12 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {/* ── Step 6: Services ── */}
+          {/* ── Step 6: Requests ── */}
           {stepIndex === 6 ? (
           <FormSection
             id="edit-services"
-            title="Services"
-            description="Add services residents can request directly from their portal — cleaning, linen sets, parking, and more. You can edit these any time from the Services tab."
+            title="Requests"
+            description="Add request options residents can choose directly from their portal — cleaning, linen sets, parking, and more. You can edit these any time from the property inline editor."
           >
             <div className="space-y-4">
               {serviceOffers.length > 0 ? (
@@ -3216,13 +3216,13 @@ export function ManagerAddListingForm({
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-12 text-center">
-                  <p className="text-sm font-medium text-slate-600">No services yet</p>
-                  <p className="mt-1 max-w-xs text-xs text-slate-400">Add optional paid or free services that residents can request — like weekly cleaning, linen sets, or storage.</p>
+                  <p className="text-sm font-medium text-slate-600">No request options yet</p>
+                  <p className="mt-1 max-w-xs text-xs text-slate-400">Add optional paid or free request options residents can choose — like weekly cleaning, linen sets, parking, or storage.</p>
                 </div>
               )}
               <div>
                 <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => { setEditingOffer(null); setServiceForm({ name: "", description: "", price: "", deposit: "" }); setServiceModalOpen(true); }}>
-                  + Add service
+                  + Add request
                 </Button>
               </div>
             </div>
@@ -3336,13 +3336,13 @@ export function ManagerAddListingForm({
       {/* Service add/edit modal */}
       <Modal
         open={serviceModalOpen}
-        title={editingOffer ? "Edit service" : "Add service"}
+        title={editingOffer ? "Edit request option" : "Add request option"}
         onClose={() => setServiceModalOpen(false)}
         panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
       >
         <div className="grid gap-3">
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Service name *</p>
+            <p className="mb-1 text-[11px] font-medium text-slate-600">Request name *</p>
             <Input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Weekly cleaning, Linen set" className="bg-white" />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -3362,7 +3362,7 @@ export function ManagerAddListingForm({
         </div>
         <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setServiceModalOpen(false)}>Cancel</Button>
-          <Button type="button" className="rounded-full" onClick={handleSaveService} disabled={!serviceForm.name.trim()}>{editingOffer ? "Save changes" : "Add service"}</Button>
+          <Button type="button" className="rounded-full" onClick={handleSaveService} disabled={!serviceForm.name.trim()}>{editingOffer ? "Save changes" : "Add request"}</Button>
         </div>
       </Modal>
     </div>

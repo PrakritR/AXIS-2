@@ -27,6 +27,7 @@ import {
   removeRejectedProperty,
   restoreRejectedToPending,
   returnRequestChangeToPending,
+  updateRequestChangeProperty,
   unlistManagerListing,
   type AdminPropertyBucketIndex,
   type AdminPropertyRow,
@@ -68,6 +69,24 @@ function submissionForListedEdit(p: MockProperty): ManagerListingSubmissionV1 {
       monthlyRent: rentNum,
       petFriendly: p.petFriendly,
       tagline: p.tagline,
+    }),
+  );
+}
+
+function submissionForAdminRow(row: AdminPropertyRow): ManagerListingSubmissionV1 {
+  if (row.submission) return normalizeManagerListingSubmissionV1(row.submission);
+  return normalizeManagerListingSubmissionV1(
+    legacyAdminFieldsToSubmission({
+      buildingName: row.buildingName,
+      address: row.address,
+      zip: row.zip,
+      neighborhood: row.neighborhood,
+      unitLabel: row.unitLabel,
+      beds: row.beds,
+      baths: row.baths,
+      monthlyRent: row.monthlyRent,
+      petFriendly: row.petFriendly,
+      tagline: row.tagline,
     }),
   );
 }
@@ -188,20 +207,29 @@ function ManagerPropertyInlineDetails({
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 
-  const portalSub = useMemo<{ sub: ManagerListingSubmissionV1; saveMode: "pending" | "listing"; saveId: string } | null>(() => {
+  const portalSub = useMemo<
+    | { sub: ManagerListingSubmissionV1; saveMode: "pending" | "listing" | "requestChange"; saveId: string; listingId?: string }
+    | null
+  >(() => {
     if (!managerUserId || !row) return null;
-    if (bucket === 0) {
-      if (row.adminRefId.startsWith("mgr-")) {
-        const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.adminRefId);
-        return p ? { sub: submissionForListedEdit(p), saveMode: "listing", saveId: row.adminRefId } : null;
+
+    const listingId = row.listingId?.trim() || undefined;
+    if (listingId) {
+      const p = readExtraListingsForUser(managerUserId).find((x) => x.id === listingId);
+      if (p) return { sub: submissionForListedEdit(p), saveMode: "listing", saveId: listingId, listingId };
+      if (bucket === 1) {
+        return { sub: submissionForAdminRow(row), saveMode: "requestChange", saveId: row.adminRefId, listingId };
       }
+      if (bucket === 0 && row.adminRefId.startsWith("mgr-")) {
+        return { sub: submissionForAdminRow(row), saveMode: "listing", saveId: row.adminRefId, listingId };
+      }
+    }
+
+    if (bucket === 0) {
       const p = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
       return p ? { sub: submissionForPendingEdit(p), saveMode: "pending", saveId: row.adminRefId } : null;
     }
-    if (bucket === 2 && row.listingId) {
-      const p = readExtraListingsForUser(managerUserId).find((x) => x.id === row.listingId);
-      return p ? { sub: submissionForListedEdit(p), saveMode: "listing", saveId: row.listingId } : null;
-    }
+
     return null;
   }, [managerUserId, row, bucket]);
 
@@ -226,6 +254,8 @@ function ManagerPropertyInlineDetails({
       if (!managerUserId || !portalSub) return;
       if (portalSub.saveMode === "pending") {
         updatePendingManagerProperty(portalSub.saveId, updated, managerUserId);
+      } else if (portalSub.saveMode === "requestChange") {
+        updateRequestChangeProperty(portalSub.saveId, managerUserId, updated);
       } else {
         updateExtraListingFromSubmission(portalSub.saveId, managerUserId, updated);
       }
@@ -436,7 +466,7 @@ function ManagerPropertyInlineDetails({
             onSaveSub={handleSaveSub}
             showToast={showToast}
             isListed={bucket === 2}
-            listingId={portalSub?.saveId ?? null}
+            listingId={portalSub?.listingId ?? portalSub?.saveId ?? null}
           />
         </div>
       ) : null}

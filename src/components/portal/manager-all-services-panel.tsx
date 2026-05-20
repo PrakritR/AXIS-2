@@ -258,9 +258,9 @@ export function ManagerAllServicesPanel() {
         {/* Empty state */}
         {unified.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
-            <p className="text-sm font-medium text-slate-600">No services yet</p>
+            <p className="text-sm font-medium text-slate-600">No requests yet</p>
             <p className="mt-1 max-w-xs text-xs text-slate-400">
-              Service requests and work orders from residents will appear here.
+              Requests and work orders from residents will appear here.
             </p>
           </div>
         ) : (

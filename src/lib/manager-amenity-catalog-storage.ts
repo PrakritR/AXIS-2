@@ -13,6 +13,7 @@ export type ManagerAmenityOffer = {
 };
 
 const KEY = "axis_amenity_catalog_v1";
+export const AMENITY_CATALOG_EVENT = "axis:amenity-catalog";
 
 type Store = Record<string, ManagerAmenityOffer[]>;
 
@@ -24,6 +25,7 @@ function read(): Store {
 function write(store: Store): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(KEY, JSON.stringify(store));
+  window.dispatchEvent(new Event(AMENITY_CATALOG_EVENT));
 }
 
 export function readAmenityOffersForManager(managerUserId: string): ManagerAmenityOffer[] {
@@ -59,6 +61,28 @@ export function toggleAmenityOfferAvailability(id: string, managerUserId: string
   const idx = list.findIndex((o) => o.id === id);
   if (idx !== -1) list[idx] = { ...list[idx]!, available: !list[idx]!.available };
   store[managerUserId] = list;
+  write(store);
+}
+
+export function migrateAmenityOffersPropertyId(
+  managerUserId: string,
+  fromPropertyId: string | null | undefined,
+  toPropertyId: string | null | undefined,
+): void {
+  const fromId = fromPropertyId?.trim() ?? "";
+  const toId = toPropertyId?.trim() ?? "";
+  if (!managerUserId.trim() || !fromId || !toId || fromId === toId) return;
+
+  const store = read();
+  const list = store[managerUserId] ?? [];
+  let changed = false;
+  const next = list.map((offer) => {
+    if (offer.propertyId?.trim() !== fromId) return offer;
+    changed = true;
+    return { ...offer, propertyId: toId };
+  });
+  if (!changed) return;
+  store[managerUserId] = next;
   write(store);
 }
 
