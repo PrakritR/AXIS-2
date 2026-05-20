@@ -206,6 +206,19 @@ export type ManagerListingSubmissionV1 = {
   bundles: ManagerBundleRow[];
   /** Optional sidebar quick facts; when empty, listing derives defaults from submission. */
   quickFacts: ManagerQuickFactRow[];
+  /** Resident-facing service request options for this property. */
+  serviceRequestOptions?: ManagerListingServiceOption[];
+};
+
+export type ManagerListingServiceOption = {
+  id: string;
+  name: string;
+  description: string;
+  price: string;
+  deposit: string;
+  available: boolean;
+  residentEmails?: string[];
+  createdAt: string;
 };
 
 /** Legacy persisted shapes (optional fields). */
@@ -341,6 +354,32 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     label: q.label ?? "",
     value: q.value ?? "",
   }));
+
+  const serviceRequestOptions = Array.isArray((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions)
+    ? ((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions as unknown[])
+        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+        .map((item) => {
+          const idRaw = typeof item.id === "string" ? item.id.trim() : "";
+          const residentEmailsRaw = Array.isArray(item.residentEmails)
+            ? (item.residentEmails as unknown[])
+                .filter((value): value is string => typeof value === "string" && value.trim().includes("@"))
+                .map((value) => value.trim().toLowerCase())
+            : [];
+          return {
+            id: idRaw || `offer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name: typeof item.name === "string" ? item.name.trim() : "",
+            description: typeof item.description === "string" ? item.description.trim() : "",
+            price: typeof item.price === "string" ? item.price.trim() : "",
+            deposit: typeof item.deposit === "string" ? item.deposit.trim() : "",
+            available: item.available !== false,
+            residentEmails: residentEmailsRaw.length > 0 ? residentEmailsRaw : undefined,
+            createdAt:
+              typeof item.createdAt === "string" && item.createdAt.trim()
+                ? item.createdAt
+                : new Date().toISOString(),
+          } satisfies ManagerListingServiceOption;
+        })
+    : [];
 
   const bathrooms = sub.bathrooms.map((b) => {
     const legacyBath = b as ManagerBathroomSubmission & { sharedByRooms?: string };
@@ -533,6 +572,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     sharedSpaces,
     bundles,
     quickFacts,
+    serviceRequestOptions,
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,
     applicationFeeVenmoEnabled,
@@ -749,6 +789,7 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     bathrooms: [],
     bundles: [],
     quickFacts: [],
+    serviceRequestOptions: [],
   };
 }
 

@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import type {
   ManagerBathroomRoomAccessKind,
   ManagerBathroomSubmission,
+  ManagerListingServiceOption,
   ManagerListingSubmissionV1,
   ManagerQuickFactRow,
   ManagerRoomSubmission,
@@ -35,13 +36,6 @@ import { getPortalListingNote, savePortalListingNote } from "@/lib/portal-listin
 import { uploadListingImageFiles, uploadListingVideoFile } from "@/lib/listing-media-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Modal } from "@/components/ui/modal";
-import {
-  readAmenityOffersForProperty,
-  saveAmenityOffer,
-  deleteAmenityOffer,
-  toggleAmenityOfferAvailability,
-  type ManagerAmenityOffer,
-} from "@/lib/manager-amenity-catalog-storage";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import {
   SERVICE_REQUESTS_EVENT,
@@ -388,19 +382,14 @@ export function ManagerListingInlineEditor({
 
   // ── services state ────────────────────────────────────────────────────────
   const { userId } = useManagerUserId();
-  const [serviceOffers, setServiceOffers] = useState<ManagerAmenityOffer[]>([]);
+  const serviceOffers = useMemo<ManagerListingServiceOption[]>(() => sub.serviceRequestOptions ?? [], [sub.serviceRequestOptions]);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [srTick, setSrTick] = useState(0);
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
-  const [editingOffer, setEditingOffer] = useState<ManagerAmenityOffer | null>(null);
+  const [editingOffer, setEditingOffer] = useState<ManagerListingServiceOption | null>(null);
   const [serviceForm, setServiceForm] = useState({
     name: "", description: "", price: "", deposit: "", restrictToResidents: false, selectedEmails: [] as string[],
   });
-
-  const loadOffers = useCallback((uid: string, lid: string | null | undefined): ManagerAmenityOffer[] => {
-    if (!lid?.trim()) return [];
-    return readAmenityOffersForProperty(uid, lid);
-  }, []);
 
   // Load service requests for this property
   const propertyId = useMemo(() => listingId?.trim() || "", [listingId]);
@@ -419,16 +408,6 @@ export function ManagerListingInlineEditor({
     return () => window.removeEventListener(SERVICE_REQUESTS_EVENT, onSrEvent);
   }, []);
 
-  useEffect(() => {
-    if (!userId) return;
-    setServiceOffers(loadOffers(userId, listingId));
-  }, [userId, listingId, loadOffers]);
-
-  const reloadOffers = useCallback(() => {
-    if (!userId) return;
-    setServiceOffers(loadOffers(userId, listingId));
-  }, [userId, listingId, loadOffers]);
-
   const propertyResidents = useMemo(() => {
     if (!listingId) return [];
     return readManagerApplicationRows().filter(
@@ -439,28 +418,31 @@ export function ManagerListingInlineEditor({
   }, [listingId]);
 
   const handleSaveService = useCallback(() => {
-    if (!serviceForm.name.trim() || !userId) return;
-    const offer: ManagerAmenityOffer = {
+    if (!serviceForm.name.trim()) return;
+    const offer: ManagerListingServiceOption = {
       id: editingOffer?.id ?? `offer-${Date.now()}`,
       name: serviceForm.name.trim(),
       description: serviceForm.description.trim(),
       price: serviceForm.price.trim(),
       deposit: serviceForm.deposit.trim(),
-      category: "",
       available: editingOffer?.available ?? true,
-      managerUserId: userId,
-      propertyId: listingId ?? undefined,
       residentEmails: serviceForm.restrictToResidents && serviceForm.selectedEmails.length
         ? serviceForm.selectedEmails
         : undefined,
       createdAt: editingOffer?.createdAt ?? new Date().toISOString(),
     };
-    saveAmenityOffer(offer);
-    reloadOffers();
+    const current = sub.serviceRequestOptions ?? [];
+    const idx = current.findIndex((item) => item.id === offer.id);
+    const nextOffers =
+      idx === -1
+        ? [offer, ...current]
+        : current.map((item) => (item.id === offer.id ? offer : item));
+    onSaveSub({ ...sub, serviceRequestOptions: nextOffers });
+    showToast(editingOffer ? "Request option updated." : "Request option added.");
     setServiceModalOpen(false);
     setEditingOffer(null);
     setServiceForm({ name: "", description: "", price: "", deposit: "", restrictToResidents: false, selectedEmails: [] });
-  }, [serviceForm, editingOffer, userId, listingId, reloadOffers]);
+  }, [editingOffer, onSaveSub, serviceForm, showToast, sub]);
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const saveSub = useCallback(
@@ -2609,7 +2591,6 @@ export function ManagerListingInlineEditor({
           {serviceOffers.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {serviceOffers.map((offer) => {
-                const isOwned = offer.managerUserId === userId;
                 return (
                 <div key={offer.id} className={`flex flex-col rounded-2xl border bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.05)] ${offer.available ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
                   <div className="flex items-start justify-between gap-2">
@@ -2623,25 +2604,36 @@ export function ManagerListingInlineEditor({
                   {offer.residentEmails?.length ? (
                     <p className="mt-1.5 text-[10px] text-slate-400">Visible to {offer.residentEmails.length} resident{offer.residentEmails.length === 1 ? "" : "s"} only</p>
                   ) : null}
-                  {isOwned ? (
-                    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
-                      <button type="button" onClick={() => {
-                        setEditingOffer(offer);
-                        setServiceForm({
-                          name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "",
-                          restrictToResidents: Boolean(offer.residentEmails?.length),
-                          selectedEmails: offer.residentEmails ?? [],
-                        });
-                        setServiceModalOpen(true);
-                      }} className={EDIT_BTN_OFF}>Edit</button>
-                      <button type="button" onClick={() => { if (userId) { toggleAmenityOfferAvailability(offer.id, userId); reloadOffers(); } }} className={EDIT_BTN_OFF}>
-                        {offer.available ? "Pause" : "Resume"}
-                      </button>
-                      <button type="button" onClick={() => { if (userId) { deleteAmenityOffer(offer.id, userId); reloadOffers(); } }} className="rounded-full border border-rose-200 bg-white px-3 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">
-                        Remove
-                      </button>
-                    </div>
-                  ) : null}
+                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
+                    <button type="button" onClick={() => {
+                      setEditingOffer(offer);
+                      setServiceForm({
+                        name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "",
+                        restrictToResidents: Boolean(offer.residentEmails?.length),
+                        selectedEmails: offer.residentEmails ?? [],
+                      });
+                      setServiceModalOpen(true);
+                    }} className={EDIT_BTN_OFF}>Edit</button>
+                    <button type="button" onClick={() => {
+                      const current = sub.serviceRequestOptions ?? [];
+                      onSaveSub({
+                        ...sub,
+                        serviceRequestOptions: current.map((item) =>
+                          item.id === offer.id ? { ...item, available: !item.available } : item,
+                        ),
+                      });
+                      showToast(offer.available ? "Request option paused." : "Request option activated.");
+                    }} className={EDIT_BTN_OFF}>
+                      {offer.available ? "Pause" : "Resume"}
+                    </button>
+                    <button type="button" onClick={() => {
+                      const current = sub.serviceRequestOptions ?? [];
+                      onSaveSub({ ...sub, serviceRequestOptions: current.filter((item) => item.id !== offer.id) });
+                      showToast("Request option removed.");
+                    }} className="rounded-full border border-rose-200 bg-white px-3 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">
+                      Remove
+                    </button>
+                  </div>
                 </div>
                 );
               })}

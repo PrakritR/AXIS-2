@@ -38,10 +38,11 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import {
-  AMENITY_CATALOG_EVENT,
-  readAmenityOffersForProperty,
-  type ManagerAmenityOffer,
-} from "@/lib/manager-amenity-catalog-storage";
+  PROPERTY_PIPELINE_EVENT,
+  syncPropertyPipelineFromServer,
+} from "@/lib/demo-property-pipeline";
+import type { ManagerListingServiceOption } from "@/lib/manager-listing-submission";
+import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { getPropertyById } from "@/lib/rental-application/data";
 import {
   SERVICE_REQUESTS_EVENT,
@@ -315,17 +316,17 @@ export function ResidentServicesPanel({
   const [mPhotos, setMPhotos] = useState<string[]>([]);
 
   // service request form
-  const [selectedOffer, setSelectedOffer] = useState<ManagerAmenityOffer | null>(null);
+  const [selectedOffer, setSelectedOffer] = useState<ManagerListingServiceOption | null>(null);
   const [sNotes, setSNotes] = useState("");
   const [sReturnBy, setSReturnBy] = useState("");
 
   const [allRows, setAllRows] = useState<DemoManagerWorkOrderRow[]>([]);
-  const [availableOffers, setAvailableOffers] = useState<ManagerAmenityOffer[]>([]);
+  const [availableOffers, setAvailableOffers] = useState<ManagerListingServiceOption[]>([]);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
-  const [offerTick, setOfferTick] = useState(0);
   const [srTick, setSrTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
   const [appTick, setAppTick] = useState(0);
+  const [propertyTick, setPropertyTick] = useState(0);
 
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
@@ -347,7 +348,7 @@ export function ResidentServicesPanel({
 
   // Memoize offer loading based on resident application data
   const offersForResident = useMemo(() => {
-    void offerTick;
+    void propertyTick;
     if (!residentApplication) return [];
     const propertyId =
       residentApplication.assignedPropertyId?.trim() ||
@@ -368,8 +369,11 @@ export function ResidentServicesPanel({
     if (!propertyId) return [];
 
     if (!managerUserId) return [];
-    return readAmenityOffersForProperty(managerUserId, propertyId).filter(visibleToResident);
-  }, [residentApplication, residentEmail, offerTick]);
+    const property = getPropertyById(propertyId);
+    if (!property?.listingSubmission || property.listingSubmission.v !== 1) return [];
+    const options = normalizeManagerListingSubmissionV1(property.listingSubmission).serviceRequestOptions ?? [];
+    return options.filter(visibleToResident);
+  }, [propertyTick, residentApplication, residentEmail]);
 
   useEffect(() => {
     setAvailableOffers(offersForResident);
@@ -378,19 +382,21 @@ export function ResidentServicesPanel({
   // Initial data sync — fire syncs sequentially to avoid overwhelming the server/browser
   useEffect(() => {
     const sync = () => setAllRows(readManagerWorkOrderRows());
-    const onOffers = () => setOfferTick((t) => t + 1);
+    const onProperty = () => setPropertyTick((t) => t + 1);
     sync();
     void syncManagerWorkOrdersFromServer()
       .then(sync)
       .then(() => syncManagerApplicationsFromServer())
       .then(() => setAppTick((t) => t + 1))
+      .then(() => syncPropertyPipelineFromServer())
+      .then(() => setPropertyTick((t) => t + 1))
       .then(() => syncLeasePipelineFromServer());
     
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
-    window.addEventListener(AMENITY_CATALOG_EVENT, onOffers);
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, onProperty);
     return () => {
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
-      window.removeEventListener(AMENITY_CATALOG_EVENT, onOffers);
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, onProperty);
     };
   }, []);
 
@@ -554,10 +560,6 @@ export function ResidentServicesPanel({
     let managerUserId = application?.managerUserId?.trim() || "";
     if (!managerUserId && propertyId) {
       managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
-    }
-    if (!managerUserId) {
-      // Derive from the offer — most reliable when application row lacks managerUserId
-      managerUserId = currentOffer.managerUserId?.trim() || "";
     }
     if (!managerUserId) { showToast("Could not find your property manager. Contact support."); return; }
     createServiceRequest({
