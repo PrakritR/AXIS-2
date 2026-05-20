@@ -107,7 +107,7 @@ export function ManagerServicesPanel() {
   return (
     <>
       <ManagerPortalPageShell
-        title="Request catalog"
+        title="Services catalog"
         titleAside={
           <Button type="button" className="shrink-0 rounded-full" onClick={openCreate}>
             Add request

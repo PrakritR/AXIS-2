@@ -252,7 +252,7 @@ const LISTING_FORM_STEPS = [
   { id: "spaces",    label: "Shared spaces",  icon: "🪑" },
   { id: "lease",     label: "Lease & pricing",icon: "💰" },
   { id: "media",     label: "Media",          icon: "📷" },
-  { id: "services",  label: "Requests",       icon: "🛎" },
+  { id: "services",  label: "Services",       icon: "🛎" },
   { id: "finish",    label: "Submit",         icon: "✅" },
 ] as const;
 
@@ -265,7 +265,7 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
   spaces:    "Kitchen, laundry, lounge, outdoor — location, amenities, room access, plus optional photos/video.",
   lease:     "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
   media:     "Hero images and optional full-house walkthrough video at the top of your public listing.",
-  services:  "Add the requests residents can choose directly from their portal — cleaning, linens, and more.",
+  services:  "Add services residents can choose directly from their portal requests tab — cleaning, linens, and more.",
   finish:    "Sidebar quick facts, building amenities, and final submit.",
 };
 
@@ -3177,11 +3177,11 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {/* ── Step 6: Requests ── */}
+          {/* ── Step 6: Services ── */}
           {stepIndex === 6 ? (
           <FormSection
             id="edit-services"
-            title="Requests"
+            title="Services"
             description="Add request options residents can choose directly from their portal — cleaning, linen sets, parking, and more. You can edit these any time from the property inline editor."
           >
             <div className="space-y-4">

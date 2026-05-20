@@ -306,7 +306,7 @@ export function ResidentDashboard({
                 <span>
                   <span className="font-semibold">{openWO}</span> open maintenance request{openWO === 1 ? "" : "s"} awaiting scheduling
                 </span>
-                <Link href={`${BASE}/work-orders`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
+                <Link href={`${BASE}/services/work-orders`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
                   View →
                 </Link>
               </NotifBanner>
@@ -381,7 +381,7 @@ export function ResidentDashboard({
                     </>
                   )}
                 </div>
-                <Link href={`${BASE}/work-orders`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
+                <Link href={`${BASE}/services/work-orders`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
                   {openWO + scheduledWO > 0 ? "Manage requests →" : "Submit a request →"}
                 </Link>
               </InfoCard>

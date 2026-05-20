@@ -352,7 +352,7 @@ export function ManagerDashboard() {
             label="Service requests"
             value={pendingServiceRequests.length + approvedServiceRequests.length}
             sub={pendingServiceRequests.length > 0 ? `${pendingServiceRequests.length} awaiting approval` : approvedServiceRequests.length > 0 ? `${approvedServiceRequests.length} active` : undefined}
-            href={`${BASE}/residents`}
+            href={`${BASE}/services/requests`}
             urgent={pendingServiceRequests.length > 0}
           />
           <Tile
@@ -397,7 +397,7 @@ export function ManagerDashboard() {
           <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
             <SectionHeader
               title="Service requests"
-              href={`${BASE}/residents`}
+              href={`${BASE}/services/requests`}
               linkLabel="View all"
             />
             {pendingServiceRequests.length + approvedServiceRequests.length === 0 ? (

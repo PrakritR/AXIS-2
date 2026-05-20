@@ -37,13 +37,22 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Modal } from "@/components/ui/modal";
 import {
   readAmenityOffersForProperty,
-  readAmenityOffersForManager,
   saveAmenityOffer,
   deleteAmenityOffer,
   toggleAmenityOfferAvailability,
   type ManagerAmenityOffer,
 } from "@/lib/manager-amenity-catalog-storage";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import {
+  SERVICE_REQUESTS_EVENT,
+  readServiceRequestsForProperty,
+  updateServiceRequest,
+  approveServiceRequest,
+  denyServiceRequest,
+  deleteServiceRequest,
+  hasDeposit,
+  type ServiceRequest,
+} from "@/lib/service-requests-storage";
 
 // ─── shared style constants ──────────────────────────────────────────────────
 
@@ -380,6 +389,8 @@ export function ManagerListingInlineEditor({
   // ── services state ────────────────────────────────────────────────────────
   const { userId } = useManagerUserId();
   const [serviceOffers, setServiceOffers] = useState<ManagerAmenityOffer[]>([]);
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
+  const [srTick, setSrTick] = useState(0);
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<ManagerAmenityOffer | null>(null);
   const [serviceForm, setServiceForm] = useState({
@@ -387,11 +398,25 @@ export function ManagerListingInlineEditor({
   });
 
   const loadOffers = useCallback((uid: string, lid: string | null | undefined): ManagerAmenityOffer[] => {
-    if (lid) {
-      const specific = readAmenityOffersForProperty(uid, lid);
-      if (specific.length > 0) return specific;
+    if (!lid?.trim()) return [];
+    return readAmenityOffersForProperty(uid, lid);
+  }, []);
+
+  // Load service requests for this property
+  const propertyId = useMemo(() => listingId?.trim() || "", [listingId]);
+  useEffect(() => {
+    if (!propertyId) {
+      setServiceRequests([]);
+      return;
     }
-    return readAmenityOffersForManager(uid);
+    setServiceRequests(readServiceRequestsForProperty(propertyId));
+  }, [propertyId, srTick]);
+
+  // Listen for service request events
+  useEffect(() => {
+    const onSrEvent = () => setSrTick((t) => t + 1);
+    window.addEventListener(SERVICE_REQUESTS_EVENT, onSrEvent);
+    return () => window.removeEventListener(SERVICE_REQUESTS_EVENT, onSrEvent);
   }, []);
 
   useEffect(() => {
@@ -2461,10 +2486,116 @@ export function ManagerListingInlineEditor({
         </div>
       ) : null}
 
+      {/* ── RESIDENT SERVICE REQUESTS ── */}
+      <div className={`${SECTION_WRAP} border-blue-100`}>
+        <SectionHeader
+          title="Resident requests"
+          color="blue"
+          badge={serviceRequests.length > 0 ? <span className="text-[10px] font-semibold text-blue-600">{serviceRequests.length}</span> : undefined}
+          isEditing={false}
+          onEdit={() => {}}
+          editLabel="–"
+        />
+        <div className="p-4">
+          {serviceRequests.length === 0 ? (
+            <p className="text-sm text-slate-500">No service requests from residents yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {serviceRequests.map((req) => {
+                const statusBg: Record<string, string> = {
+                  pending: "bg-amber-50 border-amber-200",
+                  approved: "bg-emerald-50 border-emerald-200",
+                  denied: "bg-rose-50 border-rose-200",
+                  returned: "bg-blue-50 border-blue-200",
+                };
+                const statusText: Record<string, string> = {
+                  pending: "text-amber-700",
+                  approved: "text-emerald-700",
+                  denied: "text-rose-700",
+                  returned: "text-blue-700",
+                };
+                const statusBadgeBg: Record<string, string> = {
+                  pending: "bg-amber-100 text-amber-800",
+                  approved: "bg-emerald-100 text-emerald-800",
+                  denied: "bg-rose-100 text-rose-800",
+                  returned: "bg-blue-100 text-blue-800",
+                };
+
+                return (
+                  <div key={req.id} className={`rounded-lg border p-3 ${statusBg[req.status] || "bg-slate-50 border-slate-200"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-semibold ${statusText[req.status] || "text-slate-700"}`}>{req.offerName}</p>
+                        <p className="text-xs text-slate-600 mt-0.5">{req.residentName} · {req.residentEmail}</p>
+                        {req.notes && <p className="text-xs text-slate-500 mt-1 italic">"{req.notes}"</p>}
+                        {req.returnByDate && (
+                          <p className="text-xs text-slate-500 mt-0.5">Return by: {new Date(req.returnByDate).toLocaleDateString()}</p>
+                        )}
+                      </div>
+                      <div className="shrink-0">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadgeBg[req.status] || "bg-slate-100 text-slate-700"}`}>
+                          {req.status}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between border-t border-current border-opacity-10 pt-2">
+                      <div className="text-xs text-slate-600">
+                        {req.price && <span>{req.price}</span>}
+                        {req.price && req.deposit && <span> · </span>}
+                        {req.deposit && hasDeposit(req.deposit) && <span>Deposit: {req.deposit}</span>}
+                      </div>
+                      <div className="flex gap-1.5">
+                        {req.status === "pending" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                approveServiceRequest(req.id);
+                                setSrTick((t) => t + 1);
+                                showToast(`Approved "${req.offerName}".`);
+                              }}
+                              className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-emerald-700 transition"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                denyServiceRequest(req.id);
+                                setSrTick((t) => t + 1);
+                                showToast(`Denied "${req.offerName}".`);
+                              }}
+                              className="rounded-full border border-rose-300 bg-white px-2.5 py-1 text-[10px] font-semibold text-rose-600 hover:bg-rose-50 transition"
+                            >
+                              Deny
+                            </button>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            deleteServiceRequest(req.id);
+                            setSrTick((t) => t + 1);
+                            showToast("Request removed.");
+                          }}
+                          className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 transition"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ── REQUEST OPTIONS ── */}
       <div className={`${SECTION_WRAP} border-slate-200`}>
         <SectionHeader
-          title="Requests"
+          title="Services"
           color="slate"
           isEditing={false}
           editLabel="+ Add"
@@ -2518,7 +2649,7 @@ export function ManagerListingInlineEditor({
           ) : (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-10 text-center">
               <p className="text-sm font-medium text-slate-600">No request options yet</p>
-              <p className="mt-1 max-w-xs text-xs text-slate-400">Add optional paid or free requests residents can choose in their Requests portal section, like weekly cleaning, linen sets, parking, or storage.</p>
+              <p className="mt-1 max-w-xs text-xs text-slate-400">Add optional paid or free services residents can choose in their Services tab, like weekly cleaning, linen sets, parking, or storage.</p>
               <button type="button" onClick={() => { setEditingOffer(null); setServiceForm({ name: "", description: "", price: "", deposit: "", restrictToResidents: false, selectedEmails: [] }); setServiceModalOpen(true); }} className={`mt-4 ${ADD_BTN}`}>+ Add request</button>
             </div>
           )}

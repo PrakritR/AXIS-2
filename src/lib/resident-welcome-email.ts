@@ -31,7 +31,7 @@ export function buildResidentWelcomeEmailBody(params: {
     "What you can do in the resident portal:",
     "• Lease signing — review and sign your lease when your property sends it for signature.",
     "• Payments — see rent and charges, payment amounts, and any fines or fees your manager records.",
-    "• Requests — submit maintenance and service requests and follow updates.",
+    "• Services — submit requests and work orders, and follow updates.",
     "• Move-in — your earliest move-in date, access instructions, parking, and other details for your room (once your listing includes them).",
     "",
     "Use the same email address you used on your rental application when you create your account.",

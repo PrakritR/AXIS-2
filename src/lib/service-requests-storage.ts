@@ -99,6 +99,19 @@ export function readServiceRequestsForManager(managerUserId: string): ServiceReq
   return readAll().filter((r) => r.managerUserId === managerUserId);
 }
 
+export function readServiceRequestsForProperty(propertyId: string): ServiceRequest[] {
+  const propId = propertyId.trim().toLowerCase();
+  return readAll().filter((r) => r.propertyId.trim().toLowerCase() === propId);
+}
+
+export function updateServiceRequest(id: string, updates: Partial<ServiceRequest>): void {
+  const all = readAll();
+  const idx = all.findIndex((r) => r.id === id);
+  if (idx === -1) return;
+  all[idx] = { ...all[idx]!, ...updates };
+  writeAll(all);
+}
+
 export function approveServiceRequest(id: string, managerNote?: string): void {
   const all = readAll();
   const idx = all.findIndex((r) => r.id === id);

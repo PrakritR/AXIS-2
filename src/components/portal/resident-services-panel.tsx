@@ -26,6 +26,7 @@ import {
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
+import { TabNav } from "@/components/ui/tabs";
 import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -38,7 +39,6 @@ import {
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import {
   AMENITY_CATALOG_EVENT,
-  readAmenityOffersForManager,
   readAmenityOffersForProperty,
   readAllAmenityOffersForProperty,
   type ManagerAmenityOffer,
@@ -290,13 +290,20 @@ function ServiceRequestCard({
   );
 }
 
-export function ResidentServicesPanel() {
+export function ResidentServicesPanel({
+  tabId,
+  basePath,
+}: {
+  tabId: "requests" | "work-orders";
+  basePath: string;
+}) {
   const { showToast } = useAppUi();
   const session = usePortalSession();
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [bucket, setBucket] = useState<ResidentWorkBucket>("open");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const activeTab = tabId;
 
   // modal state
   const [modalMode, setModalMode] = useState<"none" | "maintenance" | "service">("none");
@@ -359,10 +366,10 @@ export function ResidentServicesPanel() {
       return o.residentEmails.some((e) => e.trim().toLowerCase() === residentEmail);
     };
 
+    if (!propertyId) return [];
+
     if (managerUserId) {
-      const offers = readAmenityOffersForProperty(managerUserId, propertyId).filter(visibleToResident);
-      if (offers.length > 0) return offers;
-      return readAmenityOffersForManager(managerUserId).filter(visibleToResident);
+      return readAmenityOffersForProperty(managerUserId, propertyId).filter(visibleToResident);
     } else if (propertyId) {
       return readAllAmenityOffersForProperty(propertyId).filter(visibleToResident);
     }
@@ -438,16 +445,6 @@ export function ResidentServicesPanel() {
     [counts],
   );
 
-  // Active service requests (not denied)
-  const activeServiceRequests = useMemo(
-    () => serviceRequests.filter((r) => r.status !== "denied"),
-    [serviceRequests],
-  );
-  const deniedServiceRequests = useMemo(
-    () => serviceRequests.filter((r) => r.status === "denied"),
-    [serviceRequests],
-  );
-
   const residentLeaseRow = useMemo(() => {
     void leaseTick;
     if (!residentEmail) return null;
@@ -496,7 +493,7 @@ export function ResidentServicesPanel() {
 
   const submitMaintenance = () => {
     if (!servicesUnlocked) {
-      showToast("Requests unlock after your lease is fully signed.");
+      showToast("Services unlock after your lease is fully signed.");
       return;
     }
     if (!mTitle.trim()) { showToast("Add a title first."); return; }
@@ -533,7 +530,7 @@ export function ResidentServicesPanel() {
 
   const submitService = () => {
     if (!servicesUnlocked) {
-      showToast("Requests unlock after your lease is fully signed.");
+      showToast("Services unlock after your lease is fully signed.");
       return;
     }
     if (!selectedOffer) { showToast("Select a service first."); return; }
@@ -548,6 +545,16 @@ export function ResidentServicesPanel() {
       application?.propertyId?.trim() ||
       application?.application?.propertyId?.trim() ||
       "";
+    if (!propertyId) {
+      showToast("No property assignment found. Contact support.");
+      return;
+    }
+    const currentOffer = availableOffers.find((offer) => offer.id === selectedOffer.id) ?? null;
+    if (!currentOffer) {
+      showToast("That request option is no longer available. Please choose another.");
+      setSelectedOffer(null);
+      return;
+    }
     // Resolve managerUserId — try application row, then property, then the selected offer's own field
     let managerUserId = application?.managerUserId?.trim() || "";
     if (!managerUserId && propertyId) {
@@ -555,15 +562,15 @@ export function ResidentServicesPanel() {
     }
     if (!managerUserId) {
       // Derive from the offer — most reliable when application row lacks managerUserId
-      managerUserId = selectedOffer.managerUserId?.trim() || "";
+      managerUserId = currentOffer.managerUserId?.trim() || "";
     }
     if (!managerUserId) { showToast("Could not find your property manager. Contact support."); return; }
     createServiceRequest({
-      offerId: selectedOffer.id,
-      offerName: selectedOffer.name,
-      offerDescription: selectedOffer.description,
-      price: selectedOffer.price,
-      deposit: selectedOffer.deposit,
+      offerId: currentOffer.id,
+      offerName: currentOffer.name,
+      offerDescription: currentOffer.description,
+      price: currentOffer.price,
+      deposit: currentOffer.deposit,
       residentEmail,
       residentName: application?.name || residentEmail,
       managerUserId,
@@ -571,7 +578,7 @@ export function ResidentServicesPanel() {
       returnByDate: sReturnBy.trim(),
       notes: sNotes.trim(),
     });
-    showToast(`${selectedOffer.name} requested — awaiting manager approval.`);
+    showToast(`${currentOffer.name} requested — awaiting manager approval.`);
     resetService();
     setModalMode("none");
     reloadServiceRequests();
@@ -579,7 +586,7 @@ export function ResidentServicesPanel() {
 
   return (
     <ManagerPortalPageShell
-      title="Requests"
+      title="Services"
       titleAside={
         <div className="flex shrink-0 gap-2">
           <Button
@@ -589,7 +596,7 @@ export function ResidentServicesPanel() {
             disabled={!servicesUnlocked}
             onClick={() => {
               if (!servicesUnlocked) {
-                showToast("Requests unlock after your lease is fully signed.");
+                showToast("Services unlock after your lease is fully signed.");
                 return;
               }
               setModalMode("maintenance");
@@ -603,7 +610,7 @@ export function ResidentServicesPanel() {
             disabled={!servicesUnlocked}
             onClick={() => {
               if (!servicesUnlocked) {
-                showToast("Requests unlock after your lease is fully signed.");
+                showToast("Services unlock after your lease is fully signed.");
                 return;
               }
               setModalMode("service");
@@ -617,158 +624,193 @@ export function ResidentServicesPanel() {
     >
       <input ref={photoInputRef} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void onPickPhotos(e.target.files); }} />
 
+      <div className="mb-4">
+        <TabNav
+          activeId={activeTab}
+          items={[
+            { id: "requests", label: "Requests", href: `${basePath}/services/requests` },
+            { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
+          ]}
+        />
+      </div>
+
       {!servicesUnlocked ? (
         <div className="mb-6 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-4 text-sm text-amber-950">
-          Requests are locked until your lease is fully signed by you and your manager.
+          Services are locked until your lease is fully signed by you and your manager.
         </div>
       ) : null}
 
-      {/* Active service requests */}
-      {activeServiceRequests.length > 0 ? (
-        <div className="mb-6">
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Active requests</p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {activeServiceRequests.map((req) => (
-              <ServiceRequestCard
-                key={req.id}
-                req={req}
-                onReturnPhotoUploaded={reloadServiceRequests}
-                onDelete={reloadServiceRequests}
-              />
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {/* Maintenance requests */}
-      <div>
-        <div className="mb-3 flex items-center gap-3">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Maintenance</p>
-          <div className="flex gap-1">
-            {statusTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setBucket(tab.id)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                  bucket === tab.id
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {tab.label}
-                {tab.count > 0 ? ` · ${tab.count}` : ""}
-              </button>
-            ))}
-          </div>
-        </div>
-
+      {activeTab === "requests" ? (
         <div className={PORTAL_DATA_TABLE_WRAP}>
-          {rows.length === 0 ? (
+          {serviceRequests.length === 0 ? (
             <PortalDataTableEmpty
-              message={
-                myRows.length === 0
-                  ? "No maintenance requests yet. Use Report maintenance to get started."
-                  : "No requests in this status."
-              }
+              message="No requests yet. Use Submit request to send one to your manager."
             />
           ) : (
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="min-w-[700px] w-full border-collapse text-left text-sm">
+              <table className="min-w-[860px] w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Request</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Price</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Return by</th>
                     <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
-                    <Fragment key={row.id}>
-                      <tr className={PORTAL_TABLE_TR}>
-                        <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-slate-500`}>{row.id}</td>
-                        <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
-                        <td className={PORTAL_TABLE_TD}>{row.status}</td>
-                        <td className={`${PORTAL_TABLE_TD} text-right`}>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                            onClick={() => setExpandedId((c) => (c === row.id ? null : row.id))}
-                          >
-                            {expandedId === row.id ? "Hide" : "Details"}
-                          </Button>
-                        </td>
-                      </tr>
-                      {expandedId === row.id ? (
-                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={4} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
-                            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Priority</p>
-                            <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>{row.priority}</span>
-                            <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Preferred arrival</p>
-                            <p className="mt-1 font-medium text-slate-800">{row.preferredArrival ?? "Anytime"}</p>
-                            <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Details</p>
-                            <p className="mt-1.5 whitespace-pre-wrap leading-relaxed">{row.description}</p>
-                            {row.photoDataUrls?.length ? (
-                              <>
-                                <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Photos</p>
-                                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                  {row.photoDataUrls.map((src, i) => (
-                                    <a key={i} href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-                                      <Image src={src} alt={`Photo ${i + 1}`} width={240} height={180} className="h-28 w-full object-cover" unoptimized />
-                                    </a>
-                                  ))}
-                                </div>
-                              </>
-                            ) : null}
-                            {bucket === "open" ? (
-                              <PortalTableDetailActions>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={PORTAL_DETAIL_BTN}
-                                  onClick={() => {
-                                    deleteManagerWorkOrderRow(row.id);
-                                    setAllRows(readManagerWorkOrderRows());
-                                    setExpandedId(null);
-                                    showToast("Request removed.");
-                                  }}
-                                >
-                                  Cancel request
-                                </Button>
-                              </PortalTableDetailActions>
-                            ) : null}
+                  {serviceRequests.map((req) => {
+                    const rowId = `request-${req.id}`;
+                    return (
+                      <Fragment key={req.id}>
+                        <tr className={PORTAL_TABLE_TR}>
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{req.offerName}</td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <ServiceStatusBadge status={req.status} />
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>{req.price || "—"}</td>
+                          <td className={PORTAL_TABLE_TD}>{req.returnByDate ? formatDate(req.returnByDate) : "—"}</td>
+                          <td className={`${PORTAL_TABLE_TD} text-right`}>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                              onClick={() => setExpandedId((c) => (c === rowId ? null : rowId))}
+                            >
+                              {expandedId === rowId ? "Hide" : "Details"}
+                            </Button>
                           </td>
                         </tr>
-                      ) : null}
-                    </Fragment>
-                  ))}
+                        {expandedId === rowId ? (
+                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                            <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                              <ServiceRequestCard
+                                req={req}
+                                onReturnPhotoUploaded={reloadServiceRequests}
+                                onDelete={reloadServiceRequests}
+                              />
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
-      </div>
-
-      {/* Denied service requests (collapsed at bottom) */}
-      {deniedServiceRequests.length > 0 ? (
-        <details className="mt-6">
-          <summary className="cursor-pointer text-xs font-semibold text-slate-400 hover:text-slate-600">
-            {deniedServiceRequests.length} denied request{deniedServiceRequests.length !== 1 ? "s" : ""}
-          </summary>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {deniedServiceRequests.map((req) => (
-              <ServiceRequestCard
-                key={req.id}
-                req={req}
-                onReturnPhotoUploaded={reloadServiceRequests}
-                onDelete={reloadServiceRequests}
-              />
-            ))}
+      ) : (
+        <div>
+          <div className="mb-3 flex items-center gap-3">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Work orders</p>
+            <div className="flex gap-1">
+              {statusTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setBucket(tab.id)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                    bucket === tab.id
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {tab.label}
+                  {tab.count > 0 ? ` · ${tab.count}` : ""}
+                </button>
+              ))}
+            </div>
           </div>
-        </details>
-      ) : null}
+
+          <div className={PORTAL_DATA_TABLE_WRAP}>
+            {rows.length === 0 ? (
+              <PortalDataTableEmpty
+                message={
+                  myRows.length === 0
+                    ? "No work orders yet. Use Report maintenance to get started."
+                    : "No work orders in this status."
+                }
+              />
+            ) : (
+              <div className={PORTAL_DATA_TABLE_SCROLL}>
+                <table className="min-w-[700px] w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className={PORTAL_TABLE_HEAD_ROW}>
+                      <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
+                      <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                      <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                      <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <Fragment key={row.id}>
+                        <tr className={PORTAL_TABLE_TR}>
+                          <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-slate-500`}>{row.id}</td>
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
+                          <td className={PORTAL_TABLE_TD}>{row.status}</td>
+                          <td className={`${PORTAL_TABLE_TD} text-right`}>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                              onClick={() => setExpandedId((c) => (c === row.id ? null : row.id))}
+                            >
+                              {expandedId === row.id ? "Hide" : "Details"}
+                            </Button>
+                          </td>
+                        </tr>
+                        {expandedId === row.id ? (
+                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                            <td colSpan={4} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
+                              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Priority</p>
+                              <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>{row.priority}</span>
+                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Preferred arrival</p>
+                              <p className="mt-1 font-medium text-slate-800">{row.preferredArrival ?? "Anytime"}</p>
+                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Details</p>
+                              <p className="mt-1.5 whitespace-pre-wrap leading-relaxed">{row.description}</p>
+                              {row.photoDataUrls?.length ? (
+                                <>
+                                  <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Photos</p>
+                                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                    {row.photoDataUrls.map((src, i) => (
+                                      <a key={i} href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                                        <Image src={src} alt={`Photo ${i + 1}`} width={240} height={180} className="h-28 w-full object-cover" unoptimized />
+                                      </a>
+                                    ))}
+                                  </div>
+                                </>
+                              ) : null}
+                              {bucket === "open" ? (
+                                <PortalTableDetailActions>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className={PORTAL_DETAIL_BTN}
+                                    onClick={() => {
+                                      deleteManagerWorkOrderRow(row.id);
+                                      setAllRows(readManagerWorkOrderRows());
+                                      setExpandedId(null);
+                                      showToast("Work order removed.");
+                                    }}
+                                  >
+                                    Cancel work order
+                                  </Button>
+                                </PortalTableDetailActions>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Maintenance modal */}
       <Modal

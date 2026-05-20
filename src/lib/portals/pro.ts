@@ -29,7 +29,14 @@ export const proPortal: PortalDefinition = {
       label: "Payments",
       tabs: [],
     },
-    { section: "services", label: "Requests", tabs: [] },
+    {
+      section: "services",
+      label: "Services",
+      tabs: [
+        { id: "requests", label: "Requests" },
+        { id: "work-orders", label: "Work orders" },
+      ],
+    },
     {
       section: "inbox",
       label: "Inbox",

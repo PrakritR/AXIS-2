@@ -25,7 +25,6 @@ import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
-import { ResidentWorkOrdersPanel } from "@/components/portal/resident-work-orders-panel";
 import { ResidentServicesPanel } from "@/components/portal/resident-services-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
@@ -113,12 +112,12 @@ export async function renderPortalSection(
           managerSubscriptionTier: residentManagerTier,
         })
       : false;
-  // work-orders now lives in Residents tab — redirect before findSection so we never 404
+  // Legacy path support: work-orders moved under Services tabs.
   if (
     (kind === "manager" || kind === "pro" || kind === "owner") &&
     section === "work-orders"
   ) {
-    redirect(`${def.basePath}/residents`);
+    redirect(`${def.basePath}/services/work-orders`);
   }
 
   const meta = findSection(def, section);
@@ -199,7 +198,7 @@ export async function renderPortalSection(
 
   if (kind === "manager") {
     if (section === "work-orders") {
-      redirect(`${def.basePath}/residents`);
+      redirect(`${def.basePath}/services/work-orders`);
     }
     if (section === "residents") {
       if (!tabParts?.length) {
@@ -233,7 +232,18 @@ export async function renderPortalSection(
       );
     }
     if (section === "work-orders" || section === "services") {
-      return subscriptionGated(<ManagerAllServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/services/requests`);
+      }
+      if (tabParts.length > 1) notFound();
+      const servicesTab = tabParts[0]!;
+      if (!["requests", "work-orders"].includes(servicesTab)) notFound();
+      return subscriptionGated(
+        <ManagerAllServicesPanel tabId={servicesTab as "requests" | "work-orders"} basePath={def.basePath} />,
+        kind,
+        "services",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (section === "payments") {
       if (tabParts?.length) {
@@ -276,7 +286,7 @@ export async function renderPortalSection(
   if (kind === "pro") {
     const useOwnerUi = proEffectiveRole === "owner";
     if (section === "work-orders" && !useOwnerUi) {
-      redirect(`${def.basePath}/residents`);
+      redirect(`${def.basePath}/services/work-orders`);
     }
 
     if (section === "relationships") {
@@ -339,7 +349,18 @@ export async function renderPortalSection(
       return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
     }
     if (section === "work-orders" || section === "services") {
-      return subscriptionGated(<ManagerAllServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/services/requests`);
+      }
+      if (tabParts.length > 1) notFound();
+      const servicesTab = tabParts[0]!;
+      if (!["requests", "work-orders"].includes(servicesTab)) notFound();
+      return subscriptionGated(
+        <ManagerAllServicesPanel tabId={servicesTab as "requests" | "work-orders"} basePath={def.basePath} />,
+        kind,
+        "services",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
@@ -394,7 +415,18 @@ export async function renderPortalSection(
       );
     }
     if (section === "work-orders" || section === "services") {
-      return subscriptionGated(<ManagerAllServicesPanel />, kind, "services", managerOwnerSubscriptionTier);
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/services/requests`);
+      }
+      if (tabParts.length > 1) notFound();
+      const servicesTab = tabParts[0]!;
+      if (!["requests", "work-orders"].includes(servicesTab)) notFound();
+      return subscriptionGated(
+        <ManagerAllServicesPanel tabId={servicesTab as "requests" | "work-orders"} basePath={def.basePath} />,
+        kind,
+        "services",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
@@ -482,14 +514,31 @@ export async function renderPortalSection(
 
   if (kind === "resident") {
     if (residentWorkspaceUnlocked) {
+      if (section === "services") {
+        if (!tabParts?.length) {
+          redirect(`${def.basePath}/services/requests`);
+        }
+        if (tabParts.length > 1) notFound();
+        const servicesTab = tabParts[0]!;
+        if (!["requests", "work-orders"].includes(servicesTab)) notFound();
+        return <ResidentServicesPanel tabId={servicesTab as "requests" | "work-orders"} basePath={def.basePath} />;
+      }
       if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentLeasePanel />;
-      if (section === "work-orders" || section === "services") return <ResidentServicesPanel />;
+      if (section === "work-orders") return <ResidentServicesPanel tabId="work-orders" basePath={def.basePath} />;
     }
     if ((residentAccess?.leaseAccessUnlocked ?? false) && residentManagerTier === "free") {
-      if (tabParts?.length) notFound();
       if (section === "lease") return <ResidentFreeTierFeatureNotice title="Lease" />;
-      if (section === "work-orders" || section === "services") return <ResidentFreeTierFeatureNotice title="Requests" />;
+      if (section === "services") {
+        if (!tabParts?.length) {
+          redirect(`${def.basePath}/services/requests`);
+        }
+        if (tabParts.length > 1) notFound();
+        if (!["requests", "work-orders"].includes(tabParts[0]!)) notFound();
+        return <ResidentFreeTierFeatureNotice title="Services" />;
+      }
+      if (tabParts?.length) notFound();
+      if (section === "work-orders") return <ResidentFreeTierFeatureNotice title="Services" />;
     }
   }
 

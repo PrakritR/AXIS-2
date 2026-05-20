@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_TOOLBAR_GROUP,
   PORTAL_TOOLBAR_LABEL,
-  PORTAL_TOOLBAR_PILL_BUTTON,
-  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
   PORTAL_TOOLBAR_SELECT,
+  MANAGER_TABLE_TH,
 } from "@/components/portal/portal-metrics";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
@@ -32,8 +30,19 @@ import {
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
+import { TabNav } from "@/components/ui/tabs";
+import {
+  PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_DATA_TABLE_WRAP,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TD,
+  PORTAL_TABLE_TR,
+} from "@/components/portal/portal-data-table";
 
-type FilterType = "all" | "requests" | "work-orders";
+type FilterType = "requests" | "work-orders";
 type SortKey = "newest" | "oldest" | "status";
 
 const STATUS_PILL: Record<string, string> = {
@@ -60,15 +69,21 @@ function hasDeposit(dep: string) {
   return dep.trim() !== "" && dep.trim() !== "0" && dep.trim() !== "$0";
 }
 
-export function ManagerAllServicesPanel() {
+export function ManagerAllServicesPanel({
+  tabId,
+  basePath,
+}: {
+  tabId: "requests" | "work-orders";
+  basePath: string;
+}) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState<FilterType>("all");
   const [sortKey, setSortKey] = useState<SortKey>("newest");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const typeFilter: FilterType = tabId;
 
   const propertyOptions = useMemo(() => {
     void propertyTick;
@@ -171,7 +186,7 @@ export function ManagerAllServicesPanel() {
 
   return (
     <ManagerPortalPageShell
-      title="All requests"
+      title="Services"
       titleAside={
         <div className="flex flex-wrap items-center gap-2">
           {pendingCount > 0 && (
@@ -224,22 +239,6 @@ export function ManagerAllServicesPanel() {
             </div>
           )}
 
-          {/* Type filter pills */}
-          <div className={PORTAL_TOOLBAR_GROUP}>
-            {(["all", "requests", "work-orders"] as FilterType[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTypeFilter(t)}
-                className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${
-                  typeFilter === t ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""
-                }`}
-              >
-                {t === "all" ? "All" : t === "requests" ? "Requests" : "Work orders"}
-              </button>
-            ))}
-          </div>
-
           {/* Sort */}
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
             <label className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort</label>
@@ -255,66 +254,82 @@ export function ManagerAllServicesPanel() {
           </div>
         </div>
 
-        {/* Empty state */}
+        <div className="mb-4">
+          <TabNav
+            activeId={typeFilter}
+            items={[
+              { id: "requests", label: "Requests", href: `${basePath}/services/requests` },
+              { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
+            ]}
+          />
+        </div>
+
         {unified.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
-            <p className="text-sm font-medium text-slate-600">No requests yet</p>
+            <p className="text-sm font-medium text-slate-600">No services yet</p>
             <p className="mt-1 max-w-xs text-xs text-slate-400">
-              Requests and work orders from residents will appear here.
+              {typeFilter === "requests"
+                ? "Service requests from residents will appear here."
+                : "Work orders from residents will appear here."}
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className={PORTAL_DATA_TABLE_WRAP}>
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="min-w-[920px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Details</th>
+                    <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
             {unified.map((item) => {
-              const id = item.kind === "request" ? item.data.id : item.data.id;
+              const id = item.kind === "request" ? `request-${item.data.id}` : `work-order-${item.data.id}`;
               const isExpanded = expandedId === id;
 
               if (item.kind === "request") {
                 const req = item.data;
                 const needsReturn = hasDeposit(req.deposit);
                 return (
-                  <div
-                    key={`req-${req.id}`}
-                    className={`rounded-2xl border bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.06)] transition ${
-                      req.status === "pending" ? "border-amber-200" : "border-slate-200"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                            Request
-                          </span>
-                          <p className="font-semibold text-slate-900">{req.offerName}</p>
-                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[req.status] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
-                            {STATUS_LABEL[req.status] ?? req.status}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {req.residentName || req.residentEmail}
-                          {req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
-                            ? ` · ${propertyOptions.find((p) => p.id === req.propertyId)!.label}`
-                            : null}
-                        </p>
-                        {req.price || needsReturn ? (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {req.price ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">{req.price}</span> : null}
-                            {needsReturn ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {req.deposit}</span> : null}
-                          </div>
-                        ) : null}
-                        {req.notes ? <p className="mt-2 text-xs italic text-slate-500">&ldquo;{req.notes}&rdquo;</p> : null}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId(isExpanded ? null : id)}
-                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50"
-                      >
-                        {isExpanded ? "Collapse" : "Actions"}
-                      </button>
-                    </div>
-
+                  <Fragment key={`req-${req.id}`}>
+                    <tr className={PORTAL_TABLE_TR}>
+                      <td className={PORTAL_TABLE_TD}>Request</td>
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{req.offerName}</td>
+                      <td className={PORTAL_TABLE_TD}>{req.residentName || req.residentEmail}</td>
+                      <td className={PORTAL_TABLE_TD}>
+                        {req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
+                          ? propertyOptions.find((p) => p.id === req.propertyId)!.label
+                          : "—"}
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[req.status] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
+                          {STATUS_LABEL[req.status] ?? req.status}
+                        </span>
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>
+                        {[req.price, needsReturn ? `Deposit ${req.deposit}` : null].filter(Boolean).join(" · ") || "—"}
+                      </td>
+                      <td className={`${PORTAL_TABLE_TD} text-right`}>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedId(isExpanded ? null : id)}
+                          className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                        >
+                          {isExpanded ? "Hide" : "Details"}
+                        </button>
+                      </td>
+                    </tr>
                     {isExpanded ? (
-                      <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                        <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <div className="space-y-3">
+                            {req.notes ? <p className="text-xs italic text-slate-500">&ldquo;{req.notes}&rdquo;</p> : null}
                         {req.status === "pending" ? (
                           <div className="flex flex-wrap gap-2">
                             <Button
@@ -377,53 +392,47 @@ export function ManagerAllServicesPanel() {
                             Delete request
                           </Button>
                         </div>
-                      </div>
+                          </div>
+                        </td>
+                      </tr>
                     ) : null}
-                  </div>
+                  </Fragment>
                 );
               }
 
               // Work order
               const wo = item.data;
               return (
-                <div
-                  key={`wo-${wo.id}`}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.06)]"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                          Work order
-                        </span>
-                        <p className="font-semibold text-slate-900">{wo.title}</p>
-                        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[wo.bucket] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
-                          {STATUS_LABEL[wo.bucket] ?? wo.status}
-                        </span>
-                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                          {wo.priority}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {wo.residentName ?? wo.residentEmail ?? "Resident"}
-                        {wo.propertyName ? ` · ${wo.propertyName}` : null}
-                        {wo.unit ? ` · ${wo.unit}` : null}
-                      </p>
-                      {wo.description ? (
-                        <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-600">{wo.description}</p>
-                      ) : null}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(isExpanded ? null : id)}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50"
-                    >
-                      {isExpanded ? "Collapse" : "Details"}
-                    </button>
-                  </div>
-
+                <Fragment key={`wo-${wo.id}`}>
+                  <tr className={PORTAL_TABLE_TR}>
+                    <td className={PORTAL_TABLE_TD}>Work order</td>
+                    <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{wo.title}</td>
+                    <td className={PORTAL_TABLE_TD}>{wo.residentName ?? wo.residentEmail ?? "Resident"}</td>
+                    <td className={PORTAL_TABLE_TD}>
+                      {[wo.propertyName, wo.unit].filter(Boolean).join(" · ") || "—"}
+                    </td>
+                    <td className={PORTAL_TABLE_TD}>
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[wo.bucket] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
+                        {STATUS_LABEL[wo.bucket] ?? wo.status}
+                      </span>
+                    </td>
+                    <td className={PORTAL_TABLE_TD}>{wo.priority}</td>
+                    <td className={`${PORTAL_TABLE_TD} text-right`}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : id)}
+                        className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
+                      >
+                        {isExpanded ? "Hide" : "Details"}
+                      </button>
+                    </td>
+                  </tr>
                   {isExpanded ? (
-                    <div className="mt-3 border-t border-slate-100 pt-3">
+                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                      <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
+                        {wo.description ? (
+                          <p className="mb-3 text-sm leading-relaxed text-slate-600">{wo.description}</p>
+                        ) : null}
                       <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
                         <div>
                           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Preferred arrival</p>
@@ -454,11 +463,15 @@ export function ManagerAllServicesPanel() {
                           </Button>
                         </div>
                       ) : null}
-                    </div>
+                      </td>
+                    </tr>
                   ) : null}
-                </div>
+                </Fragment>
               );
             })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
