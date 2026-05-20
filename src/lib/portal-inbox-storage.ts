@@ -79,7 +79,7 @@ export async function syncPersistedInboxFromServer(key: string, opts?: { force?:
     return memoryByKey.get(key) ?? [];
   }
   const promise = (async () => {
-    const res = await fetch("/api/portal-inbox-threads", { credentials: "include", cache: "no-store" });
+    const res = await fetch(`/api/portal-inbox-threads?scope=${encodeURIComponent(key)}`, { credentials: "include", cache: "no-store" });
     if (!res.ok) return memoryByKey.get(key) ?? [];
     const body = (await res.json()) as { rows?: PersistedInboxThread[] };
     const rows = (Array.isArray(body.rows) ? body.rows : []).filter(looksLikeThread);

@@ -150,7 +150,7 @@ async function deliverToPortalInbox({
   await db.from("portal_inbox_thread_records").upsert(
     {
       id: managerThreadId,
-      scope: "axis_portal_inbox_resident_v1",
+      scope: "axis_portal_inbox_manager_v1",
       owner_user_id: userId,
       participant_email: null,
       thread_type: "payment_reminder",
@@ -164,7 +164,7 @@ async function deliverToPortalInbox({
         body: messageBody,
         time: when,
         unread: false,
-        scope: "axis_portal_inbox_resident_v1",
+        scope: "axis_portal_inbox_manager_v1",
       },
       updated_at: new Date().toISOString(),
     },

@@ -146,7 +146,7 @@ export async function POST(req: Request) {
       await svc.from("portal_inbox_thread_records").upsert(
         {
           id: managerThreadId,
-          scope: "axis_portal_inbox_resident_v1",
+          scope: "axis_portal_inbox_manager_v1",
           owner_user_id: user.id,
           participant_email: null,
           thread_type: "portal_message",
@@ -160,15 +160,15 @@ export async function POST(req: Request) {
             body: text,
             time: when,
             unread: false,
-            scope: "axis_portal_inbox_resident_v1",
+            scope: "axis_portal_inbox_manager_v1",
           },
           updated_at: new Date().toISOString(),
         },
         { onConflict: "id" },
       );
 
-      // Resident's Unopened record (skip when recipient = sender to avoid polluting manager's Unopened tab)
-      if (!skipExternalEmail) {
+      // Resident's Unopened record (skip self-send and @axis.local to avoid polluting inboxes)
+      if (!skipExternalEmail && to.toLowerCase() !== senderLower) {
         const residentThreadId = `welcome_inbox_${ts}_${rand}`;
         await svc.from("portal_inbox_thread_records").upsert(
           {

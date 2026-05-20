@@ -46,6 +46,12 @@ export async function POST(req: Request) {
     const db = createSupabaseServiceRoleClient();
     // Deliver to portal inbox for all recipients (including @axis.local demo emails)
     if (deliverToPortalInbox && recipientEmails.length > 0) {
+      const { data: senderProfile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
+      const senderRole = String(senderProfile?.role ?? "").toLowerCase();
+      const senderScope = senderRole === "owner"
+        ? "axis_portal_inbox_owner_v1"
+        : "axis_portal_inbox_manager_v1";
+
       const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
       const preview = text.slice(0, 100).replace(/\n/g, " ");
       for (const recipientEmail of recipientEmails) {
@@ -53,16 +59,16 @@ export async function POST(req: Request) {
         const rand = Math.random().toString(36).slice(2, 6);
         const recipientLower = recipientEmail;
 
-        // Manager's Sent record (owner-only, so resident doesn't see a duplicate "sent" copy)
+        // Sender's Sent record (owner-only, scoped to the sender's portal)
         const managerThreadId = `msg_${user.id}_${ts}_${rand}`;
         await db.from("portal_inbox_thread_records").upsert(
           {
             id: managerThreadId,
-            scope: "axis_portal_inbox_resident_v1",
+            scope: senderScope,
             owner_user_id: user.id,
             participant_email: null,
             thread_type: "portal_message",
-            row_data: { id: managerThreadId, folder: "sent", from: fromName, email: recipientLower, subject, preview, body: text, time: when, unread: false, scope: "axis_portal_inbox_resident_v1" },
+            row_data: { id: managerThreadId, folder: "sent", from: fromName, email: recipientLower, subject, preview, body: text, time: when, unread: false, scope: senderScope },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" },

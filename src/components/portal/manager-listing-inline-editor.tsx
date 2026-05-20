@@ -38,7 +38,6 @@ import { Modal } from "@/components/ui/modal";
 import {
   readAmenityOffersForProperty,
   readAmenityOffersForManager,
-  readAllAmenityOffersForProperty,
   saveAmenityOffer,
   deleteAmenityOffer,
   toggleAmenityOfferAvailability,
@@ -387,23 +386,23 @@ export function ManagerListingInlineEditor({
     name: "", description: "", price: "", deposit: "", restrictToResidents: false, selectedEmails: [] as string[],
   });
 
+  const loadOffers = useCallback((uid: string, lid: string | null | undefined): ManagerAmenityOffer[] => {
+    if (lid) {
+      const specific = readAmenityOffersForProperty(uid, lid);
+      if (specific.length > 0) return specific;
+    }
+    return readAmenityOffersForManager(uid);
+  }, []);
+
   useEffect(() => {
     if (!userId) return;
-    setServiceOffers(
-      listingId
-        ? readAllAmenityOffersForProperty(listingId)
-        : readAmenityOffersForManager(userId),
-    );
-  }, [userId, listingId]);
+    setServiceOffers(loadOffers(userId, listingId));
+  }, [userId, listingId, loadOffers]);
 
   const reloadOffers = useCallback(() => {
     if (!userId) return;
-    setServiceOffers(
-      listingId
-        ? readAllAmenityOffersForProperty(listingId)
-        : readAmenityOffersForManager(userId),
-    );
-  }, [userId, listingId]);
+    setServiceOffers(loadOffers(userId, listingId));
+  }, [userId, listingId, loadOffers]);
 
   const propertyResidents = useMemo(() => {
     if (!listingId) return [];
