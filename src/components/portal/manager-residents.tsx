@@ -37,6 +37,7 @@ import {
   findPendingWorkOrderCharge,
   markHouseholdChargePaid,
   parseMoneyAmount,
+  deleteHouseholdCharge,
   readChargesForManagerResident,
   recordApprovedApplicationCharges,
   recordWorkOrderResidentCharge,
@@ -1406,6 +1407,15 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
   }
 
+  function deleteCharge(chargeId: string) {
+    if (!window.confirm("Delete this charge? This cannot be undone.")) return;
+    if (deleteHouseholdCharge(chargeId, userId ?? null)) {
+      showToast("Charge deleted.");
+      setHcTick((n) => n + 1);
+      void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
+    }
+  }
+
   function generateLeaseDeferred(rowId: string) {
     if (generatingLeaseRowId) return;
     setGeneratingLeaseRowId(rowId);
@@ -2049,13 +2059,31 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                   >
                                                     Mark paid
                                                   </Button>
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="rounded-full px-2 py-0.5 text-xs text-red-600 hover:border-red-200"
+                                                    onClick={() => deleteCharge(c.id)}
+                                                  >
+                                                    Delete
+                                                  </Button>
                                                 </>
                                               ) : (
-                                                <span className="text-xs text-slate-400">
-                                                  {c.paidAt
-                                                    ? formatPacificDate(c.paidAt, { month: "short", day: "numeric" })
-                                                    : "—"}
-                                                </span>
+                                                <>
+                                                  <span className="text-xs text-slate-400">
+                                                    {c.paidAt
+                                                      ? formatPacificDate(c.paidAt, { month: "short", day: "numeric" })
+                                                      : "—"}
+                                                  </span>
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="rounded-full px-2 py-0.5 text-xs text-red-600 hover:border-red-200"
+                                                    onClick={() => deleteCharge(c.id)}
+                                                  >
+                                                    Delete
+                                                  </Button>
+                                                </>
                                               )}
                                             </div>
                                           </td>
