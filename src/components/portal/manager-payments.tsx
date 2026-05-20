@@ -198,17 +198,29 @@ export function ManagerPayments() {
   }, [mergedRows]);
 
   const residentOptions = useMemo(() => {
+    // Use readManagerApplicationRows as source of truth (same as Residents page)
+    const applications = readManagerApplicationRows();
     const seen = new Map<string, string>();
-    for (const row of mergedRows) {
-      if (propertyFilter && normalizePropertyLabel(row.propertyName) !== propertyFilter) continue;
-      const key = row.residentName.trim();
-      if (!key) continue;
-      if (!seen.has(key)) seen.set(key, key);
+    
+    for (const app of applications) {
+      // If property filter is active, only include residents from that property
+      if (propertyFilter) {
+        const appPropertyName = app.assignedPropertyLabel?.trim() || 
+                                 app.property?.trim() || 
+                                 app.application?.propertyName?.trim() || 
+                                 "";
+        if (normalizePropertyLabel(appPropertyName) !== propertyFilter) continue;
+      }
+      
+      const name = app.name?.trim();
+      if (!name) continue;
+      if (!seen.has(name)) seen.set(name, name);
     }
+    
     return [...seen.entries()]
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [mergedRows, propertyFilter]);
+  }, [propertyFilter, applicationTick]);
 
   const activeResidentFilter = residentOptions.some((option) => option.id === residentFilter) ? residentFilter : "";
 
