@@ -118,9 +118,13 @@ export async function POST(req: NextRequest) {
     if (!leaseRecord) return NextResponse.json({ error: "No fully-signed lease found." }, { status: 404 });
 
     const leaseRow = leaseRecord.row_data as unknown as LeasePipelineRow;
+    const currentStart = leaseRow.application?.leaseStart ?? "";
+    if (currentStart && newLeaseEnd < currentStart) {
+      return NextResponse.json({ error: "New move-out date cannot be before the lease start date." }, { status: 400 });
+    }
     const currentEnd = leaseRow.application?.leaseEnd ?? "";
-    if (newLeaseEnd <= currentEnd) {
-      return NextResponse.json({ error: "New move-out date must be after the current end date." }, { status: 400 });
+    if (newLeaseEnd === currentEnd) {
+      return NextResponse.json({ error: "New move-out date is the same as the current date." }, { status: 400 });
     }
 
     // Build updated lease row: new leaseEnd, cleared sigs, back to Manager Review
@@ -219,7 +223,8 @@ export async function POST(req: NextRequest) {
       // Availability update is best-effort
     }
 
-    return NextResponse.json({ ok: true, newLeaseEnd });
+    const direction = newLeaseEnd < currentEnd ? "decrease" : "extend";
+    return NextResponse.json({ ok: true, newLeaseEnd, direction });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unexpected error.";
     return NextResponse.json({ error: message }, { status: 500 });

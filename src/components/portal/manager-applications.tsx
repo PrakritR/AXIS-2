@@ -644,7 +644,16 @@ function ManagerApplicationsContent() {
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket) => {
     const row = rows.find((r) => r.id === id);
     if (!row) return;
-    const next = rows.map((r) => (r.id === id ? { ...r, bucket: nextBucket, stage: stageLabelForRow(r, nextBucket) } : r));
+    const next = rows.map((r) =>
+      r.id === id
+        ? {
+            ...r,
+            bucket: nextBucket,
+            stage: stageLabelForRow(r, nextBucket),
+            managerUserId: r.managerUserId ?? (nextBucket === "approved" ? (userId ?? undefined) : r.managerUserId),
+          }
+        : r,
+    );
     persist(next);
     const updatedRow = next.find((r) => r.id === id) ?? row;
     try {
@@ -712,6 +721,7 @@ function ManagerApplicationsContent() {
         row.id === id
           ? {
               ...row,
+              managerUserId: row.managerUserId ?? userId ?? undefined,
               property: property.title?.trim() || row.property,
               propertyId,
               assignedPropertyId: propertyId,

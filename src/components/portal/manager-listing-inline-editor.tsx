@@ -37,6 +37,7 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Modal } from "@/components/ui/modal";
 import {
   readAmenityOffersForProperty,
+  readAmenityOffersForManager,
   saveAmenityOffer,
   deleteAmenityOffer,
   toggleAmenityOfferAvailability,
@@ -366,11 +367,21 @@ export function ManagerListingInlineEditor({
   });
 
   useEffect(() => {
-    if (userId && listingId) setServiceOffers(readAmenityOffersForProperty(userId, listingId));
+    if (!userId) return;
+    setServiceOffers(
+      listingId
+        ? readAmenityOffersForProperty(userId, listingId)
+        : readAmenityOffersForManager(userId),
+    );
   }, [userId, listingId]);
 
   const reloadOffers = useCallback(() => {
-    if (userId && listingId) setServiceOffers(readAmenityOffersForProperty(userId, listingId));
+    if (!userId) return;
+    setServiceOffers(
+      listingId
+        ? readAmenityOffersForProperty(userId, listingId)
+        : readAmenityOffersForManager(userId),
+    );
   }, [userId, listingId]);
 
   const propertyResidents = useMemo(() => {

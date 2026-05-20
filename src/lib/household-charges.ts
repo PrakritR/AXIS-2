@@ -1549,17 +1549,12 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const prop = getPropertyById(propertyId);
   const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
 
-  // If the property/listing data is not available in this browser context (e.g. the resident's
-  // portal, which doesn't have the manager's listing catalog), we cannot determine the correct
-  // proration method. Preserve any charges the manager already computed rather than regenerating
-  // them with the wrong (auto) method, which would overwrite daily-rate amounts on the server.
-  if (!prop) {
-    const existingAppCharges = readAll().filter(
-      (c) => c.applicationId === applicationId && c.kind !== "application_fee",
-    );
-    if (existingAppCharges.length > 0) return false;
-    // No charges exist yet — fall through so we at least create basic charges.
-  }
+  // The resident's browser doesn't have the manager's listing catalog, so getPropertyById()
+  // returns null there. Without the listing we can't determine proration method or daily rates,
+  // and any charges we'd generate would use the wrong "auto" (fractional) method. Always bail
+  // out here and let the server-synced amounts — computed correctly in the manager's browser
+  // where the listing IS available — be the sole source of truth.
+  if (!prop) return false;
 
   const allowListingDefaults = !row.manuallyAdded;
   const residentName = row.name?.trim() || row.application?.fullLegalName?.trim() || "Resident";

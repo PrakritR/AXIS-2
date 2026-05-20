@@ -1878,7 +1878,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           </p>
                                         </div>
                                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
-                                          {residentLease.stageLabel}
+                                          {residentLease.status ?? residentLease.stageLabel}
                                         </span>
                                       </div>
                                       <div className="mt-3 space-y-2">

@@ -261,8 +261,7 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     generatedHtml: r.generatedHtml ?? null,
     managerUploadedPdf: r.managerUploadedPdf ?? null,
   });
-  const normalizedStageLabel = String(r.stageLabel ?? "").trim();
-  const stageLabel = status === "Fully Signed" ? "Signed" : normalizedStageLabel || stageLabelForStatus(status);
+  const stageLabel = stageLabelForStatus(status);
   const versionNumber =
     typeof r.versionNumber === "number" && Number.isFinite(r.versionNumber)
       ? Math.max(1, Math.floor(r.versionNumber))

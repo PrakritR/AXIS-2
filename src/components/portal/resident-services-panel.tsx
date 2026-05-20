@@ -312,6 +312,7 @@ export function ResidentServicesPanel() {
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [srTick, setSrTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
+  const [appTick, setAppTick] = useState(0);
 
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
@@ -329,7 +330,7 @@ export function ResidentServicesPanel() {
     return readManagerApplicationRows().find(
       (r) => r.email?.trim().toLowerCase() === residentEmail,
     ) ?? null;
-  }, [residentEmail, allRows]); // Use allRows as dependency since it updates when rows change
+  }, [residentEmail, allRows, appTick]);
 
   // Memoize offer loading based on resident application data
   const offersForResident = useMemo(() => {
@@ -371,6 +372,7 @@ export function ResidentServicesPanel() {
     void syncManagerWorkOrdersFromServer()
       .then(sync)
       .then(() => syncManagerApplicationsFromServer())
+      .then(() => setAppTick((t) => t + 1))
       .then(() => syncLeasePipelineFromServer());
     
     // Only listen to work order events; offers are now memoized based on application data

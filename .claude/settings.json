@@ -16,7 +16,12 @@
       "Bash(git -C /Users/prakritramachandran/axis-2 commit -m ' *)",
       "Bash(git -C /Users/prakritramachandran/axis-2 push origin main)",
       "Bash(python3 -c ' *)",
-      "Bash(git -C /Users/prakritramachandran/axis-2 add src/lib/manager-access.ts src/lib/platform-fees.ts src/data/manager-plan-tiers.ts src/lib/portals/pro-nav.ts src/components/portal/portal-tier-paywall.tsx src/lib/render-portal-section.tsx 'src/app/\\(public\\)/partner/pricing/page.tsx')"
+      "Bash(git -C /Users/prakritramachandran/axis-2 add src/lib/manager-access.ts src/lib/platform-fees.ts src/data/manager-plan-tiers.ts src/lib/portals/pro-nav.ts src/components/portal/portal-tier-paywall.tsx src/lib/render-portal-section.tsx 'src/app/\\(public\\)/partner/pricing/page.tsx')",
+      "Bash(git fetch *)",
+      "Bash(node -e ' *)",
+      "Read(//Users/pakritramachandran/axis-2/src/lib/**)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 show ae4e113 --stat)",
+      "Bash(git -C /Users/prakritramachandran/axis-2 show ae4e113 -- src/lib/household-charges.ts)"
     ]
   }
 }

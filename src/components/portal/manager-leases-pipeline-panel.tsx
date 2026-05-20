@@ -413,7 +413,7 @@ export function ManagerLeasesPipelinePanel({
                 <tr className={PORTAL_TABLE_TR}>
                   <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.residentName}</td>
                   <td className={PORTAL_TABLE_TD}>{row.unit}</td>
-                  <td className={PORTAL_TABLE_TD}>{row.stageLabel}</td>
+                  <td className={PORTAL_TABLE_TD}>{row.status ?? row.stageLabel}</td>
                   <td className={`${PORTAL_TABLE_TD} text-slate-500`}>{row.updated}</td>
                   <td className={`${PORTAL_TABLE_TD} text-right`}>
                     <Button
