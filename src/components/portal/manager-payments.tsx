@@ -282,7 +282,7 @@ export function ManagerPayments() {
                 syncPropertyPipelineFromServer({ force: true }),
                 syncManagerApplicationsFromServer({ force: true }),
               ]).then(() => {
-                reconcileApprovedResidentPaymentSchedules(userId ?? null);
+                reconcileApprovedResidentPaymentSchedules(userId ?? null, true);
                 setHcTick((n) => n + 1);
                 showToast("Payments regenerated from current listing settings.");
               });

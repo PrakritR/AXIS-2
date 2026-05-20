@@ -1235,7 +1235,7 @@ function syncAllRecurringRentCharges(): boolean {
  * Re-runs charge generation for every approved resident so payments align with lease dates.
  * Safe to call repeatedly; idempotent via charge dedupe keys.
  */
-export function reconcileApprovedResidentPaymentSchedules(managerUserId: string | null): boolean {
+export function reconcileApprovedResidentPaymentSchedules(managerUserId: string | null, force = false): boolean {
   if (!isBrowser()) return false;
   const approvedRows = readManagerApplicationRows().filter((row) => {
     if (row.bucket !== "approved") return false;
@@ -1248,7 +1248,7 @@ export function reconcileApprovedResidentPaymentSchedules(managerUserId: string 
 
   let changed = false;
   for (const row of approvedRows) {
-    if (recordApprovedApplicationCharges(row, managerUserId)) {
+    if (recordApprovedApplicationCharges(row, managerUserId, force)) {
       changed = true;
     }
   }
@@ -1544,7 +1544,7 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   return Boolean(charge && !beforeIds.has(charge.id));
 }
 
-export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null): boolean {
+export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null, force = false): boolean {
   if (!isBrowser()) return false;
   const residentEmail = row.email?.trim();
   if (!residentEmail || !residentEmail.includes("@")) return false;
@@ -1580,9 +1580,23 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   if (!row.manuallyAdded) {
     recordSubmittedApplicationFeeCharge(row, effectiveManagerUserId);
   }
+  // When not forced, skip wipe+regeneration if pending charges already exist for this resident.
+  // This preserves manager-edited amounts and prevents auto-reconcile from overwriting manual changes.
+  // Pass force=true (via the "Regenerate" button) to refresh from current listing terms.
+  const emailLowerForFilter = residentEmail.trim().toLowerCase();
+  if (!force) {
+    const hasExisting = readAll().some(
+      (c) =>
+        (c.applicationId === applicationId && c.kind !== "application_fee" && c.status === "pending") ||
+        ((c.kind === "rent" || c.kind === "utilities") &&
+          c.status === "pending" &&
+          c.residentEmail.trim().toLowerCase() === emailLowerForFilter &&
+          c.propertyId === propertyId),
+    );
+    if (hasExisting) return false;
+  }
   // Preserve paid charges — only wipe pending ones so they can be regenerated with correct amounts.
   // Also wipe pending recurring rent/utilities for this resident+property so updated amounts are used.
-  const emailLowerForFilter = residentEmail.trim().toLowerCase();
   const rows = readAll().filter((charge) => {
     if (charge.applicationId === applicationId && charge.kind !== "application_fee" && charge.status === "pending") return false;
     if (
