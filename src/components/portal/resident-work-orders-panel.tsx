@@ -35,6 +35,8 @@ import {
   writeManagerWorkOrderRows,
 } from "@/lib/manager-work-orders-storage";
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
+import { getPropertyById } from "@/lib/rental-application/data";
+import { notifyManagerOfResidentSubmission } from "@/lib/resident-manager-notifications";
 
 const TABS: { id: ResidentWorkBucket; label: string }[] = [
   { id: "open", label: "Open" },
@@ -61,6 +63,7 @@ export function ResidentWorkOrdersPanel() {
   const [priority, setPriority] = useState("Medium");
   const [preferredArrival, setPreferredArrival] = useState("");
   const [photoDataUrls, setPhotoDataUrls] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   const [allWorkOrders, setAllWorkOrders] = useState<DemoManagerWorkOrderRow[]>([]);
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
@@ -133,7 +136,8 @@ export function ResidentWorkOrdersPanel() {
     setPhotoDataUrls(next);
   };
 
-  const submitNew = () => {
+  const submitNew = async () => {
+    if (submitting) return;
     if (!title.trim()) {
       showToast("Add a short title first.");
       return;
@@ -142,15 +146,34 @@ export function ResidentWorkOrdersPanel() {
       showToast("Sign in to submit a work order.");
       return;
     }
+    setSubmitting(true);
+    try {
     const application = readManagerApplicationRows().find((row) => row.email?.trim().toLowerCase() === residentEmail);
+    const propertyId =
+      application?.assignedPropertyId?.trim() ||
+      application?.propertyId?.trim() ||
+      application?.application?.propertyId?.trim() ||
+      "";
+    let managerUserId = application?.managerUserId?.trim() || "";
+    if (!managerUserId && propertyId) {
+      managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
+    }
+    if (!managerUserId) {
+      showToast("Could not find your property manager. Contact support.");
+      return;
+    }
+    const propertyLabel =
+      application?.property ||
+      getPropertyById(propertyId)?.address.split(",")[0]?.trim() ||
+      "Assigned house";
     const prefLabel = preferredArrival.trim() || "Anytime";
     const row: DemoManagerWorkOrderRow = {
       id: `WO-${Date.now()}`,
-      propertyName: application?.property || "Assigned house",
-      propertyId: application?.assignedPropertyId || application?.propertyId || application?.application?.propertyId,
+      propertyName: propertyLabel,
+      propertyId,
       assignedPropertyId: application?.assignedPropertyId,
       assignedRoomChoice: application?.assignedRoomChoice || application?.application?.roomChoice1,
-      managerUserId: application?.managerUserId ?? null,
+      managerUserId,
       unit: application?.assignedRoomChoice || application?.application?.roomChoice1 || "—",
       title: title.trim(),
       priority,
@@ -168,9 +191,32 @@ export function ResidentWorkOrdersPanel() {
     writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
     setAllWorkOrders(readManagerWorkOrderRows());
     setExpandedId(row.id);
+    const notifyResult = await notifyManagerOfResidentSubmission({
+      managerUserId,
+      residentName: application?.name || residentEmail,
+      residentEmail,
+      propertyName: propertyLabel,
+      propertyId,
+      title: row.title,
+      kind: "work-order",
+      details: [
+        `Request ID: ${row.id}`,
+        `Category: ${category}`,
+        `Priority: ${priority}`,
+        `Preferred arrival: ${prefLabel}`,
+        `Details: ${row.description}`,
+        photoDataUrls.length > 0 ? `Attached photos: ${photoDataUrls.length}` : "",
+      ],
+    });
     showToast("Work order added to your open requests.");
+    if (!notifyResult.ok) {
+      showToast("Request submitted, but manager notification could not be sent.");
+    }
     resetCreateForm();
     setCreateOpen(false);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -376,8 +422,8 @@ export function ResidentWorkOrdersPanel() {
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setCreateOpen(false)}>
             Cancel
           </Button>
-          <Button type="button" className="rounded-full" onClick={submitNew}>
-            Submit
+          <Button type="button" className="rounded-full" onClick={() => { void submitNew(); }} disabled={submitting}>
+            {submitting ? "Submitting…" : "Submit"}
           </Button>
         </div>
       </Modal>

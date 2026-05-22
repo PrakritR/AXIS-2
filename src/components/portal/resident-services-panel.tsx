@@ -38,12 +38,13 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import {
-  AMENITY_CATALOG_EVENT,
-  readAmenityOffersForProperty,
-  readAllAmenityOffersForProperty,
-  type ManagerAmenityOffer,
-} from "@/lib/manager-amenity-catalog-storage";
+  PROPERTY_PIPELINE_EVENT,
+  syncPropertyPipelineFromServer,
+} from "@/lib/demo-property-pipeline";
+import type { ManagerListingServiceOption } from "@/lib/manager-listing-submission";
+import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { getPropertyById } from "@/lib/rental-application/data";
+import { notifyManagerOfResidentSubmission } from "@/lib/resident-manager-notifications";
 import {
   SERVICE_REQUESTS_EVENT,
   createServiceRequest,
@@ -316,17 +317,19 @@ export function ResidentServicesPanel({
   const [mPhotos, setMPhotos] = useState<string[]>([]);
 
   // service request form
-  const [selectedOffer, setSelectedOffer] = useState<ManagerAmenityOffer | null>(null);
+  const [selectedOffer, setSelectedOffer] = useState<ManagerListingServiceOption | null>(null);
   const [sNotes, setSNotes] = useState("");
   const [sReturnBy, setSReturnBy] = useState("");
+  const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
+  const [serviceSubmitting, setServiceSubmitting] = useState(false);
 
   const [allRows, setAllRows] = useState<DemoManagerWorkOrderRow[]>([]);
-  const [availableOffers, setAvailableOffers] = useState<ManagerAmenityOffer[]>([]);
+  const [availableOffers, setAvailableOffers] = useState<ManagerListingServiceOption[]>([]);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
-  const [offerTick, setOfferTick] = useState(0);
   const [srTick, setSrTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
   const [appTick, setAppTick] = useState(0);
+  const [propertyTick, setPropertyTick] = useState(0);
 
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
@@ -348,7 +351,7 @@ export function ResidentServicesPanel({
 
   // Memoize offer loading based on resident application data
   const offersForResident = useMemo(() => {
-    void offerTick;
+    void propertyTick;
     if (!residentApplication) return [];
     const propertyId =
       residentApplication.assignedPropertyId?.trim() ||
@@ -368,13 +371,12 @@ export function ResidentServicesPanel({
 
     if (!propertyId) return [];
 
-    if (managerUserId) {
-      return readAmenityOffersForProperty(managerUserId, propertyId).filter(visibleToResident);
-    } else if (propertyId) {
-      return readAllAmenityOffersForProperty(propertyId).filter(visibleToResident);
-    }
-    return [];
-  }, [residentApplication, residentEmail, offerTick]);
+    if (!managerUserId) return [];
+    const property = getPropertyById(propertyId);
+    if (!property?.listingSubmission || property.listingSubmission.v !== 1) return [];
+    const options = normalizeManagerListingSubmissionV1(property.listingSubmission).serviceRequestOptions ?? [];
+    return options.filter(visibleToResident);
+  }, [propertyTick, residentApplication, residentEmail]);
 
   useEffect(() => {
     setAvailableOffers(offersForResident);
@@ -383,19 +385,21 @@ export function ResidentServicesPanel({
   // Initial data sync — fire syncs sequentially to avoid overwhelming the server/browser
   useEffect(() => {
     const sync = () => setAllRows(readManagerWorkOrderRows());
-    const onOffers = () => setOfferTick((t) => t + 1);
+    const onProperty = () => setPropertyTick((t) => t + 1);
     sync();
     void syncManagerWorkOrdersFromServer()
       .then(sync)
       .then(() => syncManagerApplicationsFromServer())
       .then(() => setAppTick((t) => t + 1))
+      .then(() => syncPropertyPipelineFromServer())
+      .then(() => setPropertyTick((t) => t + 1))
       .then(() => syncLeasePipelineFromServer());
     
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
-    window.addEventListener(AMENITY_CATALOG_EVENT, onOffers);
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, onProperty);
     return () => {
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
-      window.removeEventListener(AMENITY_CATALOG_EVENT, onOffers);
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, onProperty);
     };
   }, []);
 
@@ -491,22 +495,42 @@ export function ResidentServicesPanel({
     return residentApplication || readManagerApplicationRows().find((r) => r.email?.trim().toLowerCase() === residentEmail);
   }
 
-  const submitMaintenance = () => {
+  const submitMaintenance = async () => {
+    if (maintenanceSubmitting) return;
     if (!servicesUnlocked) {
       showToast("Services unlock after your lease is fully signed.");
       return;
     }
     if (!mTitle.trim()) { showToast("Add a title first."); return; }
     if (!residentEmail) { showToast("Sign in to submit."); return; }
+    setMaintenanceSubmitting(true);
+    try {
     const application = getApplication();
+    const propertyId =
+      application?.assignedPropertyId?.trim() ||
+      application?.propertyId?.trim() ||
+      application?.application?.propertyId?.trim() ||
+      "";
+    let managerUserId = application?.managerUserId?.trim() || "";
+    if (!managerUserId && propertyId) {
+      managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
+    }
+    if (!managerUserId) {
+      showToast("Could not find your property manager. Contact support.");
+      return;
+    }
+    const propertyLabel =
+      application?.property ||
+      getPropertyById(propertyId)?.address.split(",")[0]?.trim() ||
+      "Assigned house";
     const row: DemoManagerWorkOrderRow & { requestType: string } = {
       id: `REQ-${Date.now()}`,
       requestType: "maintenance",
-      propertyName: application?.property || "Assigned house",
-      propertyId: application?.assignedPropertyId || application?.propertyId || application?.application?.propertyId,
+      propertyName: propertyLabel,
+      propertyId,
       assignedPropertyId: application?.assignedPropertyId,
       assignedRoomChoice: application?.assignedRoomChoice || application?.application?.roomChoice1,
-      managerUserId: application?.managerUserId ?? null,
+      managerUserId,
       unit: application?.assignedRoomChoice || application?.application?.roomChoice1 || "—",
       title: mTitle.trim(),
       priority: mPriority,
@@ -523,12 +547,36 @@ export function ResidentServicesPanel({
     writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
     setAllRows(readManagerWorkOrderRows());
     setExpandedId(row.id);
+    const notifyResult = await notifyManagerOfResidentSubmission({
+      managerUserId,
+      residentName: application?.name || residentEmail,
+      residentEmail,
+      propertyName: propertyLabel,
+      propertyId,
+      title: row.title,
+      kind: "work-order",
+      details: [
+        `Request ID: ${row.id}`,
+        `Category: ${mCategory}`,
+        `Priority: ${mPriority}`,
+        `Preferred arrival: ${row.preferredArrival ?? "Anytime"}`,
+        `Details: ${row.description}`,
+        mPhotos.length > 0 ? `Attached photos: ${mPhotos.length}` : "",
+      ],
+    });
     showToast("Maintenance request submitted.");
+    if (!notifyResult.ok) {
+      showToast("Request submitted, but manager notification could not be sent.");
+    }
     resetMaintenance();
     setModalMode("none");
+    } finally {
+      setMaintenanceSubmitting(false);
+    }
   };
 
-  const submitService = () => {
+  const submitService = async () => {
+    if (serviceSubmitting) return;
     if (!servicesUnlocked) {
       showToast("Services unlock after your lease is fully signed.");
       return;
@@ -539,6 +587,8 @@ export function ResidentServicesPanel({
       showToast("Please enter a return-by date.");
       return;
     }
+    setServiceSubmitting(true);
+    try {
     const application = getApplication();
     const propertyId =
       application?.assignedPropertyId?.trim() ||
@@ -560,12 +610,8 @@ export function ResidentServicesPanel({
     if (!managerUserId && propertyId) {
       managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
     }
-    if (!managerUserId) {
-      // Derive from the offer — most reliable when application row lacks managerUserId
-      managerUserId = currentOffer.managerUserId?.trim() || "";
-    }
     if (!managerUserId) { showToast("Could not find your property manager. Contact support."); return; }
-    createServiceRequest({
+    const createdRequest = createServiceRequest({
       offerId: currentOffer.id,
       offerName: currentOffer.name,
       offerDescription: currentOffer.description,
@@ -578,10 +624,38 @@ export function ResidentServicesPanel({
       returnByDate: sReturnBy.trim(),
       notes: sNotes.trim(),
     });
+    const propertyLabel =
+      application?.property ||
+      getPropertyById(propertyId)?.address.split(",")[0]?.trim() ||
+      "Assigned house";
+    const notifyResult = await notifyManagerOfResidentSubmission({
+      managerUserId,
+      residentName: application?.name || residentEmail,
+      residentEmail,
+      propertyName: propertyLabel,
+      propertyId,
+      title: currentOffer.name,
+      kind: "service-request",
+      details: [
+        `Request ID: ${createdRequest.id}`,
+        `Offer: ${currentOffer.name}`,
+        currentOffer.description ? `Offer details: ${currentOffer.description}` : "",
+        currentOffer.price ? `Price: ${currentOffer.price}` : "",
+        hasDeposit(currentOffer.deposit) ? `Deposit: ${currentOffer.deposit}` : "",
+        sReturnBy.trim() ? `Return by: ${sReturnBy.trim()}` : "",
+        sNotes.trim() ? `Resident notes: ${sNotes.trim()}` : "",
+      ],
+    });
     showToast(`${currentOffer.name} requested — awaiting manager approval.`);
+    if (!notifyResult.ok) {
+      showToast("Request submitted, but manager notification could not be sent.");
+    }
     resetService();
     setModalMode("none");
     reloadServiceRequests();
+    } finally {
+      setServiceSubmitting(false);
+    }
   };
 
   return (
@@ -873,7 +947,9 @@ export function ResidentServicesPanel({
         </div>
         <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => { setModalMode("none"); resetMaintenance(); }}>Cancel</Button>
-          <Button type="button" className="rounded-full" onClick={submitMaintenance}>Submit</Button>
+          <Button type="button" className="rounded-full" onClick={() => { void submitMaintenance(); }} disabled={maintenanceSubmitting}>
+            {maintenanceSubmitting ? "Submitting…" : "Submit"}
+          </Button>
         </div>
       </Modal>
 
@@ -950,8 +1026,8 @@ export function ResidentServicesPanel({
         <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => { setModalMode("none"); resetService(); }}>Cancel</Button>
           {availableOffers.length > 0 ? (
-            <Button type="button" className="rounded-full" onClick={submitService} disabled={!selectedOffer}>
-              Send request
+            <Button type="button" className="rounded-full" onClick={() => { void submitService(); }} disabled={!selectedOffer || serviceSubmitting}>
+              {serviceSubmitting ? "Sending…" : "Send request"}
             </Button>
           ) : null}
         </div>

@@ -7,6 +7,7 @@ import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
@@ -537,9 +538,13 @@ function dueLabelForLeaseStart(leaseStart?: string | null): string {
 }
 
 function shouldDisplayChargeInPayments(charge: HouseholdCharge, now = new Date()): boolean {
-  void charge;
-  void now;
-  return true;
+  if (charge.status === "paid") return true;
+  const due = householdChargeDueDate(charge);
+  if (!due) return true;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msUntilDue = due.getTime() - today.getTime();
+  const daysUntilDue = msUntilDue / (1000 * 60 * 60 * 24);
+  return daysUntilDue <= 7;
 }
 
 export function chargeDueLabel(charge: HouseholdCharge): string {
@@ -1247,8 +1252,8 @@ function syncAllRecurringRentCharges(): boolean {
  */
 export function reconcileApprovedResidentPaymentSchedules(managerUserId: string | null, force = false): boolean {
   if (!isBrowser()) return false;
-  const approvedRows = readManagerApplicationRows().filter((row) => {
-    if (row.bucket !== "approved") return false;
+  const currentRows = readManagerApplicationRows().filter((row) => {
+    if (!isCurrentResidentApplicationRow(row)) return false;
     const email = row.email?.trim();
     if (!email) return false;
     if (!managerUserId) return true;
@@ -1256,8 +1261,30 @@ export function reconcileApprovedResidentPaymentSchedules(managerUserId: string 
     return !rowManager || rowManager === managerUserId;
   });
 
+  const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  const currentResidentEmails = new Set(currentRows.map((row) => row.email!.trim().toLowerCase()));
+  const existingCharges = readAll();
+  const existingProfiles = readRentProfiles();
+  const filteredCharges = existingCharges.filter((charge) => {
+    if (charge.managerUserId !== scope) return true;
+    return currentResidentEmails.has(charge.residentEmail.trim().toLowerCase());
+  });
+  const filteredProfiles = existingProfiles.filter((profile) => {
+    if (profile.managerUserId !== scope) return true;
+    return currentResidentEmails.has(profile.residentEmail.trim().toLowerCase());
+  });
+
   let changed = false;
-  for (const row of approvedRows) {
+  if (filteredCharges.length !== existingCharges.length) {
+    writeAll(filteredCharges, true);
+    changed = true;
+  }
+  if (filteredProfiles.length !== existingProfiles.length) {
+    writeRentProfiles(filteredProfiles);
+    changed = true;
+  }
+
+  for (const row of currentRows) {
     if (recordApprovedApplicationCharges(row, managerUserId, force)) {
       changed = true;
     }

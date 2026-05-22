@@ -32,6 +32,7 @@ import {
   type ManagerBathroomSubmission,
   type ManagerBundleRow,
   type ManagerListingSubmissionV1,
+  type ManagerListingServiceOption,
   type ManagerQuickFactRow,
   type ManagerRoomSubmission,
   type ManagerSharedSpaceSubmission,
@@ -59,13 +60,6 @@ import {
 } from "@/data/manager-listing-presets";
 import { loadListingPresetConfig, type ListingPresetConfig } from "@/lib/site-content";
 import { Modal } from "@/components/ui/modal";
-import {
-  readAmenityOffersForProperty,
-  saveAmenityOffer,
-  deleteAmenityOffer,
-  toggleAmenityOfferAvailability,
-  type ManagerAmenityOffer,
-} from "@/lib/manager-amenity-catalog-storage";
 
 const selectInputCls =
   "min-h-[44px] w-full rounded-xl border border-black/[0.08] bg-black/[0.04] px-3.5 py-2.5 text-[14px] text-[#1d1d1f] outline-none transition focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/20";
@@ -577,9 +571,11 @@ export function ManagerAddListingForm({
   const [listingPresets, setListingPresets] = useState<ListingPresetConfig>(DEFAULT_LISTING_PRESETS);
   const [showQuickFacts, setShowQuickFacts] = useState(() => Boolean(initialSubmission?.quickFacts?.length));
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
-  const [serviceOffers, setServiceOffers] = useState<ManagerAmenityOffer[]>([]);
+  const [serviceOffers, setServiceOffers] = useState<ManagerListingServiceOption[]>(
+    () => normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission()).serviceRequestOptions ?? [],
+  );
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
-  const [editingOffer, setEditingOffer] = useState<ManagerAmenityOffer | null>(null);
+  const [editingOffer, setEditingOffer] = useState<ManagerListingServiceOption | null>(null);
   const [serviceForm, setServiceForm] = useState({ name: "", description: "", price: "", deposit: "" });
   const scrollRef = useRef<HTMLDivElement>(null);
   // Object URLs for video preview (avoids putting huge base64 strings in <video src>).
@@ -612,42 +608,24 @@ export function ManagerAddListingForm({
     };
   }, []);
 
-  // Load service offers for existing listing
-  useEffect(() => {
-    if (userId && editListingId) {
-      setServiceOffers(readAmenityOffersForProperty(userId, editListingId));
-    }
-  }, [userId, editListingId]);
-
-  const reloadOffers = () => {
-    if (userId && editListingId) setServiceOffers(readAmenityOffersForProperty(userId, editListingId));
-  };
-
   const handleSaveService = () => {
-    if (!serviceForm.name.trim() || !userId) return;
-    const propertyId = editListingId ?? undefined;
-    const offer: ManagerAmenityOffer = {
+    if (!serviceForm.name.trim()) return;
+    const offer: ManagerListingServiceOption = {
       id: editingOffer?.id ?? `offer-${Date.now()}`,
       name: serviceForm.name.trim(),
       description: serviceForm.description.trim(),
       price: serviceForm.price.trim(),
       deposit: serviceForm.deposit.trim(),
-      category: "",
       available: editingOffer?.available ?? true,
-      managerUserId: userId,
-      propertyId,
       createdAt: editingOffer?.createdAt ?? new Date().toISOString(),
     };
-    saveAmenityOffer(offer);
-    if (editListingId) {
-      reloadOffers();
-    } else {
-      setServiceOffers((prev) => {
-        const idx = prev.findIndex((o) => o.id === offer.id);
-        if (idx === -1) return [offer, ...prev];
-        const next = [...prev]; next[idx] = offer; return next;
-      });
-    }
+    setServiceOffers((prev) => {
+      const idx = prev.findIndex((o) => o.id === offer.id);
+      if (idx === -1) return [offer, ...prev];
+      const next = [...prev];
+      next[idx] = offer;
+      return next;
+    });
     setServiceModalOpen(false);
     setEditingOffer(null);
     setServiceForm({ name: "", description: "", price: "", deposit: "" });
@@ -1361,6 +1339,7 @@ export function ManagerAddListingForm({
   const submitListing = async () => {
     const submission: ManagerListingSubmissionV1 = {
       ...sub,
+      serviceRequestOptions: serviceOffers,
       rooms: sub.rooms.map((room) => ({
         ...room,
         roomAmenitiesText: sanitizeRoomAmenityText(room.roomAmenitiesText),
@@ -1433,10 +1412,6 @@ export function ManagerAddListingForm({
       if (!id) {
         showToast("Could not submit listing.");
         return;
-      }
-      // Persist any service drafts to the catalog using the new listing id
-      for (const offer of serviceOffers) {
-        saveAmenityOffer({ ...offer, managerUserId: userId, propertyId: id });
       }
       onSubmitted();
     } finally {
@@ -3203,12 +3178,10 @@ export function ManagerAddListingForm({
                       <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
                         <button type="button" onClick={() => { setEditingOffer(offer); setServiceForm({ name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "" }); setServiceModalOpen(true); }} className="rounded-full border border-slate-200 bg-white px-3 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">Edit</button>
                         <button type="button" onClick={() => {
-                          if (userId && editListingId) { toggleAmenityOfferAvailability(offer.id, userId); reloadOffers(); }
-                          else setServiceOffers((prev) => prev.map((o) => o.id === offer.id ? { ...o, available: !o.available } : o));
+                          setServiceOffers((prev) => prev.map((o) => o.id === offer.id ? { ...o, available: !o.available } : o));
                         }} className="rounded-full border border-slate-200 bg-white px-3 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">{offer.available ? "Pause" : "Resume"}</button>
                         <button type="button" onClick={() => {
-                          if (userId && editListingId) { deleteAmenityOffer(offer.id, userId); reloadOffers(); }
-                          else setServiceOffers((prev) => prev.filter((o) => o.id !== offer.id));
+                          setServiceOffers((prev) => prev.filter((o) => o.id !== offer.id));
                         }} className="rounded-full border border-rose-200 bg-white px-3 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">Remove</button>
                       </div>
                     </div>

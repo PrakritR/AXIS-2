@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { hasMoveOutDatePassed, isPreviousResidentStage } from "@/lib/current-resident";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -9,8 +10,31 @@ function canManage(role: string, isAdmin: boolean) {
   return isAdmin || role === "manager" || role === "owner";
 }
 
-export async function POST() {
+function isCurrentResidentRow(row: unknown): boolean {
+  if (!row || typeof row !== "object") return false;
+  const record = row as {
+    bucket?: unknown;
+    stage?: unknown;
+    manualResidentDetails?: { moveOutDate?: unknown } | null;
+  };
+  const bucket = typeof record.bucket === "string" ? record.bucket.trim().toLowerCase() : "";
+  if (bucket !== "approved") return false;
+  const moveOutRaw =
+    record.manualResidentDetails && typeof record.manualResidentDetails === "object"
+      ? record.manualResidentDetails.moveOutDate
+      : undefined;
+  const moveOut = typeof moveOutRaw === "string" ? moveOutRaw : undefined;
+  if (hasMoveOutDatePassed(moveOut)) return false;
+  const stage = typeof record.stage === "string" ? record.stage : undefined;
+  return !isPreviousResidentStage(stage);
+}
+
+export async function POST(req: Request) {
   try {
+    const body = (await req.json().catch(() => null)) as { mode?: unknown } | null;
+    const mode = typeof body?.mode === "string" ? body.mode.trim().toLowerCase() : "current_only";
+    const currentOnly = mode === "current_only";
+
     const auth = await createSupabaseServerClient();
     const {
       data: { user },
@@ -27,25 +51,41 @@ export async function POST() {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
-    // Collect all known resident emails for this manager (any application status)
+    // Collect all known resident emails for this manager.
     const { data: applications } = await db
       .from("manager_application_records")
-      .select("resident_email")
+      .select("id, resident_email, row_data")
       .eq("manager_user_id", user.id);
 
-    const activeEmails = new Set(
-      (applications ?? [])
-        .map((r) => (typeof r.resident_email === "string" ? r.resident_email.trim().toLowerCase() : ""))
-        .filter(Boolean),
-    );
+    const activeEmails = new Set<string>();
+    const deletedApplicationIds: string[] = [];
+    const orphanedEmails = new Set<string>();
+    for (const record of applications ?? []) {
+      const email = typeof record.resident_email === "string" ? record.resident_email.trim().toLowerCase() : "";
+      if (currentOnly) {
+        const keep = email && isCurrentResidentRow(record.row_data);
+        if (keep) {
+          activeEmails.add(email);
+        } else {
+          if (email) orphanedEmails.add(email);
+          if (record.id) deletedApplicationIds.push(record.id);
+        }
+      } else if (email) {
+        activeEmails.add(email);
+      }
+    }
 
     // Safety guard: never delete when there are no known residents at all
     if (activeEmails.size === 0) {
-      return NextResponse.json({ ok: true, deleted: {} });
+      return NextResponse.json({
+        ok: true,
+        deleted: {},
+        purgedEmails: [...orphanedEmails],
+        deletedApplicationIds,
+      });
     }
 
     const deleted: Record<string, number> = {};
-    const orphanedEmails = new Set<string>();
 
     // Tables keyed by manager_user_id with resident_email
     const managerTables = [
@@ -102,7 +142,17 @@ export async function POST() {
     }
     deleted["portal_inbox_thread_records"] = orphanInboxIds.length;
 
-    return NextResponse.json({ ok: true, deleted, purgedEmails: [...orphanedEmails] });
+    if (currentOnly && deletedApplicationIds.length > 0) {
+      await db.from("manager_application_records").delete().in("id", deletedApplicationIds);
+    }
+    deleted["manager_application_records"] = currentOnly ? deletedApplicationIds.length : 0;
+
+    return NextResponse.json({
+      ok: true,
+      deleted,
+      purgedEmails: [...orphanedEmails],
+      deletedApplicationIds,
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to purge orphaned records.";
     return NextResponse.json({ error: message }, { status: 500 });
