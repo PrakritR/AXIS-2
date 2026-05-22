@@ -32,6 +32,7 @@ import {
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
@@ -178,8 +179,18 @@ export function ManagerPayments() {
   const mergedRows = useMemo(() => {
     void ledgerDataVersion;
     const applications = readManagerApplicationRows();
+    const previousResidentEmails = new Set(
+      applications
+        .filter((row) => !isCurrentResidentApplicationRow(row))
+        .map((row) => row.email?.trim().toLowerCase())
+        .filter((e): e is string => Boolean(e))
+    );
     return readChargesForManager(userId)
       .filter((charge) => !shouldExcludePaymentAccount(charge.residentName, charge.residentEmail))
+      .filter((charge) => {
+        const email = charge.residentEmail?.trim().toLowerCase();
+        return !email || !previousResidentEmails.has(email);
+      })
       .map((charge) => {
         const ledgerRow = householdChargeToLedgerRow(charge);
         const chargeEmail = charge.residentEmail.trim().toLowerCase();

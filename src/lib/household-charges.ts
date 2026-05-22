@@ -538,9 +538,13 @@ function dueLabelForLeaseStart(leaseStart?: string | null): string {
 }
 
 function shouldDisplayChargeInPayments(charge: HouseholdCharge, now = new Date()): boolean {
-  void charge;
-  void now;
-  return true;
+  if (charge.status === "paid") return true;
+  const due = householdChargeDueDate(charge);
+  if (!due) return true;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msUntilDue = due.getTime() - today.getTime();
+  const daysUntilDue = msUntilDue / (1000 * 60 * 60 * 24);
+  return daysUntilDue <= 7;
 }
 
 export function chargeDueLabel(charge: HouseholdCharge): string {

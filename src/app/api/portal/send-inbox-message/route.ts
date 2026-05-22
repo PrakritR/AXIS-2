@@ -4,10 +4,27 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
+const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
+const OWNER_INBOX_SCOPE = "axis_portal_inbox_owner_v1";
+const RESIDENT_INBOX_SCOPE = "axis_portal_inbox_resident_v1";
+
 function normalizeEmails(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
   if (typeof value === "string") return value.split(/[;,]/).map((e) => e.trim()).filter(Boolean);
   return [];
+}
+
+function normalizeUserIds(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(/[;,]/).map((v) => v.trim()).filter(Boolean);
+  return [];
+}
+
+function scopeForRole(role: string | null | undefined): string {
+  const normalized = String(role ?? "").trim().toLowerCase();
+  if (normalized === "owner") return OWNER_INBOX_SCOPE;
+  if (normalized === "manager" || normalized === "pro" || normalized === "admin") return MANAGER_INBOX_SCOPE;
+  return RESIDENT_INBOX_SCOPE;
 }
 
 export async function POST(req: Request) {
@@ -22,18 +39,14 @@ export async function POST(req: Request) {
       fromName?: string;
       fromEmail?: string;
       toEmails?: unknown;
+      toUserIds?: unknown;
       subject?: string;
       text?: string;
       deliverToPortalInbox?: boolean;
     };
 
     const senderEmail = String(user.email ?? body.fromEmail ?? "portal@example.com").trim().toLowerCase();
-    const allEmails = normalizeEmails(body.toEmails)
-      .filter((e) => e.includes("@"))
-      .map((e) => e.trim().toLowerCase())
-      .filter((email, index, arr) => arr.indexOf(email) === index);
-    const recipientEmails = allEmails.filter((email) => email !== senderEmail);
-    const toEmails = recipientEmails.filter((e) => !e.endsWith("@axis.local"));
+    const toUserIds = normalizeUserIds(body.toUserIds);
     const subject = String(body.subject ?? "").trim();
     const text = String(body.text ?? "").trim();
     const fromName = String(body.fromName ?? "Axis Housing Portal").trim();
@@ -44,46 +57,86 @@ export async function POST(req: Request) {
     }
 
     const db = createSupabaseServiceRoleClient();
+    const recipientsByEmail = new Map<
+      string,
+      { email: string; userId: string | null; role: string | null; scope: string }
+    >();
+
+    for (const email of normalizeEmails(body.toEmails)
+      .filter((e) => e.includes("@"))
+      .map((e) => e.trim().toLowerCase())) {
+      if (email === senderEmail || recipientsByEmail.has(email)) continue;
+      recipientsByEmail.set(email, {
+        email,
+        userId: null,
+        role: null,
+        scope: RESIDENT_INBOX_SCOPE,
+      });
+    }
+
+    if (toUserIds.length > 0) {
+      const { data: recipientProfiles } = await db
+        .from("profiles")
+        .select("id, email, role")
+        .in("id", toUserIds);
+      for (const profile of recipientProfiles ?? []) {
+        const email = String(profile.email ?? "").trim().toLowerCase();
+        if (!email || email === senderEmail) continue;
+        const role = String(profile.role ?? "").trim().toLowerCase() || null;
+        recipientsByEmail.set(email, {
+          email,
+          userId: profile.id ?? null,
+          role,
+          scope: scopeForRole(role),
+        });
+      }
+    }
+
+    const recipients = [...recipientsByEmail.values()];
+    const recipientEmails = recipients.map((recipient) => recipient.email);
+    const toEmails = recipients
+      .map((recipient) => recipient.email)
+      .filter((email) => !email.endsWith("@axis.local"));
+
     // Deliver to portal inbox for all recipients (including @axis.local demo emails)
-    if (deliverToPortalInbox && recipientEmails.length > 0) {
+    if (deliverToPortalInbox && recipients.length > 0) {
       const { data: senderProfile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
-      const senderRole = String(senderProfile?.role ?? "").toLowerCase();
-      const senderScope = senderRole === "owner"
-        ? "axis_portal_inbox_owner_v1"
-        : "axis_portal_inbox_manager_v1";
+      const senderScope = scopeForRole(senderProfile?.role ?? null);
 
       const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
       const preview = text.slice(0, 100).replace(/\n/g, " ");
-      for (const recipientEmail of recipientEmails) {
+      for (const recipient of recipients) {
         const ts = Date.now();
         const rand = Math.random().toString(36).slice(2, 6);
-        const recipientLower = recipientEmail;
+        const recipientLower = recipient.email;
 
         // Sender's Sent record (owner-only, scoped to the sender's portal)
-        const managerThreadId = `msg_${user.id}_${ts}_${rand}`;
+        const senderThreadId = `msg_${user.id}_${ts}_${rand}`;
         await db.from("portal_inbox_thread_records").upsert(
           {
-            id: managerThreadId,
+            id: senderThreadId,
             scope: senderScope,
             owner_user_id: user.id,
             participant_email: null,
             thread_type: "portal_message",
-            row_data: { id: managerThreadId, folder: "sent", from: fromName, email: recipientLower, subject, preview, body: text, time: when, unread: false, scope: senderScope },
+            row_data: { id: senderThreadId, folder: "sent", from: fromName, email: recipientLower, subject, preview, body: text, time: when, unread: false, scope: senderScope },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" },
         );
 
-        // Resident's Unopened record
-        const residentThreadId = `msg_inbox_${ts}_${rand}`;
+        if (recipientLower === senderEmail) continue;
+
+        // Recipient's inbox record in their own scope.
+        const recipientThreadId = `msg_inbox_${ts}_${rand}`;
         await db.from("portal_inbox_thread_records").upsert(
           {
-            id: residentThreadId,
-            scope: "axis_portal_inbox_resident_v1",
-            owner_user_id: null,
+            id: recipientThreadId,
+            scope: recipient.scope,
+            owner_user_id: recipient.userId,
             participant_email: recipientLower,
             thread_type: "portal_message",
-            row_data: { id: residentThreadId, folder: "inbox", from: fromName, email: senderEmail, subject, preview, body: text, time: when, unread: true, scope: "axis_portal_inbox_resident_v1" },
+            row_data: { id: recipientThreadId, folder: "inbox", from: fromName, email: senderEmail, subject, preview, body: text, time: when, unread: true, scope: recipient.scope },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" },
@@ -92,6 +145,19 @@ export async function POST(req: Request) {
     }
 
     if (toEmails.length === 0) {
+      const sentAt = new Date().toISOString();
+      for (const recipient of recipients) {
+        const logId = `outbound_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        await db.from("portal_outbound_mail_records").upsert(
+          {
+            id: logId,
+            recipient_email: recipient.email,
+            subject,
+            row_data: { id: logId, to: recipient.email, subject, body: text, sentAt, emailSent: false },
+          },
+          { onConflict: "id" },
+        );
+      }
       return NextResponse.json({ ok: true, skipped: true, reason: "No eligible real recipients — portal inbox updated." });
     }
 
@@ -112,6 +178,26 @@ export async function POST(req: Request) {
     const payload = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
     if (!res.ok) {
       return NextResponse.json({ ok: false, error: payload.message ?? "Email send failed." }, { status: 502 });
+    }
+    const sentAt = new Date().toISOString();
+    for (const recipient of recipients) {
+      const logId = `outbound_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await db.from("portal_outbound_mail_records").upsert(
+        {
+          id: logId,
+          recipient_email: recipient.email,
+          subject,
+          row_data: {
+            id: logId,
+            to: recipient.email,
+            subject,
+            body: text,
+            sentAt,
+            emailSent: toEmails.includes(recipient.email),
+          },
+        },
+        { onConflict: "id" },
+      );
     }
     return NextResponse.json({ ok: true, id: payload.id ?? null });
   } catch (err) {
