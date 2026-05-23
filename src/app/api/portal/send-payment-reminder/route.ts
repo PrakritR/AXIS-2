@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { sendSms } from "@/lib/twilio";
 
 export const runtime = "nodejs";
 
@@ -69,8 +70,31 @@ export async function POST(req: Request) {
       id: outboundId,
       recipient_email: residentEmail.toLowerCase(),
       subject,
+      channel: "email",
       row_data: { id: outboundId, to: residentEmail, subject, body: messageBody, sentAt: new Date().toISOString(), emailSent },
     }, { onConflict: "id" });
+
+    // 4. SMS delivery (if manager has sms_from_number configured)
+    const { data: managerProfile } = await db.from("profiles").select("sms_from_number").eq("id", user.id).maybeSingle();
+    const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
+    if (smsFromNumber) {
+      const { data: residentProfile } = await db.from("profiles").select("phone").eq("email", residentEmail.toLowerCase()).maybeSingle();
+      const residentPhone = String(residentProfile?.phone ?? "").trim();
+      if (residentPhone) {
+        const smsBody = `Hi ${residentName}, this is a payment reminder: ${chargeTitle}${balanceDue ? ` — ${balanceDue}` : ""}${propertyLabel ? ` (${propertyLabel})` : ""}. Log in to your Axis portal to pay. — ${managerName}`;
+        const smsResult = await sendSms(residentPhone, smsBody, smsFromNumber);
+        if (smsResult.sent) {
+          const smsLogId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          await db.from("portal_outbound_mail_records").upsert({
+            id: smsLogId,
+            recipient_email: residentEmail.toLowerCase(),
+            subject,
+            channel: "sms",
+            row_data: { id: smsLogId, to: residentPhone, subject, body: smsBody, sentAt: new Date().toISOString(), smsSent: true },
+          }, { onConflict: "id" });
+        }
+      }
+    }
 
     return NextResponse.json({ ok: true, emailSent });
   } catch (err) {

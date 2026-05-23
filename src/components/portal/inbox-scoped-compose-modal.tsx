@@ -24,6 +24,8 @@ export type ScopedInboxSendPayload = {
   toEmailLine: string;
   includesAxisAdmin: boolean;
   includesDirectoryRecipients: boolean;
+  deliverViaEmail: boolean;
+  deliverViaSms: boolean;
 };
 
 type Chip =
@@ -78,6 +80,8 @@ export function ScopedInboxComposeModal({
   const [contactIds, setContactIds] = useState<Set<string>>(new Set());
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [deliverViaEmail, setDeliverViaEmail] = useState(true);
+  const [deliverViaSms, setDeliverViaSms] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -86,6 +90,8 @@ export function ScopedInboxComposeModal({
       setContactIds(new Set());
       setSubject("");
       setBody("");
+      setDeliverViaEmail(true);
+      setDeliverViaSms(false);
     });
   }, [open]);
 
@@ -235,6 +241,8 @@ export function ScopedInboxComposeModal({
       toEmailLine,
       includesAxisAdmin,
       includesDirectoryRecipients,
+      deliverViaEmail,
+      deliverViaSms,
     });
   };
 
@@ -366,6 +374,33 @@ export function ScopedInboxComposeModal({
             onChange={(e) => setBody(e.target.value)}
             placeholder="Write your message…"
           />
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/40 px-4 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Deliver via</p>
+          <div className="mt-2 flex flex-wrap gap-4">
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={deliverViaEmail}
+                onChange={(e) => setDeliverViaEmail(e.target.checked)}
+              />
+              <span className="text-sm font-medium text-slate-800">Email</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={deliverViaSms}
+                onChange={(e) => setDeliverViaSms(e.target.checked)}
+              />
+              <span className="text-sm font-medium text-slate-800">SMS</span>
+            </label>
+          </div>
+          {deliverViaSms && (
+            <p className="mt-2 text-xs text-slate-500">SMS sends from your Twilio number. Recipients must have a phone number on their profile.</p>
+          )}
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 pt-2">

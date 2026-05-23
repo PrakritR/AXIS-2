@@ -270,7 +270,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       setLocal((prev) => [row, ...prev]);
       setComposeOpen(false);
 
-      // Fire-and-forget real email delivery via Resend
+      // Fire-and-forget real email/SMS delivery
       void fetch("/api/portal/send-inbox-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -281,6 +281,8 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           toEmails: p.toEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
           subject: p.subject.trim(),
           text: p.body.trim(),
+          deliverViaEmail: p.deliverViaEmail,
+          deliverViaSms: p.deliverViaSms,
         }),
       }).catch(() => undefined);
 

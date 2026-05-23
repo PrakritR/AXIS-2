@@ -44,6 +44,7 @@ export function PortalProfileClient({
   initialFullName,
   initialEmail,
   initialPhone,
+  initialSmsFromNumber,
   idLabel,
   idValue,
 }: {
@@ -51,6 +52,7 @@ export function PortalProfileClient({
   initialFullName: string;
   initialEmail: string;
   initialPhone: string;
+  initialSmsFromNumber?: string;
   idLabel: string;
   idValue: string;
 }) {
@@ -58,6 +60,7 @@ export function PortalProfileClient({
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(dashToEmpty(initialFullName));
   const [phone, setPhone] = useState(dashToEmpty(initialPhone));
+  const [smsFromNumber, setSmsFromNumber] = useState(dashToEmpty(initialSmsFromNumber ?? ""));
   const [saving, setSaving] = useState(false);
   /** Skip one sync from server props after save so we don't overwrite local state before RSC catches up. */
   const skipNextServerPropsSync = useRef(false);
@@ -70,7 +73,8 @@ export function PortalProfileClient({
     }
     setFullName(dashToEmpty(initialFullName));
     setPhone(dashToEmpty(initialPhone));
-  }, [initialFullName, initialPhone, editing]);
+    setSmsFromNumber(dashToEmpty(initialSmsFromNumber ?? ""));
+  }, [initialFullName, initialPhone, initialSmsFromNumber, editing]);
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -79,7 +83,7 @@ export function PortalProfileClient({
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, phone }),
+        body: JSON.stringify({ fullName, phone, smsFromNumber }),
       });
       const raw = await res.text();
       let body: { error?: string; ok?: boolean } = {};
@@ -102,13 +106,14 @@ export function PortalProfileClient({
     } finally {
       setSaving(false);
     }
-  }, [fullName, phone, showToast]);
+  }, [fullName, phone, smsFromNumber, showToast]);
 
   const cancel = useCallback(() => {
     setFullName(dashToEmpty(initialFullName));
     setPhone(dashToEmpty(initialPhone));
+    setSmsFromNumber(dashToEmpty(initialSmsFromNumber ?? ""));
     setEditing(false);
-  }, [initialFullName, initialPhone]);
+  }, [initialFullName, initialPhone, initialSmsFromNumber]);
 
   const headerActions = editing
     ? [
@@ -158,6 +163,22 @@ export function PortalProfileClient({
               />
             </div>
             <ProfileReadonlyField label={idLabel} value={idValue} mono />
+            {variant === "manager" && (
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-sm font-semibold text-slate-800" htmlFor="pf-sms-from">
+                  SMS from number (Twilio)
+                </label>
+                <Input
+                  id="pf-sms-from"
+                  value={smsFromNumber}
+                  onChange={(e) => setSmsFromNumber(e.target.value)}
+                  className="rounded-xl"
+                  inputMode="tel"
+                  placeholder="+15551234567"
+                />
+                <p className="text-xs text-slate-500">Your Twilio phone number. Residents will receive SMS from this number.</p>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -165,6 +186,11 @@ export function PortalProfileClient({
             <ProfileReadonlyField label="Email" value={initialEmail} />
             <ProfileReadonlyField label="Phone" value={emptyToDash(phone)} />
             <ProfileReadonlyField label={idLabel} value={idValue} mono />
+            {variant === "manager" && (
+              <div className="md:col-span-2">
+                <ProfileReadonlyField label="SMS from number (Twilio)" value={emptyToDash(smsFromNumber)} mono />
+              </div>
+            )}
           </>
         )}
       </div>

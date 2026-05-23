@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { sendSms } from "@/lib/twilio";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,8 @@ export async function POST(req: Request) {
       subject?: string;
       text?: string;
       deliverToPortalInbox?: boolean;
+      deliverViaEmail?: boolean;
+      deliverViaSms?: boolean;
     };
 
     const senderEmail = String(user.email ?? body.fromEmail ?? "portal@example.com").trim().toLowerCase();
@@ -51,6 +54,8 @@ export async function POST(req: Request) {
     const text = String(body.text ?? "").trim();
     const fromName = String(body.fromName ?? "Axis Housing Portal").trim();
     const deliverToPortalInbox = body.deliverToPortalInbox !== false;
+    const deliverViaEmail = body.deliverViaEmail !== false;
+    const deliverViaSms = body.deliverViaSms === true;
 
     if (!subject || !text) {
       return NextResponse.json({ ok: false, error: "subject and text are required." }, { status: 400 });
@@ -144,7 +149,8 @@ export async function POST(req: Request) {
       }
     }
 
-    if (toEmails.length === 0) {
+    // If no eligible real email recipients and SMS not requested, short-circuit
+    if (toEmails.length === 0 && !deliverViaSms) {
       const sentAt = new Date().toISOString();
       for (const recipient of recipients) {
         const logId = `outbound_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -153,6 +159,7 @@ export async function POST(req: Request) {
             id: logId,
             recipient_email: recipient.email,
             subject,
+            channel: "email",
             row_data: { id: logId, to: recipient.email, subject, body: text, sentAt, emailSent: false },
           },
           { onConflict: "id" },
@@ -161,45 +168,89 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, skipped: true, reason: "No eligible real recipients — portal inbox updated." });
     }
 
-    const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (!apiKey) {
-      return NextResponse.json({ ok: false, error: "Email delivery not configured (RESEND_API_KEY missing)." }, { status: 503 });
+    let emailResendId: string | null = null;
+
+    if (deliverViaEmail && toEmails.length > 0) {
+      const apiKey = process.env.RESEND_API_KEY?.trim();
+      if (!apiKey) {
+        return NextResponse.json({ ok: false, error: "Email delivery not configured (RESEND_API_KEY missing)." }, { status: 503 });
+      }
+      const from = process.env.RESEND_FROM?.trim() || "Axis Housing <onboarding@resend.dev>";
+      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via Axis Housing portal by ${fromName}</p>`;
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: toEmails, subject, text, html }),
+      });
+      const emailPayload = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
+      if (!res.ok) {
+        return NextResponse.json({ ok: false, error: emailPayload.message ?? "Email send failed." }, { status: 502 });
+      }
+      emailResendId = emailPayload.id ?? null;
     }
 
-    const from = process.env.RESEND_FROM?.trim() || "Axis Housing <onboarding@resend.dev>";
-    const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via Axis Housing portal by ${fromName}</p>`;
-
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: toEmails, subject, text, html }),
-    });
-
-    const payload = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
-    if (!res.ok) {
-      return NextResponse.json({ ok: false, error: payload.message ?? "Email send failed." }, { status: 502 });
-    }
     const sentAt = new Date().toISOString();
-    for (const recipient of recipients) {
-      const logId = `outbound_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      await db.from("portal_outbound_mail_records").upsert(
-        {
-          id: logId,
-          recipient_email: recipient.email,
-          subject,
-          row_data: {
+
+    // Log email sends
+    if (deliverViaEmail && toEmails.length > 0) {
+      for (const recipient of recipients) {
+        const logId = `outbound_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        await db.from("portal_outbound_mail_records").upsert(
+          {
             id: logId,
-            to: recipient.email,
+            recipient_email: recipient.email,
             subject,
-            body: text,
-            sentAt,
-            emailSent: toEmails.includes(recipient.email),
+            channel: "email",
+            row_data: {
+              id: logId,
+              to: recipient.email,
+              subject,
+              body: text,
+              sentAt,
+              emailSent: toEmails.includes(recipient.email),
+            },
           },
-        },
-        { onConflict: "id" },
-      );
+          { onConflict: "id" },
+        );
+      }
     }
-    return NextResponse.json({ ok: true, id: payload.id ?? null });
+
+    // SMS delivery
+    if (deliverViaSms) {
+      const { data: senderProfile } = await db.from("profiles").select("sms_from_number").eq("id", user.id).maybeSingle();
+      const smsFromNumber = String(senderProfile?.sms_from_number ?? "").trim();
+
+      if (smsFromNumber) {
+        // Fetch phone numbers for all recipients
+        const recipientEmails = recipients.map((r) => r.email);
+        const { data: phones } = await db
+          .from("profiles")
+          .select("email, phone")
+          .in("email", recipientEmails);
+        const phoneByEmail = new Map((phones ?? []).map((p) => [String(p.email).toLowerCase(), String(p.phone ?? "").trim()]));
+
+        for (const recipient of recipients) {
+          const recipientPhone = phoneByEmail.get(recipient.email) ?? "";
+          if (!recipientPhone) continue;
+          const result = await sendSms(recipientPhone, `${subject}\n\n${text}`, smsFromNumber);
+          if (result.sent) {
+            const logId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            await db.from("portal_outbound_mail_records").upsert(
+              {
+                id: logId,
+                recipient_email: recipient.email,
+                subject,
+                channel: "sms",
+                row_data: { id: logId, to: recipientPhone, subject, body: text, sentAt, smsSent: true },
+              },
+              { onConflict: "id" },
+            );
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({ ok: true, id: emailResendId });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });

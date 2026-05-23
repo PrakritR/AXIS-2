@@ -982,7 +982,11 @@ function ManagerApplicationsContent() {
                               <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">Application on file</p>
                               <div className="mt-4">
                                 <ManagerApplicationReadonlyReview
-                                  partial={effectiveApplicationForRow(row) ?? row.application}
+                                  partial={{
+                                    fullLegalName: row.name || undefined,
+                                    email: row.email || undefined,
+                                    ...(effectiveApplicationForRow(row) ?? row.application),
+                                  }}
                                   assignedPropertyId={row.assignedPropertyId}
                                   assignedRoomChoice={row.assignedRoomChoice}
                                 />

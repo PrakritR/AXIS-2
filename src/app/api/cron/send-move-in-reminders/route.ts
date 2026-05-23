@@ -6,6 +6,7 @@ import {
   buildMoveInReminderText,
   buildMoveInReminderHtml,
 } from "@/lib/move-in-reminder-email";
+import { sendSms } from "@/lib/twilio";
 
 export const runtime = "nodejs";
 
@@ -57,14 +58,14 @@ export async function GET(req: Request) {
   // Fetch all application records and find approved residents moving in tomorrow.
   const { data: records, error } = await db
     .from("manager_application_records")
-    .select("resident_email, row_data");
+    .select("resident_email, manager_user_id, row_data");
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   // Dedupe by email — keep only approved records; prefer manualResidentDetails.moveInDate.
-  const emailMap = new Map<string, { moveInDate: string; name: string }>();
+  const emailMap = new Map<string, { moveInDate: string; name: string; managerUserId: string | null }>();
 
   for (const rec of records ?? []) {
     const email = rec.resident_email?.trim().toLowerCase();
@@ -93,7 +94,8 @@ export async function GET(req: Request) {
           : typeof (application?.fullLegalName) === "string"
             ? (application.fullLegalName as string).trim()
             : "";
-      emailMap.set(email, { moveInDate, name });
+      const managerUserId = typeof rec.manager_user_id === "string" ? rec.manager_user_id : null;
+      emailMap.set(email, { moveInDate, name, managerUserId });
     }
   }
 
@@ -109,7 +111,7 @@ export async function GET(req: Request) {
   let skipped = 0;
   const errors: string[] = [];
 
-  for (const [email, { name }] of emailMap) {
+  for (const [email, { name, managerUserId }] of emailMap) {
     // Dedup: skip if we already sent a reminder for this email + date.
     const dedupId = `move_in_reminder_${email}_${tomorrow}`;
     const { data: existing } = await db
@@ -192,10 +194,41 @@ export async function GET(req: Request) {
         id: dedupId,
         recipient_email: email,
         subject: MOVE_IN_REMINDER_SUBJECT,
+        channel: "email",
         row_data: { id: dedupId, to: email, subject: MOVE_IN_REMINDER_SUBJECT, body: text, sentAt: new Date().toISOString(), emailSent },
       },
       { onConflict: "id" },
     );
+
+    // SMS delivery if the associated manager has a Twilio number
+    if (managerUserId) {
+      try {
+        const { data: managerProfile } = await db.from("profiles").select("sms_from_number, full_name").eq("id", managerUserId).maybeSingle();
+        const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
+        if (smsFromNumber) {
+          const { data: residentProfile } = await db.from("profiles").select("phone").eq("email", email).maybeSingle();
+          const residentPhone = String(residentProfile?.phone ?? "").trim();
+          if (residentPhone) {
+            const managerName = String(managerProfile?.full_name ?? "Your property manager").trim() || "Your property manager";
+            const smsBody = `Hi ${name || "Resident"}, reminder: your move-in is tomorrow at ${propertyLabel}${addressLine ? `, ${addressLine}` : ""}. — ${managerName}`;
+            const smsResult = await sendSms(residentPhone, smsBody, smsFromNumber);
+            if (smsResult.sent) {
+              const smsLogId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+              await db.from("portal_outbound_mail_records").upsert(
+                {
+                  id: smsLogId,
+                  recipient_email: email,
+                  subject: MOVE_IN_REMINDER_SUBJECT,
+                  channel: "sms",
+                  row_data: { id: smsLogId, to: residentPhone, subject: MOVE_IN_REMINDER_SUBJECT, body: smsBody, sentAt: new Date().toISOString(), smsSent: true },
+                },
+                { onConflict: "id" },
+              );
+            }
+          }
+        }
+      } catch { /* non-critical */ }
+    }
 
     sent++;
   }

@@ -9,6 +9,8 @@ export type ServerProfile = {
   full_name: string | null;
   /** Present after `profiles.phone` migration is applied. */
   phone?: string | null;
+  /** Twilio "from" number stored by managers; used to send SMS via Axis. */
+  sms_from_number?: string | null;
   application_approved: boolean;
 };
 
@@ -20,6 +22,7 @@ function normalizeProfileRow(data: Record<string, unknown>, fallbackUserId: stri
   const manager_id = data.manager_id == null || data.manager_id === "" ? null : String(data.manager_id);
   const full_name = data.full_name == null ? null : String(data.full_name);
   const phone = data.phone == null ? null : String(data.phone);
+  const sms_from_number = data.sms_from_number == null ? null : String(data.sms_from_number);
   let application_approved = false;
   const aa = data.application_approved;
   if (typeof aa === "boolean") application_approved = aa;
@@ -33,6 +36,7 @@ function normalizeProfileRow(data: Record<string, unknown>, fallbackUserId: stri
     manager_id,
     full_name,
     phone,
+    sms_from_number,
     application_approved,
   };
 }

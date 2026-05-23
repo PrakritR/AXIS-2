@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { sendSms } from "@/lib/twilio";
 import {
   RESIDENT_WELCOME_EMAIL_SUBJECT,
   buildResidentWelcomeEmailBody,
@@ -197,6 +198,21 @@ export async function POST(req: Request) {
     } catch {
       /* non-critical — email already sent */
     }
+
+    // SMS welcome if manager has sms_from_number configured
+    try {
+      const { data: managerProfile } = await svc.from("profiles").select("sms_from_number, full_name").eq("id", user.id).maybeSingle();
+      const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
+      if (smsFromNumber && !skipExternalEmail) {
+        const { data: residentProfile } = await svc.from("profiles").select("phone").eq("email", to).maybeSingle();
+        const residentPhone = String(residentProfile?.phone ?? "").trim();
+        if (residentPhone) {
+          const senderName = String(managerProfile?.full_name ?? user.email ?? "Your property manager").trim() || "Your property manager";
+          const smsBody = `Welcome${residentName ? `, ${residentName}` : ""}! Your Axis resident portal is ready. Your Axis ID: ${axisId}. — ${senderName}`;
+          await sendSms(residentPhone, smsBody, smsFromNumber);
+        }
+      }
+    } catch { /* non-critical */ }
 
     return NextResponse.json({ ok: true, id: payloadId, skipped: skipExternalEmail });
   } catch (error) {
