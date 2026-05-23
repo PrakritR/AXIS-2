@@ -356,7 +356,8 @@ set
   row_data = jsonb_set(
     row_data,
     '{application}',
-    coalesce(row_data->'application', '{}'::jsonb) || jsonb_build_object(
+    coalesce(row_data->'application', '{}'::jsonb)
+    || jsonb_build_object(
       'fullLegalName',       'Wesley Taylor',
       'email',               'wbtaylor002@gmail.com',
       'phone',               '(704) 307-5286',
@@ -385,7 +386,9 @@ set
       'prevState',           'NC',
       'prevZip',             '28269',
       'prevLandlordName',    '',
-      'prevLandlordPhone',   '',
+      'prevLandlordPhone',   ''
+    )
+    || jsonb_build_object(
       'prevMoveIn',          '4/30/2026',
       'prevMoveOut',         '5/19/2026',
       'prevReasonLeaving',   'School',
