@@ -8,7 +8,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import { formatPacificDate } from "@/lib/pacific-time";
+import { formatPacificDate, safeFormatDateTime } from "@/lib/pacific-time";
 import {
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
@@ -542,7 +542,7 @@ export function ResidentLeasePanel() {
                     <p className="font-semibold text-slate-800">Manager</p>
                     <p className={pipelineRow.managerSignature ? "text-emerald-800" : "text-amber-700"}>
                       {pipelineRow.managerSignature
-                        ? `Signed by ${pipelineRow.managerSignature.name} · ${new Date(pipelineRow.managerSignature.signedAtIso).toLocaleString()}`
+                        ? `Signed by ${pipelineRow.managerSignature.name} · ${safeFormatDateTime(pipelineRow.managerSignature.signedAtIso)}`
                         : "Pending signature"}
                     </p>
                   </div>
@@ -550,7 +550,7 @@ export function ResidentLeasePanel() {
                     <p className="font-semibold text-slate-800">Resident</p>
                     <p className={pipelineRow.residentSignature ? "text-emerald-800" : "text-amber-700"}>
                       {pipelineRow.residentSignature
-                        ? `Signed by ${pipelineRow.residentSignature.name} · ${new Date(pipelineRow.residentSignature.signedAtIso).toLocaleString()}`
+                        ? `Signed by ${pipelineRow.residentSignature.name} · ${safeFormatDateTime(pipelineRow.residentSignature.signedAtIso)}`
                         : "Pending signature"}
                     </p>
                   </div>
@@ -603,7 +603,7 @@ export function ResidentLeasePanel() {
                       className={`rounded-xl px-3 py-2 text-sm ${m.role === "resident" ? "border border-blue-100 bg-blue-50" : "border border-slate-100 bg-slate-50"}`}
                     >
                       <span className="font-semibold text-slate-800">{m.role === "resident" ? "You" : "Manager"}</span>
-                      <span className="ml-1.5 text-xs text-slate-400">{new Date(m.at).toLocaleString()}</span>
+                      <span className="ml-1.5 text-xs text-slate-400">{safeFormatDateTime(m.at)}</span>
                       <p className="mt-1 whitespace-pre-wrap text-slate-700">{m.body}</p>
                     </li>
                   ))}

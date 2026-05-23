@@ -1,6 +1,6 @@
 export const MOVE_IN_REMINDER_SUBJECT = "Your move-in is tomorrow — here's what you need to know";
 
-const PORTAL_URL = "https://www.axis-seattle-housing.com/portal";
+const PORTAL_URL = "https://www.axis-seattle-housing.com/resident/dashboard";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

@@ -15,3 +15,10 @@ export function formatPacificDateTime(date: Date | string | number): string {
     minute: "2-digit",
   });
 }
+
+export function safeFormatDateTime(value: string | undefined | null, fallback = "—"): string {
+  if (!value) return fallback;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return fallback;
+  return formatPacificDateTime(d);
+}

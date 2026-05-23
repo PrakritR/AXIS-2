@@ -29,6 +29,7 @@ import {
   type HouseholdCharge,
 } from "@/lib/household-charges";
 import { syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
+import { safeFormatDateTime } from "@/lib/pacific-time";
 
 type PayTab = "pending" | "paid";
 
@@ -158,14 +159,14 @@ export function ResidentPaymentsPanel() {
       ) : (
         <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+            <table className="sm:min-w-[720px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Property</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Due</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Balance</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                   <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
@@ -175,10 +176,10 @@ export function ResidentPaymentsPanel() {
                   <Fragment key={row.id}>
                     <tr className={PORTAL_TABLE_TR}>
                       <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
-                      <td className={PORTAL_TABLE_TD}>{row.propertyLabel}</td>
+                      <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{row.propertyLabel}</td>
                       <td className={PORTAL_TABLE_TD}>{chargeDueLabel(row)}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums text-slate-800`}>{row.amountLabel}</td>
-                      <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-slate-900`}>{row.balanceLabel}</td>
+                      <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-slate-900 hidden sm:table-cell`}>{row.balanceLabel}</td>
                       <td className={PORTAL_TABLE_TD}>
                         <span
                           className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusClass(row.status === "paid" ? "Paid" : "Unpaid")}`}
@@ -225,7 +226,7 @@ export function ResidentPaymentsPanel() {
                             </p>
                           )}
                           {row.status === "paid" && row.paidAt ? (
-                            <p className="mt-2 text-xs text-slate-500">Marked paid {new Date(row.paidAt).toLocaleString()}</p>
+                            <p className="mt-2 text-xs text-slate-500">Marked paid {safeFormatDateTime(row.paidAt)}</p>
                           ) : null}
                           {row.blocksLeaseUntilPaid && row.status === "pending" ? (
                             <p className="mt-3 text-sm text-amber-900">
