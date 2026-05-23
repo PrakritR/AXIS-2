@@ -122,6 +122,7 @@ export type DemoManagerPaymentLedgerRow = {
   statusLabel: string;
   notes: string;
   householdChargeId?: string;
+  cancelledReminders?: Array<"3d" | "12h">;
 };
 
 export const demoManagerPaymentLedgerRows: DemoManagerPaymentLedgerRow[] = [];

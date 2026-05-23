@@ -45,6 +45,9 @@ import {
   syncHouseholdChargesFromServer,
   updateHouseholdChargeAmount,
   updatePendingRentAmountForResident,
+  cancelHouseholdChargeReminder,
+  uncancelHouseholdChargeReminder,
+  householdChargeDueDate,
   type HouseholdCharge,
 } from "@/lib/household-charges";
 import {
@@ -2080,6 +2083,38 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                   >
                                                     Delete
                                                   </Button>
+                                                  {(() => {
+                                                    const due = householdChargeDueDate(c);
+                                                    if (!due) return null;
+                                                    const hours = (due.getTime() - Date.now()) / 3_600_000;
+                                                    const slots: Array<"3d" | "12h"> = [];
+                                                    if (hours > 13) slots.push("3d");
+                                                    if (hours > 1) slots.push("12h");
+                                                    if (!slots.length) return null;
+                                                    return slots.map((slot) => {
+                                                      const isCancelled = (c.cancelledReminders ?? []).includes(slot);
+                                                      const label = slot === "3d" ? "3-day reminder" : "12-hr reminder";
+                                                      return (
+                                                        <Button
+                                                          key={slot}
+                                                          type="button"
+                                                          variant="outline"
+                                                          title={isCancelled ? `Re-enable ${label}` : `Cancel ${label}`}
+                                                          className={`rounded-full px-2 py-0.5 text-xs ${isCancelled ? "text-slate-400 line-through" : "text-violet-700 hover:border-violet-300"}`}
+                                                          onClick={() => {
+                                                            if (isCancelled) {
+                                                              uncancelHouseholdChargeReminder(c.id, slot, userId ?? null);
+                                                            } else {
+                                                              cancelHouseholdChargeReminder(c.id, slot, userId ?? null);
+                                                            }
+                                                            void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
+                                                          }}
+                                                        >
+                                                          {isCancelled ? `↺ ${label}` : `✕ ${label}`}
+                                                        </Button>
+                                                      );
+                                                    });
+                                                  })()}
                                                 </>
                                               ) : (
                                                 <>

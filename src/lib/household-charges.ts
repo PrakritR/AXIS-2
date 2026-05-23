@@ -76,6 +76,7 @@ export type HouseholdCharge = {
   rentMonth?: string;
   dueDay?: number;
   dueDateLabel?: string;
+  cancelledReminders?: Array<"3d" | "12h">;
 };
 
 export type RecurringRentProfile = {
@@ -1467,6 +1468,40 @@ export function deleteHouseholdCharge(chargeId: string, managerUserId: string | 
   return true;
 }
 
+export function cancelHouseholdChargeReminder(
+  chargeId: string,
+  slot: "3d" | "12h",
+  managerUserId: string | null,
+): boolean {
+  if (!isBrowser()) return false;
+  const rows = readAll();
+  const i = rows.findIndex((r) => r.id === chargeId && chargeVisibleToManager(r, managerUserId));
+  if (i === -1) return false;
+  const existing = rows[i]!.cancelledReminders ?? [];
+  if (existing.includes(slot)) return true;
+  const next = [...rows];
+  next[i] = { ...next[i]!, cancelledReminders: [...existing, slot] };
+  writeAll(next);
+  return true;
+}
+
+export function uncancelHouseholdChargeReminder(
+  chargeId: string,
+  slot: "3d" | "12h",
+  managerUserId: string | null,
+): boolean {
+  if (!isBrowser()) return false;
+  const rows = readAll();
+  const i = rows.findIndex((r) => r.id === chargeId && chargeVisibleToManager(r, managerUserId));
+  if (i === -1) return false;
+  const existing = rows[i]!.cancelledReminders ?? [];
+  if (!existing.includes(slot)) return true;
+  const next = [...rows];
+  next[i] = { ...next[i]!, cancelledReminders: existing.filter((s) => s !== slot) };
+  writeAll(next);
+  return true;
+}
+
 export function markHouseholdChargePaid(chargeId: string, managerUserId: string | null): boolean {
   const rows = readAll();
   const i = rows.findIndex((r) => r.id === chargeId && chargeVisibleToManager(r, managerUserId));
@@ -2267,6 +2302,7 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     dueDate: chargeDueLabel(c),
     bucket,
     statusLabel: c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Pending",
+    cancelledReminders: c.cancelledReminders,
     notes:
       c.kind === "rent"
         ? `Recurring tenant rent. Current cycle: ${c.rentMonth ?? currentRentMonth()}. Due ${formatRecurringRentDueLabel(c.rentMonth ?? currentRentMonth(), c.dueDay ?? 1)}.`
