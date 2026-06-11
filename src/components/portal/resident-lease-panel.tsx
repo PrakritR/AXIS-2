@@ -162,7 +162,7 @@ function MoveOutDateModal({
   };
 
   const currentEndFormatted = currentEnd
-    ? formatPacificDate(new Date(currentEnd + "T00:00:00"), { year: "numeric", month: "long", day: "numeric" })
+    ? formatPacificDate(currentEnd, { year: "numeric", month: "long", day: "numeric" })
     : "—";
 
   const minDate = leaseStart || undefined;
@@ -237,7 +237,7 @@ function MoveOutDateModal({
                       <p className="mt-1 text-red-700">
                         Next available:{" "}
                         <span className="font-medium">
-                          {formatPacificDate(new Date(availability.nextAvailableDate + "T00:00:00"), {
+                          {formatPacificDate(availability.nextAvailableDate, {
                             year: "numeric", month: "long", day: "numeric",
                           })}
                         </span>
