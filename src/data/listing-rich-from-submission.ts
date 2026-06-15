@@ -198,6 +198,19 @@ function roomModalIncludedTags(room: ManagerRoomSubmission, sub: ManagerListingS
     .map((s) => s.trim())
     .filter((s) => s.length > 0 && s.length < 40);
 
+  const isSensitiveAccessInfo = (s: string): boolean => {
+    const sl = s.toLowerCase();
+    return (
+      sl.includes("lockerbox") ||
+      sl.includes("lockbox") ||
+      sl.includes("lock box") ||
+      /\bcode\s*:/.test(sl) ||
+      /\bpasscode\b/.test(sl) ||
+      /\bpin\s*:/.test(sl) ||
+      /\baccess\s+code\b/.test(sl)
+    );
+  };
+
   for (const e of extras) {
     const el = e.toLowerCase();
     if (amenityLc.has(el)) continue;
@@ -206,6 +219,7 @@ function roomModalIncludedTags(room: ManagerRoomSubmission, sub: ManagerListingS
     if (roomNameNorm && el === roomNameNorm) continue;
     if (genericOnly(e)) continue;
     if ((el.includes("private") && el.includes("bath")) && tags.includes("Private bath")) continue;
+    if (isSensitiveAccessInfo(e)) continue;
     tags.push(e);
   }
 
