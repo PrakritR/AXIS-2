@@ -96,6 +96,16 @@ export async function POST(req: Request) {
 
     const db = createSupabaseServiceRoleClient();
     if (body.action === "delete") {
+      if (!admin) {
+        const { data: existing } = await db
+          .from("manager_property_records")
+          .select("manager_user_id")
+          .eq("id", id)
+          .maybeSingle();
+        if (existing && existing.manager_user_id !== user.id) {
+          return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+        }
+      }
       const { error } = await db.from("manager_property_records").delete().eq("id", id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ ok: true });

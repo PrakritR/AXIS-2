@@ -3,7 +3,6 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { parseAuthRole, type AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { isValidAdminRegisterKey } from "@/lib/auth/resolve-portal-role";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -244,8 +243,8 @@ export default function CreateAccountClient() {
     }
 
     if (role === "admin") {
-      if (!isValidAdminRegisterKey(adminKey)) {
-        showToast("Invalid admin registration key.");
+      if (!adminKey.trim()) {
+        showToast("Admin registration key is required.");
         return;
       }
       setBusy(true);

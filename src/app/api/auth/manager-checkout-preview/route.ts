@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAxisIntentSessionId } from "@/lib/manager-signup-intent";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -11,6 +12,10 @@ export const runtime = "nodejs";
  */
 export async function GET(req: Request) {
   try {
+    if (!rateLimit(`checkout-preview:${clientIpFrom(req)}`, 10, 60_000).ok) {
+      return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
+    }
+
     const { searchParams } = new URL(req.url);
     const sessionId = searchParams.get("session_id")?.trim();
     if (!sessionId) {

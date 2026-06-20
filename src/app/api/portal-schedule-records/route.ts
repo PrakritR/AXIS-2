@@ -28,6 +28,14 @@ const route = createJsonRecordRoute({
       updated_at: new Date().toISOString(),
     };
   },
+  assignOwnership: (record, user) => {
+    if (user.role === "admin") return record;
+    const recordType = String(record.record_type ?? "");
+    const managerScoped = recordType === "manager_availability" || recordType === "manager_property_availability";
+    // Only stamp ownership on manager-scoped types; shared singleton records
+    // (partner inquiries, planned events) keep their existing owner handling.
+    return managerScoped ? { ...record, manager_user_id: user.id } : record;
+  },
 });
 
 export const GET = route.GET;

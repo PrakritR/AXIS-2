@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isProductionRuntime } from "@/lib/server-env";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { householdChargeDueDate, chargeDueLabel, type HouseholdCharge } from "@/lib/household-charges";
 import {
@@ -17,7 +18,8 @@ const WINDOWS: Array<{ slot: "3d" | "12h"; minH: number; maxH: number }> = [
 
 function isAuthorized(req: Request): boolean {
   const cronSecret = process.env.CRON_SECRET?.trim();
-  if (!cronSecret) return true;
+  // Fail closed in production: an unset secret must not leave the endpoint open.
+  if (!cronSecret) return !isProductionRuntime();
   return req.headers.get("authorization") === `Bearer ${cronSecret}`;
 }
 

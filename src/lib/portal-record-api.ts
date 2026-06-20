@@ -3,13 +3,22 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
+type RecordUser = { id: string; email?: string | null; role: string };
+
 type RecordConfig = {
   table: string;
   select?: string;
   orderColumn?: string;
   normalize?: (row: Record<string, unknown>) => Record<string, unknown>;
-  scope?: (query: unknown, user: { id: string; email?: string | null; role: string }) => unknown;
-  buildUpsert: (row: Record<string, unknown>, user: { id: string; email?: string | null; role: string }) => Record<string, unknown>;
+  scope?: (query: unknown, user: RecordUser) => unknown;
+  buildUpsert: (row: Record<string, unknown>, user: RecordUser) => Record<string, unknown>;
+  /**
+   * Stamps server-trusted ownership columns onto a record that is being created
+   * (a new id). Used to ignore client-supplied owner ids on INSERT so a caller
+   * cannot write rows under another tenant. Not applied to existing records,
+   * whose writes are already gated by `scope`.
+   */
+  assignOwnership?: (record: Record<string, unknown>, user: RecordUser) => Record<string, unknown>;
 };
 
 async function sessionUser() {
@@ -96,7 +105,8 @@ export function createJsonRecordRoute(config: RecordConfig) {
           const id = String(record.id);
           const { data: existing, error: existingError } = await ctx.db.from(config.table).select("id").eq("id", id).limit(1);
           if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
-          if (Array.isArray(existing) && existing.length > 0 && config.scope) {
+          const recordExists = Array.isArray(existing) && existing.length > 0;
+          if (recordExists && config.scope) {
             let visibleQuery = ctx.db.from(config.table).select("id").eq("id", id).limit(1);
             visibleQuery = config.scope(visibleQuery, ctx.user) as typeof visibleQuery;
             const { data: visible, error: visibleError } = await visibleQuery;
@@ -105,7 +115,10 @@ export function createJsonRecordRoute(config: RecordConfig) {
               return NextResponse.json({ error: "Record not found." }, { status: 404 });
             }
           }
-          const { error } = await ctx.db.from(config.table).upsert(record, { onConflict: "id" });
+          // On INSERT, stamp server-trusted ownership so client-supplied owner
+          // ids cannot be used to write rows under another tenant.
+          const finalRecord = !recordExists && config.assignOwnership ? config.assignOwnership(record, ctx.user) : record;
+          const { error } = await ctx.db.from(config.table).upsert(finalRecord, { onConflict: "id" });
           if (error) return NextResponse.json({ error: error.message }, { status: 500 });
         }
         return NextResponse.json({ ok: true });
