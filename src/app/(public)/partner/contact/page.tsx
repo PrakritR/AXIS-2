@@ -30,9 +30,11 @@ function PartnerContactInner() {
   const [tab, setTab] = useState<"schedule" | "message">(tabFromUrl);
 
   useEffect(() => {
-    const t = searchParams.get("tab");
-    if (t === "schedule") setTab("schedule");
-    else if (t === "message") setTab("message");
+    queueMicrotask(() => {
+      const t = searchParams.get("tab");
+      if (t === "schedule") setTab("schedule");
+      else if (t === "message") setTab("message");
+    });
   }, [searchParams]);
 
   return (

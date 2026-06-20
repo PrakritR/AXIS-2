@@ -39,14 +39,25 @@ export default function CreateAccountClient() {
   const searchParams = useSearchParams();
   const sessionIdFromUrl = useMemo(() => searchParams.get("session_id")?.trim() ?? "", [searchParams]);
   const roleFromUrl = useMemo(() => parseAuthRole(searchParams.get("role")), [searchParams]);
-  const [role, setRole] = useState<AuthRole>(roleFromUrl);
-  const [ownerInviteRef, setOwnerInviteRef] = useState(searchParams.get("slot") ?? "");
+  const axisIdFromUrl = useMemo(
+    () => searchParams.get("axis_id")?.trim() || "",
+    [searchParams],
+  );
+  const slotFromUrl = useMemo(() => searchParams.get("slot") ?? "", [searchParams]);
+  const urlDerivedRole: AuthRole = axisIdFromUrl
+    ? "resident"
+    : sessionIdFromUrl
+      ? "manager"
+      : roleFromUrl;
+
+  const [role, setRole] = useState<AuthRole>(urlDerivedRole);
+  const [ownerInviteRef, setOwnerInviteRef] = useState(slotFromUrl);
   const [adminKey, setAdminKey] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [axisId, setAxisId] = useState("");
+  const [axisId, setAxisId] = useState(axisIdFromUrl);
   const [busy, setBusy] = useState(false);
   const [checkoutPreview, setCheckoutPreview] = useState<ManagerCheckoutPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -54,79 +65,94 @@ export default function CreateAccountClient() {
   const [managerIdInput, setManagerIdInput] = useState("");
   const [emailStatus, setEmailStatus] = useState<ExistingEmailStatus | null>(null);
   const [emailStatusLoading, setEmailStatusLoading] = useState(false);
+  const [prevRoleFromUrl, setPrevRoleFromUrl] = useState(roleFromUrl);
+  const [prevSlotFromUrl, setPrevSlotFromUrl] = useState(slotFromUrl);
+
+  if (sessionIdFromUrl || axisIdFromUrl) {
+    if (role !== urlDerivedRole) setRole(urlDerivedRole);
+  } else if (roleFromUrl !== prevRoleFromUrl) {
+    setPrevRoleFromUrl(roleFromUrl);
+    if (role !== roleFromUrl) setRole(roleFromUrl);
+  }
+
+  if (slotFromUrl !== prevSlotFromUrl) {
+    setPrevSlotFromUrl(slotFromUrl);
+    if (ownerInviteRef !== slotFromUrl) setOwnerInviteRef(slotFromUrl);
+  }
+
+  if (axisIdFromUrl && axisId !== axisIdFromUrl) {
+    setAxisId(axisIdFromUrl);
+  }
+
+  const normalEmail = email.trim().toLowerCase();
+  const isEmailCheckable = normalEmail.length > 0 && normalEmail.includes("@");
+  const displayedEmailStatus = isEmailCheckable ? emailStatus : null;
+  const displayedEmailStatusLoading = isEmailCheckable ? emailStatusLoading : false;
+
+  const shouldLoadCheckout = role === "manager" && !!sessionIdFromUrl;
+  const effectiveCheckoutPreview = shouldLoadCheckout ? checkoutPreview : null;
+  const effectivePreviewError = shouldLoadCheckout ? previewError : null;
+  const effectivePreviewLoading = shouldLoadCheckout ? previewLoading : false;
+
+  if (!shouldLoadCheckout && confirmPassword !== "") {
+    setConfirmPassword("");
+  }
 
   useEffect(() => {
-    setRole(sessionIdFromUrl ? "manager" : roleFromUrl);
-  }, [roleFromUrl, sessionIdFromUrl]);
+    if (!isEmailCheckable) return;
 
-  useEffect(() => {
-    setOwnerInviteRef(searchParams.get("slot") ?? "");
-  }, [searchParams]);
+    const controller = new AbortController();
 
-  const axisIdFromUrl = useMemo(
-    () => searchParams.get("axis_id")?.trim() || "",
-    [searchParams],
-  );
+    void Promise.resolve().then(() => {
+      if (controller.signal.aborted) return;
+      setEmailStatusLoading(true);
+    });
 
-  useEffect(() => {
-    if (axisIdFromUrl) {
-      setAxisId(axisIdFromUrl);
-      setRole("resident");
-    }
-  }, [axisIdFromUrl]);
-
-  useEffect(() => {
-    const normalEmail = email.trim().toLowerCase();
-    if (!normalEmail || !normalEmail.includes("@")) {
-      setEmailStatus(null);
-      setEmailStatusLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setEmailStatusLoading(true);
-
-    void fetch(`/api/auth/account-email-status?email=${encodeURIComponent(normalEmail)}`)
+    void fetch(`/api/auth/account-email-status?email=${encodeURIComponent(normalEmail)}`, {
+      signal: controller.signal,
+    })
       .then(async (res) => {
         const body = (await res.json()) as ExistingEmailStatus & { error?: string };
         if (!res.ok) throw new Error(body.error ?? "Could not check email.");
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setEmailStatus({ exists: Boolean(body.exists), roles: Array.isArray(body.roles) ? body.roles : [] });
         }
       })
-      .catch(() => {
-        if (!cancelled) setEmailStatus(null);
+      .catch((e: unknown) => {
+        if (controller.signal.aborted) return;
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setEmailStatus(null);
       })
       .finally(() => {
-        if (!cancelled) setEmailStatusLoading(false);
+        if (!controller.signal.aborted) setEmailStatusLoading(false);
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [email]);
+  }, [isEmailCheckable, normalEmail]);
 
   useEffect(() => {
-    if (role !== "manager" || !sessionIdFromUrl) {
-      setCheckoutPreview(null);
+    if (!shouldLoadCheckout) return;
+
+    const controller = new AbortController();
+
+    void Promise.resolve().then(() => {
+      if (controller.signal.aborted) return;
+      setPreviewLoading(true);
       setPreviewError(null);
-      setPreviewLoading(false);
-      setConfirmPassword("");
-      return;
-    }
+      setCheckoutPreview(null);
+    });
 
-    let cancelled = false;
-    setPreviewLoading(true);
-    setPreviewError(null);
-    setCheckoutPreview(null);
-
-    void fetch(`/api/auth/manager-checkout-preview?session_id=${encodeURIComponent(sessionIdFromUrl)}`)
+    void fetch(`/api/auth/manager-checkout-preview?session_id=${encodeURIComponent(sessionIdFromUrl)}`, {
+      signal: controller.signal,
+    })
       .then(async (res) => {
         const body = (await res.json()) as ManagerCheckoutPreview & { error?: string };
         if (!res.ok) {
           throw new Error(body.error ?? "Could not load checkout session.");
         }
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setCheckoutPreview({
             managerId: body.managerId,
             email: body.email,
@@ -135,27 +161,27 @@ export default function CreateAccountClient() {
         }
       })
       .catch((e: unknown) => {
-        if (!cancelled) {
-          setPreviewError(e instanceof Error ? e.message : "Could not load checkout session.");
-        }
+        if (controller.signal.aborted) return;
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setPreviewError(e instanceof Error ? e.message : "Could not load checkout session.");
       })
       .finally(() => {
-        if (!cancelled) setPreviewLoading(false);
+        if (!controller.signal.aborted) setPreviewLoading(false);
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [role, sessionIdFromUrl]);
+  }, [shouldLoadCheckout, sessionIdFromUrl]);
 
-  const managerPostCheckout = role === "manager" && !!sessionIdFromUrl && !!checkoutPreview;
+  const managerPostCheckout = role === "manager" && !!sessionIdFromUrl && !!effectiveCheckoutPreview;
   const managerNeedsPricing = role === "manager" && !sessionIdFromUrl;
   const isAxisIntentSignup = sessionIdFromUrl.startsWith("axis_intent_");
   const existingAccountRoles = useMemo(() => {
-    if (!emailStatus?.exists) return [];
-    return emailStatus.roles.filter((r) => r !== role);
-  }, [emailStatus, role]);
-  const reusingExistingAccount = Boolean(emailStatus?.exists);
+    if (!displayedEmailStatus?.exists) return [];
+    return displayedEmailStatus.roles.filter((r) => r !== role);
+  }, [displayedEmailStatus, role]);
+  const reusingExistingAccount = Boolean(displayedEmailStatus?.exists);
   const passwordLabel =
     reusingExistingAccount && (role === "resident" || role === "owner" || role === "admin" || role === "manager")
       ? "Password"
@@ -170,7 +196,7 @@ export default function CreateAccountClient() {
           : null;
 
   const submit = async () => {
-    if (managerPostCheckout && checkoutPreview) {
+    if (managerPostCheckout && effectiveCheckoutPreview) {
       if (password.length < 8) {
         showToast("Enter a valid password (8+ characters).");
         return;
@@ -191,7 +217,7 @@ export default function CreateAccountClient() {
           showToast(body.error ?? "Could not create account.");
           return;
         }
-        showToast(`Account ready. Axis ID ${body.managerId ?? checkoutPreview.managerId}. Sign in with your email.`);
+        showToast(`Account ready. Axis ID ${body.managerId ?? effectiveCheckoutPreview.managerId}. Sign in with your email.`);
         router.push("/auth/sign-in");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Sign up failed";
@@ -202,8 +228,8 @@ export default function CreateAccountClient() {
       return;
     }
 
-    if (role === "manager" && sessionIdFromUrl && !checkoutPreview) {
-      showToast(previewLoading ? "Still loading checkout details…" : "Fix checkout session or start from Partner pricing.");
+    if (role === "manager" && sessionIdFromUrl && !effectiveCheckoutPreview) {
+      showToast(effectivePreviewLoading ? "Still loading checkout details…" : "Fix checkout session or start from Partner pricing.");
       return;
     }
 
@@ -442,13 +468,13 @@ export default function CreateAccountClient() {
         )}
       </div>
 
-      {role === "manager" && sessionIdFromUrl && previewLoading ? (
+      {role === "manager" && sessionIdFromUrl && effectivePreviewLoading ? (
         <p className="mt-6 text-center text-sm text-slate-600">Loading checkout details…</p>
       ) : null}
 
-      {role === "manager" && sessionIdFromUrl && previewError ? (
+      {role === "manager" && sessionIdFromUrl && effectivePreviewError ? (
         <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <p>{previewError}</p>
+          <p>{effectivePreviewError}</p>
           <Link className="mt-3 inline-block font-semibold text-primary hover:underline" href="/partner/pricing">
             Back to Partner pricing
           </Link>
@@ -462,7 +488,7 @@ export default function CreateAccountClient() {
           </div>
         ) : null}
 
-        {managerPostCheckout && checkoutPreview ? (
+        {managerPostCheckout && effectiveCheckoutPreview ? (
           <>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="manager-id">
@@ -472,16 +498,16 @@ export default function CreateAccountClient() {
                 id="manager-id"
                 readOnly
                 className={`font-mono text-[13px] ${readOnlyInputClass}`}
-                value={checkoutPreview.managerId}
+                value={effectiveCheckoutPreview.managerId}
                 tabIndex={-1}
               />
             </div>
-            {checkoutPreview.fullName ? (
+            {effectiveCheckoutPreview.fullName ? (
               <div>
                 <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-name">
                   Full name
                 </label>
-                <Input id="mgr-name" readOnly className={readOnlyInputClass} value={checkoutPreview.fullName} tabIndex={-1} />
+                <Input id="mgr-name" readOnly className={readOnlyInputClass} value={effectiveCheckoutPreview.fullName} tabIndex={-1} />
               </div>
             ) : null}
             <div>
@@ -494,7 +520,7 @@ export default function CreateAccountClient() {
                 readOnly
                 className={readOnlyInputClass}
                 type="email"
-                value={checkoutPreview.email}
+                value={effectiveCheckoutPreview.email}
                 tabIndex={-1}
               />
             </div>
@@ -673,7 +699,7 @@ export default function CreateAccountClient() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              {emailStatusLoading ? <p className="mt-1 text-xs text-slate-400">Checking for an existing Axis login…</p> : null}
+              {displayedEmailStatusLoading ? <p className="mt-1 text-xs text-slate-400">Checking for an existing Axis login…</p> : null}
             </div>
           </>
         )}
@@ -690,7 +716,7 @@ export default function CreateAccountClient() {
           onClick={() => void submit()}
           disabled={
             busy ||
-            (role === "manager" && !!sessionIdFromUrl && (previewLoading || !!previewError || !checkoutPreview))
+            (role === "manager" && !!sessionIdFromUrl && (effectivePreviewLoading || !!effectivePreviewError || !effectiveCheckoutPreview))
           }
         >
           {busy ? "Working…" : "Create account"}

@@ -32,23 +32,41 @@ function ManagerIdContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const sessionId = searchParams.get("session_id") ?? "";
+  const missingSession = !sessionId;
 
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!missingSession);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const error = missingSession ? "No session ID found." : fetchError;
+  const isLoading = missingSession ? false : loading;
+
   useEffect(() => {
-    if (!sessionId) { setError("No session ID found."); setLoading(false); return; }
-    fetch(`/api/auth/manager-checkout-preview?session_id=${encodeURIComponent(sessionId)}`)
+    if (missingSession) return;
+
+    const controller = new AbortController();
+    void fetch(`/api/auth/manager-checkout-preview?session_id=${encodeURIComponent(sessionId)}`, {
+      signal: controller.signal,
+    })
       .then((r) => r.json())
       .then((data: Preview & { error?: string }) => {
         if (data.error) throw new Error(data.error);
         setPreview({ managerId: data.managerId, email: data.email, fullName: data.fullName ?? null });
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not load session."))
-      .finally(() => setLoading(false));
-  }, [sessionId]);
+      .catch((e: unknown) => {
+        if (controller.signal.aborted) return;
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setFetchError(e instanceof Error ? e.message : "Could not load session.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [missingSession, sessionId]);
 
   const copy = () => {
     if (!preview) return;
@@ -58,7 +76,7 @@ function ManagerIdContent() {
     });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <AuthCard>
         <p className="text-center text-sm text-slate-500">Loading your account details…</p>
@@ -107,7 +125,7 @@ function ManagerIdContent() {
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
-        <p className="mt-2 text-xs text-slate-400">Save this — you'll need it to access support or activate your account later.</p>
+        <p className="mt-2 text-xs text-slate-400">Save this — you&apos;ll need it to access support or activate your account later.</p>
       </div>
 
       {/* Steps */}

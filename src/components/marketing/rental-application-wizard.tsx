@@ -78,9 +78,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const searchParams = useSearchParams();
   const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState<RentalWizardFormState>(createInitialRentalWizardState);
+  const [form, setForm] = useState<RentalWizardFormState>(() => {
+    const draft = loadRentalWizardDraft();
+    return draft ? { ...createInitialRentalWizardState(), ...draft } : createInitialRentalWizardState();
+  });
   const [errors, setErrors] = useState<RentalWizardErrors>({});
-  const [draftReady, setDraftReady] = useState(false);
+  const [draftReady] = useState(true);
   const [extrasTick, setExtrasTick] = useState(0);
   const [chargeTick, setChargeTick] = useState(0);
   const [feeStepUserId, setFeeStepUserId] = useState<string | null>(null);
@@ -139,6 +142,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   }, [step]);
 
   const propertyOptions = useMemo(() => {
+    void extrasTick;
     const base = getPropertySelectOptions();
     const seen = new Set(base.map((b) => b.value));
     const extra = readExtraListings()
@@ -146,14 +150,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       .map((p) => ({ value: p.id, label: p.title }));
     return [...base, ...extra];
   }, [extrasTick]);
-
-  useEffect(() => {
-    const draft = loadRentalWizardDraft();
-    if (draft) {
-      setForm((current) => ({ ...current, ...draft }));
-    }
-    setDraftReady(true);
-  }, []);
 
   useEffect(() => {
     if (!draftReady) return;
@@ -167,25 +163,27 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
     const listingRoomId = searchParams.get("listingRoomId") ?? "";
 
-    setForm((prev) => {
-      const opts = getRoomOptionsForProperty(pid, { includeUnavailable: true }).filter((o) => o.value);
-      let room1 = opts[0]?.value ?? "";
-      const lr = listingRoomId.trim();
-      if (lr) {
-        const composite = `${pid}${LISTING_ROOM_CHOICE_SEP}${lr}`;
-        const hit = opts.find((o) => o.value === composite);
-        if (hit) room1 = hit.value;
-      }
+    queueMicrotask(() => {
+      setForm((prev) => {
+        const opts = getRoomOptionsForProperty(pid, { includeUnavailable: true }).filter((o) => o.value);
+        let room1 = opts[0]?.value ?? "";
+        const lr = listingRoomId.trim();
+        if (lr) {
+          const composite = `${pid}${LISTING_ROOM_CHOICE_SEP}${lr}`;
+          const hit = opts.find((o) => o.value === composite);
+          if (hit) room1 = hit.value;
+        }
 
-      return {
-        ...prev,
-        propertyId: pid,
-        roomChoice1: room1 || prev.roomChoice1,
-        roomChoice2: "",
-        roomChoice3: "",
-      };
+        return {
+          ...prev,
+          propertyId: pid,
+          roomChoice1: room1 || prev.roomChoice1,
+          roomChoice2: "",
+          roomChoice3: "",
+        };
+      });
     });
-  }, [draftReady, listingPrefillKey]);
+  }, [draftReady, listingPrefillKey, searchParams]);
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
     setForm((f) => ({ ...f, ...p }));
@@ -205,7 +203,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     const prop = pid ? getPropertyById(pid) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const next = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
-    if (next !== form.applicationFeePayChannel) patchForm({ applicationFeePayChannel: next });
+    if (next !== form.applicationFeePayChannel) {
+      queueMicrotask(() => patchForm({ applicationFeePayChannel: next }));
+    }
   }, [draftReady, step, form.propertyId, form.applicationFeePayChannel, patchForm]);
 
   const setPhoneMasked = useCallback((key: keyof RentalWizardFormState, next: string) => {

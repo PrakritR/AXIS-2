@@ -25,9 +25,7 @@ export type ManagerAdminShapeRow = {
 const PENDING_BY_USER_KEY = "axis_manager_pending_by_user_v1";
 const EXTRAS_BY_USER_KEY = "axis_manager_extras_by_user_v1";
 
-/** Pre–per-account migration (single global arrays). */
-const LEGACY_PENDING_KEY = "axis_manager_pending_properties_v1";
-const LEGACY_EXTRAS_KEY = "axis_public_extra_listings_v1";
+/** Pre–per-account migration (single global arrays) — reserved for future migration helpers. */
 
 export const PROPERTY_PIPELINE_EVENT = "axis-property-pipeline";
 const memoryStore = new Map<string, unknown>();
@@ -732,6 +730,6 @@ export function approvePendingManagerProperty(pendingId: string): MockProperty |
 }
 
 /** Reserved for optional onboarding seeding; no automatic listing data is injected. */
-export function ensureDemoManagerPipelineSeed(_userId: string | null): void {
+export function ensureDemoManagerPipelineSeed(): void {
   /* no-op */
 }

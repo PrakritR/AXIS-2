@@ -722,7 +722,7 @@ export function applyListingBedroomSlots(
   target: number,
 ): ApplyBedroomSlotsResult {
   const clamped = Math.max(1, Math.min(8, Math.round(target)));
-  let rooms = [...sub.rooms];
+  const rooms = [...sub.rooms];
   if (rooms.length < clamped) {
     while (rooms.length < clamped) rooms.push(emptyRoom(rooms.length));
     return { ok: true, sub: { ...sub, rooms, listingBedroomSlots: clamped } };

@@ -130,7 +130,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
       const onScroll = () => publishStackAndSpy();
       scrollRoot?.addEventListener("scroll", onScroll, { passive: true });
       window.addEventListener("resize", publishStackAndSpy, { passive: true });
-      publishStackAndSpy();
+      queueMicrotask(() => publishStackAndSpy());
 
       return () => {
         ro.disconnect();
@@ -155,7 +155,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", publishStackAndSpy, { passive: true });
-    publishStackAndSpy();
+    queueMicrotask(() => publishStackAndSpy());
 
     return () => {
       ro.disconnect();

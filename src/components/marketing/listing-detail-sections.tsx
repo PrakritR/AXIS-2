@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PropertyDetailActions } from "@/components/marketing/property-detail-actions";
@@ -32,9 +32,6 @@ function ListingHeroPhotoGrid({
 }) {
   const [slide, setSlide] = useState(0);
   const n = urls.length;
-  useEffect(() => {
-    setSlide(0);
-  }, [urls.join("|")]);
 
   const mainUrl = n ? urls[slide % n]! : null;
   const side1 = n > 1 ? urls[1]! : null;
@@ -212,7 +209,7 @@ function HouseRulesSection({ rulesBody }: { rulesBody: string | null }) {
         ) : open ? (
           <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{rulesBody}</p>
         ) : (
-          <p className="mt-3 text-sm text-slate-500">Click "View rules" to see the community guidelines.</p>
+          <p className="mt-3 text-sm text-slate-500">Click &quot;View rules&quot; to see the community guidelines.</p>
         )}
       </div>
     </section>
@@ -238,7 +235,7 @@ export function ListingDetailSections({
     <div className="bg-[#f4f7fb]">
       <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10"}`}>
         {previewModal ? <ListingStickySubnav mode="modal" /> : null}
-        <ListingHeroPhotoGrid urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
+        <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
 
         <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>

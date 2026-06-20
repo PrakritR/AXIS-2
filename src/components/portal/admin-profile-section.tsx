@@ -19,16 +19,11 @@ function adminAxisIdFrom(value: unknown): string {
  * issues or odd row shapes don’t take down the whole `/admin/profile` segment.
  */
 export async function AdminProfileSection() {
+  let profile: Awaited<ReturnType<typeof getServerSessionProfile>>["profile"];
+  let user: Awaited<ReturnType<typeof getServerSessionProfile>>["user"];
+
   try {
-    const { profile, user } = await getServerSessionProfile();
-    return (
-      <AdminProfileClient
-        fullName={safeLine(profile?.full_name)}
-        email={safeLine(profile?.email ?? user?.email)}
-        phone={safeLine(profile?.phone)}
-        adminId={adminAxisIdFrom(profile?.id ?? user?.id)}
-      />
-    );
+    ({ profile, user } = await getServerSessionProfile());
   } catch {
     return (
       <AdminProfileClient
@@ -39,4 +34,13 @@ export async function AdminProfileSection() {
       />
     );
   }
+
+  return (
+    <AdminProfileClient
+      fullName={safeLine(profile?.full_name)}
+      email={safeLine(profile?.email ?? user?.email)}
+      phone={safeLine(profile?.phone)}
+      adminId={adminAxisIdFrom(profile?.id ?? user?.id)}
+    />
+  );
 }

@@ -101,22 +101,17 @@ export function CosignerApplyFlow({
   onDone?: () => void;
 }) {
   const [step, setStep] = useState(1);
-  const [f, setF] = useState<CosignerFields>(emptyCosigner);
+  const [f, setF] = useState<CosignerFields>(() => {
+    const draft = loadCosignerDraft<CosignerFields>();
+    return draft ? { ...emptyCosigner(), ...draft } : emptyCosigner();
+  });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [draftReady, setDraftReady] = useState(false);
+  const [draftReady] = useState(true);
   const [postSubmit, setPostSubmit] = useState<{
     linkedAxisId: string;
     linkedSignerName: string;
     cosignerName: string;
   } | null>(null);
-
-  useEffect(() => {
-    const draft = loadCosignerDraft<CosignerFields>();
-    if (draft) {
-      setF((current) => ({ ...current, ...draft }));
-    }
-    setDraftReady(true);
-  }, []);
 
   useEffect(() => {
     if (!draftReady) return;

@@ -62,9 +62,11 @@ function MoveOutDateModal({
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!open) {
-      setSelectedDate("");
-      setAvailability({ status: "idle" });
-      setSubmitting(false);
+      queueMicrotask(() => {
+        setSelectedDate("");
+        setAvailability({ status: "idle" });
+        setSubmitting(false);
+      });
     }
   }, [open]);
 
@@ -80,15 +82,15 @@ function MoveOutDateModal({
   useEffect(() => {
     if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
     if (!selectedDate || selectedDate === currentEnd) {
-      setAvailability({ status: "idle" });
+      queueMicrotask(() => setAvailability({ status: "idle" }));
       return;
     }
     if (direction === "decrease") {
       // No server check needed for early termination
-      setAvailability({ status: "available", direction: "decrease" });
+      queueMicrotask(() => setAvailability({ status: "available", direction: "decrease" }));
       return;
     }
-    setAvailability({ status: "checking" });
+    queueMicrotask(() => setAvailability({ status: "checking" }));
     checkTimerRef.current = setTimeout(() => {
       void (async () => {
         try {
@@ -427,7 +429,7 @@ export function ResidentLeasePanel() {
     await syncLeasePipelineFromServer();
     if (pipelineRow?.id) generateLeaseHtmlForRow(pipelineRow.id);
     setPipelineTick((t) => t + 1);
-  }, [pipelineRow?.id]);
+  }, [pipelineRow]);
 
   if ((!pipelineRow || !leaseVisibleToResident) && email) {
     return (

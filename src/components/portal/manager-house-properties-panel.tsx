@@ -243,11 +243,6 @@ function ManagerPropertyInlineDetails({
   const [localSub, setLocalSub] = useState<ManagerListingSubmissionV1 | null>(null);
   const displaySub = localSub ?? portalSub?.sub ?? null;
 
-  // Reset local copy when the underlying row changes.
-  useEffect(() => {
-    setLocalSub(null);
-  }, [row?.adminRefId, row?.listingId]);
-
   const handleSaveSub = useCallback(
     (updated: ManagerListingSubmissionV1) => {
       setLocalSub(updated);
@@ -536,11 +531,6 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
   }, [tick, managerUserId, activeStage]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setExpandedRowKey(null), 0);
-    return () => window.clearTimeout(timer);
-  }, [activeStage]);
-
-  useEffect(() => {
     if (activeStage !== "pending") return;
     if ((stageCounts.pending ?? 0) === 0 && (stageCounts.listed ?? 0) > 0) {
       setActiveStage("listed");
@@ -561,7 +551,10 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
           <button
             key={stage.key}
             type="button"
-            onClick={() => setActiveStage(stage.key)}
+            onClick={() => {
+              setActiveStage(stage.key);
+              setExpandedRowKey(null);
+            }}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
               activeStage === stage.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
             }`}
@@ -643,6 +636,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                         <tr key={`${rowKey}-details`} className="border-b border-slate-100">
                           <td colSpan={4} className="bg-slate-50/40 px-4 py-4">
                             <ManagerPropertyInlineDetails
+                              key={rowKey}
                               bucket={sourceBucket}
                               row={row}
                               onUpdated={() => setTick((t) => t + 1)}

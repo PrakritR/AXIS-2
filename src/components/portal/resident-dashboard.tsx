@@ -158,7 +158,7 @@ export function ResidentDashboard({
       window.removeEventListener("storage", bump);
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, onInbox as EventListener);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   useEffect(() => {

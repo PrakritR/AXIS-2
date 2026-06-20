@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "check": "npm run lint && npm run build",
     "admin:sync-account": "node scripts/ensure-admin-account.mjs",
     "admin:ensure-demo-manager": "node scripts/ensure-demo-manager-account.mjs",
     "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs"

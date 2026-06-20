@@ -1,5 +1,4 @@
 import { PublicNavbar } from "@/components/layout/public-navbar";
-import { AccountLinksSync } from "@/components/portal/account-links-sync";
 import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PORTAL_MAIN_CONTENT_CLASS } from "@/lib/portal-layout-classes";

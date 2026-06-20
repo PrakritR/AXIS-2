@@ -64,6 +64,13 @@ export function PortalProfileClient({
   const [saving, setSaving] = useState(false);
   /** Skip one sync from server props after save so we don't overwrite local state before RSC catches up. */
   const skipNextServerPropsSync = useRef(false);
+  const [pendingSkipServerPropsSync, setPendingSkipServerPropsSync] = useState(false);
+
+  useEffect(() => {
+    if (!pendingSkipServerPropsSync) return;
+    skipNextServerPropsSync.current = true;
+    queueMicrotask(() => setPendingSkipServerPropsSync(false));
+  }, [pendingSkipServerPropsSync]);
 
   useEffect(() => {
     if (editing) return;
@@ -98,7 +105,7 @@ export function PortalProfileClient({
         return;
       }
       showToast("Profile saved.");
-      skipNextServerPropsSync.current = true;
+      setPendingSkipServerPropsSync(true);
       setEditing(false);
       // Full RSC refresh can 500 on some hosts; next navigation will re-sync from server. Local state is already correct.
     } catch {

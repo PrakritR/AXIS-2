@@ -139,7 +139,6 @@ export async function POST(req: Request) {
       }
     }
 
-    const recipientEmails = recipients.map((recipient) => recipient.email);
     const toEmails = recipients
       .map((recipient) => recipient.email)
       .filter((email) => !email.endsWith("@axis.local"));

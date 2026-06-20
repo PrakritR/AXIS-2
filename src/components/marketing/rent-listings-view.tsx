@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useIsClient } from "@/hooks/use-is-client";
 import { PropertyCard } from "@/components/marketing/property-card";
 import { RoomListingCard } from "@/components/marketing/room-listing-card";
 import { LISTINGS_PENDING_SEARCH_KEY } from "@/components/marketing/home-hero-search";
@@ -51,13 +52,13 @@ function readPendingListingsSearch(): PendingListingsSearch {
 }
 
 export function RentListingsView() {
+  const isClient = useIsClient();
   const [extras, setExtras] = useState<MockProperty[]>([]);
   const [applicationTick, setApplicationTick] = useState(0);
-  const [search, setSearch] = useState<PendingListingsSearch>(DEFAULT_SEARCH);
-
-  useEffect(() => {
-    setSearch(readPendingListingsSearch());
-  }, []);
+  const search = useMemo(
+    () => (isClient ? readPendingListingsSearch() : DEFAULT_SEARCH),
+    [isClient],
+  );
 
   const refreshExtras = useCallback(() => {
     setExtras(readExtraListingsPublic());

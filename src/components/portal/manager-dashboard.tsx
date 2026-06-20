@@ -122,6 +122,7 @@ export function ManagerDashboard() {
   const { userId } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
+  const [nowMs] = useState(() => Date.now());
 
   useEffect(() => {
     void Promise.allSettled([
@@ -149,7 +150,7 @@ export function ManagerDashboard() {
       window.removeEventListener("storage", bump);
       window.removeEventListener(SERVICE_REQUESTS_EVENT, bump);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [userId]);
 
   const data = useMemo(() => {
@@ -182,7 +183,7 @@ export function ManagerDashboard() {
     const publishedProperties = p2;
     const totalProperties = publishedProperties + pendingProperties;
 
-    const cutoff = Date.now() - 30 * 60 * 1000;
+    const cutoff = nowMs - 30 * 60 * 1000;
     const tours = [
       ...readPartnerInquiries()
         .filter((r) => r.kind === "tour" && r.status === "pending" && r.managerUserId === userId)
@@ -224,7 +225,7 @@ export function ManagerDashboard() {
       pendingServiceRequests,
       approvedServiceRequests,
     };
-  }, [tick, userId]);
+  }, [tick, userId, nowMs]);
 
   if (!data) return null;
 
@@ -375,7 +376,7 @@ export function ManagerDashboard() {
               linkLabel={pendingApps.length > 4 ? `View all ${pendingApps.length}` : "View all"}
             />
             {pendingApps.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No pending applications — you're all caught up.</p>
+              <p className="mt-4 text-sm text-slate-400">No pending applications — you&apos;re all caught up.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {pendingApps.slice(0, 5).map((app: DemoApplicantRow) => (

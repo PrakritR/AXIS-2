@@ -13,7 +13,6 @@ import {
   PORTAL_TOOLBAR_GROUP,
   PORTAL_TOOLBAR_LABEL,
   PORTAL_TOOLBAR_PILL_BUTTON,
-  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
   PORTAL_TOOLBAR_SELECT,
 } from "@/components/portal/portal-metrics";
 import {
@@ -301,6 +300,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentsSort, setResidentsSort] = useState<ResidentsSort>("name-asc");
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
+  const [prevTabId, setPrevTabId] = useState(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addChargeOpen, setAddChargeOpen] = useState(false);
   const [editChargeId, setEditChargeId] = useState<string | null>(null);
@@ -309,6 +309,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [chargeAmount, setChargeAmount] = useState("");
   const [chargeBlocksLease, setChargeBlocksLease] = useState(false);
   const [chargeTab, setChargeTab] = useState<"pending" | "paid">("pending");
+  const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [portalSetupMap, setPortalSetupMap] = useState<Map<string, boolean>>(new Map());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
@@ -362,13 +363,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [erSecurityDeposit, setErSecurityDeposit] = useState("");
   const [erNotes, setErNotes] = useState("");
 
-  // Per-resident move-in instructions editing
-  const [editMoveInId, setEditMoveInId] = useState<string | null>(null);
-  const [editMoveInText, setEditMoveInText] = useState("");
-
-  useEffect(() => {
-    setResidentsTab(tabId);
-  }, [tabId]);
+  if (tabId !== prevTabId) {
+    setPrevTabId(tabId);
+    if (residentsTab !== tabId) setResidentsTab(tabId);
+  }
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -634,17 +632,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   const isEditMonthToMonthLease = erLeaseTerm === "Month-to-month";
 
-  useEffect(() => {
-    if (isMonthToMonthLease && arMoveOutDate) {
-      setArMoveOutDate("");
-    }
-  }, [isMonthToMonthLease, arMoveOutDate]);
+  if (isMonthToMonthLease && arMoveOutDate) {
+    setArMoveOutDate("");
+  }
 
-  useEffect(() => {
-    if (isEditMonthToMonthLease && erMoveOutDate) {
-      setErMoveOutDate("");
-    }
-  }, [isEditMonthToMonthLease, erMoveOutDate]);
+  if (isEditMonthToMonthLease && erMoveOutDate) {
+    setErMoveOutDate("");
+  }
 
   const filtered = useMemo(() => {
     const inTab = residents.filter((resident) => (residentsTab === "current" ? !resident.isPrevious : resident.isPrevious));
@@ -673,9 +667,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   const selected = useMemo(() => residents.find((r) => r.id === selectedId) ?? null, [residents, selectedId]);
 
-  useEffect(() => {
+  if (selectedId !== prevSelectedId) {
+    setPrevSelectedId(selectedId);
     if (selectedId) setChargeTab("pending");
-  }, [selectedId]);
+  }
+
+  if (selectedId && !filtered.some((resident) => resident.id === selectedId)) {
+    setSelectedId(null);
+  }
 
   // Auto-regenerate unsigned leases when a resident is selected so stale HTML is always refreshed
   useEffect(() => {
@@ -694,16 +693,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     for (const lr of leasesToRegen) {
       generateLeaseHtmlForRow(lr.id);
     }
-    setLeaseTick((n) => n + 1);
+    queueMicrotask(() => {
+      setLeaseTick((n) => n + 1);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
-
-  useEffect(() => {
-    if (!selectedId) return;
-    if (!filtered.some((resident) => resident.id === selectedId)) {
-      setSelectedId(null);
-    }
-  }, [filtered, selectedId]);
 
   const residentCharges = useMemo<HouseholdCharge[]>(() => {
     void hcTick;
@@ -1152,61 +1146,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setAddResidentOpen(false);
     setHcTick((n) => n + 1);
     showToast(`Resident added — Axis ID: ${axisId}`);
-  }
-
-  function autoGenerateMoveIn() {
-    if (!selected || !userId) return;
-    const row = readManagerApplicationRows().find((r) => r.id === selected.id);
-    const propId = row?.assignedPropertyId?.trim() || row?.propertyId?.trim() || selected.propertyId;
-    const parts: string[] = [];
-    // Get house description — prefer server submission, fall back to localStorage
-    if (propId) {
-      const property = getPropertyById(propId);
-      let houseDesc: string | undefined;
-      if (property?.listingSubmission?.v === 1) {
-        const sub = normalizeManagerListingSubmissionV1(property.listingSubmission);
-        houseDesc = sub.houseDescription?.trim();
-      }
-      if (!houseDesc) {
-        try {
-          const notesRaw = typeof window !== "undefined" ? localStorage.getItem("axis_portal_notes_v1") : null;
-          if (notesRaw) {
-            const notesStore = JSON.parse(notesRaw) as Record<string, { houseDescription?: string }>;
-            const noteKey = `${userId}:${propId}`;
-            houseDesc = notesStore[noteKey]?.houseDescription?.trim();
-          }
-        } catch { /* ignore */ }
-      }
-      if (houseDesc) parts.push(houseDesc);
-    }
-    // Get room description from listing submission
-    if (propId) {
-      const property = getPropertyById(propId);
-      if (property?.listingSubmission?.v === 1) {
-        const sub = normalizeManagerListingSubmissionV1(property.listingSubmission);
-        const roomChoice = row?.assignedRoomChoice?.trim() || row?.application?.roomChoice1?.trim() || "";
-        if (roomChoice) {
-          const sep = LISTING_ROOM_CHOICE_SEP;
-          const roomId = roomChoice.includes(sep) ? roomChoice.split(sep)[1] : null;
-          const room = roomId ? sub.rooms.find((r) => r.id === roomId) : null;
-          if (room?.detail?.trim()) parts.push(room.detail.trim());
-        }
-      }
-    }
-    const generated = parts.join("\n\n").trim();
-    if (generated) setEditMoveInText(generated);
-    else showToast("No description data found — add a house description or room description first.");
-  }
-
-  function saveMoveInInstructions() {
-    if (!editMoveInId) return;
-    const rows = readManagerApplicationRows().map((row) =>
-      row.id === editMoveInId ? { ...row, moveInInstructions: editMoveInText.trim() || undefined } : row,
-    );
-    writeManagerApplicationRows(rows);
-    setEditMoveInId(null);
-    setHcTick((n) => n + 1);
-    showToast("Move-in instructions saved.");
   }
 
   function openEditResidentModal() {
