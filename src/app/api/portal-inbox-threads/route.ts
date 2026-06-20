@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { createJsonRecordRoute } from "@/lib/portal-record-api";
+import { isAdminUser } from "@/lib/auth/admin-preview";
 
 export const runtime = "nodejs";
 
 const route = createJsonRecordRoute({
   table: "portal_inbox_thread_records",
   scope: (query, user) => {
-    const q = query as { or: (expr: string) => unknown };
+    const q = query as { or: (expr: string) => unknown; eq: (col: string, val: string) => unknown };
+    // Admin inbox is a single shared mailbox for admin staff — not gated to one admin's owner_user_id.
+    if (user.role === "admin") return q.eq("scope", "admin");
     return q.or(`owner_user_id.eq.${user.id},participant_email.eq.${user.email ?? ""}`);
   },
   normalize: (row) => ({
@@ -16,10 +19,10 @@ const route = createJsonRecordRoute({
     id: String(row.id ?? "").trim(),
     email: String(row.email ?? row.participantEmail ?? row.participant_email ?? "").trim().toLowerCase(),
   }),
-  buildUpsert: (row) => ({
+  buildUpsert: (row, user) => ({
     id: row.id,
     scope: row.scope ?? "portal",
-    owner_user_id: row.ownerUserId ?? row.owner_user_id ?? null,
+    owner_user_id: row.scope === "admin" ? null : (row.ownerUserId ?? row.owner_user_id ?? user.id),
     participant_email: row.email ?? row.participantEmail ?? null,
     thread_type: row.threadType ?? row.thread_type ?? null,
     row_data: row,
@@ -39,13 +42,16 @@ export async function GET(request: Request) {
     const db = createSupabaseServiceRoleClient();
     const { data: profile } = await db.from("profiles").select("email").eq("id", user.id).maybeSingle();
     const userEmail = (profile?.email ?? user.email ?? "").trim().toLowerCase();
+    const admin = await isAdminUser(user.id);
 
     let query = db
       .from("portal_inbox_thread_records")
       .select("id, row_data, updated_at")
       .order("updated_at", { ascending: false })
-      .limit(500)
-      .or(`owner_user_id.eq.${user.id},participant_email.eq.${userEmail}`);
+      .limit(500);
+
+    // Admin inbox is a single shared mailbox for admin staff — not gated to one admin's owner_user_id.
+    query = admin && scopeParam === "admin" ? query : query.or(`owner_user_id.eq.${user.id},participant_email.eq.${userEmail}`);
 
     if (scopeParam) {
       query = query.eq("scope", scopeParam) as typeof query;

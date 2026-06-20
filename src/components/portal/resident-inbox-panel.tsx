@@ -13,7 +13,6 @@ import { demoResidentInboxThreads } from "@/data/demo-portal";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
   appendPersistedInboxThread,
-  MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
   type PersistedInboxThread,
   persistInbox,
@@ -189,21 +188,21 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         unread: false,
       };
       if (p.includesDirectoryRecipients) {
-        appendPersistedInboxThread(
-          MANAGER_INBOX_STORAGE_KEY,
-          {
-            id: `inbox_resident_${Date.now()}`,
-            folder: "inbox",
-            from: "Resident",
-            email: "resident@example.com",
+        void fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            fromName: p.senderName,
+            fromEmail: p.senderEmail,
+            toEmails: p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
+            toBroadcast: p.broadcastCategories,
             subject: p.subject.trim(),
-            preview: previewLine(p.body),
-            body: p.body.trim(),
-            time: when,
-            unread: true,
-          },
-          [],
-        );
+            text: p.body.trim(),
+            deliverViaEmail: p.deliverViaEmail,
+            deliverViaSms: p.deliverViaSms,
+          }),
+        }).catch(() => undefined);
       }
       // Persist synchronously before navigation so the sent message survives the route change
       appendPersistedInboxThread(RESIDENT_INBOX_STORAGE_KEY, row, RESIDENT_INBOX_THREAD_FALLBACK);

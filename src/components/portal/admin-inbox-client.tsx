@@ -29,6 +29,7 @@ import {
   readInboxMessages,
   restoreInboxMessageFromTrash,
   roleAllowsThread,
+  syncInboxMessagesFromServer,
   type AdminComposeSendMode,
   type InboxMessage,
 } from "@/lib/demo-admin-partner-inbox";
@@ -130,6 +131,8 @@ function ComposeModal({
         return;
       }
 
+      let toUserIds: string[] = [];
+
       if (mode === "all_portal" || mode === "all_managers" || mode === "all_residents" || mode === "all_owners") {
         const label =
           mode === "all_portal"
@@ -157,6 +160,14 @@ function ComposeModal({
           composeAudience: mode === "all_portal" ? "all" : mode,
           composeRecipientLabel: label,
         });
+        toUserIds =
+          mode === "all_portal"
+            ? [...recipients.managers, ...recipients.residents, ...recipients.owners].map((p) => p.id)
+            : mode === "all_managers"
+              ? recipients.managers.map((p) => p.id)
+              : mode === "all_residents"
+                ? recipients.residents.map((p) => p.id)
+                : recipients.owners.map((p) => p.id);
       } else {
         const pool =
           mode === "pick_managers"
@@ -183,6 +194,23 @@ function ComposeModal({
               ? `${picked[0]!.name} (${roleLabel})`
               : `${picked.length} ${roleLabel.toLowerCase()}s (${picked.map((p) => p.name).join(", ")})`,
         });
+        toUserIds = picked.map((p) => p.id);
+      }
+
+      // Deliver to each recipient's real portal inbox (admin's own "Sent" record above is separate).
+      if (toUserIds.length > 0) {
+        void fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            fromName: "Axis Housing Admin",
+            toUserIds,
+            subject: topicTrim,
+            text: bodyTrim,
+            deliverViaEmail: false,
+          }),
+        }).catch(() => undefined);
       }
 
       showToast("Message sent. It appears under Sent.");
@@ -320,8 +348,10 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   });
 
   const refresh = useCallback(() => {
-    setTick((t) => t + 1);
-    showToast("Refreshed inbox.");
+    void syncInboxMessagesFromServer({ force: true }).then(() => {
+      setTick((t) => t + 1);
+      showToast("Refreshed inbox.");
+    });
   }, [showToast]);
 
   useEffect(() => {
@@ -332,6 +362,10 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
       window.removeEventListener(ADMIN_UI_EVENT, on);
       window.removeEventListener("storage", on);
     };
+  }, []);
+
+  useEffect(() => {
+    void syncInboxMessagesFromServer().then(() => setTick((t) => t + 1));
   }, []);
 
   useEffect(() => {

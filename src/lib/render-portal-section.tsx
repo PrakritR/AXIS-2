@@ -3,6 +3,7 @@ import { ManagerApplications } from "@/components/portal/manager-applications";
 import { PortalCalendar } from "@/components/portal/portal-calendar";
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 import { ManagerInbox } from "@/components/portal/manager-inbox";
+import { OwnerInboxPanel } from "@/components/portal/owner-inbox-panel";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerPayments } from "@/components/portal/manager-payments";
@@ -313,7 +314,7 @@ export async function renderPortalSection(
       const inboxTab = tabParts[0]!;
       if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
       return subscriptionGated(
-        <ManagerInbox tabId={inboxTab} />,
+        useOwnerUi ? <OwnerInboxPanel tabId={inboxTab} /> : <ManagerInbox tabId={inboxTab} />,
         kind,
         "inbox",
         managerOwnerSubscriptionTier,
@@ -408,7 +409,7 @@ export async function renderPortalSection(
       const inboxTab = tabParts[0]!;
       if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
       return subscriptionGated(
-        <ManagerInbox tabId={inboxTab} />,
+        <OwnerInboxPanel tabId={inboxTab} />,
         kind,
         "inbox",
         managerOwnerSubscriptionTier,

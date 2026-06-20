@@ -155,6 +155,25 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
       };
       setLocal((prev) => [row, ...prev]);
       setComposeOpen(false);
+
+      if (p.includesDirectoryRecipients) {
+        void fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            fromName: p.senderName,
+            fromEmail: p.senderEmail,
+            toEmails: p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
+            toBroadcast: p.broadcastCategories,
+            subject: p.subject.trim(),
+            text: p.body.trim(),
+            deliverViaEmail: p.deliverViaEmail,
+            deliverViaSms: p.deliverViaSms,
+          }),
+        }).catch(() => undefined);
+      }
+
       showToast(
         p.includesAxisAdmin && !p.includesDirectoryRecipients
           ? "Message sent to Axis Housing admin."

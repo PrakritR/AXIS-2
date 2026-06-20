@@ -47,10 +47,14 @@ function readAll(): InboxMessage[] {
   return inboxMessages;
 }
 
-function writeAll(rows: InboxMessage[]) {
+function writeAllLocal(rows: InboxMessage[]) {
   if (!isBrowser()) return;
   inboxMessages = rows;
   emitAdminUi();
+}
+
+function writeAll(rows: InboxMessage[]) {
+  writeAllLocal(rows);
   void fetch("/api/portal-inbox-threads", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -61,6 +65,31 @@ function writeAll(rows: InboxMessage[]) {
 
 export function readInboxMessages(): InboxMessage[] {
   return readAll();
+}
+
+function looksLikeInboxMessage(row: unknown): row is InboxMessage {
+  if (!row || typeof row !== "object") return false;
+  const r = row as Record<string, unknown>;
+  return typeof r.id === "string" && typeof r.folder === "string" && typeof r.senderRole === "string";
+}
+
+let syncedFromServer = false;
+
+/** Hydrate the in-memory admin inbox from the server (admin inbox is otherwise lost on every fresh page load). */
+export async function syncInboxMessagesFromServer(opts?: { force?: boolean }): Promise<InboxMessage[]> {
+  if (!isBrowser()) return readAll();
+  if (syncedFromServer && !opts?.force) return readAll();
+  try {
+    const res = await fetch("/api/portal-inbox-threads?scope=admin", { credentials: "include", cache: "no-store" });
+    if (!res.ok) return readAll();
+    const body = (await res.json()) as { rows?: unknown[] };
+    const rows = (Array.isArray(body.rows) ? body.rows : []).filter(looksLikeInboxMessage);
+    syncedFromServer = true;
+    writeAllLocal(rows);
+    return rows;
+  } catch {
+    return readAll();
+  }
 }
 
 export function markInboxMessageRead(id: string): boolean {

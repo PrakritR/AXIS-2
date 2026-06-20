@@ -278,7 +278,8 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         body: JSON.stringify({
           fromName: p.senderName,
           fromEmail: p.senderEmail,
-          toEmails: p.toEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
+          toEmails: p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
+          toBroadcast: p.broadcastCategories,
           subject: p.subject.trim(),
           text: p.body.trim(),
           deliverViaEmail: p.deliverViaEmail,

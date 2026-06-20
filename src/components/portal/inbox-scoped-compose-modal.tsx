@@ -22,8 +22,12 @@ export type ScopedInboxSendPayload = {
   senderEmail: string;
   toLabel: string;
   toEmailLine: string;
+  /** Same as toEmailLine but with "All management"/"All residents" placeholder addresses stripped. */
+  directRecipientEmailLine: string;
   includesAxisAdmin: boolean;
   includesDirectoryRecipients: boolean;
+  /** Broadcast categories selected ("All management" / "All residents"), resolved to real recipients server-side. */
+  broadcastCategories: ("management" | "resident")[];
   deliverViaEmail: boolean;
   deliverViaSms: boolean;
 };
@@ -216,6 +220,13 @@ export function ScopedInboxComposeModal({
 
     const toLabel = parts.map((p) => p.label).join(", ");
     const toEmailLine = parts.map((p) => p.email).join("; ");
+    // "management"/"resident" broadcast chips are placeholder addresses (resolved server-side via
+    // broadcastCategories below) — exclude them here so we don't send literal toEmails to nobody.
+    const directRecipientEmailLine = parts
+      .filter((p) => p.email.toLowerCase() !== broadcastStubForCategory("management").email.toLowerCase()
+        && p.email.toLowerCase() !== broadcastStubForCategory("resident").email.toLowerCase())
+      .map((p) => p.email)
+      .join("; ");
 
     const includesAxisAdmin =
       broadcastCats.has("admin") ||
@@ -232,6 +243,10 @@ export function ScopedInboxComposeModal({
         return c && categoryForContactRole(portal, c.role) !== "admin";
       });
 
+    const broadcastCategories = [...broadcastCats].filter(
+      (c): c is "management" | "resident" => c === "management" || c === "resident",
+    );
+
     onSend({
       subject: s,
       body: b,
@@ -239,8 +254,10 @@ export function ScopedInboxComposeModal({
       senderEmail,
       toLabel,
       toEmailLine,
+      directRecipientEmailLine,
       includesAxisAdmin,
       includesDirectoryRecipients,
+      broadcastCategories,
       deliverViaEmail,
       deliverViaSms,
     });
