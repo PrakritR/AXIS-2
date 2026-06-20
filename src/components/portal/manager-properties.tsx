@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerHousePropertiesPanel } from "@/components/portal/manager-house-properties-panel";
 import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -12,7 +13,6 @@ import {
   mirrorLocalPropertyPipelineToServer,
   PROPERTY_PIPELINE_EVENT,
   readPendingManagerPropertiesForUser,
-  submitManagerPendingProperty,
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 import { readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
@@ -24,7 +24,6 @@ import {
   normalizeManagerSkuTier,
   PRO_MAX_PROPERTIES,
 } from "@/lib/manager-access";
-import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 export function ManagerProperties() {
@@ -36,6 +35,7 @@ export function ManagerProperties() {
   const [skuTier, setSkuTier] = useState<string | null>(null);
   const [propCount, setPropCount] = useState(0);
   const [linkedListings, setLinkedListings] = useState<ReturnType<typeof readLinkedListingsForUser>>([]);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const refreshPending = useCallback(() => {
     if (!userId) {
@@ -105,13 +105,11 @@ export function ManagerProperties() {
       );
       return;
     }
-    // Create a blank listing immediately — manager fills it in via the inline editor.
-    submitManagerPendingProperty(createDefaultListingSubmission(), userId);
-    refreshPending();
-    showToast("New listing created. Expand it below to fill in the details.");
+    setWizardOpen(true);
   };
 
   return (
+    <>
     <ManagerPortalPageShell
       title="Properties"
       titleAside={
@@ -183,5 +181,19 @@ export function ManagerProperties() {
         </div>
       ) : null}
     </ManagerPortalPageShell>
+    {wizardOpen ? (
+      <ManagerAddListingForm
+        onClose={() => setWizardOpen(false)}
+        onSubmitted={() => {
+          setWizardOpen(false);
+          refreshPending();
+          showToast("Listing submitted for admin review.");
+        }}
+        showToast={showToast}
+        skuTier={skuTier}
+        propCountBeforeSubmit={propCount}
+      />
+    ) : null}
+    </>
   );
 }

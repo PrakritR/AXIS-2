@@ -2,6 +2,7 @@
 
 import type { DragEvent, FormEvent, ReactNode } from "react";
 import { Children, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { createPortal } from "react-dom";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -10,6 +11,8 @@ import {
   updateExtraListingFromSubmissionOnServer,
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
+import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
+import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
   BUSINESS_MAX_PROPERTIES,
   FREE_MAX_PROPERTIES,
@@ -548,7 +551,9 @@ export function ManagerAddListingForm({
   editPendingId = null,
   editListingId = null,
   editListingOwnerUserId = null,
+  editRequestChangeId = null,
   initialSubmission = null,
+  noteKey = null,
 }: {
   onClose: () => void;
   onSubmitted: () => void;
@@ -559,13 +564,30 @@ export function ManagerAddListingForm({
   editListingId?: string | null;
   /** Owner's userId to use when saving edits to a linked listing (overrides the current user's id). */
   editListingOwnerUserId?: string | null;
+  /** adminRefId of a "request change" (edits requested by admin) row to save back to. */
+  editRequestChangeId?: string | null;
   initialSubmission?: ManagerListingSubmissionV1 | null;
+  /** Stable key for legacy localStorage house-detail notes, used to backfill houseDescription/houseRulesText if empty on the submission. */
+  noteKey?: string | null;
 }) {
-  const [sub, setSub] = useState<ManagerListingSubmissionV1>(() =>
-    initialSubmission ? normalizeManagerListingSubmissionV1(initialSubmission) : createDefaultListingSubmission(),
-  );
+  const [sub, setSub] = useState<ManagerListingSubmissionV1>(() => {
+    const base = initialSubmission ? normalizeManagerListingSubmissionV1(initialSubmission) : createDefaultListingSubmission();
+    if (!noteKey || (base.houseDescription?.trim() && base.houseRulesText?.trim())) return base;
+    const legacy = getPortalListingNote(noteKey);
+    return {
+      ...base,
+      houseDescription: base.houseDescription?.trim() || legacy.houseDescription || "",
+      houseRulesText: base.houseRulesText?.trim() || legacy.houseRulesText || "",
+    };
+  });
   const [busy, setBusy] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  // Portal to document.body once mounted, so this modal can't get visually trapped by an
+  // ancestor that creates a containing block for fixed-position descendants (e.g. transform/filter).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   // Incremented whenever a video preview URL changes, to trigger re-render.
   const [, setVideoTick] = useState(0);
   const [listingPresets, setListingPresets] = useState<ListingPresetConfig>(DEFAULT_LISTING_PRESETS);
@@ -595,7 +617,7 @@ export function ManagerAddListingForm({
   const locationLevelOptions = useMemo(() => locationOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
   const roomFloorOptions = useMemo(() => roomFloorOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
 
-  const isEditMode = Boolean(editPendingId ?? editListingId);
+  const isEditMode = Boolean(editPendingId ?? editListingId ?? editRequestChangeId);
   const lastStepIndex = LISTING_STEP_COUNT - 1;
   const isFinalStep = stepIndex === lastStepIndex;
 
@@ -1397,6 +1419,16 @@ export function ManagerAddListingForm({
         onSubmitted();
         return;
       }
+      if (editRequestChangeId) {
+        const ok = updateRequestChangeProperty(editRequestChangeId, userId, uploadedSubmission);
+        if (!ok) {
+          showToast("Could not save changes.");
+          return;
+        }
+        showToast("Changes saved and resubmitted for admin re-approval.");
+        onSubmitted();
+        return;
+      }
       if (editListingId) {
         const saveUserId = editListingOwnerUserId?.trim() || userId;
         const ok = await updateExtraListingFromSubmissionOnServer(editListingId, saveUserId, uploadedSubmission);
@@ -1419,7 +1451,9 @@ export function ManagerAddListingForm({
     }
   };
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-slate-900/50 px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
@@ -1430,16 +1464,15 @@ export function ManagerAddListingForm({
         className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
       >
         {/* ── Header ── */}
-        <div className="shrink-0 border-b border-slate-100 bg-white">
-          <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 sm:px-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <span className="text-base">{LISTING_FORM_STEPS[stepIndex]?.icon}</span>
-              </div>
-              <div>
-                <h2 className="text-[15px] font-bold tracking-tight text-slate-900">{isEditMode ? "Edit listing" : "New listing"}</h2>
-                <p className="text-xs text-slate-400">Step {stepIndex + 1} of {LISTING_STEP_COUNT} · {LISTING_FORM_STEPS[stepIndex]?.label}</p>
-              </div>
+        <div className="shrink-0 border-b border-slate-100 bg-white px-5 pt-5 pb-6 sm:px-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                Step {stepIndex + 1} of {LISTING_STEP_COUNT}
+              </p>
+              <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
+                {isEditMode ? "Edit listing" : "New listing"} · {LISTING_FORM_STEPS[stepIndex]?.label}
+              </p>
             </div>
             <button
               type="button"
@@ -1451,20 +1484,20 @@ export function ManagerAddListingForm({
             </button>
           </div>
 
-          {/* Step nav */}
-          <div className="-mx-0 overflow-x-auto px-5 pb-0 sm:px-6 [-webkit-overflow-scrolling:touch]">
-            <div className="flex min-w-max gap-1 border-b border-slate-100">
+          {/* Step pills — click any completed step (or any step you can continue past) to jump directly to it */}
+          <div className="-mx-0 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+            <div className="flex min-w-max gap-1.5">
               {LISTING_FORM_STEPS.map((step, i) => (
                 <button
                   key={step.id}
                   type="button"
                   onClick={() => { if (i < stepIndex || canContinueFromStep(stepIndex)) setStepIndex(i); }}
-                  className={`relative flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-xs font-semibold transition ${
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     i === stepIndex
-                      ? "text-primary after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-full after:rounded-full after:bg-primary"
+                      ? "bg-primary/10 text-primary"
                       : i < stepIndex
-                        ? "text-slate-600 hover:text-slate-900"
-                        : "text-slate-400 hover:text-slate-600"
+                        ? "text-slate-600 hover:bg-slate-50"
+                        : "text-slate-400 hover:bg-slate-50"
                   }`}
                 >
                   <span className={`inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
@@ -1479,15 +1512,15 @@ export function ManagerAddListingForm({
           </div>
 
           {/* Progress bar */}
-          <div className="h-0.5 bg-slate-100">
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full bg-primary transition-[width] duration-300 ease-out"
+              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
               style={{ width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%` }}
             />
           </div>
 
           {/* Step blurb */}
-          <p className="px-5 py-2.5 text-[12px] leading-relaxed text-slate-500 sm:px-6">
+          <p className="mt-3 text-[12px] leading-relaxed text-slate-500">
             {LISTING_STEP_BLURBS[LISTING_FORM_STEPS[stepIndex]!.id]}
           </p>
         </div>
@@ -3266,6 +3299,45 @@ export function ManagerAddListingForm({
                 </div>
               </ListingSubsection>
 
+              <ListingSubsection
+                title="House details"
+                description="Internal notes and resident-facing house info. Not shown on the public listing card."
+              >
+                <div>
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <FieldLabel>House description</FieldLabel>
+                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">Manager only</span>
+                  </div>
+                  <Textarea
+                    rows={4}
+                    value={sub.houseDescription ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, houseDescription: e.target.value }))}
+                    placeholder="Internal notes about the house…"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>House rules</FieldLabel>
+                  <Textarea
+                    rows={3}
+                    value={sub.houseRulesText}
+                    onChange={(e) => setSub((s) => ({ ...s, houseRulesText: e.target.value }))}
+                    placeholder="Quiet hours, guests, smoking, pets…"
+                  />
+                </div>
+                <div>
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <FieldLabel>General house info</FieldLabel>
+                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">Residents only</span>
+                  </div>
+                  <Textarea
+                    rows={4}
+                    value={sub.generalHouseInfo ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, generalHouseInfo: e.target.value }))}
+                    placeholder="Wi-Fi network & password, gate/door codes, laundry tips, trash schedule…"
+                  />
+                </div>
+              </ListingSubsection>
+
               <div className="rounded-2xl border border-sky-200/80 bg-sky-50/60 p-4 sm:p-6">
                 <p className="text-sm font-bold text-slate-950">{isEditMode ? "Ready to submit changes?" : "Ready to submit this listing?"}</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
@@ -3279,25 +3351,25 @@ export function ManagerAddListingForm({
           ) : null}
         </div>
 
-        <div className="z-20 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-10px_28px_-12px_rgba(15,23,42,0.14)] sm:px-6">
+        <div className="z-20 shrink-0 border-t border-slate-100 bg-white px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
+              <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={onClose} disabled={busy}>
                 Close
               </Button>
               {stepIndex > 0 ? (
-                <Button type="button" variant="outline" className="rounded-full" onClick={goPrev} disabled={busy}>
+                <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={goPrev} disabled={busy}>
                   Back
                 </Button>
               ) : null}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               {!isFinalStep ? (
-                <Button type="button" className="rounded-full" onClick={goNext} disabled={busy}>
+                <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={goNext} disabled={busy}>
                   {stepIndex === lastStepIndex - 1 ? "Review & submit →" : "Continue"}
                 </Button>
               ) : (
-                <Button type="button" className="rounded-full" onClick={() => void submitListing()} disabled={busy}>
+                <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={() => void submitListing()} disabled={busy}>
                   {busy ? (isEditMode ? "Submitting changes…" : "Submitting listing…") : isEditMode ? "Submit changes" : "Submit listing"}
                 </Button>
               )}
@@ -3338,6 +3410,7 @@ export function ManagerAddListingForm({
           <Button type="button" className="rounded-full" onClick={handleSaveService} disabled={!serviceForm.name.trim()}>{editingOffer ? "Save changes" : "Add request"}</Button>
         </div>
       </Modal>
-    </div>
+    </div>,
+    document.body,
   );
 }

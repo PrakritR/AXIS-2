@@ -6,7 +6,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import type { MockProperty } from "@/data/types";
-import { ManagerListingInlineEditor } from "@/components/portal/manager-listing-inline-editor";
+import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
@@ -27,7 +27,6 @@ import {
   removeRejectedProperty,
   restoreRejectedToPending,
   returnRequestChangeToPending,
-  updateRequestChangeProperty,
   unlistManagerListing,
   type AdminPropertyBucketIndex,
   type AdminPropertyRow,
@@ -39,8 +38,6 @@ import {
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
   syncPropertyPipelineFromServer,
-  updateExtraListingFromSubmissionOnServer,
-  updatePendingManagerPropertyOnServer,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import {
@@ -239,37 +236,8 @@ function ManagerPropertyInlineDetails({
     [managerUserId, stablePropertyId],
   );
 
-  // Keep a local copy of the submission so inline edits show immediately.
-  const [localSub, setLocalSub] = useState<ManagerListingSubmissionV1 | null>(null);
-  const displaySub = localSub ?? portalSub?.sub ?? null;
-
-  // Reset local copy when the underlying row changes.
-  useEffect(() => {
-    setLocalSub(null);
-  }, [row?.adminRefId, row?.listingId]);
-
-  const handleSaveSub = useCallback(
-    (updated: ManagerListingSubmissionV1) => {
-      setLocalSub(updated);
-      if (!managerUserId || !portalSub) return;
-      void (async () => {
-        let ok = false;
-        if (portalSub.saveMode === "pending") {
-          ok = await updatePendingManagerPropertyOnServer(portalSub.saveId, updated, managerUserId);
-        } else if (portalSub.saveMode === "requestChange") {
-          ok = updateRequestChangeProperty(portalSub.saveId, managerUserId, updated);
-        } else {
-          ok = await updateExtraListingFromSubmissionOnServer(portalSub.saveId, managerUserId, updated);
-        }
-        if (!ok) {
-          showToast("Could not save property changes.");
-          return;
-        }
-        onUpdated();
-      })();
-    },
-    [managerUserId, onUpdated, portalSub, showToast],
-  );
+  const displaySub = portalSub?.sub ?? null;
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
@@ -465,17 +433,30 @@ function ManagerPropertyInlineDetails({
         <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">{footer}</div>
       </div>
 
-      {displaySub ? (
+      {displaySub && portalSub ? (
         <div className="mt-5">
-          <ManagerListingInlineEditor
-            sub={displaySub}
-            noteKey={noteKey}
-            onSaveSub={handleSaveSub}
-            showToast={showToast}
-            isListed={bucket === 2}
-            listingId={portalSub?.listingId ?? portalSub?.saveId ?? null}
-          />
+          <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditorOpen(true)}>
+            Edit listing
+          </Button>
         </div>
+      ) : null}
+
+      {editorOpen && portalSub ? (
+        <ManagerAddListingForm
+          onClose={() => setEditorOpen(false)}
+          onSubmitted={() => {
+            setEditorOpen(false);
+            onUpdated();
+          }}
+          showToast={showToast}
+          skuTier={null}
+          propCountBeforeSubmit={0}
+          initialSubmission={portalSub.sub}
+          noteKey={noteKey}
+          editPendingId={portalSub.saveMode === "pending" ? portalSub.saveId : null}
+          editListingId={portalSub.saveMode === "listing" ? portalSub.saveId : null}
+          editRequestChangeId={portalSub.saveMode === "requestChange" ? portalSub.saveId : null}
+        />
       ) : null}
     </div>
   );
