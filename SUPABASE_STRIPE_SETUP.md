@@ -71,6 +71,5 @@ Restart `npm run dev` after changes.
 - [ ] Set `NEXT_PUBLIC_APP_URL` to production origin.
 - [ ] Set a strong random `AXIS_ADMIN_REGISTER_KEY` in production (admin registration is disabled if unset). Remove any legacy `NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY` and rotate the previously exposed key.
 - [ ] Set `AXIS_PAYMENT_WAIVER_CODE` only if you intend to allow a Stripe-bypass code in production (waiver is disabled when unset).
-- [ ] Leave `ENABLE_DESTRUCTIVE_ADMIN_TOOLS` unset in production unless you explicitly need the mass-delete endpoint (set to `true` to enable).
 - [ ] Decide email confirmation policy for Auth.
 - [ ] Replace empty portal UI with real queries when backends are ready.

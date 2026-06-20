@@ -34,13 +34,3 @@ export function getPaymentWaiverCode(): string | null {
   if (fromEnv) return fromEnv;
   return isProductionRuntime() ? null : "FREE100";
 }
-
-/**
- * Whether destructive admin tooling (e.g. mass user deletion) is reachable.
- * Always enabled outside production; in production it requires the explicit
- * ENABLE_DESTRUCTIVE_ADMIN_TOOLS=true opt-in.
- */
-export function destructiveAdminToolsEnabled(): boolean {
-  if (!isProductionRuntime()) return true;
-  return process.env.ENABLE_DESTRUCTIVE_ADMIN_TOOLS === "true";
-}
