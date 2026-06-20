@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isProductionRuntime } from "@/lib/server-env";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { loadResidentMoveInForEmail } from "@/lib/resident-move-in-info";
 import {
@@ -13,7 +14,8 @@ export const runtime = "nodejs";
 // Vercel Cron sends "Authorization: Bearer $CRON_SECRET" on every invocation.
 function isAuthorized(req: Request): boolean {
   const cronSecret = process.env.CRON_SECRET?.trim();
-  if (!cronSecret) return true; // not configured — allow (dev/preview)
+  // Not configured: allow in dev/preview, but fail closed in production.
+  if (!cronSecret) return !isProductionRuntime();
   return req.headers.get("authorization") === `Bearer ${cronSecret}`;
 }
 

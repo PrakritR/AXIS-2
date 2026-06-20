@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { isAdminUser } from "@/lib/auth/admin-preview";
+import { managerOwnsResident } from "@/lib/auth/resident-relationship";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { sendSms } from "@/lib/twilio";
@@ -35,6 +38,13 @@ export async function POST(req: Request) {
       data: { user },
     } = await auth.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, error: "Not authenticated." }, { status: 401 });
+
+    if (
+      !rateLimit(`send-inbox:user:${user.id}`, 30, 60_000).ok ||
+      !rateLimit(`send-inbox:ip:${clientIpFrom(req)}`, 60, 60_000).ok
+    ) {
+      return NextResponse.json({ ok: false, error: "Too many messages. Please slow down." }, { status: 429 });
+    }
 
     const body = (await req.json().catch(() => ({}))) as {
       fromName?: string;
@@ -97,8 +107,38 @@ export async function POST(req: Request) {
       }
     }
 
-    const recipients = [...recipientsByEmail.values()];
-    const recipientEmails = recipients.map((recipient) => recipient.email);
+    // Restrict outbound relay: residents (and other non-staff) may only message
+    // a manager/owner who actually manages them. Managers/owners/admins (trusted
+    // staff) keep their existing reach so compose-to-resident/applicant/admin is
+    // unchanged.
+    const senderIsAdmin = await isAdminUser(user.id);
+    const { data: senderRoleProfile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    const senderRole = String(senderRoleProfile?.role ?? "").trim().toLowerCase();
+    const senderIsStaff =
+      senderIsAdmin || senderRole === "manager" || senderRole === "owner" || senderRole === "pro";
+
+    let recipients = [...recipientsByEmail.values()];
+    if (!senderIsStaff) {
+      const allowed = await Promise.all(
+        recipients.map(async (recipient) => {
+          let recipientUserId = recipient.userId;
+          if (!recipientUserId && recipient.email) {
+            const { data } = await db.from("profiles").select("id").eq("email", recipient.email).maybeSingle();
+            recipientUserId = data?.id ?? null;
+          }
+          if (!recipientUserId) return false;
+          return managerOwnsResident(db, recipientUserId, { email: senderEmail });
+        }),
+      );
+      recipients = recipients.filter((_, index) => allowed[index]);
+      if (recipients.length === 0) {
+        return NextResponse.json(
+          { ok: false, error: "You can only message a manager or owner who manages your account." },
+          { status: 403 },
+        );
+      }
+    }
+
     const toEmails = recipients
       .map((recipient) => recipient.email)
       .filter((email) => !email.endsWith("@axis.local"));

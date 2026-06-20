@@ -25,9 +25,7 @@ export type ManagerAdminShapeRow = {
 const PENDING_BY_USER_KEY = "axis_manager_pending_by_user_v1";
 const EXTRAS_BY_USER_KEY = "axis_manager_extras_by_user_v1";
 
-/** Pre–per-account migration (single global arrays). */
-const LEGACY_PENDING_KEY = "axis_manager_pending_properties_v1";
-const LEGACY_EXTRAS_KEY = "axis_public_extra_listings_v1";
+/** Pre–per-account migration (single global arrays) — reserved for future migration helpers. */
 
 export const PROPERTY_PIPELINE_EVENT = "axis-property-pipeline";
 const memoryStore = new Map<string, unknown>();
@@ -119,11 +117,13 @@ function readJson<T>(key: string, fallback: T): T {
   return fallback;
 }
 
-function writeJson(key: string, value: unknown) {
+function writeJson(key: string, value: unknown, opts?: { silent?: boolean }) {
   if (!isBrowser()) return;
   memoryStore.set(key, value);
   writeSessionJson(key, value);
-  window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+  if (!opts?.silent) {
+    window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+  }
 }
 
 function readPendingMap(): PendingMap {
@@ -138,8 +138,8 @@ function readExtrasMap(): ExtrasMap {
   return parseRecordOfArrays<MockProperty>(readJson(EXTRAS_BY_USER_KEY, {}));
 }
 
-function writeExtrasMap(m: ExtrasMap) {
-  writeJson(EXTRAS_BY_USER_KEY, m);
+function writeExtrasMap(m: ExtrasMap, opts?: { silent?: boolean }) {
+  writeJson(EXTRAS_BY_USER_KEY, m, opts);
 }
 
 function mirrorPropertyRecord(input: {
@@ -205,7 +205,7 @@ export function deleteMirroredPropertyRecord(id: string) {
   }).catch(() => {});
 }
 
-export function cachePublicExtraListings(listings: MockProperty[]) {
+export function cachePublicExtraListings(listings: MockProperty[], opts?: { silent?: boolean }) {
   if (!isBrowser()) return;
   const map = readExtrasMap();
   for (const listing of listings) {
@@ -217,7 +217,7 @@ export function cachePublicExtraListings(listings: MockProperty[]) {
     else list[idx] = next;
     map[uid] = list;
   }
-  writeExtrasMap(map);
+  writeExtrasMap(map, opts);
 }
 
 export async function syncPropertyPipelineFromServer(opts?: { force?: boolean }): Promise<boolean> {
@@ -298,7 +298,7 @@ export async function loadPublicExtraListingsFromServer(): Promise<MockProperty[
     const body = (await res.json()) as { listings?: MockProperty[] };
     if (!res.ok) return readExtraListingsPublic();
     const listings = body.listings ?? [];
-    cachePublicExtraListings(listings);
+    cachePublicExtraListings(listings, { silent: true });
     return listings;
   } catch {
     return readExtraListingsPublic();
@@ -732,6 +732,6 @@ export function approvePendingManagerProperty(pendingId: string): MockProperty |
 }
 
 /** Reserved for optional onboarding seeding; no automatic listing data is injected. */
-export function ensureDemoManagerPipelineSeed(_userId: string | null): void {
+export function ensureDemoManagerPipelineSeed(): void {
   /* no-op */
 }

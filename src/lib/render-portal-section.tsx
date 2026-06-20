@@ -17,7 +17,6 @@ import { AdminProfileSection } from "@/components/portal/admin-profile-section";
 import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
 import { ManagerProperties } from "@/components/portal/manager-properties";
 import { ManagerResidents } from "@/components/portal/manager-residents";
-import { ManagerWorkOrders } from "@/components/portal/manager-work-orders";
 import { ManagerAllServicesPanel } from "@/components/portal/manager-all-services-panel";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";

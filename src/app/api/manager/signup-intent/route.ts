@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateManagerId } from "@/lib/manager-id";
 import { newAxisIntentSessionId } from "@/lib/manager-signup-intent";
-import { FULL_PAYMENT_WAIVER_PROMO_CODE } from "@/lib/stripe-promos";
+import { getPaymentWaiverCode } from "@/lib/server-env";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -48,12 +48,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "tier and billing are required." }, { status: 400 });
     }
 
+    const waiverCode = getPaymentWaiverCode();
     const skipStripeForFree = tierRaw === "free";
-    const skipStripeForPromo = promo === FULL_PAYMENT_WAIVER_PROMO_CODE;
+    const skipStripeForPromo = Boolean(waiverCode) && promo === waiverCode!.trim().toUpperCase();
 
     if (!skipStripeForFree && !skipStripeForPromo) {
       return NextResponse.json(
-        { error: "This tier requires Stripe checkout. Use Continue on the pricing page for paid plans." },
+        {
+          error: "This tier requires Stripe checkout. Use Continue on the pricing page for paid plans.",
+          code: "REQUIRES_CHECKOUT",
+        },
         { status: 400 },
       );
     }
@@ -78,7 +82,7 @@ export async function POST(req: Request) {
       manager_id: managerId,
       tier: tierRaw,
       billing: billingRaw,
-      promo_code: skipStripeForPromo ? FULL_PAYMENT_WAIVER_PROMO_CODE : null,
+      promo_code: skipStripeForPromo ? promo : null,
       paid_at: new Date().toISOString(),
       full_name: fullName,
     });

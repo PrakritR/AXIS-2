@@ -34,7 +34,6 @@ import {
 import type { PortalListingNote } from "@/lib/portal-listing-notes";
 import { getPortalListingNote, savePortalListingNote } from "@/lib/portal-listing-notes";
 import { uploadListingImageFiles, uploadListingVideoFile } from "@/lib/listing-media-client";
-import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Modal } from "@/components/ui/modal";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 
@@ -371,7 +370,6 @@ export function ManagerListingInlineEditor({
       sub.houseRulesText, sub.houseDescription, sub, onSaveSub]);
 
   // ── services state ────────────────────────────────────────────────────────
-  const { userId } = useManagerUserId();
   const serviceOffers = useMemo<ManagerListingServiceOption[]>(() => sub.serviceRequestOptions ?? [], [sub.serviceRequestOptions]);
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<ManagerListingServiceOption | null>(null);

@@ -11,7 +11,6 @@ import {
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
   removeExtraListing,
-  republishManagerListingAfterReview,
   submitManagerPendingProperty,
   takePendingManagerProperty,
   type ManagerPendingPropertyRow,
@@ -497,7 +496,7 @@ export function removeRejectedProperty(adminRefId: string, forManagerUserId?: st
 }
 
 /** Previously seeded demo rows for manager side-buckets; disabled until the real flow ships. */
-export function ensureDemoManagerSideBucketsSeed(_forManagerUserId: string | null): void {
+export function ensureDemoManagerSideBucketsSeed(): void {
   /* no-op */
 }
 

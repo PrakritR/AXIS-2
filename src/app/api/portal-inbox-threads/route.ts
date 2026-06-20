@@ -25,6 +25,8 @@ const route = createJsonRecordRoute({
     row_data: row,
     updated_at: new Date().toISOString(),
   }),
+  assignOwnership: (record, user) =>
+    user.role === "admin" ? record : { ...record, owner_user_id: user.id },
 });
 
 export async function GET(request: Request) {

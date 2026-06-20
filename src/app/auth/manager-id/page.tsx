@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
-type Preview = { managerId: string; email: string; fullName: string | null };
+import { managerSignupReservedHeadline } from "@/lib/manager-access";
+
+type Preview = { managerId: string; email: string; fullName: string | null; tier: string };
 
 function Step({ n, label, done }: { n: number; label: string; done?: boolean }) {
   return (
@@ -32,23 +34,46 @@ function ManagerIdContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const sessionId = searchParams.get("session_id") ?? "";
+  const missingSession = !sessionId;
 
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!missingSession);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const error = missingSession ? "No session ID found." : fetchError;
+  const isLoading = missingSession ? false : loading;
+
   useEffect(() => {
-    if (!sessionId) { setError("No session ID found."); setLoading(false); return; }
-    fetch(`/api/auth/manager-checkout-preview?session_id=${encodeURIComponent(sessionId)}`)
+    if (missingSession) return;
+
+    const controller = new AbortController();
+    void fetch(`/api/auth/manager-checkout-preview?session_id=${encodeURIComponent(sessionId)}`, {
+      signal: controller.signal,
+    })
       .then((r) => r.json())
       .then((data: Preview & { error?: string }) => {
         if (data.error) throw new Error(data.error);
-        setPreview({ managerId: data.managerId, email: data.email, fullName: data.fullName ?? null });
+        setPreview({
+          managerId: data.managerId,
+          email: data.email,
+          fullName: data.fullName ?? null,
+          tier: data.tier ?? "pro",
+        });
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not load session."))
-      .finally(() => setLoading(false));
-  }, [sessionId]);
+      .catch((e: unknown) => {
+        if (controller.signal.aborted) return;
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setFetchError(e instanceof Error ? e.message : "Could not load session.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [missingSession, sessionId]);
 
   const copy = () => {
     if (!preview) return;
@@ -58,7 +83,7 @@ function ManagerIdContent() {
     });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <AuthCard>
         <p className="text-center text-sm text-slate-500">Loading your account details…</p>
@@ -88,7 +113,9 @@ function ManagerIdContent() {
             <circle cx="12" cy="7" r="4" />
           </svg>
         </span>
-        <h1 className="mt-4 text-[22px] font-bold tracking-tight text-[#0f172a]">Axis Pro account reserved</h1>
+        <h1 className="mt-4 text-[22px] font-bold tracking-tight text-[#0f172a]">
+          {managerSignupReservedHeadline(preview.tier)}
+        </h1>
         {preview.fullName ? (
           <p className="mt-1 text-sm text-slate-500">Welcome, {preview.fullName}</p>
         ) : null}
@@ -107,7 +134,7 @@ function ManagerIdContent() {
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
-        <p className="mt-2 text-xs text-slate-400">Save this — you'll need it to access support or activate your account later.</p>
+        <p className="mt-2 text-xs text-slate-400">Save this — you&apos;ll need it to access support or activate your account later.</p>
       </div>
 
       {/* Steps */}

@@ -48,7 +48,6 @@ import {
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
-import { openMailtoHref } from "@/lib/resident-welcome-email";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
 import {
   recordApprovedApplicationCharges,
@@ -59,14 +58,10 @@ import {
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
 import {
-  deleteLeasePipelineRow,
   deleteLeasePipelineRowsForResident,
-  readLeasePipeline,
 } from "@/lib/lease-pipeline-storage";
 import {
-  deleteManagerWorkOrderRow,
   deleteManagerWorkOrdersForResident,
-  readManagerWorkOrderRows,
 } from "@/lib/manager-work-orders-storage";
 import { deleteServiceRequestsForResident } from "@/lib/service-requests-storage";
 import { loadPersistedInbox, MANAGER_INBOX_STORAGE_KEY, persistInbox } from "@/lib/portal-inbox-storage";
@@ -547,7 +542,7 @@ function ManagerApplicationsContent() {
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
     sync();
-    void syncManagerApplicationsFromServer().then(sync);
+    void syncManagerApplicationsFromServer({ managerUserId: userId }).then(sync);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
@@ -623,8 +618,10 @@ function ManagerApplicationsContent() {
     const id = normalizeApplicationAxisId(raw).toUpperCase();
     const hit = scopedRows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === id);
     if (!hit) return;
-    setBucket(hit.bucket);
-    setExpandedId(hit.id);
+    queueMicrotask(() => {
+      setBucket(hit.bucket);
+      setExpandedId(hit.id);
+    });
     requestAnimationFrame(() => {
       document.getElementById(`portal-application-${hit.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
@@ -769,7 +766,7 @@ function ManagerApplicationsContent() {
     const result = await deleteManagerApplicationFromServer(id);
     if (!result.ok) {
       // Roll back on failure.
-      setRows(await syncManagerApplicationsFromServer());
+      setRows(await syncManagerApplicationsFromServer({ managerUserId: userId }));
       showToast(result.error ?? "Could not delete application.");
       return;
     }
@@ -792,7 +789,7 @@ function ManagerApplicationsContent() {
       }
       if (removedResidentAccess) {
         removeResidentHouseholdPaymentData(email);
-        deleteLeasePipelineRowsForResident(email, id);
+        deleteLeasePipelineRowsForResident(email, id, userId);
         deleteManagerWorkOrdersForResident(email);
         deleteServiceRequestsForResident(email);
         const allInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
@@ -812,7 +809,7 @@ function ManagerApplicationsContent() {
       }
     }
 
-    void syncManagerApplicationsFromServer().then(setRows);
+    void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
     showToast(
       email && !removedResidentAccess
         ? "Application deleted, but resident access could not be removed."

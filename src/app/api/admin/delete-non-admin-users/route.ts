@@ -1,14 +1,27 @@
 import { NextResponse } from "next/server";
-import { isValidAdminRegisterKey } from "@/lib/auth/resolve-portal-role";
+import { isAdminUser } from "@/lib/auth/admin-preview";
+import { destructiveAdminToolsEnabled } from "@/lib/server-env";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-export async function POST(req: Request) {
+async function requireAdmin() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  return isAdminUser(user.id);
+}
+
+export async function POST() {
   try {
-    const { adminKey } = (await req.json()) as { adminKey?: string };
-    if (!isValidAdminRegisterKey(adminKey ?? "")) {
-      return NextResponse.json({ error: "Invalid admin key." }, { status: 401 });
+    if (!destructiveAdminToolsEnabled()) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
+    if (!(await requireAdmin())) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
     const supabase = createSupabaseServiceRoleClient();

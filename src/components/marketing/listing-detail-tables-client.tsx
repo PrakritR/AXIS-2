@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useIsClient } from "@/hooks/use-is-client";
 import type {
   AmenityItem,
   BundleCard,
@@ -115,25 +116,6 @@ function rangeSummaryLabel(w: RoomUnavailabilityWindow): string {
   return "Unavailable dates set";
 }
 
-function unavailableDateSetFromWindows(windows: RoomUnavailabilityWindow[], horizonDays = 90): Set<string> {
-  const out = new Set<string>();
-  const today = startOfLocalDay(new Date());
-  const horizonEnd = addDays(today, horizonDays);
-
-  for (const w of windows) {
-    const start = w.start ? startOfLocalDay(w.start) : today;
-    const end = w.end ? startOfLocalDay(w.end) : horizonEnd;
-    const clippedStart = start.getTime() < today.getTime() ? today : start;
-    const clippedEnd = end.getTime() > horizonEnd.getTime() ? horizonEnd : end;
-    if (clippedEnd.getTime() < clippedStart.getTime()) continue;
-    for (let d = clippedStart; d.getTime() <= clippedEnd.getTime(); d = addDays(d, 1)) {
-      out.add(dateKey(d));
-    }
-  }
-
-  return out;
-}
-
 function dayIsUnavailable(day: Date, windows: RoomUnavailabilityWindow[]): boolean {
   const t = startOfLocalDay(day).getTime();
   return windows.some((w) => {
@@ -157,10 +139,12 @@ function MiniAvailabilityCalendar({ windows }: { windows: RoomUnavailabilityWind
   const monthCount =
     (endMonth.getFullYear() - startMonth.getFullYear()) * 12 + (endMonth.getMonth() - startMonth.getMonth()) + 1;
   const [monthOffset, setMonthOffset] = useState(0);
-
-  useEffect(() => {
+  const windowsKey = windows.map((w) => `${w.start?.toISOString() ?? ""}|${w.end?.toISOString() ?? ""}`).join(",");
+  const [prevWindowsKey, setPrevWindowsKey] = useState(windowsKey);
+  if (windowsKey !== prevWindowsKey) {
+    setPrevWindowsKey(windowsKey);
     setMonthOffset(0);
-  }, [windows]);
+  }
 
   const clampedOffset = Math.min(Math.max(monthOffset, 0), Math.max(monthCount - 1, 0));
   const monthStart = addMonths(startMonth, clampedOffset);
@@ -286,11 +270,7 @@ function ListingDetailModal({
   listingPropertyId: string;
 }) {
   const stop = useCallback((e: React.MouseEvent) => e.stopPropagation(), []);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const isClient = useIsClient();
 
   useEffect(() => {
     if (!state) return;
@@ -302,7 +282,7 @@ function ListingDetailModal({
   }, [state]);
 
   if (!state) return null;
-  if (!mounted || typeof document === "undefined") return null;
+  if (!isClient || typeof document === "undefined") return null;
 
   const panel = (
     <div className="fixed inset-0 z-[240] flex items-end justify-center p-3 sm:items-center sm:p-6" role="dialog" aria-modal>

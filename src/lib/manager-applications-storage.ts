@@ -2,10 +2,11 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
 export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
-const MANAGER_APPLICATIONS_SESSION_KEY = "axis:manager-applications:v1";
+const MANAGER_APPLICATIONS_SESSION_KEY_PREFIX = "axis:manager-applications:v2";
 
 const EMPTY_FALLBACK: DemoApplicantRow[] = [];
 let memoryRows: DemoApplicantRow[] = [];
+let activeApplicationsScopeUserId: string | undefined;
 const MANAGER_APPLICATIONS_SYNC_TTL_MS = 15_000;
 let managerApplicationsLastSyncedAt = 0;
 let managerApplicationsSyncPromise: Promise<DemoApplicantRow[]> | null = null;
@@ -140,10 +141,25 @@ function canUseStorage() {
   return typeof window !== "undefined";
 }
 
-function hydrateManagerApplicationsFromSession() {
-  if (!canUseStorage() || memoryRows.length > 0) return;
+function managerApplicationsSessionKey(scopeUserId?: string | null): string {
+  if (scopeUserId) return `${MANAGER_APPLICATIONS_SESSION_KEY_PREFIX}:${scopeUserId}`;
+  return `${MANAGER_APPLICATIONS_SESSION_KEY_PREFIX}:shared`;
+}
+
+function ensureApplicationsScope(scopeUserId?: string | null) {
+  const nextScope = scopeUserId ?? undefined;
+  if (activeApplicationsScopeUserId !== nextScope) {
+    activeApplicationsScopeUserId = nextScope;
+    memoryRows = [];
+    managerApplicationsLastSyncedAt = 0;
+  }
+}
+
+function hydrateManagerApplicationsFromSession(scopeUserId?: string | null) {
+  if (!canUseStorage()) return;
+  if (memoryRows.length > 0) return;
   try {
-    const raw = window.sessionStorage.getItem(MANAGER_APPLICATIONS_SESSION_KEY);
+    const raw = window.sessionStorage.getItem(managerApplicationsSessionKey(scopeUserId));
     if (!raw) return;
     const parsed = JSON.parse(raw) as DemoApplicantRow[];
     if (!Array.isArray(parsed)) return;
@@ -153,10 +169,13 @@ function hydrateManagerApplicationsFromSession() {
   }
 }
 
-function persistManagerApplicationsToSession(rows: DemoApplicantRow[]) {
+function persistManagerApplicationsToSession(rows: DemoApplicantRow[], scopeUserId?: string | null) {
   if (!canUseStorage()) return;
   try {
-    window.sessionStorage.setItem(MANAGER_APPLICATIONS_SESSION_KEY, JSON.stringify(rows));
+    window.sessionStorage.setItem(
+      managerApplicationsSessionKey(scopeUserId ?? activeApplicationsScopeUserId),
+      JSON.stringify(rows),
+    );
   } catch {
     /* ignore */
   }
@@ -208,9 +227,14 @@ export async function deleteManagerApplicationFromServer(id: string): Promise<{ 
   }
 }
 
-export async function syncManagerApplicationsFromServer(opts?: { force?: boolean }): Promise<DemoApplicantRow[]> {
+export async function syncManagerApplicationsFromServer(opts?: {
+  force?: boolean;
+  managerUserId?: string | null;
+}): Promise<DemoApplicantRow[]> {
   if (!canUseStorage()) return [];
-  hydrateManagerApplicationsFromSession();
+  const managerUserId = opts?.managerUserId ?? undefined;
+  ensureApplicationsScope(managerUserId);
+  hydrateManagerApplicationsFromSession(managerUserId);
   const force = opts?.force === true;
   if (!force && managerApplicationsSyncPromise) return managerApplicationsSyncPromise;
   if (!force && managerApplicationsLastSyncedAt > 0 && Date.now() - managerApplicationsLastSyncedAt < MANAGER_APPLICATIONS_SYNC_TTL_MS) {
@@ -221,10 +245,10 @@ export async function syncManagerApplicationsFromServer(opts?: { force?: boolean
       const res = await fetch("/api/manager-applications", { credentials: "include" });
       if (!res.ok) return readManagerApplicationRows();
       const body = (await res.json()) as { rows?: DemoApplicantRow[] };
-      const rows = mergeApplicationRows(memoryRows, Array.isArray(body.rows) ? body.rows : []);
+      const rows = mergeApplicationRows([], Array.isArray(body.rows) ? body.rows : []);
       const changed = applicationRowsChanged(memoryRows, rows);
       memoryRows = rows;
-      persistManagerApplicationsToSession(rows);
+      persistManagerApplicationsToSession(rows, managerUserId);
       managerApplicationsLastSyncedAt = Date.now();
       if (changed) emit();
       return rows;
@@ -263,7 +287,7 @@ export async function syncPublicApprovedApplicationsFromServer(opts?: { force?: 
 }
 
 export function readManagerApplicationRows(fallback: DemoApplicantRow[] = EMPTY_FALLBACK): DemoApplicantRow[] {
-  hydrateManagerApplicationsFromSession();
+  hydrateManagerApplicationsFromSession(activeApplicationsScopeUserId);
   const stored = normalizeApplicationRows(memoryRows);
   if (stored.length === 0) return [...fallback];
   return stored.map((r) => {
@@ -282,12 +306,12 @@ export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
     const normalizedRows = normalizeApplicationRows(rows);
     if (!applicationRowsChanged(memoryRows, normalizedRows)) return;
     memoryRows = normalizedRows;
-    persistManagerApplicationsToSession(normalizedRows);
+    persistManagerApplicationsToSession(normalizedRows, activeApplicationsScopeUserId);
     managerApplicationsLastSyncedAt = Date.now();
     emit();
     mirrorApplicationsToServer(normalizedRows);
     void import("@/lib/lease-pipeline-storage").then(({ syncLeasePipelineFromApplications }) => {
-      syncLeasePipelineFromApplications();
+      syncLeasePipelineFromApplications(activeApplicationsScopeUserId ?? null);
     });
   } catch {
     /* ignore */
@@ -296,7 +320,9 @@ export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
 
 export function resetManagerApplicationRowsToDemo(): void {
   memoryRows = [];
-  if (canUseStorage()) window.sessionStorage.removeItem(MANAGER_APPLICATIONS_SESSION_KEY);
+  if (canUseStorage()) {
+    window.sessionStorage.removeItem(managerApplicationsSessionKey(activeApplicationsScopeUserId));
+  }
   emit();
 }
 

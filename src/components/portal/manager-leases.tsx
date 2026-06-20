@@ -48,7 +48,10 @@ export function ManagerLeases() {
   useEffect(() => {
     if (!authReady || !userId) return;
     const on = () => setTick((t) => t + 1);
-    void Promise.all([syncManagerApplicationsFromServer(), syncLeasePipelineFromServer(userId)]).then(on);
+    void Promise.all([
+      syncManagerApplicationsFromServer({ managerUserId: userId }),
+      syncLeasePipelineFromServer(userId),
+    ]).then(on);
     window.addEventListener(LEASE_PIPELINE_EVENT, on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
     return () => {
@@ -167,7 +170,7 @@ export function ManagerLeases() {
             variant="outline"
             className="shrink-0 rounded-full"
             onClick={() => {
-              const result = regenerateAllLeaseHtml();
+              const result = regenerateAllLeaseHtml(userId);
               // Re-sync charges for all approved applications so payment tabs reflect current lease values
               const approvedRows = readManagerApplicationRows().filter((r) => r.bucket === "approved");
               for (const appRow of approvedRows) {
@@ -191,7 +194,7 @@ export function ManagerLeases() {
               if (!userId) return;
               void Promise.all([
                 syncPropertyPipelineFromServer({ force: true }),
-                syncManagerApplicationsFromServer({ force: true }),
+                syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
                 syncLeasePipelineFromServer(userId, { force: true }),
               ]).then(() => {
                 setPropertyTick((t) => t + 1);
@@ -221,6 +224,7 @@ export function ManagerLeases() {
         rows={rows}
         bucket={bucket}
         refreshKey={tick}
+        managerUserId={userId}
         residentAccountEmails={residentAccountEmails}
         onEmailAccountSetup={(email) => {
           setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));

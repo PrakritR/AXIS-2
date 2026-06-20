@@ -11,7 +11,6 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -324,7 +323,6 @@ export function ResidentServicesPanel({
   const [serviceSubmitting, setServiceSubmitting] = useState(false);
 
   const [allRows, setAllRows] = useState<DemoManagerWorkOrderRow[]>([]);
-  const [availableOffers, setAvailableOffers] = useState<ManagerListingServiceOption[]>([]);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [srTick, setSrTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
@@ -378,15 +376,13 @@ export function ResidentServicesPanel({
     return options.filter(visibleToResident);
   }, [propertyTick, residentApplication, residentEmail]);
 
-  useEffect(() => {
-    setAvailableOffers(offersForResident);
-  }, [offersForResident]);
+  const availableOffers = offersForResident;
 
   // Initial data sync — fire syncs sequentially to avoid overwhelming the server/browser
   useEffect(() => {
     const sync = () => setAllRows(readManagerWorkOrderRows());
     const onProperty = () => setPropertyTick((t) => t + 1);
-    sync();
+    queueMicrotask(() => sync());
     void syncManagerWorkOrdersFromServer()
       .then(sync)
       .then(() => syncManagerApplicationsFromServer())
@@ -404,7 +400,7 @@ export function ResidentServicesPanel({
   }, []);
 
   useEffect(() => {
-    reloadServiceRequests();
+    queueMicrotask(() => reloadServiceRequests());
     const onSr = () => setSrTick((t) => t + 1);
     window.addEventListener(SERVICE_REQUESTS_EVENT, onSr);
     return () => {
@@ -422,7 +418,7 @@ export function ResidentServicesPanel({
   }, []);
 
   useEffect(() => {
-    reloadServiceRequests();
+    queueMicrotask(() => reloadServiceRequests());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [srTick]);
 
@@ -457,11 +453,9 @@ export function ResidentServicesPanel({
 
   const servicesUnlocked = Boolean(residentLeaseRow && hasBothLeaseSignatures(residentLeaseRow));
 
-  useEffect(() => {
-    if (!servicesUnlocked && modalMode !== "none") {
-      setModalMode("none");
-    }
-  }, [servicesUnlocked, modalMode]);
+  if (!servicesUnlocked && modalMode !== "none") {
+    setModalMode("none");
+  }
 
   const fileToDataUrl = (file: File) =>
     new Promise<string>((resolve, reject) => {

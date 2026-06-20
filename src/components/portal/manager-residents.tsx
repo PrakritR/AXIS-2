@@ -13,7 +13,6 @@ import {
   PORTAL_TOOLBAR_GROUP,
   PORTAL_TOOLBAR_LABEL,
   PORTAL_TOOLBAR_PILL_BUTTON,
-  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
   PORTAL_TOOLBAR_SELECT,
 } from "@/components/portal/portal-metrics";
 import {
@@ -301,6 +300,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentsSort, setResidentsSort] = useState<ResidentsSort>("name-asc");
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
+  const [prevTabId, setPrevTabId] = useState(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addChargeOpen, setAddChargeOpen] = useState(false);
   const [editChargeId, setEditChargeId] = useState<string | null>(null);
@@ -309,6 +309,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [chargeAmount, setChargeAmount] = useState("");
   const [chargeBlocksLease, setChargeBlocksLease] = useState(false);
   const [chargeTab, setChargeTab] = useState<"pending" | "paid">("pending");
+  const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [portalSetupMap, setPortalSetupMap] = useState<Map<string, boolean>>(new Map());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
@@ -362,13 +363,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [erSecurityDeposit, setErSecurityDeposit] = useState("");
   const [erNotes, setErNotes] = useState("");
 
-  // Per-resident move-in instructions editing
-  const [editMoveInId, setEditMoveInId] = useState<string | null>(null);
-  const [editMoveInText, setEditMoveInText] = useState("");
-
-  useEffect(() => {
-    setResidentsTab(tabId);
-  }, [tabId]);
+  if (tabId !== prevTabId) {
+    setPrevTabId(tabId);
+    if (residentsTab !== tabId) setResidentsTab(tabId);
+  }
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -423,7 +421,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     let cancelled = false;
     void Promise.allSettled([
       syncPropertyPipelineFromServer(),
-      syncManagerApplicationsFromServer(),
+      syncManagerApplicationsFromServer({ managerUserId: userId }),
       syncLeasePipelineFromServer(userId),
       syncManagerWorkOrdersFromServer(),
       syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
@@ -501,7 +499,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         const body = (await res.json()) as { deleted?: Record<string, number>; purgedEmails?: string[] };
         const total = Object.values(body.deleted ?? {}).reduce((a, b) => a + b, 0);
         if (total === 0) return;
-        await syncManagerApplicationsFromServer({ force: true });
+        await syncManagerApplicationsFromServer({ force: true, managerUserId: userId });
         void syncHouseholdChargesFromServer(true).then(() => { if (!cancelled) setHcTick((n) => n + 1); });
         void syncLeasePipelineFromServer(userId, { force: true }).then(() => { if (!cancelled) setLeaseTick((n) => n + 1); });
         void syncManagerWorkOrdersFromServer({ force: true }).then(() => { if (!cancelled) setWorkOrderTick((n) => n + 1); });
@@ -522,7 +520,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         for (const email of purgedEmailSet) {
           removeResidentHouseholdPaymentData(email);
           deleteManagerWorkOrdersForResident(email);
-          deleteLeasePipelineRowsForResident(email);
+          deleteLeasePipelineRowsForResident(email, undefined, userId);
           deleteServiceRequestsForResident(email);
         }
         const inboxRows = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
@@ -634,17 +632,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   const isEditMonthToMonthLease = erLeaseTerm === "Month-to-month";
 
-  useEffect(() => {
-    if (isMonthToMonthLease && arMoveOutDate) {
-      setArMoveOutDate("");
-    }
-  }, [isMonthToMonthLease, arMoveOutDate]);
+  if (isMonthToMonthLease && arMoveOutDate) {
+    setArMoveOutDate("");
+  }
 
-  useEffect(() => {
-    if (isEditMonthToMonthLease && erMoveOutDate) {
-      setErMoveOutDate("");
-    }
-  }, [isEditMonthToMonthLease, erMoveOutDate]);
+  if (isEditMonthToMonthLease && erMoveOutDate) {
+    setErMoveOutDate("");
+  }
 
   const filtered = useMemo(() => {
     const inTab = residents.filter((resident) => (residentsTab === "current" ? !resident.isPrevious : resident.isPrevious));
@@ -673,9 +667,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   const selected = useMemo(() => residents.find((r) => r.id === selectedId) ?? null, [residents, selectedId]);
 
-  useEffect(() => {
+  if (selectedId !== prevSelectedId) {
+    setPrevSelectedId(selectedId);
     if (selectedId) setChargeTab("pending");
-  }, [selectedId]);
+  }
+
+  if (selectedId && !filtered.some((resident) => resident.id === selectedId)) {
+    setSelectedId(null);
+  }
 
   // Auto-regenerate unsigned leases when a resident is selected so stale HTML is always refreshed
   useEffect(() => {
@@ -692,18 +691,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     );
     if (leasesToRegen.length === 0) return;
     for (const lr of leasesToRegen) {
-      generateLeaseHtmlForRow(lr.id);
+      generateLeaseHtmlForRow(lr.id, userId);
     }
-    setLeaseTick((n) => n + 1);
+    queueMicrotask(() => {
+      setLeaseTick((n) => n + 1);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
-
-  useEffect(() => {
-    if (!selectedId) return;
-    if (!filtered.some((resident) => resident.id === selectedId)) {
-      setSelectedId(null);
-    }
-  }, [filtered, selectedId]);
 
   const residentCharges = useMemo<HouseholdCharge[]>(() => {
     void hcTick;
@@ -1057,7 +1051,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         return;
       }
 
-      appendLeaseThreadMessage(leaseId, "manager", "Sent lease-signing reminder to resident.");
+      appendLeaseThreadMessage(leaseId, "manager", "Sent lease-signing reminder to resident.", userId);
       setLeaseTick((n) => n + 1);
       if (data.skipped) {
         showToast("Reminder sent to Axis inbox (demo email, no external email sent).");
@@ -1152,61 +1146,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setAddResidentOpen(false);
     setHcTick((n) => n + 1);
     showToast(`Resident added — Axis ID: ${axisId}`);
-  }
-
-  function autoGenerateMoveIn() {
-    if (!selected || !userId) return;
-    const row = readManagerApplicationRows().find((r) => r.id === selected.id);
-    const propId = row?.assignedPropertyId?.trim() || row?.propertyId?.trim() || selected.propertyId;
-    const parts: string[] = [];
-    // Get house description — prefer server submission, fall back to localStorage
-    if (propId) {
-      const property = getPropertyById(propId);
-      let houseDesc: string | undefined;
-      if (property?.listingSubmission?.v === 1) {
-        const sub = normalizeManagerListingSubmissionV1(property.listingSubmission);
-        houseDesc = sub.houseDescription?.trim();
-      }
-      if (!houseDesc) {
-        try {
-          const notesRaw = typeof window !== "undefined" ? localStorage.getItem("axis_portal_notes_v1") : null;
-          if (notesRaw) {
-            const notesStore = JSON.parse(notesRaw) as Record<string, { houseDescription?: string }>;
-            const noteKey = `${userId}:${propId}`;
-            houseDesc = notesStore[noteKey]?.houseDescription?.trim();
-          }
-        } catch { /* ignore */ }
-      }
-      if (houseDesc) parts.push(houseDesc);
-    }
-    // Get room description from listing submission
-    if (propId) {
-      const property = getPropertyById(propId);
-      if (property?.listingSubmission?.v === 1) {
-        const sub = normalizeManagerListingSubmissionV1(property.listingSubmission);
-        const roomChoice = row?.assignedRoomChoice?.trim() || row?.application?.roomChoice1?.trim() || "";
-        if (roomChoice) {
-          const sep = LISTING_ROOM_CHOICE_SEP;
-          const roomId = roomChoice.includes(sep) ? roomChoice.split(sep)[1] : null;
-          const room = roomId ? sub.rooms.find((r) => r.id === roomId) : null;
-          if (room?.detail?.trim()) parts.push(room.detail.trim());
-        }
-      }
-    }
-    const generated = parts.join("\n\n").trim();
-    if (generated) setEditMoveInText(generated);
-    else showToast("No description data found — add a house description or room description first.");
-  }
-
-  function saveMoveInInstructions() {
-    if (!editMoveInId) return;
-    const rows = readManagerApplicationRows().map((row) =>
-      row.id === editMoveInId ? { ...row, moveInInstructions: editMoveInText.trim() || undefined } : row,
-    );
-    writeManagerApplicationRows(rows);
-    setEditMoveInId(null);
-    setHcTick((n) => n + 1);
-    showToast("Move-in instructions saved.");
   }
 
   function openEditResidentModal() {
@@ -1326,8 +1265,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       for (const lr of leasesToRegen) {
         updateLeasePipelineRow(lr.id, {
           application: { ...(lr.application ?? {}), ...nextRow.application },
-        });
-        generateLeaseHtmlForRow(lr.id);
+        }, userId);
+        generateLeaseHtmlForRow(lr.id, userId);
       }
     }
 
@@ -1381,7 +1320,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       (row) => row.residentEmail.trim().toLowerCase() === residentEmail,
     );
     for (const leaseRow of residentLeases) {
-      deleteLeasePipelineRow(leaseRow.id);
+      deleteLeasePipelineRow(leaseRow.id, userId);
     }
 
     const residentWorkOrders = readManagerWorkOrderRows().filter(
@@ -1406,7 +1345,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       }).catch(() => undefined);
     }
 
-    await syncManagerApplicationsFromServer({ force: true });
+    await syncManagerApplicationsFromServer({ force: true, managerUserId: userId });
     setSelectedId(null);
     setHcTick((n) => n + 1);
     setLeaseTick((n) => n + 1);
@@ -1437,7 +1376,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setGeneratingLeaseRowId(rowId);
     window.setTimeout(() => {
       try {
-        const result = generateLeaseHtmlForRow(rowId);
+        const result = generateLeaseHtmlForRow(rowId, userId);
         if (result.ok) {
           setLeaseTick((n) => n + 1);
           showToast(`Lease generated (v${result.version}).`);
@@ -1464,7 +1403,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   function handleManagerModalSign(signatureName: string) {
     if (!signingLease) return false;
-    if (managerSignLease(signingLease.id, signatureName.trim())) {
+    if (managerSignLease(signingLease.id, signatureName.trim(), userId)) {
       setLeaseTick((n) => n + 1);
       showToast(
         hasBothLeaseSignatures({
@@ -1653,7 +1592,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         // Force-sync latest listing & application data before regenerating
                                         await Promise.all([
                                           syncPropertyPipelineFromServer({ force: true }),
-                                          syncManagerApplicationsFromServer({ force: true }),
+                                          syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
                                         ]);
                                         const row = readManagerApplicationRows().find((r) => r.id === selected.id);
                                         if (!row) { showToast("Resident not found."); return; }
@@ -1670,8 +1609,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                               lr.status !== "Voided",
                                           );
                                           for (const lr of leasesToRegen) {
-                                            updateLeasePipelineRow(lr.id, { application: { ...(lr.application ?? {}), ...row.application } });
-                                            generateLeaseHtmlForRow(lr.id);
+                                            updateLeasePipelineRow(lr.id, { application: { ...(lr.application ?? {}), ...row.application } }, userId);
+                                            generateLeaseHtmlForRow(lr.id, userId);
                                           }
                                           if (leasesToRegen.length > 0) setLeaseTick((n) => n + 1);
                                         }
@@ -1844,8 +1783,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             showToast("Resident must create their account before the lease can be sent.");
                                             return;
                                           }
-                                          appendLeaseThreadMessage(residentLease.id, "manager", "Sent lease to resident for review and signature.");
-                                          if (sendLeaseToResident(residentLease.id)) {
+                                          appendLeaseThreadMessage(residentLease.id, "manager", "Sent lease to resident for review and signature.", userId);
+                                          if (sendLeaseToResident(residentLease.id, userId)) {
                                             setLeaseTick((n) => n + 1);
                                             showToast("Lease moved to Resident Signature Pending.");
                                           } else {
@@ -1871,8 +1810,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           variant="outline"
                                           className="rounded-full px-3 py-1 text-xs"
                                           onClick={() => {
-                                            appendLeaseThreadMessage(residentLease.id, "manager", "Moved lease back to manager review.");
-                                            if (sendLeaseBackToManager(residentLease.id)) {
+                                            appendLeaseThreadMessage(residentLease.id, "manager", "Moved lease back to manager review.", userId);
+                                            if (sendLeaseBackToManager(residentLease.id, userId)) {
                                               setLeaseTick((n) => n + 1);
                                               showToast("Lease moved to Manager Review.");
                                             } else {
@@ -1894,7 +1833,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           const file = e.target.files?.[0];
                                           if (!file || !residentLease) return;
                                           setUploadingLeaseRowId(residentLease.id);
-                                          const result = await managerUploadLeasePdf(residentLease.id, file);
+                                          const result = await managerUploadLeasePdf(residentLease.id, file, userId);
                                           setUploadingLeaseRowId(null);
                                           e.currentTarget.value = "";
                                           if (result.ok) {
@@ -1912,7 +1851,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-rose-50"
                                       onClick={() => {
                                         if (!window.confirm(`Delete the lease for ${selected.name}? This cannot be undone.`)) return;
-                                        if (deleteLeasePipelineRow(residentLease.id)) {
+                                        if (deleteLeasePipelineRow(residentLease.id, userId)) {
                                           setLeaseTick((n) => n + 1);
                                           showToast("Lease deleted.");
                                         } else {
