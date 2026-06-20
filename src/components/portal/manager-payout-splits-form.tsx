@@ -60,7 +60,9 @@ export function ManagerPayoutSplitsForm() {
   }, [showToast]);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
   const totals = useMemo(() => {

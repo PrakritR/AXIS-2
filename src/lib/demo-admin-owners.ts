@@ -1,6 +1,4 @@
-import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-
-let ownerRows: AdminOwnerRow[] = [];
+const ownerRows: AdminOwnerRow[] = [];
 
 export type AdminOwnerRow = {
   id: string;
@@ -8,16 +6,6 @@ export type AdminOwnerRow = {
   email: string;
   status: "current" | "past";
 };
-
-function isBrowser() {
-  return typeof window !== "undefined";
-}
-
-function write(rows: AdminOwnerRow[]) {
-  if (!isBrowser()) return;
-  ownerRows = rows;
-  window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
-}
 
 export function readAdminOwners(): AdminOwnerRow[] {
   return ownerRows;

@@ -1,13 +1,28 @@
 import { NextResponse } from "next/server";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
 /**
  * Resolve another workspace by Axis ID (`profiles.manager_id`). Owner and manager workspaces validate separately per Account links tab.
+ * Requires an authenticated caller and returns minimal fields (no email).
  */
 export async function GET(req: Request) {
   try {
+    if (!rateLimit(`lookup-axis-id:${clientIpFrom(req)}`, 20, 60_000).ok) {
+      return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
+    }
+
+    const auth = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await auth.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const axisId = searchParams.get("axisId")?.trim() ?? "";
     if (!axisId) {
@@ -17,7 +32,7 @@ export async function GET(req: Request) {
     const supabase = createSupabaseServiceRoleClient();
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("id, full_name, email, manager_id, role")
+      .select("id, full_name, manager_id, role")
       .eq("manager_id", axisId)
       .maybeSingle();
 
@@ -40,7 +55,7 @@ export async function GET(req: Request) {
       ok: true,
       userId: profile.id,
       axisId,
-      displayName: profile.full_name?.trim() || profile.email || axisId,
+      displayName: profile.full_name?.trim() || axisId,
       role,
     });
   } catch (e) {

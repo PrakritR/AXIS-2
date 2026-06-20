@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isValidAdminRegisterKey } from "@/lib/auth/resolve-portal-role";
+import { isValidAdminRegisterKey } from "@/lib/auth/admin-register-key";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { generateAxisId } from "@/lib/manager-id";

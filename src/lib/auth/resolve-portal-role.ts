@@ -16,9 +16,3 @@ export function resolvePortalRoleFromEmail(email: string): AuthRole {
   }
   return "resident";
 }
-
-/** Expected key when creating the primary admin account. Override with NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY. */
-export function isValidAdminRegisterKey(key: string): boolean {
-  const expected = process.env.NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY ?? "prakrit-admin-register";
-  return key.trim() === expected;
-}

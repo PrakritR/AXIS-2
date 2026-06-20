@@ -1,8 +1,9 @@
 "use client";
 
-import type { DragEvent, FormEvent, ReactNode } from "react";
+import type { DragEvent, ReactNode } from "react";
 import { Children, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { createPortal } from "react-dom";
+import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -77,13 +78,6 @@ function dedupeByLabel<T extends { label: string }>(items: readonly T[]): T[] {
     out.push(item);
   }
   return out;
-}
-
-function roomFloorSelectValue(floor: string): string {
-  const hit = LISTING_ROOM_FLOOR_LEVEL_OPTIONS.find((o) => o.label === floor);
-  if (hit) return hit.id;
-  if (!floor.trim()) return "";
-  return ROOM_FLOOR_LEVEL_CUSTOM;
 }
 
 function roomFloorOptionsFromStories(storiesId: string | undefined): { id: string; label: string }[] {
@@ -205,7 +199,6 @@ function togglePaymentAtSigning(
 }
 
 const MAX_IMG_BYTES = 10 * 1024 * 1024;
-const MAX_VID_BYTES = 14 * 1024 * 1024;
 const MAX_HOUSE_PHOTOS = 12;
 /** Max pixel width after compression. */
 const IMG_MAX_WIDTH = 1280;
@@ -584,14 +577,8 @@ export function ManagerAddListingForm({
   const [stepIndex, setStepIndex] = useState(0);
   // Portal to document.body once mounted, so this modal can't get visually trapped by an
   // ancestor that creates a containing block for fixed-position descendants (e.g. transform/filter).
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  // Incremented whenever a video preview URL changes, to trigger re-render.
-  const [, setVideoTick] = useState(0);
+  const mounted = useIsClient();
   const [listingPresets, setListingPresets] = useState<ListingPresetConfig>(DEFAULT_LISTING_PRESETS);
-  const [showQuickFacts, setShowQuickFacts] = useState(() => Boolean(initialSubmission?.quickFacts?.length));
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const [serviceOffers, setServiceOffers] = useState<ManagerListingServiceOption[]>(
     () => normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission()).serviceRequestOptions ?? [],
@@ -602,7 +589,11 @@ export function ManagerAddListingForm({
   const scrollRef = useRef<HTMLDivElement>(null);
   // Object URLs for video preview (avoids putting huge base64 strings in <video src>).
   // Keyed by a stable id like "room-<id>", "bath-<id>", "space-<id>", "house".
-  const videoPreviewUrls = useRef<Map<string, string>>(new Map());
+  const [videoPreviewUrls, setVideoPreviewUrls] = useState<Record<string, string>>({});
+  const videoPreviewUrlsRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    videoPreviewUrlsRef.current = videoPreviewUrls;
+  }, [videoPreviewUrls]);
   const { userId, ready: authReady } = useManagerUserId();
   const dedupedPresets = useMemo(
     () => ({
@@ -623,10 +614,8 @@ export function ManagerAddListingForm({
 
   // Revoke all object URLs on unmount.
   useEffect(() => {
-    const map = videoPreviewUrls.current;
     return () => {
-      map.forEach((url) => URL.revokeObjectURL(url));
-      map.clear();
+      Object.values(videoPreviewUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
 
@@ -655,17 +644,23 @@ export function ManagerAddListingForm({
 
   /** Set or replace the preview object URL for a video key, revoking the old one. */
   const setVideoPreview = (key: string, file: File) => {
-    const old = videoPreviewUrls.current.get(key);
-    if (old) URL.revokeObjectURL(old);
-    videoPreviewUrls.current.set(key, URL.createObjectURL(file));
-    setVideoTick((n) => n + 1);
+    setVideoPreviewUrls((prev) => {
+      const old = prev[key];
+      if (old) URL.revokeObjectURL(old);
+      return { ...prev, [key]: URL.createObjectURL(file) };
+    });
   };
 
   /** Remove the preview object URL for a video key, revoking it. */
   const clearVideoPreview = (key: string) => {
-    const old = videoPreviewUrls.current.get(key);
-    if (old) { URL.revokeObjectURL(old); videoPreviewUrls.current.delete(key); }
-    setVideoTick((n) => n + 1);
+    setVideoPreviewUrls((prev) => {
+      const old = prev[key];
+      if (!old) return prev;
+      URL.revokeObjectURL(old);
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
   const [videoUploadingKeys, setVideoUploadingKeys] = useState<ReadonlySet<string>>(new Set());
@@ -2509,7 +2504,7 @@ export function ManagerAddListingForm({
                           {room.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
                               <video
-                                src={videoPreviewUrls.current.get(`room-${room.id}`) ?? room.videoDataUrl}
+                                src={videoPreviewUrls[`room-${room.id}`] ?? room.videoDataUrl}
                                 controls
                                 playsInline
                                 className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
@@ -2802,7 +2797,7 @@ export function ManagerAddListingForm({
                           {b.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
                               <video
-                                src={videoPreviewUrls.current.get(`bath-${b.id}`) ?? b.videoDataUrl}
+                                src={videoPreviewUrls[`bath-${b.id}`] ?? b.videoDataUrl}
                                 controls
                                 playsInline
                                 className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
@@ -3032,7 +3027,7 @@ export function ManagerAddListingForm({
                             {sp.videoDataUrl ? (
                               <div className="mt-4 space-y-2">
                                 <video
-                                  src={videoPreviewUrls.current.get(`space-${sp.id}`) ?? sp.videoDataUrl}
+                                  src={videoPreviewUrls[`space-${sp.id}`] ?? sp.videoDataUrl}
                                   controls
                                   playsInline
                                   className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
@@ -3165,7 +3160,7 @@ export function ManagerAddListingForm({
                 {sub.houseVideoDataUrl ? (
                   <div className="mt-3 space-y-2">
                     <video
-                      src={videoPreviewUrls.current.get("house") ?? sub.houseVideoDataUrl}
+                      src={videoPreviewUrls.house ?? sub.houseVideoDataUrl}
                       controls
                       className="max-h-48 w-full rounded-xl border border-slate-200 bg-black object-contain"
                     />

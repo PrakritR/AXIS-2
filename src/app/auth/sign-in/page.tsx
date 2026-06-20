@@ -8,7 +8,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 
 const LOGIN_TIMEOUT_MS = 6000;
 
@@ -65,14 +65,23 @@ async function tryResidentAutoConfirm(email: string): Promise<boolean> {
   }
 }
 
+function readRememberedLoginEmail(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem("axis:remembered-login-email") ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function SignInForm() {
   const { showToast } = useAppUi();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "";
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(readRememberedLoginEmail);
   const [password, setPassword] = useState("");
-  const [rememberEmail, setRememberEmail] = useState(false);
+  const [rememberEmail, setRememberEmail] = useState(() => Boolean(readRememberedLoginEmail()));
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -150,18 +159,6 @@ function SignInForm() {
   };
 
   const busy = isSigningIn || isLoadingPortal;
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem("axis:remembered-login-email");
-      if (stored) {
-        setEmail(stored);
-        setRememberEmail(true);
-      }
-    } catch {
-      // ignore localStorage failures
-    }
-  }, []);
 
   return (
     <AuthCard>

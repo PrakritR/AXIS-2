@@ -82,9 +82,11 @@ export function InboxComposeModal({
 
   useEffect(() => {
     if (!open) {
-      setTo("");
-      setSubject("");
-      setBody("");
+      queueMicrotask(() => {
+        setTo("");
+        setSubject("");
+        setBody("");
+      });
     }
   }, [open]);
 

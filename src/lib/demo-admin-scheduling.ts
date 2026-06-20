@@ -272,24 +272,6 @@ export function startOfWeekMonday(d: Date) {
   return x;
 }
 
-function migrateLegacyWeeklyToDateKeys(legacyKeys: string[]): string[] {
-  const mon = startOfWeekMonday(new Date());
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const key of legacyKeys) {
-    const p = parseSlotKey(key);
-    if (!p) continue;
-    const day = new Date(mon);
-    day.setDate(mon.getDate() + p.dayIndex);
-    const k = dateSlotKey(toLocalDateStr(day), p.slotIndex);
-    if (!seen.has(k)) {
-      seen.add(k);
-      out.push(k);
-    }
-  }
-  return out;
-}
-
 export function parseSlotKey(key: string): { dayIndex: number; slotIndex: number } | null {
   const [a, b] = key.split("-");
   const dayIndex = Number.parseInt(a ?? "", 10);

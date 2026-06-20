@@ -40,6 +40,31 @@ export function normalizeManagerSkuTier(tier: string | null | undefined): Manage
   return null;
 }
 
+/** Short plan label for signup / checkout UI copy. */
+export function managerTierDisplayLabel(tier: string | null | undefined): string {
+  const normalized = normalizeManagerSkuTier(tier);
+  if (normalized === "free") return "Free";
+  if (normalized === "business") return "Business";
+  if (normalized === "pro") return "Pro";
+  return "Pro";
+}
+
+/** Headline on manager-id page after pricing signup. */
+export function managerSignupReservedHeadline(tier: string | null | undefined): string {
+  const normalized = normalizeManagerSkuTier(tier) ?? "pro";
+  if (normalized === "free") return "Free tier account reserved";
+  if (normalized === "business") return "Axis Business account reserved";
+  return "Axis Pro account reserved";
+}
+
+/** Phrase for create-account finish copy, e.g. "your Axis Pro account". */
+export function managerSignupFinishPhrase(tier: string | null | undefined): string {
+  const normalized = normalizeManagerSkuTier(tier) ?? "pro";
+  if (normalized === "free") return "your Free tier account";
+  if (normalized === "business") return "your Axis Business account";
+  return "your Axis Pro account";
+}
+
 export function isProSkuTier(tier: string | null | undefined): boolean {
   return normalizeManagerSkuTier(tier) === "pro";
 }

@@ -100,6 +100,16 @@ export async function POST(req: Request) {
     if (body.action === "deleteCharge") {
       const id = body.id?.trim();
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+      if (user.role !== "admin") {
+        const { data: existing } = await db
+          .from("portal_household_charge_records")
+          .select("manager_user_id")
+          .eq("id", id)
+          .maybeSingle();
+        if (existing && existing.manager_user_id !== user.id) {
+          return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+        }
+      }
       await db.from("portal_household_charge_records").delete().eq("id", id);
       return NextResponse.json({ ok: true });
     }
@@ -112,7 +122,7 @@ export async function POST(req: Request) {
         .filter((c) => c.id)
         .map((c) => ({
           id: String(c.id),
-          manager_user_id: toUuid(c.managerUserId) ?? user.id,
+          manager_user_id: user.role === "admin" ? toUuid(c.managerUserId) ?? user.id : user.id,
           resident_user_id: toUuid(c.residentUserId),
           resident_email: typeof c.residentEmail === "string" ? c.residentEmail.trim().toLowerCase() : null,
           property_id: typeof c.propertyId === "string" ? c.propertyId : null,
@@ -132,7 +142,7 @@ export async function POST(req: Request) {
         .filter((p) => p.id)
         .map((p) => ({
           id: String(p.id),
-          manager_user_id: toUuid(p.managerUserId) ?? user.id,
+          manager_user_id: user.role === "admin" ? toUuid(p.managerUserId) ?? user.id : user.id,
           resident_user_id: toUuid(p.residentUserId),
           resident_email: typeof p.residentEmail === "string" ? p.residentEmail.trim().toLowerCase() : null,
           property_id: typeof p.propertyId === "string" ? p.propertyId : null,

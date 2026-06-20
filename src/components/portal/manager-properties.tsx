@@ -64,7 +64,9 @@ export function ManagerProperties() {
   }, []);
 
   useEffect(() => {
-    void loadSku();
+    queueMicrotask(() => {
+      void loadSku();
+    });
   }, [loadSku]);
 
   useEffect(() => {
@@ -133,7 +135,7 @@ export function ManagerProperties() {
     >
       {atPropertyLimit && limitMax != null ? (
         <p className="mb-4 rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950">
-          You've reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.{" "}
+          You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.{" "}
           <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={`${portalBase}/plan`}>
             View plans
           </Link>{" "}

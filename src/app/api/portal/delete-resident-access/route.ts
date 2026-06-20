@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { isAdminUser } from "@/lib/auth/admin-preview";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { removePortalAccess } from "@/lib/auth/remove-portal-access";
+import { managerOwnsResident } from "@/lib/auth/resident-relationship";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -109,6 +111,27 @@ export async function POST(req: Request) {
     const { data: requestor } = await svc.from("profiles").select("role").eq("id", user.id).maybeSingle();
     if (!requestor || !canManageResidentAccess(requestor.role)) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
+    // Tenant scoping: unless admin, the resident must belong to the requestor's
+    // portfolio (an application, charge, or lease record ties them together).
+    const isAdmin = String(requestor.role ?? "").toLowerCase() === "admin" || (await isAdminUser(user.id));
+    if (!isAdmin) {
+      let related = email ? await managerOwnsResident(svc, user.id, { email }) : false;
+      if (!related && applicationId) {
+        const { data: appRow } = await svc
+          .from("manager_application_records")
+          .select("manager_user_id")
+          .eq("id", applicationId)
+          .maybeSingle();
+        if (appRow && appRow.manager_user_id === user.id) related = true;
+      }
+      if (!related) {
+        return NextResponse.json(
+          { error: "Forbidden: resident is not in your portfolio." },
+          { status: 403 },
+        );
+      }
     }
 
     if (!purgeData) {

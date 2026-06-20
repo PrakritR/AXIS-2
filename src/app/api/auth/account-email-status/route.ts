@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {
+    if (!rateLimit(`account-email-status:${clientIpFrom(req)}`, 20, 60_000).ok) {
+      return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
+    }
+
     const url = new URL(req.url);
     const email = url.searchParams.get("email")?.trim().toLowerCase() ?? "";
     if (!email || !email.includes("@")) {
@@ -20,7 +25,7 @@ export async function GET(req: Request) {
 
     const roles = new Set<string>();
 
-    const { data: profile } = await supabase.from("profiles").select("role, manager_id").eq("id", userId).maybeSingle();
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
     const primaryRole = typeof profile?.role === "string" ? profile.role.trim().toLowerCase() : "";
     if (primaryRole) roles.add(primaryRole);
 
@@ -31,12 +36,10 @@ export async function GET(req: Request) {
     }
 
     const sortedRoles = [...roles].sort();
-    const axisId = profile?.manager_id?.trim() || null;
 
     return NextResponse.json({
       exists: true,
       roles: sortedRoles,
-      axisId,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

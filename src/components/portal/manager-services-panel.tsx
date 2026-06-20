@@ -22,7 +22,7 @@ const EMPTY_FORM = { name: "", description: "", price: "", deposit: "" };
 export function ManagerServicesPanel() {
   const { showToast } = useAppUi();
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
-  const [offers, setOffers] = useState<ManagerAmenityOffer[]>([]);
+  const [offersTick, setOffersTick] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<ManagerAmenityOffer | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -34,27 +34,28 @@ export function ManagerServicesPanel() {
     return buildManagerPropertyFilterOptions(managerUserId ?? null);
   }, [managerUserId, propertyTick]);
 
+  const resolvedPropertyId = useMemo(() => {
+    if (propertyOptions.length === 0) return "";
+    if (selectedPropertyId && propertyOptions.some((option) => option.id === selectedPropertyId)) {
+      return selectedPropertyId;
+    }
+    return propertyOptions[0]!.id;
+  }, [propertyOptions, selectedPropertyId]);
+
+  const offers = useMemo(() => {
+    void offersTick;
+    if (managerUserId && resolvedPropertyId) {
+      return readAmenityOffersForProperty(managerUserId, resolvedPropertyId);
+    }
+    return [];
+  }, [managerUserId, resolvedPropertyId, offersTick]);
+
   useEffect(() => {
     if (!authReady || !managerUserId) return;
     void syncPropertyPipelineFromServer().then(() => setPropertyTick((t) => t + 1));
   }, [authReady, managerUserId]);
 
-  // Auto-select first property when options load
-  useEffect(() => {
-    if (!selectedPropertyId && propertyOptions.length > 0) {
-      setSelectedPropertyId(propertyOptions[0]!.id);
-    }
-  }, [propertyOptions, selectedPropertyId]);
-
-  const reload = () => {
-    if (managerUserId && selectedPropertyId) {
-      setOffers(readAmenityOffersForProperty(managerUserId, selectedPropertyId));
-    } else {
-      setOffers([]);
-    }
-  };
-
-  useEffect(() => { reload(); }, [managerUserId, selectedPropertyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const reload = () => setOffersTick((t) => t + 1);
 
   const openCreate = () => {
     setEditingOffer(null);
@@ -80,7 +81,7 @@ export function ManagerServicesPanel() {
       category: "",
       available: editingOffer?.available ?? true,
       managerUserId,
-      propertyId: selectedPropertyId || undefined,
+      propertyId: resolvedPropertyId || undefined,
       createdAt: editingOffer?.createdAt ?? new Date().toISOString(),
     };
     saveAmenityOffer(offer);
@@ -120,7 +121,7 @@ export function ManagerServicesPanel() {
               <div className="mb-4 flex items-center gap-2">
                 <label className="text-xs font-semibold text-slate-500">Property</label>
                 <select
-                  value={selectedPropertyId}
+                  value={resolvedPropertyId}
                   onChange={(e) => setSelectedPropertyId(e.target.value)}
                   className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 >
@@ -130,7 +131,7 @@ export function ManagerServicesPanel() {
                 </select>
               </div>
             )}
-            {!selectedPropertyId ? (
+            {!resolvedPropertyId ? (
               <p className="py-8 text-center text-sm text-slate-400">Select a property to manage its request options.</p>
             ) : offers.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">

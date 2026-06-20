@@ -14,9 +14,6 @@ import {
   roomSelectOptionsWithNone,
 } from "@/lib/rental-application/data";
 import {
-  applicantFirstChoiceRentLabel,
-  formatListingFeeDisplay,
-  paymentAtSigningIncludedLabels,
   paymentAtSigningPriceLabel,
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
@@ -120,8 +117,41 @@ function maskSsnReview(ssn: string) {
   return `***-**-${d.slice(5)}`;
 }
 
+function ReviewSection({
+  title,
+  stepTarget,
+  onEdit,
+  children,
+}: {
+  title: string;
+  stepTarget: number;
+  onEdit: (step: number) => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-100 bg-slate-50/60 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{title}</h3>
+        <button type="button" onClick={() => onEdit(stepTarget)} className="shrink-0 text-sm font-semibold text-primary hover:underline">
+          Edit
+        </button>
+      </div>
+      <dl className="mt-4 space-y-3 text-sm">{children}</dl>
+    </section>
+  );
+}
+
+function ReviewRow({ k, v }: { k: string; v: ReactNode }) {
+  return (
+    <div className="grid gap-1 border-b border-slate-100/80 pb-3 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,38%)_1fr] sm:gap-4">
+      <dt className="font-medium text-slate-500">{k}</dt>
+      <dd className="text-slate-900">{v}</dd>
+    </div>
+  );
+}
+
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, propertyOptions, patch, goToStep, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
+  const { step, form, errors, propertyOptions, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
 
   if (step === 1) {
     return (
@@ -1267,31 +1297,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   if (step === 11) {
     const prop = getPropertyById(form.propertyId);
     const roomLabel = (id: string) => getRoomChoiceLabel(id);
-    const ReviewSection = ({
-      title,
-      stepTarget,
-      children,
-    }: {
-      title: string;
-      stepTarget: number;
-      children: ReactNode;
-    }) => (
-      <section className="rounded-2xl border border-slate-100 bg-slate-50/60 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{title}</h3>
-          <button type="button" onClick={() => editFromReview(stepTarget)} className="shrink-0 text-sm font-semibold text-primary hover:underline">
-            Edit
-          </button>
-        </div>
-        <dl className="mt-4 space-y-3 text-sm">{children}</dl>
-      </section>
-    );
-    const Row = ({ k, v }: { k: string; v: ReactNode }) => (
-      <div className="grid gap-1 border-b border-slate-100/80 pb-3 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,38%)_1fr] sm:gap-4">
-        <dt className="font-medium text-slate-500">{k}</dt>
-        <dd className="text-slate-900">{v}</dd>
-      </div>
-    );
     return (
       <div className="space-y-8">
         <div>
@@ -1299,60 +1304,60 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <StepIntro className="mt-3">Confirm everything below, then continue to the application fee step.</StepIntro>
         </div>
         <div className="space-y-4">
-          <ReviewSection title="Group application" stepTarget={1}>
-            <Row k="Applying as group" v={form.applyingAsGroup === "yes" ? "Yes" : form.applyingAsGroup === "no" ? "No" : "—"} />
+          <ReviewSection title="Group application" stepTarget={1} onEdit={editFromReview}>
+            <ReviewRow k="Applying as group" v={form.applyingAsGroup === "yes" ? "Yes" : form.applyingAsGroup === "no" ? "No" : "—"} />
             {form.applyingAsGroup === "yes" ? (
               <>
-                <Row k="Role" v={form.groupRole === "first" ? "First applicant" : form.groupRole === "joining" ? "Joining group" : "—"} />
-                <Row k={form.groupRole === "first" ? "Group size" : "Group ID"} v={displayOrDash(form.groupRole === "first" ? form.groupSize : form.groupId)} />
+                <ReviewRow k="Role" v={form.groupRole === "first" ? "First applicant" : form.groupRole === "joining" ? "Joining group" : "—"} />
+                <ReviewRow k={form.groupRole === "first" ? "Group size" : "Group ID"} v={displayOrDash(form.groupRole === "first" ? form.groupSize : form.groupId)} />
               </>
             ) : null}
           </ReviewSection>
-          <ReviewSection title="Co-signer" stepTarget={2}>
-            <Row k="Co-signer planned" v={form.hasCosigner === "yes" ? "Yes" : form.hasCosigner === "no" ? "No" : "—"} />
+          <ReviewSection title="Co-signer" stepTarget={2} onEdit={editFromReview}>
+            <ReviewRow k="Co-signer planned" v={form.hasCosigner === "yes" ? "Yes" : form.hasCosigner === "no" ? "No" : "—"} />
           </ReviewSection>
-          <ReviewSection title="Property information" stepTarget={3}>
-            <Row k="Property" v={displayOrDash(prop?.title)} />
-            <Row k="1st choice room" v={displayOrDash(roomLabel(form.roomChoice1))} />
-            <Row k="2nd choice room" v={displayOrDash(roomLabel(form.roomChoice2))} />
-            <Row k="3rd choice room" v={displayOrDash(roomLabel(form.roomChoice3))} />
-            <Row k="Application type" v={form.rentalType === "short_term" ? "Short-term stay" : "Standard lease"} />
-            <Row k="Lease term" v={displayOrDash(form.leaseTerm)} />
-            <Row k={form.rentalType === "short_term" ? "Check-in date" : "Lease start"} v={displayOrDash(form.leaseStart)} />
-            {form.leaseTerm !== "Month-to-Month" ? <Row k={form.rentalType === "short_term" ? "Check-out date" : "Lease end"} v={displayOrDash(form.leaseEnd)} /> : null}
+          <ReviewSection title="Property information" stepTarget={3} onEdit={editFromReview}>
+            <ReviewRow k="Property" v={displayOrDash(prop?.title)} />
+            <ReviewRow k="1st choice room" v={displayOrDash(roomLabel(form.roomChoice1))} />
+            <ReviewRow k="2nd choice room" v={displayOrDash(roomLabel(form.roomChoice2))} />
+            <ReviewRow k="3rd choice room" v={displayOrDash(roomLabel(form.roomChoice3))} />
+            <ReviewRow k="Application type" v={form.rentalType === "short_term" ? "Short-term stay" : "Standard lease"} />
+            <ReviewRow k="Lease term" v={displayOrDash(form.leaseTerm)} />
+            <ReviewRow k={form.rentalType === "short_term" ? "Check-in date" : "Lease start"} v={displayOrDash(form.leaseStart)} />
+            {form.leaseTerm !== "Month-to-Month" ? <ReviewRow k={form.rentalType === "short_term" ? "Check-out date" : "Lease end"} v={displayOrDash(form.leaseEnd)} /> : null}
             {form.rentalType === "short_term" ? (
               <>
-                <Row k="Check-in time" v={displayOrDash(form.shortTermCheckInTime)} />
-                <Row k="Check-out time" v={displayOrDash(form.shortTermCheckOutTime)} />
+                <ReviewRow k="Check-in time" v={displayOrDash(form.shortTermCheckInTime)} />
+                <ReviewRow k="Check-out time" v={displayOrDash(form.shortTermCheckOutTime)} />
               </>
             ) : null}
           </ReviewSection>
           {prop?.listingSubmission?.v === 1 ? (
-            <ReviewSection title="Housing charges (this listing)" stepTarget={3}>
-              <Row k="Application fee" v={displayOrDash(prop.listingSubmission.applicationFee)} />
-              <Row k="Security deposit" v={displayOrDash(prop.listingSubmission.securityDeposit)} />
-              <Row k="Move-in fee" v={displayOrDash(prop.listingSubmission.moveInFee)} />
-              <Row k="Payment due at signing" v={displayOrDash(paymentAtSigningPriceLabel(prop.listingSubmission))} />
-              <Row k="Utilities (estimate, by room)" v={displayOrDash(utilitiesListingEstimateLabel(prop.listingSubmission))} />
+            <ReviewSection title="Housing charges (this listing)" stepTarget={3} onEdit={editFromReview}>
+              <ReviewRow k="Application fee" v={displayOrDash(prop.listingSubmission.applicationFee)} />
+              <ReviewRow k="Security deposit" v={displayOrDash(prop.listingSubmission.securityDeposit)} />
+              <ReviewRow k="Move-in fee" v={displayOrDash(prop.listingSubmission.moveInFee)} />
+              <ReviewRow k="Payment due at signing" v={displayOrDash(paymentAtSigningPriceLabel(prop.listingSubmission))} />
+              <ReviewRow k="Utilities (estimate, by room)" v={displayOrDash(utilitiesListingEstimateLabel(prop.listingSubmission))} />
             </ReviewSection>
           ) : (
-            <ReviewSection title="Housing charges" stepTarget={3}>
-              <Row
+            <ReviewSection title="Housing charges" stepTarget={3} onEdit={editFromReview}>
+              <ReviewRow
                 k="Listing fees"
                 v="This property has not published detailed fee lines yet. Confirm dollar amounts with the property manager before you pay or sign."
               />
             </ReviewSection>
           )}
-          <ReviewSection title="Personal information" stepTarget={4}>
-            <Row k="Legal name" v={displayOrDash(form.fullLegalName)} />
-            <Row k="Date of birth" v={displayOrDash(form.dateOfBirth)} />
-            <Row k="SSN" v={maskSsnReview(form.ssn)} />
-            <Row k="ID number" v={displayOrDash(form.driversLicense)} />
-            <Row k="Phone" v={displayOrDash(form.phone)} />
-            <Row k="Email" v={displayOrDash(form.email)} />
+          <ReviewSection title="Personal information" stepTarget={4} onEdit={editFromReview}>
+            <ReviewRow k="Legal name" v={displayOrDash(form.fullLegalName)} />
+            <ReviewRow k="Date of birth" v={displayOrDash(form.dateOfBirth)} />
+            <ReviewRow k="SSN" v={maskSsnReview(form.ssn)} />
+            <ReviewRow k="ID number" v={displayOrDash(form.driversLicense)} />
+            <ReviewRow k="Phone" v={displayOrDash(form.phone)} />
+            <ReviewRow k="Email" v={displayOrDash(form.email)} />
           </ReviewSection>
-          <ReviewSection title="Address history" stepTarget={5}>
-            <Row
+          <ReviewSection title="Address history" stepTarget={5} onEdit={editFromReview}>
+            <ReviewRow
               k="Current address"
               v={displayOrDash(
                 [form.currentStreet, [form.currentCity, form.currentState, form.currentZip].filter(Boolean).join(" ")]
@@ -1360,20 +1365,20 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   .join(", "),
               )}
             />
-            <Row
+            <ReviewRow
               k="Landlord (current)"
               v={displayOrDash([form.currentLandlordName, form.currentLandlordPhone].filter(Boolean).join(" · "))}
             />
-            <Row
+            <ReviewRow
               k="Move-in / move-out (current)"
               v={displayOrDash([form.currentMoveIn, form.currentMoveOut].filter(Boolean).join(" → "))}
             />
-            <Row k="Reason for leaving (current)" v={displayOrDash(form.currentReasonLeaving)} />
+            <ReviewRow k="Reason for leaving (current)" v={displayOrDash(form.currentReasonLeaving)} />
             {form.noPreviousAddress ? (
-              <Row k="Previous address" v="Not provided (none reported)" />
+              <ReviewRow k="Previous address" v="Not provided (none reported)" />
             ) : (
               <>
-                <Row
+                <ReviewRow
                   k="Previous address"
                   v={displayOrDash(
                     [form.prevStreet, [form.prevCity, form.prevState, form.prevZip].filter(Boolean).join(" ")]
@@ -1381,45 +1386,45 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                       .join(", "),
                   )}
                 />
-                <Row
+                <ReviewRow
                   k="Landlord (previous)"
                   v={displayOrDash([form.prevLandlordName, form.prevLandlordPhone].filter(Boolean).join(" · "))}
                 />
-                <Row
+                <ReviewRow
                   k="Move-in / move-out (previous)"
                   v={displayOrDash([form.prevMoveIn, form.prevMoveOut].filter(Boolean).join(" → "))}
                 />
-                <Row k="Reason for leaving (previous)" v={displayOrDash(form.prevReasonLeaving)} />
+                <ReviewRow k="Reason for leaving (previous)" v={displayOrDash(form.prevReasonLeaving)} />
               </>
             )}
           </ReviewSection>
-          <ReviewSection title="Employment" stepTarget={7}>
-            <Row k="Not employed" v={form.notEmployed ? "Yes" : "No"} />
-            <Row k="Employer" v={displayOrDash(form.employer)} />
-            <Row k="Employer address" v={displayOrDash(form.employerAddress)} />
-            <Row k="Supervisor" v={displayOrDash([form.supervisorName, form.supervisorPhone].filter(Boolean).join(" · "))} />
-            <Row k="Job title" v={displayOrDash(form.jobTitle)} />
-            <Row k="Employment start" v={displayOrDash(form.employmentStart)} />
-            <Row k="Monthly income" v={displayOrDash(form.monthlyIncome)} />
-            <Row k="Annual income" v={displayOrDash(form.annualIncome)} />
-            <Row k="Other income" v={displayOrDash(form.otherIncome)} />
+          <ReviewSection title="Employment" stepTarget={7} onEdit={editFromReview}>
+            <ReviewRow k="Not employed" v={form.notEmployed ? "Yes" : "No"} />
+            <ReviewRow k="Employer" v={displayOrDash(form.employer)} />
+            <ReviewRow k="Employer address" v={displayOrDash(form.employerAddress)} />
+            <ReviewRow k="Supervisor" v={displayOrDash([form.supervisorName, form.supervisorPhone].filter(Boolean).join(" · "))} />
+            <ReviewRow k="Job title" v={displayOrDash(form.jobTitle)} />
+            <ReviewRow k="Employment start" v={displayOrDash(form.employmentStart)} />
+            <ReviewRow k="Monthly income" v={displayOrDash(form.monthlyIncome)} />
+            <ReviewRow k="Annual income" v={displayOrDash(form.annualIncome)} />
+            <ReviewRow k="Other income" v={displayOrDash(form.otherIncome)} />
           </ReviewSection>
-          <ReviewSection title="References" stepTarget={8}>
-            <Row k="Reference 1" v={displayOrDash(`${form.ref1Name} · ${form.ref1Relationship} · ${form.ref1Phone}`)} />
-            <Row k="Reference 2" v={form.ref2Name.trim() ? displayOrDash(`${form.ref2Name} · ${form.ref2Relationship} · ${form.ref2Phone}`) : displayOrDash("")} />
+          <ReviewSection title="References" stepTarget={8} onEdit={editFromReview}>
+            <ReviewRow k="Reference 1" v={displayOrDash(`${form.ref1Name} · ${form.ref1Relationship} · ${form.ref1Phone}`)} />
+            <ReviewRow k="Reference 2" v={form.ref2Name.trim() ? displayOrDash(`${form.ref2Name} · ${form.ref2Relationship} · ${form.ref2Phone}`) : displayOrDash("")} />
           </ReviewSection>
-          <ReviewSection title="Additional details" stepTarget={9}>
-            <Row k="Occupants" v={displayOrDash(form.occupancyCount)} />
-            <Row k="Pets" v={displayOrDash(form.pets)} />
-            <Row k="Eviction" v={form.evictionHistory === "yes" ? `Yes — ${form.evictionDetails}` : form.evictionHistory === "no" ? "No" : "—"} />
-            <Row k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes — ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
-            <Row k="Criminal history" v={form.criminalHistory === "yes" ? `Yes — ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
+          <ReviewSection title="Additional details" stepTarget={9} onEdit={editFromReview}>
+            <ReviewRow k="Occupants" v={displayOrDash(form.occupancyCount)} />
+            <ReviewRow k="Pets" v={displayOrDash(form.pets)} />
+            <ReviewRow k="Eviction" v={form.evictionHistory === "yes" ? `Yes — ${form.evictionDetails}` : form.evictionHistory === "no" ? "No" : "—"} />
+            <ReviewRow k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes — ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
+            <ReviewRow k="Criminal history" v={form.criminalHistory === "yes" ? `Yes — ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
           </ReviewSection>
-          <ReviewSection title="Consent" stepTarget={10}>
-            <Row k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
-            <Row k="Accuracy confirmed" v={form.consentTruth ? "Yes" : "Not checked"} />
-            <Row k="Signature" v={displayOrDash(form.digitalSignature)} />
-            <Row k="Date signed" v={displayOrDash(form.dateSigned)} />
+          <ReviewSection title="Consent" stepTarget={10} onEdit={editFromReview}>
+            <ReviewRow k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
+            <ReviewRow k="Accuracy confirmed" v={form.consentTruth ? "Yes" : "Not checked"} />
+            <ReviewRow k="Signature" v={displayOrDash(form.digitalSignature)} />
+            <ReviewRow k="Date signed" v={displayOrDash(form.dateSigned)} />
           </ReviewSection>
         </div>
         <p className="text-center text-xs text-slate-500">Next: application fee confirmation before final submit.</p>

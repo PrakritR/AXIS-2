@@ -3,7 +3,6 @@
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
-  FULL_PAYMENT_WAIVER_PROMO_CODE,
   normalizeProMonthlyPromoInput,
   PRO_MONTHLY_FIRST_FREE_PROMO_CODE,
 } from "@/lib/stripe-promos";
@@ -132,7 +131,11 @@ export default function PartnerPricingPage() {
   );
 
   const startManagerSignupIntent = useCallback(
-    async (opts: { tier: TierId; billing: "monthly" | "annual"; promo?: string }) => {
+    async (opts: {
+      tier: TierId;
+      billing: "monthly" | "annual";
+      promo?: string;
+    }): Promise<"redirected" | "needs-checkout" | "error"> => {
       setCheckoutBusy(true);
       try {
         const res = await fetch("/api/manager/signup-intent", {
@@ -147,24 +150,31 @@ export default function PartnerPricingPage() {
             promo: opts.promo,
           }),
         });
-        let payload: { sessionId?: string; error?: string };
+        let payload: { sessionId?: string; error?: string; code?: string };
         try {
-          payload = (await res.json()) as { sessionId?: string; error?: string };
+          payload = (await res.json()) as { sessionId?: string; error?: string; code?: string };
         } catch {
           showToast("Invalid response from server. Try again.");
-          return;
+          return "error";
         }
         if (!res.ok) {
+          // Server is the sole authority on whether a promo waives payment.
+          // When it declines, fall back to Stripe checkout instead of toasting.
+          if (payload.code === "REQUIRES_CHECKOUT") {
+            return "needs-checkout";
+          }
           showToast(typeof payload.error === "string" ? payload.error : "Could not start signup.");
-          return;
+          return "error";
         }
         if (payload.sessionId) {
           router.push(`/auth/manager-id?session_id=${encodeURIComponent(payload.sessionId)}`);
-          return;
+          return "redirected";
         }
         showToast("Unexpected signup response.");
+        return "error";
       } catch {
         showToast("Network error.");
+        return "error";
       } finally {
         setCheckoutBusy(false);
       }
@@ -418,7 +428,7 @@ export default function PartnerPricingPage() {
                     }
                     const normalizedPromo = normalizeProMonthlyPromoInput(codeSafe);
                     const isProMonthly = selectedTierId === "pro" && billing === "monthly";
-                    const isFullWaiver = normalizedPromo === FULL_PAYMENT_WAIVER_PROMO_CODE;
+                    const hasPromo = codeSafe.trim().length > 0;
 
                     if (
                       normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
@@ -431,13 +441,23 @@ export default function PartnerPricingPage() {
                       return;
                     }
 
-                    if (selectedTierId === "free" || isFullWaiver) {
-                      await startManagerSignupIntent({
+                    if (selectedTierId === "free") {
+                      await startManagerSignupIntent({ tier: selectedTierId, billing });
+                      return;
+                    }
+
+                    // Paid tier with a promo entered: let the server decide whether the
+                    // code waives payment. If it does, we redirect; otherwise we fall
+                    // through to Stripe checkout. The waiver code is never on the client.
+                    if (hasPromo) {
+                      const outcome = await startManagerSignupIntent({
                         tier: selectedTierId,
                         billing,
-                        promo: isFullWaiver ? FULL_PAYMENT_WAIVER_PROMO_CODE : undefined,
+                        promo: codeSafe.trim(),
                       });
-                      return;
+                      if (outcome !== "needs-checkout") {
+                        return;
+                      }
                     }
 
                     setCheckoutBusy(true);

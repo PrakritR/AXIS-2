@@ -84,7 +84,8 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   }, []);
 
   useEffect(() => {
-    void loadAvailability();
+    const id = window.setTimeout(() => void loadAvailability(), 0);
+    return () => window.clearTimeout(id);
   }, [loadAvailability, tick]);
 
   useEffect(() => {

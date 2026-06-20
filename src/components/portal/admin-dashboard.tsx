@@ -110,7 +110,7 @@ export function AdminDashboard() {
       window.removeEventListener(ADMIN_UI_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   const data = useMemo(() => {

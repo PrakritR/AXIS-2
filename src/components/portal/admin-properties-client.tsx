@@ -153,10 +153,6 @@ function AdminPropertyInlineDetails({
   const rich = useMemo(() => getListingRichContent(mock), [mock]);
   const publicHref = publicListingHrefForPropertyRow(row);
 
-  useEffect(() => {
-    setComposeEdit(null);
-  }, [row.adminRefId]);
-
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
       showToast(err);
@@ -410,10 +406,6 @@ export function AdminPropertiesClient() {
     };
   }, []);
 
-  useEffect(() => {
-    setExpandedRowKey(null);
-  }, [activeKpi]);
-
   const kpiValues = useMemo(() => adminKpiCounts(), [tick]);
   const rows = useMemo(() => readAdminPropertyRows(activeKpi), [tick, activeKpi]);
   const status = rowStatus(activeKpi);
@@ -432,7 +424,10 @@ export function AdminPropertiesClient() {
           <button
             key={label}
             type="button"
-            onClick={() => setActiveKpi(i as AdminPropertyBucketIndex)}
+            onClick={() => {
+              setActiveKpi(i as AdminPropertyBucketIndex);
+              setExpandedRowKey(null);
+            }}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
               activeKpi === i ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
             }`}
@@ -516,6 +511,7 @@ export function AdminPropertiesClient() {
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
                           <td colSpan={4} className="bg-slate-50/50 px-4 py-4">
                             <AdminPropertyInlineDetails
+                              key={rowKey}
                               bucket={activeKpi}
                               row={row}
                               onUpdated={() => setTick((t) => t + 1)}

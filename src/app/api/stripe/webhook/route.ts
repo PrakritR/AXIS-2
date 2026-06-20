@@ -24,7 +24,7 @@ function logCheckoutCompleted(session: Stripe.Checkout.Session) {
   const billing = session.metadata?.billing ?? null;
   const userId = session.metadata?.userId ?? null;
 
-  // eslint-disable-next-line no-console -- intentional webhook audit log
+   
   console.info("[stripe webhook] checkout.session.completed", {
     sessionId: session.id,
     customerId,
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   try {
     if (event.type === "account.updated") {
       const account = event.data.object as Stripe.Account;
-      // eslint-disable-next-line no-console -- Connect observability
+       
       console.info("[stripe webhook] account.updated", {
         accountId: account.id,
         chargesEnabled: account.charges_enabled,
@@ -79,12 +79,12 @@ export async function POST(req: Request) {
             try {
               await reconcileManagerPurchaseWithStripe(uid);
             } catch (reconcileErr) {
-              // eslint-disable-next-line no-console -- webhook persistence
+               
               console.error("[stripe webhook] reconcileManagerPurchaseWithStripe", reconcileErr);
             }
           }
         } catch (e) {
-          // eslint-disable-next-line no-console -- webhook persistence
+           
           console.error("[stripe webhook] recordPaidManagerCheckoutSession", e);
         }
       }
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
         try {
           await applyScheduledDowngradeAfterInvoicePaid(subId, inv.billing_reason ?? null);
         } catch (e) {
-          // eslint-disable-next-line no-console -- webhook persistence
+           
           console.error("[stripe webhook] invoice.paid scheduled downgrade", e);
         }
       }
@@ -115,7 +115,7 @@ export async function POST(req: Request) {
           await reconcileManagerPurchaseByStripeSubscriptionId(sub.id);
         }
       } catch (e) {
-        // eslint-disable-next-line no-console -- webhook persistence
+         
         console.error("[stripe webhook] subscription event", e);
       }
     }
