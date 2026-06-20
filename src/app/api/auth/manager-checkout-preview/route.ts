@@ -26,7 +26,7 @@ export async function GET(req: Request) {
       const supabase = createSupabaseServiceRoleClient();
       const { data: row, error } = await supabase
         .from("manager_purchases")
-        .select("manager_id, email, full_name")
+        .select("manager_id, email, full_name, tier")
         .eq("stripe_checkout_session_id", sessionId)
         .maybeSingle();
 
@@ -38,6 +38,7 @@ export async function GET(req: Request) {
         managerId: row.manager_id,
         email: row.email,
         fullName: row.full_name?.trim() || null,
+        tier: row.tier?.trim().toLowerCase() || "free",
       });
     }
 
@@ -62,6 +63,8 @@ export async function GET(req: Request) {
       .toLowerCase();
     const fullName = session.metadata?.full_name?.trim() ?? "";
 
+    const tierMeta = session.metadata?.tier?.trim().toLowerCase() || "pro";
+
     if (!managerId || !email) {
       return NextResponse.json({ error: "This session does not include manager signup details." }, { status: 400 });
     }
@@ -70,6 +73,7 @@ export async function GET(req: Request) {
       managerId,
       email,
       fullName: fullName || null,
+      tier: tierMeta,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not load checkout session.";

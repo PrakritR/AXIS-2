@@ -26,11 +26,14 @@ import {
   hasBothLeaseSignatures,
   printLeaseAsPdf,
   residentCanViewLeaseRow,
+  residentLeaseAuthorized,
   residentSendLeaseToManager,
   residentSignLease,
   residentUploadLeasePdf,
   syncLeasePipelineFromServer,
 } from "@/lib/lease-pipeline-storage";
+import { resolveResidentPortalAxisId } from "@/lib/manager-applications-storage";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 type AvailabilityResult =
@@ -295,7 +298,36 @@ export function ResidentLeasePanel() {
   const [showSigningModal, setShowSigningModal] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
+  const [residentAxisId, setResidentAxisId] = useState("");
   const email = session.email?.trim() || null;
+
+  useEffect(() => {
+    if (!session.userId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const [{ data: profile }, { data: authUser }] = await Promise.all([
+          supabase.from("profiles").select("manager_id").eq("id", session.userId).maybeSingle(),
+          supabase.auth.getUser(),
+        ]);
+        if (cancelled) return;
+        const meta = authUser?.user?.user_metadata as Record<string, unknown> | undefined;
+        const metaAxis = typeof meta?.axis_id === "string" ? meta.axis_id : null;
+        setResidentAxisId(
+          resolveResidentPortalAxisId({
+            profileManagerId: profile?.manager_id,
+            authUserAxisId: metaAxis,
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.userId]);
 
   useEffect(() => {
     const on = () => setPipelineTick((t) => t + 1);
@@ -311,8 +343,21 @@ export function ResidentLeasePanel() {
   const pipelineRow = useMemo(() => {
     void pipelineTick;
     if (!email) return null;
-    return findLeaseForResidentEmail(email);
-  }, [email, pipelineTick]);
+    return findLeaseForResidentEmail(email, {
+      email,
+      residentAxisId,
+      profileManagerId: residentAxisId,
+    });
+  }, [email, pipelineTick, residentAxisId]);
+
+  const leaseAuthorized = useMemo(() => {
+    if (!pipelineRow || !email) return false;
+    return residentLeaseAuthorized(pipelineRow, {
+      email,
+      residentAxisId,
+      profileManagerId: residentAxisId,
+    });
+  }, [pipelineRow, email, residentAxisId]);
 
   const leaseCtx = useMemo(() => {
     if (pipelineRow?.application && Object.keys(pipelineRow.application).length > 0) {
@@ -322,7 +367,7 @@ export function ResidentLeasePanel() {
   }, [pipelineRow]);
 
   const leaseLocked = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
-  const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow);
+  const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow) && leaseAuthorized;
   const usesElectronicSigning = Boolean(pipelineRow?.generatedHtml && !pipelineRow?.managerUploadedPdf?.dataUrl);
 
   const upgradeBreakdown = useMemo(() => {

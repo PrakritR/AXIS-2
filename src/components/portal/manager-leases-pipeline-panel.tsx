@@ -71,12 +71,14 @@ export function ManagerLeasesPipelinePanel({
   rows,
   bucket,
   refreshKey,
+  managerUserId,
   residentAccountEmails,
   onEmailAccountSetup,
 }: {
   rows: LeasePipelineRow[];
   bucket: ManagerLeaseBucket;
   refreshKey: number;
+  managerUserId?: string | null;
   residentAccountEmails: Set<string>;
   onEmailAccountSetup?: (email: string, name: string, axisId?: string) => void;
 }) {
@@ -175,7 +177,7 @@ export function ManagerLeasesPipelinePanel({
         return;
       }
 
-      appendLeaseThreadMessage(row.id, "manager", "Sent lease-signing reminder to resident.");
+      appendLeaseThreadMessage(row.id, "manager", "Sent lease-signing reminder to resident.", managerUserId);
       if (data.skipped) {
         showToast("Reminder sent to Axis inbox (demo email, no external email sent).");
       } else {
@@ -210,7 +212,7 @@ export function ManagerLeasesPipelinePanel({
     setGeneratingRowId(row.id);
     window.setTimeout(() => {
       try {
-        const res = generateLeaseHtmlForRow(row.id);
+        const res = generateLeaseHtmlForRow(row.id, managerUserId);
         if (res.ok) {
           showToast(`Lease generated from application data (v${res.version}).`);
         } else showToast(res.error ?? "Could not generate.");
@@ -240,8 +242,8 @@ export function ManagerLeasesPipelinePanel({
       showToast("Resident must create their Axis resident account before you can send the lease.");
       return;
     }
-    appendLeaseThreadMessage(row.id, "manager", "Sent lease to resident for review and signature.");
-    if (sendLeaseToResident(row.id)) {
+    appendLeaseThreadMessage(row.id, "manager", "Sent lease to resident for review and signature.", managerUserId);
+    if (sendLeaseToResident(row.id, managerUserId)) {
       showToast("Lease moved to Resident Signature Pending.");
       setExpandedId(null);
     } else showToast("Could not update.");
@@ -249,7 +251,7 @@ export function ManagerLeasesPipelinePanel({
 
   const onDeleteLease = (row: LeasePipelineRow) => {
     if (!window.confirm(`Delete lease for ${row.residentName} (${row.unit})? This cannot be undone.`)) return;
-    if (deleteLeasePipelineRow(row.id)) {
+    if (deleteLeasePipelineRow(row.id, managerUserId)) {
       showToast("Lease removed from pipeline.");
       setExpandedId(null);
     } else showToast("Could not delete lease.");
@@ -261,8 +263,8 @@ export function ManagerLeasesPipelinePanel({
       showToast("Add a message for the admin team.");
       return;
     }
-    appendLeaseThreadMessage(row.id, "manager", text);
-    if (sendLeaseToAdminReview(row.id)) {
+    appendLeaseThreadMessage(row.id, "manager", text, managerUserId);
+    if (sendLeaseToAdminReview(row.id, managerUserId)) {
       setAdminNoteById((s) => ({ ...s, [row.id]: "" }));
       showToast("Sent to Admin Review.");
       setExpandedId(null);
@@ -270,8 +272,8 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onMoveToManagerReview = (row: LeasePipelineRow) => {
-    appendLeaseThreadMessage(row.id, "manager", "Moved lease back to manager review.");
-    if (sendLeaseBackToManager(row.id)) {
+    appendLeaseThreadMessage(row.id, "manager", "Moved lease back to manager review.", managerUserId);
+    if (sendLeaseBackToManager(row.id, managerUserId)) {
       showToast("Lease moved to Manager Review.");
       setExpandedId(null);
     } else showToast("Could not update.");
@@ -291,7 +293,7 @@ export function ManagerLeasesPipelinePanel({
 
   const handleManagerModalSign = (signatureName: string) => {
     if (!signingRow) return false;
-    if (managerSignLease(signingRow.id, signatureName.trim())) {
+    if (managerSignLease(signingRow.id, signatureName.trim(), managerUserId)) {
       showToast(
         hasBothLeaseSignatures({
           ...signingRow,
@@ -313,7 +315,7 @@ export function ManagerLeasesPipelinePanel({
     const f = files?.[0];
     if (!f) return;
     setPendingRowId(rowId);
-    const res = await managerUploadLeasePdf(rowId, f);
+    const res = await managerUploadLeasePdf(rowId, f, managerUserId);
     setPendingRowId(null);
     if (uploadRef.current) uploadRef.current.value = "";
     if (res.ok) {

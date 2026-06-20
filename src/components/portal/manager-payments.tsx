@@ -83,7 +83,7 @@ export function ManagerPayments() {
   useEffect(() => {
     const on = () => setApplicationTick((n) => n + 1);
     // Only sync once on mount, not on every event to avoid excessive syncs
-    void syncManagerApplicationsFromServer().then(on);
+    void syncManagerApplicationsFromServer({ managerUserId: userId }).then(on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
@@ -114,7 +114,7 @@ export function ManagerPayments() {
         const body = (await res.json()) as { deleted?: Record<string, number>; purgedEmails?: string[] };
         const total = Object.values(body.deleted ?? {}).reduce((a, b) => a + b, 0);
         if (total === 0) return;
-        await syncManagerApplicationsFromServer({ force: true });
+        await syncManagerApplicationsFromServer({ force: true, managerUserId: userId });
         // Clear local cache first so the re-sync doesn't push orphaned charges back to server
         for (const email of body.purgedEmails ?? []) {
           removeResidentHouseholdPaymentData(email);
@@ -331,7 +331,7 @@ export function ManagerPayments() {
             onClick={() => {
               void Promise.all([
                 syncPropertyPipelineFromServer({ force: true }),
-                syncManagerApplicationsFromServer({ force: true }),
+                syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
               ]).then(() => {
                 reconcileApprovedResidentPaymentSchedules(userId ?? null, true);
                 setHcTick((n) => n + 1);
@@ -348,7 +348,7 @@ export function ManagerPayments() {
             onClick={() => {
               void Promise.all([
                 syncHouseholdChargesFromServer(),
-                syncManagerApplicationsFromServer({ force: true }),
+                syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
                 syncPropertyPipelineFromServer({ force: true }),
               ]).then(() => {
                 setHcTick((n) => n + 1);

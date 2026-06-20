@@ -35,6 +35,22 @@ export function applicationVisibleToPortalUser(row: DemoApplicantRow, userId: st
   return false;
 }
 
+/** Minimal lease shape for portfolio visibility checks (avoids circular imports). */
+export type LeaseVisibilityRow = {
+  managerUserId?: string | null;
+  propertyId?: string;
+  application?: { propertyId?: string };
+};
+
+/** Whether a lease row should appear for this portal user (direct owner or linked property). */
+export function leaseVisibleToPortalUser(row: LeaseVisibilityRow, userId: string | null): boolean {
+  if (!userId) return false;
+  if (row.managerUserId && row.managerUserId === userId) return true;
+  const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
+  if (pid && collectAccessiblePropertyIds(userId).has(pid)) return true;
+  return false;
+}
+
 export type ManagerPropertyFilterOption = { id: string; label: string };
 
 /** Labels for Applications / Payments property dropdowns. */

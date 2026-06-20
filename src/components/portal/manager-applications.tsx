@@ -542,7 +542,7 @@ function ManagerApplicationsContent() {
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
     sync();
-    void syncManagerApplicationsFromServer().then(sync);
+    void syncManagerApplicationsFromServer({ managerUserId: userId }).then(sync);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
@@ -766,7 +766,7 @@ function ManagerApplicationsContent() {
     const result = await deleteManagerApplicationFromServer(id);
     if (!result.ok) {
       // Roll back on failure.
-      setRows(await syncManagerApplicationsFromServer());
+      setRows(await syncManagerApplicationsFromServer({ managerUserId: userId }));
       showToast(result.error ?? "Could not delete application.");
       return;
     }
@@ -789,7 +789,7 @@ function ManagerApplicationsContent() {
       }
       if (removedResidentAccess) {
         removeResidentHouseholdPaymentData(email);
-        deleteLeasePipelineRowsForResident(email, id);
+        deleteLeasePipelineRowsForResident(email, id, userId);
         deleteManagerWorkOrdersForResident(email);
         deleteServiceRequestsForResident(email);
         const allInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
@@ -809,7 +809,7 @@ function ManagerApplicationsContent() {
       }
     }
 
-    void syncManagerApplicationsFromServer().then(setRows);
+    void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
     showToast(
       email && !removedResidentAccess
         ? "Application deleted, but resident access could not be removed."

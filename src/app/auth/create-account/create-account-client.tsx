@@ -6,7 +6,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { managerSignupFinishPhrase } from "@/lib/manager-access";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -26,6 +26,7 @@ type ManagerCheckoutPreview = {
   managerId: string;
   email: string;
   fullName: string | null;
+  tier: string;
 };
 
 type ExistingEmailStatus = {
@@ -157,6 +158,7 @@ export default function CreateAccountClient() {
             managerId: body.managerId,
             email: body.email,
             fullName: body.fullName ?? null,
+            tier: body.tier ?? "pro",
           });
         }
       })
@@ -433,12 +435,12 @@ export default function CreateAccountClient() {
             {isAxisIntentSignup ? (
               <>
                 Your <span className="font-semibold text-slate-800">Axis ID</span> is reserved for this signup—use it
-                when you need support. Set a password below to finish your Axis Pro account.
+                when you need support. Set a password below to finish {managerSignupFinishPhrase(effectiveCheckoutPreview?.tier)}.
               </>
             ) : (
               <>
                 Payment confirmed. Your <span className="font-semibold text-slate-800">Axis ID</span> is tied to this
-                checkout. Set a password below to finish your Axis Pro account.
+                checkout. Set a password below to finish {managerSignupFinishPhrase(effectiveCheckoutPreview?.tier)}.
               </>
             )}
           </>

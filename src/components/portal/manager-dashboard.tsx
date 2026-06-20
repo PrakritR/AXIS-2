@@ -126,7 +126,7 @@ export function ManagerDashboard() {
 
   useEffect(() => {
     void Promise.allSettled([
-      syncManagerApplicationsFromServer(),
+      syncManagerApplicationsFromServer({ managerUserId: userId }),
       syncLeasePipelineFromServer(userId),
       syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
       syncHouseholdChargesFromServer(),

@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
-type Preview = { managerId: string; email: string; fullName: string | null };
+import { managerSignupReservedHeadline } from "@/lib/manager-access";
+
+type Preview = { managerId: string; email: string; fullName: string | null; tier: string };
 
 function Step({ n, label, done }: { n: number; label: string; done?: boolean }) {
   return (
@@ -52,7 +54,12 @@ function ManagerIdContent() {
       .then((r) => r.json())
       .then((data: Preview & { error?: string }) => {
         if (data.error) throw new Error(data.error);
-        setPreview({ managerId: data.managerId, email: data.email, fullName: data.fullName ?? null });
+        setPreview({
+          managerId: data.managerId,
+          email: data.email,
+          fullName: data.fullName ?? null,
+          tier: data.tier ?? "pro",
+        });
       })
       .catch((e: unknown) => {
         if (controller.signal.aborted) return;
@@ -106,7 +113,9 @@ function ManagerIdContent() {
             <circle cx="12" cy="7" r="4" />
           </svg>
         </span>
-        <h1 className="mt-4 text-[22px] font-bold tracking-tight text-[#0f172a]">Axis Pro account reserved</h1>
+        <h1 className="mt-4 text-[22px] font-bold tracking-tight text-[#0f172a]">
+          {managerSignupReservedHeadline(preview.tier)}
+        </h1>
         {preview.fullName ? (
           <p className="mt-1 text-sm text-slate-500">Welcome, {preview.fullName}</p>
         ) : null}

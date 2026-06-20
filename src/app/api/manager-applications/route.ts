@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -68,6 +69,57 @@ async function persistNormalizedRow(db: ReturnType<typeof createSupabaseServiceR
   }
 }
 
+async function fetchApplicationsForManagerUser(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  userId: string,
+) {
+  const linkedPropertyIds = await collectLinkedPropertyIdsForUser(db, userId);
+  const select = "id, row_data, updated_at, manager_user_id, property_id, assigned_property_id";
+
+  const { data: ownedRows, error: ownedError } = await db
+    .from("manager_application_records")
+    .select(select)
+    .eq("manager_user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(500);
+  if (ownedError) throw ownedError;
+
+  const byId = new Map<string, (typeof ownedRows)[number]>();
+  for (const row of ownedRows ?? []) {
+    if (row.id) byId.set(row.id, row);
+  }
+
+  if (linkedPropertyIds.size > 0) {
+    const propertyIds = [...linkedPropertyIds];
+    const [{ data: byProperty, error: propertyError }, { data: byAssigned, error: assignedError }] = await Promise.all([
+      db
+        .from("manager_application_records")
+        .select(select)
+        .in("property_id", propertyIds)
+        .order("updated_at", { ascending: false })
+        .limit(500),
+      db
+        .from("manager_application_records")
+        .select(select)
+        .in("assigned_property_id", propertyIds)
+        .order("updated_at", { ascending: false })
+        .limit(500),
+    ]);
+    if (propertyError) throw propertyError;
+    if (assignedError) throw assignedError;
+    for (const row of [...(byProperty ?? []), ...(byAssigned ?? [])]) {
+      if (!row.id || byId.has(row.id)) continue;
+      byId.set(row.id, row);
+    }
+  }
+
+  return [...byId.values()].sort((a, b) => {
+    const aTs = Date.parse(String(a.updated_at ?? ""));
+    const bTs = Date.parse(String(b.updated_at ?? ""));
+    return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+  });
+}
+
 export async function GET() {
   try {
     const user = await sessionUser();
@@ -79,17 +131,35 @@ export async function GET() {
     const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
     const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
 
-    let query = db
-      .from("manager_application_records")
-      .select("id, row_data, updated_at")
-      .order("updated_at", { ascending: false })
-      .limit(500);
+    let data: { id: string; row_data: unknown }[] | null = null;
+    let error: { message: string } | null = null;
 
     if (!admin && role === "resident") {
-      query = query.eq("resident_email", email);
+      const result = await db
+        .from("manager_application_records")
+        .select("id, row_data, updated_at")
+        .eq("resident_email", email)
+        .order("updated_at", { ascending: false })
+        .limit(500);
+      data = result.data;
+      error = result.error;
+    } else if (!admin && (role === "manager" || role === "owner" || role === "pro")) {
+      try {
+        data = await fetchApplicationsForManagerUser(db, user.id);
+        error = null;
+      } catch (e) {
+        error = { message: e instanceof Error ? e.message : "Failed to load applications." };
+      }
+    } else {
+      const result = await db
+        .from("manager_application_records")
+        .select("id, row_data, updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(500);
+      data = result.data;
+      error = result.error;
     }
 
-    const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const byId = new Map<string, DemoApplicantRow>();
