@@ -293,7 +293,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
             )}
           </div>
         </div>
-      ) : (
+      ) : variant === "listings" ? null : (
         <div className="w-full">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm font-semibold text-foreground">

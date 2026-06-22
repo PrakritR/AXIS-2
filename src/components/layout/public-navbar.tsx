@@ -1,54 +1,163 @@
 "use client";
 
 import { AxisLogoLink } from "@/components/brand/axis-logo";
-import { PublicNavbarPortalStrip } from "@/components/layout/public-navbar-portal-strip";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import Link from "next/link";
+import { Navbar1, type NavbarMenuItem } from "@/components/ui/navbar1";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const RENT_LINKS = [
-  { href: "/rent/listings", label: "View all properties" },
-  { href: "/rent/tours-contact", label: "Schedule tour" },
-  { href: "/rent/apply", label: "Apply" },
+  {
+    href: "/",
+    label: "Axis Housing home",
+    description: "Search rentals and explore the platform",
+  },
+  {
+    href: "/rent/listings",
+    label: "View all properties",
+    description: "Browse available homes and apartments",
+  },
+  {
+    href: "/rent/tours-contact",
+    label: "Schedule tour",
+    description: "Book a walkthrough at your preferred time",
+  },
+  {
+    href: "/rent/apply",
+    label: "Apply",
+    description: "Start your online rental application",
+  },
 ];
 
 const PARTNER_LINKS = [
-  { href: "/partner", label: "Partner overview" },
-  { href: "/partner/pricing", label: "Software & pricing" },
-  { href: "/partner/contact", label: "Partner inquiries" },
+  {
+    href: "/partner",
+    label: "Partner overview",
+    description: "Learn how Axis works for property teams",
+  },
+  {
+    href: "/partner/pricing",
+    label: "Software & pricing",
+    description: "Plans and features for managers and owners",
+  },
+  {
+    href: "/partner/contact",
+    label: "Partner inquiries",
+    description: "Talk with our team about getting started",
+  },
 ];
 
-type MenuKey = "rent" | "partner";
-
-/** Path is this route or a deeper segment (`/partner/pricing` must not match only `/partner`). */
 function pathMatchesHref(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Pick the longest matching link so `/partner/pricing` highlights Software & pricing, not Partner overview. */
 function pickActiveNavHref(pathname: string, links: readonly { href: string }[]): string | undefined {
   const matches = links.filter((l) => pathMatchesHref(pathname, l.href)).map((l) => l.href);
   if (matches.length === 0) return undefined;
   return matches.reduce((a, b) => (a.length >= b.length ? a : b));
 }
 
+function HomeIcon() {
+  return (
+    <svg className="size-5 shrink-0 text-primary" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function BuildingIcon() {
+  return (
+    <svg className="size-5 shrink-0 text-primary" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 20V8l8-4 8 4v12M9 20v-4h6v4M9 10h.01M15 10h.01M9 14h.01M15 14h.01"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg className="size-5 shrink-0 text-primary" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M8 3v2M16 3v2M4 9h16M6 5h12a2 2 0 012 2v13a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function FileIcon() {
+  return (
+    <svg className="size-5 shrink-0 text-primary" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+      <path d="M14 2v6h6M9 13h6M9 17h6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function HandshakeIcon() {
+  return (
+    <svg className="size-5 shrink-0 text-primary" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 12l2-2 3 3-5 5-3-3M7 12l-2-2 3-3 5 5-3 3M2 12l4-4M22 12l-4-4"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function TagIcon() {
+  return (
+    <svg className="size-5 shrink-0 text-primary" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M20 12l-8 8-8-8V4h8l8 8z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+      <circle cx="9" cy="9" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function MailIcon() {
+  return (
+    <svg className="size-5 shrink-0 text-primary" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 6h16v12H4V6zM4 7l8 6 8-6"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+const RENT_ICONS = [HomeIcon, BuildingIcon, CalendarIcon, FileIcon];
+const PARTNER_ICONS = [HandshakeIcon, TagIcon, MailIcon];
+
 export function PublicNavbar() {
   const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [openKey, setOpenKey] = useState<MenuKey | null>(null);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const cancelClose = () => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-  };
-
-  const scheduleClose = () => {
-    cancelClose();
-    closeTimer.current = setTimeout(() => setOpenKey(null), 200);
-  };
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20);
@@ -61,6 +170,43 @@ export function PublicNavbar() {
   const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
   const activeRentHref = useMemo(() => pickActiveNavHref(pathname, RENT_LINKS), [pathname]);
   const activePartnerHref = useMemo(() => pickActiveNavHref(pathname, PARTNER_LINKS), [pathname]);
+
+  const menu: NavbarMenuItem[] = useMemo(
+    () => [
+      {
+        title: "Rent with Axis",
+        url: "/",
+        active: rentActive,
+        activeChildHref: activeRentHref,
+        items: RENT_LINKS.map((link, i) => {
+          const Icon = RENT_ICONS[i] ?? BuildingIcon;
+          return {
+            title: link.label,
+            url: link.href,
+            description: link.description,
+            icon: <Icon />,
+          };
+        }),
+      },
+      {
+        title: "Partner with Axis",
+        url: "/partner",
+        active: partnerActive,
+        activeChildHref: activePartnerHref,
+        items: PARTNER_LINKS.map((link, i) => {
+          const Icon = PARTNER_ICONS[i] ?? HandshakeIcon;
+          return {
+            title: link.label,
+            url: link.href,
+            description: link.description,
+            icon: <Icon />,
+          };
+        }),
+      },
+    ],
+    [rentActive, partnerActive, activeRentHref, activePartnerHref],
+  );
+
   return (
     <div
       id="axis-public-navbar"
@@ -71,273 +217,15 @@ export function PublicNavbar() {
           : "border-transparent bg-[var(--glass-fill)]/80 shadow-none"
       }`}
     >
-      <div className="mx-auto grid min-h-[56px] w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 sm:px-5 lg:grid-cols-[auto_1fr_auto]">
-        <div className="justify-self-start">
-          <AxisLogoLink href="/" />
-        </div>
-
-        <nav
-          className="hidden items-center justify-center gap-1 justify-self-center lg:flex"
-          onMouseLeave={scheduleClose}
-        >
-          <div
-            className="relative"
-            onMouseEnter={() => {
-              cancelClose();
-              setOpenKey("rent");
-            }}
-          >
-            <RentWithAxisTrigger
-              active={rentActive}
-              open={openKey === "rent"}
-              onToggleChevron={() => setOpenKey((k) => (k === "rent" ? null : "rent"))}
-            />
-            <DropdownPanel
-              open={openKey === "rent"}
-              links={RENT_LINKS}
-              activeHref={activeRentHref}
-              onNavigate={() => setOpenKey(null)}
-              cancelClose={cancelClose}
-            />
-          </div>
-
-          <div
-            className="relative"
-            onMouseEnter={() => {
-              cancelClose();
-              setOpenKey("partner");
-            }}
-          >
-            <PartnerDropdownTrigger active={partnerActive} open={openKey === "partner"} onToggle={() => setOpenKey((k) => (k === "partner" ? null : "partner"))} label="Partner with Axis" />
-            <DropdownPanel
-              open={openKey === "partner"}
-              links={PARTNER_LINKS}
-              activeHref={activePartnerHref}
-              onNavigate={() => setOpenKey(null)}
-              cancelClose={cancelClose}
-            />
-          </div>
-        </nav>
-
-        <div className="flex items-center justify-end justify-self-end gap-2">
-          <ThemeToggle className="hidden lg:inline-flex" />
-          <div className="hidden lg:block">
-            <PublicNavbarPortalStrip />
-          </div>
-
-          {/* Mobile menu button */}
-          <button
-            type="button"
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-[var(--shadow-sm)] transition hover:bg-accent lg:hidden"
-            onClick={() => setMobileOpen((v) => !v)}
-          >
-          {mobileOpen ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-          ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-          )}
-            Menu
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile drawer */}
-      <div
-        className={`overflow-hidden transition-all duration-300 ease-in-out lg:hidden ${
-          mobileOpen ? "max-h-[520px] opacity-100" : "max-h-0 opacity-0"
-        }`}
-      >
-        <div className="glass-nav border-t border-border bg-[var(--glass-fill)] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 sm:px-5">
-          <div className="space-y-1">
-            <MobileSection label="Rent with Axis">
-              <MobileLink href="/" label="Axis Housing home" active={pathname === "/"} onClose={() => setMobileOpen(false)} />
-              {RENT_LINKS.map(({ href, label }) => (
-                <MobileLink
-                  key={href}
-                  href={href}
-                  label={label}
-                  active={activeRentHref === href}
-                  onClose={() => setMobileOpen(false)}
-                />
-              ))}
-            </MobileSection>
-            <div className="pt-1">
-              <MobileSection label="Partner with Axis">
-                {PARTNER_LINKS.map(({ href, label }) => (
-                  <MobileLink
-                    key={href}
-                    href={href}
-                    label={label}
-                    active={activePartnerHref === href}
-                    onClose={() => setMobileOpen(false)}
-                  />
-                ))}
-              </MobileSection>
-            </div>
-            <div className="pt-4">
-              <div className="flex w-full flex-col items-stretch gap-3">
-                <ThemeToggle className="w-full justify-center" />
-                <PublicNavbarPortalStrip className="w-full justify-center" onInteract={() => setMobileOpen(false)} />
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border pt-3 text-xs">
-              <Link href="/auth/sign-in" className="font-semibold text-primary" onClick={() => setMobileOpen(false)}>
-                Sign in
-              </Link>
-              <Link href="/auth/create-account" className="font-semibold text-primary" onClick={() => setMobileOpen(false)}>
-                Create account
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RentWithAxisTrigger({
-  active,
-  open,
-  onToggleChevron,
-}: {
-  active: boolean;
-  open: boolean;
-  onToggleChevron: () => void;
-}) {
-  return (
-    <div className="relative inline-flex items-center gap-0.5">
-      <Link
-        href="/"
-        className={`relative flex min-h-10 items-center rounded-full px-3 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
-          active ? "text-primary" : "text-foreground/85 hover:text-foreground"
-        } ${open ? "bg-card" : "hover:bg-card/70"}`}
-      >
-        Rent with Axis
-      </Link>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label="Rent menu"
-        onClick={(e) => {
-          e.preventDefault();
-          onToggleChevron();
+      <Navbar1
+        logoSlot={<AxisLogoLink href="/" />}
+        menu={menu}
+        auth={{
+          login: { text: "Log in", url: "#" },
+          signup: { text: "Sign up", url: "#" },
         }}
-        className={`relative flex min-h-10 min-w-10 items-center justify-center rounded-full p-2 outline-none transition-colors duration-200 ${
-          active ? "text-primary" : "text-foreground/85 hover:text-foreground"
-        } ${open ? "bg-card" : "hover:bg-card/70"}`}
-      >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden className={`shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
-          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {active && (
-        <span className="pointer-events-none absolute bottom-0 left-2 right-8 h-[2px] rounded-full bg-primary transition-all duration-300" />
-      )}
+        actionsSlot={<ThemeToggle />}
+      />
     </div>
-  );
-}
-
-function PartnerDropdownTrigger({
-  label,
-  active,
-  open,
-  onToggle,
-}: {
-  label: string;
-  active: boolean;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={onToggle}
-        className={`relative flex min-h-10 items-center gap-1.5 rounded-full px-4 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
-          active ? "text-primary" : "text-foreground/85 hover:text-foreground"
-        } ${open ? "bg-card" : "hover:bg-card/70"}`}
-      >
-        <span>{label}</span>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden className={`shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
-          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        {active && (
-          <span className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full bg-primary transition-all duration-300" />
-        )}
-      </button>
-    </div>
-  );
-}
-
-function DropdownPanel({
-  open,
-  links,
-  activeHref,
-  onNavigate,
-  cancelClose,
-}: {
-  open: boolean;
-  links: { href: string; label: string }[];
-  activeHref?: string;
-  onNavigate: () => void;
-  cancelClose: () => void;
-}) {
-  return (
-    <div
-      className={`absolute left-1/2 top-full z-50 -translate-x-1/2 pt-4 transition-all duration-200 ${
-        open ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none -translate-y-1 opacity-0"
-      }`}
-      onMouseEnter={cancelClose}
-    >
-      <div className="glass-card min-w-[220px] overflow-hidden rounded-[22px] py-1.5">
-        {links.map(({ href, label: linkLabel }) => {
-          const isActive = activeHref === href;
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={() => onNavigate()}
-              className={`flex items-center gap-3 px-4 py-2.5 text-[14px] font-medium transition-[transform,background-color,color] duration-200 ease-out active:scale-[0.99] ${
-                isActive
-                  ? "bg-accent text-primary"
-                  : "text-foreground/80 hover:bg-foreground/[0.04] hover:text-foreground"
-              }`}
-            >
-              {isActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
-              {!isActive && <span className="h-1.5 w-1.5 shrink-0" />}
-              {linkLabel}
-            </Link>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function MobileSection({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-muted">{label}</p>
-      <div className="space-y-0.5">{children}</div>
-    </div>
-  );
-}
-
-function MobileLink({ href, label, active, onClose }: { href: string; label: string; active: boolean; onClose: () => void }) {
-  return (
-    <Link
-      href={href}
-      onClick={onClose}
-      className={`flex min-h-[44px] items-center gap-2.5 rounded-xl px-3 py-3 text-[14px] font-medium transition-[background-color,color,transform] duration-200 sm:min-h-0 sm:py-2.5 ${
-        active ? "bg-accent font-semibold text-primary" : "text-foreground/80 hover:bg-foreground/[0.04]"
-      }`}
-    >
-      {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
-      {!active && <span className="h-1.5 w-1.5 shrink-0" />}
-      {label}
-    </Link>
   );
 }

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { RentListingsHero } from "@/components/marketing/rent-listings-hero";
 import { RentListingsView } from "@/components/marketing/rent-listings-view";
 
 function ListingsFallback() {
@@ -24,8 +25,11 @@ function ListingsFallback() {
 /** Client URL parsing + Suspense avoids server `searchParams` / RSC edge cases that can 500 the page. */
 export default function ListingsPage() {
   return (
-    <Suspense fallback={<ListingsFallback />}>
-      <RentListingsView />
-    </Suspense>
+    <>
+      <RentListingsHero />
+      <Suspense fallback={<ListingsFallback />}>
+        <RentListingsView />
+      </Suspense>
+    </>
   );
 }

@@ -113,16 +113,9 @@ export function RentListingsView() {
   }, [combined, search, applicationTick, showRooms]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-5 sm:py-14">
-      <div className="border-b border-border/60 pb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Listings</p>
-        <h1 className="mt-2 text-2xl font-bold tracking-[-0.02em] text-foreground sm:text-3xl">
-          {showRooms ? "Available rooms" : "Available properties"}
-        </h1>
-      </div>
-
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-5 sm:py-10">
       {showRooms ? (
-        <div className="glass-card mt-6 flex flex-col gap-3 rounded-2xl px-4 py-3.5 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="glass-card flex flex-col gap-3 rounded-2xl px-4 py-3.5 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <p className="flex flex-wrap items-center gap-x-1 gap-y-1">
             {centerZip !== null ? (
               <>
@@ -182,15 +175,20 @@ export function RentListingsView() {
         <div className="glass-card mt-12 rounded-[1.5rem] border border-dashed border-border px-6 py-14 text-center">
           <p className="text-base font-semibold text-foreground">Loading listings…</p>
           <p className="mt-2 text-sm text-muted">Properties appear here as they are published to the site.</p>
-          <Link href="/" className="link-premium mt-6 inline-flex text-sm font-semibold text-primary">
-            Search from home
+          <Link href="/rent/listings" className="link-premium mt-6 inline-flex text-sm font-semibold text-primary">
+            Adjust your search above
           </Link>
         </div>
       ) : (
+        <div className="mt-2">
+          <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-xl">
+            {showRooms ? "Available rooms" : "Available properties"}
+          </h2>
         <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {showRooms
             ? roomResults.map((room) => <RoomListingCard key={room.key} row={room} />)
             : combined.map((property) => <PropertyCard key={property.id} property={property} />)}
+        </div>
         </div>
       )}
     </div>
