@@ -10,9 +10,9 @@ import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
+  ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_TOOLBAR_LABEL,
-  PORTAL_TOOLBAR_SELECT,
+  PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
@@ -65,6 +65,48 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import { deleteServiceRequestsForResident } from "@/lib/service-requests-storage";
 import { loadPersistedInbox, MANAGER_INBOX_STORAGE_KEY, persistInbox } from "@/lib/portal-inbox-storage";
+import {
+  APPLICATION_BACKGROUND_CHECK_STATUSES,
+  applicationShowsBackgroundCheck,
+  backgroundCheckStatusClassName,
+  backgroundCheckStatusLabel,
+  resolveBackgroundCheckStatus,
+} from "@/lib/application-background-check";
+
+function ApplicationBackgroundCheckStatusBadge({ row }: { row: DemoApplicantRow }) {
+  if (!applicationShowsBackgroundCheck(row)) return null;
+  const status = resolveBackgroundCheckStatus(row);
+  return (
+    <span
+      className={`mt-2 inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${backgroundCheckStatusClassName(status)}`}
+    >
+      {backgroundCheckStatusLabel(status)}
+    </span>
+  );
+}
+
+function ApplicationBackgroundCheckStatusField({ row }: { row: DemoApplicantRow }) {
+  if (!applicationShowsBackgroundCheck(row)) return null;
+  const status = resolveBackgroundCheckStatus(row);
+  return (
+    <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 sm:p-6">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Background check</p>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+        Screening status for this application. Results appear here automatically once background checks are enabled for your plan.
+      </p>
+      <label className="mt-4 block max-w-md">
+        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Status</span>
+        <Select value={status} disabled aria-readonly>
+          {APPLICATION_BACKGROUND_CHECK_STATUSES.filter((value) => value !== "not_applicable").map((value) => (
+            <option key={value} value={value}>
+              {backgroundCheckStatusLabel(value)}
+            </option>
+          ))}
+        </Select>
+      </label>
+    </div>
+  );
+}
 
 function CosignerSection({ applicationId }: { applicationId: string }) {
   const subs = readCosignerSubmissionsForSignerAppId(applicationId);
@@ -829,27 +871,25 @@ function ManagerApplicationsContent() {
             propertyValue={propertyFilter}
             onPropertyChange={(id) => setPropertyFilter(id)}
           />
-          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
-            <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort room</span>
-            <select
-              value={roomSortDir}
-              onChange={(e) => setRoomSortDir(e.target.value as "asc" | "desc")}
-              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
-            >
-              <option value="asc">A-Z</option>
-              <option value="desc">Z-A</option>
-            </select>
-          </label>
+          <PortalToolbarSortSelect
+            label="Sort room"
+            value={roomSortDir}
+            onChange={setRoomSortDir}
+            options={[
+              { value: "asc", label: "A-Z" },
+              { value: "desc", label: "Z-A" },
+            ]}
+          />
           <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={refreshTable}>
             Refresh
           </Button>
         </>
       }
       filterRow={
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
           {propertyDataLoading ? <p className="text-xs text-slate-500">Loading properties from backend…</p> : null}
-        </div>
+        </ManagerPortalFilterRow>
       }
     >
       <div className={PORTAL_DATA_TABLE_WRAP}>
@@ -887,6 +927,7 @@ function ManagerApplicationsContent() {
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
                         <p className="font-medium leading-snug text-slate-900">{row.name}</p>
                         {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{row.email}</p> : null}
+                        <ApplicationBackgroundCheckStatusBadge row={row} />
                         <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-slate-400">{row.id}</p>
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
@@ -992,6 +1033,8 @@ function ManagerApplicationsContent() {
                               </div>
                             </div>
                           ) : null}
+
+                          <ApplicationBackgroundCheckStatusField row={row} />
 
                           <div className="space-y-5 rounded-2xl border border-slate-200/70 bg-white/80 p-5 sm:p-6">
                           <ApplicantIds axisId={row.id} />

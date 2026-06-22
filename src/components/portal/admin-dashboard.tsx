@@ -194,13 +194,23 @@ export function AdminDashboard() {
       {/* ── Action-required banners ── */}
       {(pendingProps > 0 || leasesInAdminReview > 0 || inboxUnread > 0 || pendingMeetings > 0 || pendingTours > 0) && (
         <div className="space-y-2">
+          {pendingTours > 0 && (
+            <NotifBanner tone="amber">
+              <span>
+                <span className="font-semibold">{pendingTours}</span> pending tour request{pendingTours === 1 ? "" : "s"} awaiting confirmation
+              </span>
+              <Link href="/admin/events" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
+                Tours →
+              </Link>
+            </NotifBanner>
+          )}
           {pendingProps > 0 && (
             <NotifBanner tone="amber">
               <span>
                 <span className="font-semibold">{pendingProps}</span> propert{pendingProps === 1 ? "y" : "ies"} pending your approval
               </span>
               <Link href="/admin/properties" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Review →
+                Properties →
               </Link>
             </NotifBanner>
           )}
@@ -210,7 +220,7 @@ export function AdminDashboard() {
                 <span className="font-semibold">{leasesInAdminReview}</span> lease{leasesInAdminReview === 1 ? "" : "s"} in admin review
               </span>
               <Link href="/admin/leases" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Review →
+                Leases →
               </Link>
             </NotifBanner>
           )}
@@ -220,17 +230,7 @@ export function AdminDashboard() {
                 <span className="font-semibold">{inboxUnread}</span> unread message{inboxUnread === 1 ? "" : "s"} in admin inbox
               </span>
               <Link href="/admin/inbox/unopened" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Open inbox →
-              </Link>
-            </NotifBanner>
-          )}
-          {pendingTours > 0 && (
-            <NotifBanner tone="amber">
-              <span>
-                <span className="font-semibold">{pendingTours}</span> pending tour request{pendingTours === 1 ? "" : "s"} awaiting confirmation
-              </span>
-              <Link href="/admin/events" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                View →
+                Inbox →
               </Link>
             </NotifBanner>
           )}
@@ -240,7 +240,7 @@ export function AdminDashboard() {
                 <span className="font-semibold">{pendingMeetings}</span> meeting request{pendingMeetings === 1 ? "" : "s"} need confirmation
               </span>
               <Link href="/admin/events" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Confirm →
+                Tours →
               </Link>
             </NotifBanner>
           )}
@@ -280,11 +280,11 @@ export function AdminDashboard() {
           href="/admin/axis-users"
         />
         <Tile
-          label="Calendar events"
+          label="Tours"
           value={totalEvents}
           sub={`${pendingMeetings} pending · ${confirmedMeetings} confirmed`}
           href="/admin/events"
-          urgent={pendingMeetings > 0}
+          urgent={pendingMeetings > 0 || pendingTours > 0}
         />
       </div>
 
@@ -294,7 +294,7 @@ export function AdminDashboard() {
           <div className="flex items-center justify-between">
             <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Upcoming meetings</h2>
             <Link href="/admin/events" className="text-xs font-semibold text-primary hover:underline underline-offset-2">
-              View all →
+              Tours →
             </Link>
           </div>
           <ul className="mt-3 space-y-2">

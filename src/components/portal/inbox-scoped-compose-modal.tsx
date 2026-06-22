@@ -37,7 +37,7 @@ type Chip =
   | { key: string; kind: "contact"; contact: InboxScopedContact };
 
 function categoryHint(portal: "resident" | "manager" | "owner", category: InboxRecipientCategory): string {
-  if (category === "admin") return "Messages to Axis Housing operations.";
+  if (category === "admin") return "Messages to Axis operations.";
   if (portal === "manager") {
     if (category === "management") return "Property owners on your listings.";
     return "Tenants & approved residents.";

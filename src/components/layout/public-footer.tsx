@@ -108,7 +108,6 @@ export function PublicFooter() {
       <div className="border-t border-slate-200/60 bg-white/30 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-[2px] sm:px-6">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1.5 text-center text-[13px] font-normal text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <span>© 2026 Axis. All rights reserved.</span>
-          <span className="text-slate-500">Axis Housing</span>
         </div>
       </div>
     </footer>

@@ -73,7 +73,7 @@ export function ManagerPaymentsLedgerPanel({
       "If you have any questions, please don't hesitate to reach out.",
       "",
       "Your property manager",
-      "Axis Housing Portal",
+      "Axis Portal",
     );
     setReminderPreview({ row, subject, body: lines.join("\n") });
   };

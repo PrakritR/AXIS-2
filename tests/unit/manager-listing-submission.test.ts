@@ -5,6 +5,7 @@ import {
   entireHomeMonthlyRentAmount,
   isEntireHomeListing,
   normalizeManagerListingSubmissionV1,
+  resolveAllowedLeaseTerms,
 } from "@/lib/manager-listing-submission";
 
 describe("manager-listing-submission", () => {
@@ -58,5 +59,20 @@ describe("manager-listing-submission", () => {
       ],
     });
     expect(sub.sharedSpaces[0]?.spaceKind).toBe("laundry");
+  });
+
+  it("creates default submission with one empty room row", () => {
+    const sub = createDefaultListingSubmission();
+    expect(sub.v).toBe(1);
+    expect(sub.listingPlaceCategoryId).toBe("shared_home");
+    expect(sub.rooms).toHaveLength(1);
+    expect(sub.rooms[0]?.name).toBe("");
+  });
+
+  it("resolves lease terms from body text when array is empty", () => {
+    const sub = createDefaultListingSubmission();
+    sub.allowedLeaseTerms = [];
+    sub.leaseTermsBody = "Available lease lengths: 12-Month, Month-to-Month.";
+    expect(resolveAllowedLeaseTerms(sub)).toEqual(expect.arrayContaining(["12-Month", "Month-to-Month"]));
   });
 });

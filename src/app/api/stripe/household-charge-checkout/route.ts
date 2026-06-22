@@ -128,7 +128,7 @@ export async function POST(req: Request) {
       residentEmail,
       amountCents,
       productName: charge.title?.trim() || "Resident payment",
-      productDescription: charge.propertyLabel?.trim() || "Axis Housing",
+      productDescription: charge.propertyLabel?.trim() || "Axis",
       metadata,
       destinationAccountId: connect.accountId,
       mode: useEmbedded ? "embedded" : "hosted",

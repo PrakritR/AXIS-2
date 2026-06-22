@@ -18,4 +18,19 @@ describe("sharedSpaceAmenityPresetsForKind", () => {
     const pruned = pruneSharedSpaceAmenitiesForKind("Microwave\nWasher / dryer", "kitchen");
     expect(pruned).toBe("Microwave");
   });
+
+  it("keeps custom amenity lines when space type changes", () => {
+    const pruned = pruneSharedSpaceAmenitiesForKind(
+      "Microwave\nWasher / dryer\nCustom rooftop deck",
+      "kitchen",
+    );
+    expect(pruned).toBe("Microwave\nCustom rooftop deck");
+  });
+
+  it("returns expanded living presets", () => {
+    const presets = sharedSpaceAmenityPresetsForKind("living");
+    expect(presets.map((p) => p.id)).toEqual(
+      expect.arrayContaining(["sofa", "lounge-seating", "tv-common", "hardwood-floors"]),
+    );
+  });
 });

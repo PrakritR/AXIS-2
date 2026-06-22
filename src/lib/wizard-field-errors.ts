@@ -59,6 +59,8 @@ export const LISTING_STEP_FIELD_ORDER: Record<number, string[]> = {
     "listingBedroomSlots",
   ],
   1: ["rooms"],
+  2: ["bathrooms"],
+  3: ["sharedSpaces"],
   4: [
     "listingPlaceCategoryId",
     "monthlyRent",

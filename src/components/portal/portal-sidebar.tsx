@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { AdminPortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
+import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -15,6 +15,10 @@ function hrefForSection(def: PortalDefinition, section: string) {
   if (!meta) return def.basePath;
   if (!meta.tabs.length) return `${def.basePath}/${section}`;
   return `${def.basePath}/${section}/${meta.tabs[0].id}`;
+}
+
+function portalTitleIsBrand(title: string): boolean {
+  return title.trim().toLowerCase() === "axis";
 }
 
 export function PortalSidebar({ definition }: { definition: PortalDefinition }) {
@@ -58,7 +62,13 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         ? "bg-slate-900"
         : "bg-[#0a84ff]";
 
-  const adminNavIcons = definition.kind === "admin";
+  const showNavIcons =
+    definition.kind === "admin" ||
+    definition.kind === "pro" ||
+    definition.kind === "resident" ||
+    definition.kind === "manager" ||
+    definition.kind === "owner";
+  const brandOnlyHeader = portalTitleIsBrand(definition.title);
 
   const leavePaymentsSection = (event: MouseEvent<HTMLAnchorElement>, targetSection: string, href: string) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
@@ -79,8 +89,14 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
   const desktopAside = (
     <aside className="relative z-40 hidden h-full min-h-0 w-[17.5rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-slate-200/60 bg-[#fafbfd] lg:flex">
       <div className={`px-6 py-6 text-white ${accentHeader}`}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72">Axis Housing</p>
-        <p className="mt-2 text-lg font-semibold tracking-[-0.02em] leading-snug">{definition.title}</p>
+        {brandOnlyHeader ? (
+          <p className="text-lg font-semibold tracking-[-0.02em] leading-snug">Axis</p>
+        ) : (
+          <>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72">Axis</p>
+            <p className="mt-2 text-lg font-semibold tracking-[-0.02em] leading-snug">{definition.title}</p>
+          </>
+        )}
       </div>
       <nav className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto space-y-1">
@@ -98,9 +114,9 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     : "text-slate-600 hover:bg-white/90 hover:text-slate-950"
                 }`}
               >
-                {adminNavIcons ? (
+                {showNavIcons ? (
                   <span className="shrink-0 opacity-90" aria-hidden>
-                    <AdminPortalNavIcon section={s.section} />
+                    <PortalNavIcon section={s.section} />
                   </span>
                 ) : null}
                 <span className="min-w-0 flex-1">{s.label}</span>
@@ -136,8 +152,14 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
           <div className="flex items-center gap-2.5 px-3 pt-2 sm:px-4">
             <div className={`h-11 w-1.5 shrink-0 rounded-full ${accentBar}`} aria-hidden />
             <div className="min-w-0 flex-1 py-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Axis Housing</p>
-              <p className="truncate text-sm font-semibold leading-snug text-slate-900">{definition.title}</p>
+              {brandOnlyHeader ? (
+                <p className="text-sm font-semibold leading-snug text-slate-900">Axis</p>
+              ) : (
+                <>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Axis</p>
+                  <p className="truncate text-sm font-semibold leading-snug text-slate-900">{definition.title}</p>
+                </>
+              )}
             </div>
             {hasSignOut ? (
               <button
@@ -164,9 +186,9 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                       : "bg-slate-200/40 text-slate-700 ring-1 ring-transparent hover:bg-slate-200/65"
                   }`}
                 >
-                  {adminNavIcons ? (
+                  {showNavIcons ? (
                     <span className="shrink-0 opacity-90" aria-hidden>
-                      <AdminPortalNavIcon section={s.section} />
+                      <PortalNavIcon section={s.section} />
                     </span>
                   ) : null}
                   {s.label}

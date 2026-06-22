@@ -124,7 +124,7 @@ export function formatManagerMonthlyLabel(tier: string | null | undefined): stri
 export function paidWorkspacePortalTitle(tierRaw: string | null | undefined, stripeSubscriptionId: string | null | undefined): string {
   void tierRaw;
   void stripeSubscriptionId;
-  return "Axis Property Portal";
+  return "Axis";
 }
 
 const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{

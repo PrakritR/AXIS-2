@@ -9,7 +9,7 @@ import {
   inferSharedSpaceKind,
   normalizeSharedSpaceKind,
 } from "@/data/manager-listing-presets";
-import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
+import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/lease-terms";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
 export type PaymentAtSigningOptionId =
@@ -1013,23 +1013,15 @@ export function applyListingBedroomSlots(
 }
 
 export function createDefaultListingServiceOptions(): ManagerListingServiceOption[] {
-  const now = new Date().toISOString();
-  const defaults = [
-    { name: "Weekly cleaning", description: "Regular cleaning of your room or shared areas." },
-    { name: "Linen refresh", description: "Fresh sheets and towels on request." },
-    { name: "Parking pass", description: "On-site or street parking access." },
-    { name: "Storage locker", description: "Personal storage space on the property." },
-  ];
-  return defaults.map((d, i) => ({
-    id: `offer-default-${i}`,
-    name: d.name,
-    description: d.description,
-    price: "",
-    deposit: "",
-    available: true,
-    createdAt: now,
-  }));
+  return [];
 }
+
+/** One-click presets for the listing services step (not added until the manager chooses). */
+export const LISTING_SERVICE_QUICK_ADDS: { name: string; description: string }[] = [
+  { name: "Weekly cleaning", description: "Regular cleaning of your room or shared areas." },
+  { name: "Linen refresh", description: "Fresh sheets and towels on request." },
+  { name: "Storage locker", description: "Personal storage space on the property." },
+];
 
 export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
   return {

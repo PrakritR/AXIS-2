@@ -52,7 +52,7 @@ export function buildPaymentReminderText(p: Params): string {
     "If you have any questions, please don't hesitate to reach out.",
     "",
     p.managerName,
-    "Axis Housing Portal",
+    "Axis Portal",
   ];
   return lines.filter((l): l is string => l !== null).join("\n");
 }
@@ -66,7 +66,7 @@ export function buildPaymentReminderHtml(p: Params): string {
     p.propertyLabel ? `<p><strong>Property:</strong> ${p.propertyLabel}</p>` : null,
     `<p>${p.slot === "overdue_daily" ? "Please submit payment as soon as possible to avoid additional late fees." : "Please log in to your Axis resident portal to make your payment at your earliest convenience."}</p>`,
     `<p>If you have any questions, please don't hesitate to reach out.</p>`,
-    `<p>${p.managerName}<br>Axis Housing Portal</p>`,
+    `<p>${p.managerName}<br>Axis Portal</p>`,
   ]
     .filter((l): l is string => l !== null)
     .join("\n");
@@ -90,7 +90,7 @@ export function buildLateFeeNoticeText(input: {
     "Please log in to your Axis resident portal to review and pay the updated balance.",
     "",
     input.managerName,
-    "Axis Housing Portal",
+    "Axis Portal",
   ]
     .filter((l): l is string => l !== null)
     .join("\n");

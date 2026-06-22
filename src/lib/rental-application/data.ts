@@ -5,17 +5,15 @@ import { LISTING_ROOM_FLOOR_LEVEL_OPTIONS } from "@/data/manager-listing-presets
 import { buildMockPropertyFromDraft, readAllExtraListings, readAllPendingManagerProperties, readExtraListings } from "@/lib/demo-property-pipeline";
 import { effectiveApplicationForRow, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { normalizeManagerListingSubmissionV1, resolveAllowedLeaseTerms } from "@/lib/manager-listing-submission";
+import { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, type LeaseTermOption } from "@/lib/rental-application/lease-terms";
+
+export { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, type LeaseTermOption };
 
 function normFloorLabel(raw: string): string {
   if (!raw.trim()) return "";
   const hit = LISTING_ROOM_FLOOR_LEVEL_OPTIONS.find((o) => o.id === raw.trim());
   return hit ? hit.label : raw.trim();
 }
-
-export const LEASE_TERM_OPTIONS = ["3-Month", "9-Month", "12-Month", "Month-to-Month", "Custom"] as const;
-export const SHORT_TERM_LEASE_TERM = "Short-Term Stay";
-
-export type LeaseTermOption = (typeof LEASE_TERM_OPTIONS)[number];
 
 export function listingAllowedLeaseTerms(propertyId: string): string[] {
   const prop = getPropertyById(propertyId);

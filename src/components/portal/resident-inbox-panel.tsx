@@ -210,7 +210,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       setComposeOpen(false);
       showToast(
         p.includesAxisAdmin && !p.includesDirectoryRecipients
-          ? "Message sent to Axis Housing admin."
+          ? "Message sent to Axis admin."
           : "Message sent.",
       );
       router.push("/resident/inbox/sent");

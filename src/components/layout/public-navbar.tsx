@@ -147,7 +147,7 @@ export function PublicNavbar() {
         <div className="border-t border-slate-100 bg-white px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 sm:px-5">
           <div className="space-y-1">
             <MobileSection label="Rent with Axis">
-              <MobileLink href="/" label="Axis Housing home" active={pathname === "/"} onClose={() => setMobileOpen(false)} />
+              <MobileLink href="/" label="Axis home" active={pathname === "/"} onClose={() => setMobileOpen(false)} />
               {RENT_LINKS.map(({ href, label }) => (
                 <MobileLink
                   key={href}

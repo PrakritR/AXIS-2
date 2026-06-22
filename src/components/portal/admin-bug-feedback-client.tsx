@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
@@ -9,7 +10,7 @@ import {
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR,
 } from "@/components/portal/portal-data-table";
-import { MANAGER_TABLE_TH, ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -18,9 +19,16 @@ import {
   readBugFeedbackRows,
   syncBugFeedbackFromServer,
   updateBugFeedbackRow,
+  type BugFeedbackReporterRole,
   type BugFeedbackStatus,
   type PortalBugFeedbackRow,
 } from "@/lib/portal-bug-feedback";
+
+import {
+  countBugFeedbackTabs,
+  groupBugFeedbackForAdmin,
+  roleGroupLabelForFeedback,
+} from "@/lib/portal-bug-feedback-utils";
 
 function formatWhen(iso: string) {
   try {
@@ -44,6 +52,7 @@ const STATUS_OPTIONS: { value: BugFeedbackStatus; label: string }[] = [
 ];
 
 export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }) {
+  const router = useRouter();
   const { showToast } = useAppUi();
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -61,13 +70,9 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
     return () => window.removeEventListener(ADMIN_UI_EVENT, onRefresh);
   }, [refresh]);
 
-  const filtered = useMemo(
-    () =>
-      [...rows]
-        .filter((r) => (tabId === "bugs" ? r.type === "bug" : r.type === "feedback"))
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [rows, tabId],
-  );
+  const { managerRows, residentRows } = useMemo(() => groupBugFeedbackForAdmin(rows, tabId), [rows, tabId]);
+
+  const tabCounts = useMemo(() => countBugFeedbackTabs(rows), [rows]);
 
   const saveStatus = async (row: PortalBugFeedbackRow, status: BugFeedbackStatus, adminNotes: string) => {
     setSavingId(row.id);
@@ -83,38 +88,114 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
   };
 
   return (
-    <ManagerPortalPageShell title={tabId === "bugs" ? "Bug reports" : "Feedback"}>
-      <p className="mb-6 text-sm text-slate-500">
+    <ManagerPortalPageShell
+      title="Feedback"
+      filterRow={
+        <ManagerPortalStatusPills
+          activeTone="primary"
+          tabs={[
+            { id: "bugs", label: "Bugs", count: tabCounts.bugs },
+            { id: "feedback", label: "Feedback", count: tabCounts.feedback },
+          ]}
+          activeId={tabId}
+          onChange={(id) => router.push(`/admin/bugs-feedback/${id}`)}
+        />
+      }
+    >
+      <p className="mb-5 text-sm text-slate-500">
         {tabId === "bugs"
-          ? "Issues reported by managers and residents from their portals."
-          : "Product feedback and feature requests from portal users."}
+          ? "Issues reported from manager and resident portals, grouped by role."
+          : "Product feedback from portal users, grouped by role."}
       </p>
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-          <thead>
-            <tr className={PORTAL_TABLE_HEAD_ROW}>
-              <th className={`${MANAGER_TABLE_TH} w-8`} />
-              <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">
-                  No {tabId === "bugs" ? "bug reports" : "feedback"} yet.
-                </td>
+
+      <div className="space-y-4">
+        <FeedbackRoleGroup
+          title="Managers"
+          subtitle="Reports from property managers and co-managers."
+          rows={managerRows}
+          emptyLabel={tabId === "bugs" ? "No manager bug reports yet." : "No manager feedback yet."}
+          expandedId={expandedId}
+          savingId={savingId}
+          onToggle={(id) => setExpandedId(expandedId === id ? null : id)}
+          onSave={(row, status, notes) => void saveStatus(row, status, notes)}
+        />
+        <FeedbackRoleGroup
+          title="Residents"
+          subtitle="Reports from resident portal accounts."
+          rows={residentRows}
+          emptyLabel={tabId === "bugs" ? "No resident bug reports yet." : "No resident feedback yet."}
+          expandedId={expandedId}
+          savingId={savingId}
+          onToggle={(id) => setExpandedId(expandedId === id ? null : id)}
+          onSave={(row, status, notes) => void saveStatus(row, status, notes)}
+        />
+      </div>
+    </ManagerPortalPageShell>
+  );
+}
+
+function FeedbackRoleGroup({
+  title,
+  subtitle,
+  rows,
+  emptyLabel,
+  expandedId,
+  savingId,
+  onToggle,
+  onSave,
+}: {
+  title: string;
+  subtitle: string;
+  rows: PortalBugFeedbackRow[];
+  emptyLabel: string;
+  expandedId: string | null;
+  savingId: string | null;
+  onToggle: (id: string) => void;
+  onSave: (row: PortalBugFeedbackRow, status: BugFeedbackStatus, notes: string) => void;
+}) {
+  return (
+    <details
+      className="group overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm open:shadow-[0_8px_28px_-20px_rgba(15,23,42,0.18)]"
+      open
+    >
+      <summary className="cursor-pointer list-none border-b border-transparent px-5 py-4 group-open:border-slate-100 [&::-webkit-details-marker]:hidden">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{title}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{subtitle}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-slate-600">
+              {rows.length}
+            </span>
+            <span className="text-xs font-semibold text-primary group-open:hidden">Open</span>
+            <span className="hidden text-xs font-semibold text-slate-400 group-open:inline">Hide</span>
+          </div>
+        </div>
+      </summary>
+
+      <div className="overflow-x-auto">
+        {rows.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-slate-500">{emptyLabel}</p>
+        ) : (
+          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+            <thead>
+              <tr className={PORTAL_TABLE_HEAD_ROW}>
+                <th className={`${MANAGER_TABLE_TH} w-8`} />
+                <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
               </tr>
-            ) : (
-              filtered.map((row) => {
+            </thead>
+            <tbody>
+              {rows.map((row) => {
                 const open = expandedId === row.id;
                 return (
                   <Fragment key={row.id}>
                     <tr
                       className={`${PORTAL_TABLE_TR} ${PORTAL_TABLE_ROW_TOGGLE_CLASS} cursor-pointer`}
-                      onClick={() => setExpandedId(open ? null : row.id)}
+                      onClick={() => onToggle(row.id)}
                     >
                       <td className={`${PORTAL_TABLE_TD} text-slate-400`}>{open ? "▾" : "▸"}</td>
                       <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-slate-500`}>
@@ -123,7 +204,7 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
                       <td className={PORTAL_TABLE_TD}>
                         <p className="font-medium text-slate-900">{row.reporterName || row.reporterEmail}</p>
                         <p className="text-xs text-slate-500">
-                          {row.reporterRole} · {row.reporterEmail}
+                          {roleGroupLabelForFeedback(row.reporterRole)} · {row.reporterEmail}
                         </p>
                       </td>
                       <td className={PORTAL_TABLE_TD}>
@@ -145,14 +226,21 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
                             <p className="whitespace-pre-wrap">{row.description}</p>
                             {row.stepsToReproduce ? (
                               <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Steps to reproduce</p>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Steps to reproduce
+                                </p>
                                 <p className="mt-1 whitespace-pre-wrap">{row.stepsToReproduce}</p>
                               </div>
                             ) : null}
                             {row.pageUrl ? (
                               <p className="text-xs text-slate-500">
                                 Page:{" "}
-                                <a href={row.pageUrl} className="text-primary hover:underline" target="_blank" rel="noreferrer">
+                                <a
+                                  href={row.pageUrl}
+                                  className="text-primary hover:underline"
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
                                   {row.pageUrl}
                                 </a>
                               </p>
@@ -160,7 +248,7 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
                             <AdminRowEditor
                               row={row}
                               busy={savingId === row.id}
-                              onSave={(status, notes) => void saveStatus(row, status, notes)}
+                              onSave={(status, notes) => onSave(row, status, notes)}
                             />
                           </div>
                         </td>
@@ -168,12 +256,12 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
                     ) : null}
                   </Fragment>
                 );
-              })
-            )}
-          </tbody>
-        </table>
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
-    </ManagerPortalPageShell>
+    </details>
   );
 }
 

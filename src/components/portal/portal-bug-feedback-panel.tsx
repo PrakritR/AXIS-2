@@ -111,7 +111,7 @@ export function PortalBugFeedbackPanel({
   };
 
   return (
-    <ManagerPortalPageShell title="Bugs & feedback">
+    <ManagerPortalPageShell title="Feedback">
       <p className="mb-6 text-sm text-slate-500">
         Report something broken or share ideas to improve Axis.
       </p>
@@ -200,28 +200,60 @@ export function PortalBugFeedbackPanel({
         <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
           <p className="text-sm font-semibold text-slate-900">Your submissions</p>
           <p className="mt-1 text-xs text-slate-500">We review every report. Status updates appear here.</p>
-          <div className="mt-4 space-y-2">
+          <div className="mt-4 space-y-3">
             {myRows.length === 0 ? (
               <p className="text-xs text-slate-400">Nothing submitted yet.</p>
             ) : (
-              myRows.slice(0, 8).map((row) => (
-                <div key={row.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-semibold text-slate-900">{row.title}</p>
-                    <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
-                      {row.type}
-                    </span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{row.description}</p>
-                  <p className="mt-2 text-[10px] text-slate-400">
-                    {formatWhen(row.createdAt)} · {row.status}
-                  </p>
-                </div>
-              ))
+              <>
+                <SubmissionGroup title="Bug reports" rows={myRows.filter((r) => r.type === "bug")} empty="No bug reports yet." />
+                <SubmissionGroup title="Feedback" rows={myRows.filter((r) => r.type === "feedback")} empty="No feedback yet." />
+              </>
             )}
           </div>
         </div>
       </div>
     </ManagerPortalPageShell>
+  );
+}
+
+function SubmissionGroup({
+  title,
+  rows,
+  empty,
+}: {
+  title: string;
+  rows: PortalBugFeedbackRow[];
+  empty: string;
+}) {
+  return (
+    <details className="group rounded-xl border border-slate-200/80 bg-white open:shadow-sm" open={rows.length > 0}>
+      <summary className="cursor-pointer list-none px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-slate-900">{title}</p>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold tabular-nums text-slate-600">
+              {rows.length}
+            </span>
+            <span className="text-[10px] font-semibold text-primary group-open:hidden">Open</span>
+            <span className="hidden text-[10px] font-semibold text-slate-400 group-open:inline">Hide</span>
+          </div>
+        </div>
+      </summary>
+      <div className="space-y-2 border-t border-slate-100 px-3 py-2.5">
+        {rows.length === 0 ? (
+          <p className="text-[11px] text-slate-400">{empty}</p>
+        ) : (
+          rows.slice(0, 8).map((row) => (
+            <div key={row.id} className="rounded-lg border border-slate-200 bg-slate-50/50 p-2.5">
+              <p className="text-xs font-semibold text-slate-900">{row.title}</p>
+              <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{row.description}</p>
+              <p className="mt-2 text-[10px] text-slate-400">
+                {formatWhen(row.createdAt)} · {row.status}
+              </p>
+            </div>
+          ))
+        )}
+      </div>
+    </details>
   );
 }

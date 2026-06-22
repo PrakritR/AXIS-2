@@ -302,6 +302,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         managerUserId: listing?.managerUserId ?? feeCharge?.managerUserId ?? prop?.managerUserId ?? null,
         stage: "Submitted",
         bucket: "pending",
+        backgroundCheckStatus: "pending_review",
         detail: `Submitted ${new Date().toLocaleString()}`,
         email: emailTrim,
         application: structuredClone(form),

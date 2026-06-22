@@ -33,11 +33,8 @@ import {
   applicationVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
 import {
-  SERVICE_REQUESTS_EVENT,
-  readServiceRequestsForManager,
-} from "@/lib/service-requests-storage";
-import {
   countUnopenedPersistedInbox,
+  loadPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
   syncPersistedInboxFromServer,
@@ -139,7 +136,6 @@ export function ManagerDashboard() {
     window.addEventListener(ADMIN_UI_EVENT, bump);
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
     window.addEventListener("storage", bump);
-    window.addEventListener(SERVICE_REQUESTS_EVENT, bump);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
       window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
@@ -148,7 +144,6 @@ export function ManagerDashboard() {
       window.removeEventListener(ADMIN_UI_EVENT, bump);
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
       window.removeEventListener("storage", bump);
-      window.removeEventListener(SERVICE_REQUESTS_EVENT, bump);
     };
    
   }, [userId]);
@@ -163,11 +158,6 @@ export function ManagerDashboard() {
 
     const leases = readLeasePipeline(userId);
     const needsManagerSig = leases.filter((l) => l.status === "Manager Signature Pending").length;
-    const totalLeases = leases.length;
-
-    const allServiceRequests = readServiceRequestsForManager(userId);
-    const pendingServiceRequests = allServiceRequests.filter((r) => r.status === "pending");
-    const approvedServiceRequests = allServiceRequests.filter((r) => r.status === "approved");
 
     const charges = readChargesForManager(userId);
     const overdueCharges = charges.filter((c) => isHouseholdChargeOverdue(c));
@@ -176,7 +166,10 @@ export function ManagerDashboard() {
       return s + (Number.isFinite(n) ? Math.round(n * 100) : 0);
     }, 0);
 
-    const inbox = countUnopenedPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
+    const inboxCount = countUnopenedPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
+    const inboxThreads = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, [])
+      .filter((t) => t.folder === "inbox" && t.unread)
+      .slice(0, 5);
 
     const [p0, , p2] = adminKpiCounts(userId);
     const pendingProperties = p0;
@@ -216,14 +209,12 @@ export function ManagerDashboard() {
       activeResidents,
       overdueCharges,
       overdueTotal,
-      inbox,
-      totalLeases,
+      inbox: inboxCount,
+      inboxThreads,
       needsManagerSig,
       totalProperties,
       pendingProperties,
       tours,
-      pendingServiceRequests,
-      approvedServiceRequests,
     };
   }, [tick, userId, nowMs]);
 
@@ -235,13 +226,11 @@ export function ManagerDashboard() {
     overdueCharges,
     overdueTotal,
     inbox,
-    totalLeases,
+    inboxThreads,
     needsManagerSig,
     totalProperties,
     pendingProperties,
     tours,
-    pendingServiceRequests,
-    approvedServiceRequests,
   } = data;
 
   const pendingTours = tours.filter((t) => t.status === "pending");
@@ -260,13 +249,23 @@ export function ManagerDashboard() {
           pendingProperties > 0 ||
           overdueCharges.length > 0) && (
           <div className="space-y-2">
+            {pendingTours.length > 0 && (
+              <NotifBanner tone="amber">
+                <span>
+                  <span className="font-semibold">{pendingTours.length}</span> pending tour request{pendingTours.length === 1 ? "" : "s"} awaiting your approval
+                </span>
+                <Link href={`${BASE}/calendar`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
+                  Tours →
+                </Link>
+              </NotifBanner>
+            )}
             {pendingApps.length > 0 && (
               <NotifBanner tone="amber">
                 <span>
                   <span className="font-semibold">{pendingApps.length}</span> application{pendingApps.length === 1 ? "" : "s"} waiting for a decision
                 </span>
                 <Link href={`${BASE}/applications`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Review →
+                  Applications →
                 </Link>
               </NotifBanner>
             )}
@@ -276,7 +275,7 @@ export function ManagerDashboard() {
                   <span className="font-semibold">{needsManagerSig}</span> lease{needsManagerSig === 1 ? "" : "s"} need{needsManagerSig === 1 ? "s" : ""} your signature
                 </span>
                 <Link href={`${BASE}/leases`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Sign →
+                  Leases →
                 </Link>
               </NotifBanner>
             )}
@@ -286,17 +285,7 @@ export function ManagerDashboard() {
                   <span className="font-semibold">{inbox}</span> unread message{inbox === 1 ? "" : "s"} in your inbox
                 </span>
                 <Link href={`${BASE}/inbox/unopened`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Open inbox →
-                </Link>
-              </NotifBanner>
-            )}
-            {pendingTours.length > 0 && (
-              <NotifBanner tone="amber">
-                <span>
-                  <span className="font-semibold">{pendingTours.length}</span> pending tour request{pendingTours.length === 1 ? "" : "s"} awaiting your approval
-                </span>
-                <Link href={`${BASE}/calendar`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Review →
+                  Inbox →
                 </Link>
               </NotifBanner>
             )}
@@ -306,27 +295,27 @@ export function ManagerDashboard() {
                   Next confirmed tour{tours.filter((t) => t.status === "confirmed").length > 1 ? ` (${tours.filter((t) => t.status === "confirmed").length} total)` : ""}: <span className="font-semibold">{nextTour.label}</span>{nextTour.propertyTitle ? ` · ${nextTour.propertyTitle}` : ""} at <span className="font-semibold">{fmt(nextTour.start)}</span>
                 </span>
                 <Link href={`${BASE}/calendar`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Calendar →
+                  Tours →
                 </Link>
               </NotifBanner>
             )}
             {pendingProperties > 0 && (
-              <NotifBanner tone="rose">
+              <NotifBanner tone="amber">
                 <span>
                   <span className="font-semibold">{pendingProperties}</span> propert{pendingProperties === 1 ? "y" : "ies"} pending Axis approval
                 </span>
                 <Link href={`${BASE}/properties`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  View →
+                  Properties →
                 </Link>
               </NotifBanner>
             )}
             {overdueCharges.length > 0 && (
-              <NotifBanner tone="amber">
+              <NotifBanner tone="rose">
                 <span>
                   <span className="font-semibold">{overdueCharges.length}</span> overdue charge{overdueCharges.length === 1 ? "" : "s"} totalling <span className="font-semibold">{dollars(overdueTotal)}</span> across residents
                 </span>
-                <Link href={`${BASE}/residents`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  View →
+                <Link href={`${BASE}/payments`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
+                  Payments →
                 </Link>
               </NotifBanner>
             )}
@@ -334,7 +323,7 @@ export function ManagerDashboard() {
         )}
 
         {/* ── KPI tiles ── */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-2">
           <Tile
             label="Properties"
             value={totalProperties}
@@ -349,31 +338,43 @@ export function ManagerDashboard() {
             href={`${BASE}/residents`}
             urgent={pendingApps.length > 0}
           />
-          <Tile
-            label="Service requests"
-            value={pendingServiceRequests.length + approvedServiceRequests.length}
-            sub={pendingServiceRequests.length > 0 ? `${pendingServiceRequests.length} awaiting approval` : approvedServiceRequests.length > 0 ? `${approvedServiceRequests.length} active` : undefined}
-            href={`${BASE}/services/requests`}
-            urgent={pendingServiceRequests.length > 0}
-          />
-          <Tile
-            label="Leases"
-            value={totalLeases}
-            sub={needsManagerSig > 0 ? `${needsManagerSig} need your signature` : undefined}
-            href={`${BASE}/leases`}
-            urgent={needsManagerSig > 0}
-          />
         </div>
 
         {/* ── Bottom three-column section ── */}
         <div className="grid gap-4 lg:grid-cols-3">
+
+          {/* Pending tours */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+            <SectionHeader
+              title="Pending tour requests"
+              href={`${BASE}/calendar`}
+              linkLabel="Tours →"
+            />
+            {pendingTours.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-400">No pending tour requests right now.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {pendingTours.slice(0, 5).map((tour) => (
+                  <li key={tour.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{tour.label}</p>
+                      <p className="truncate text-xs text-slate-500">{tour.propertyTitle || "—"} · {fmt(tour.start)}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                      Pending
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {/* Pending applications */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
             <SectionHeader
               title="Pending applications"
               href={`${BASE}/applications`}
-              linkLabel={pendingApps.length > 4 ? `View all ${pendingApps.length}` : "View all"}
+              linkLabel="Applications →"
             />
             {pendingApps.length === 0 ? (
               <p className="mt-4 text-sm text-slate-400">No pending applications — you&apos;re all caught up.</p>
@@ -394,55 +395,25 @@ export function ManagerDashboard() {
             )}
           </div>
 
-          {/* Service requests */}
+          {/* Inbox */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
             <SectionHeader
-              title="Service requests"
-              href={`${BASE}/services/requests`}
-              linkLabel="View all"
+              title="Inbox"
+              href={`${BASE}/inbox/unopened`}
+              linkLabel="Inbox →"
             />
-            {pendingServiceRequests.length + approvedServiceRequests.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No active service requests right now.</p>
+            {inbox === 0 ? (
+              <p className="mt-4 text-sm text-slate-400">No unread messages — inbox is clear.</p>
             ) : (
               <ul className="mt-3 space-y-2">
-                {[...pendingServiceRequests, ...approvedServiceRequests].slice(0, 5).map((sr) => (
-                  <li key={sr.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                {inboxThreads.map((thread) => (
+                  <li key={thread.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{sr.offerName}</p>
-                      <p className="truncate text-xs text-slate-500">{sr.residentName || sr.residentEmail || "—"}</p>
+                      <p className="truncate text-sm font-semibold text-slate-900">{thread.from || "Unknown sender"}</p>
+                      <p className="truncate text-xs text-slate-500">{thread.subject || thread.preview || "—"}</p>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
-                      sr.status === "pending"
-                        ? "bg-amber-100 text-amber-800"
-                        : "bg-sky-100 text-sky-800"
-                    }`}>
-                      {sr.status === "pending" ? "Pending" : "Approved"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* Pending tours */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-            <SectionHeader
-              title="Pending tour requests"
-              href={`${BASE}/calendar`}
-              linkLabel="Calendar →"
-            />
-            {pendingTours.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No pending tour requests right now.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {pendingTours.slice(0, 5).map((tour) => (
-                  <li key={tour.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{tour.label}</p>
-                      <p className="truncate text-xs text-slate-500">{tour.propertyTitle || "—"} · {fmt(tour.start)}</p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                      Pending
+                    <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">
+                      Unread
                     </span>
                   </li>
                 ))}

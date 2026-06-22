@@ -14,7 +14,7 @@ export type InboxScopedContact = {
 /** Axis partner inbox (admin). */
 export const PRIMARY_AXIS_ADMIN_EMAIL = "prakritramachandran@gmail.com";
 
-export const PRIMARY_AXIS_ADMIN_LABEL = "Axis Housing admin";
+export const PRIMARY_AXIS_ADMIN_LABEL = "Axis admin";
 
 /** UI buckets — how the compose modal groups recipients. */
 export type InboxRecipientCategory = "admin" | "management" | "resident";

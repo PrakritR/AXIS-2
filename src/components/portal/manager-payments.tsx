@@ -6,9 +6,9 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
+  ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_TOOLBAR_LABEL,
-  PORTAL_TOOLBAR_SELECT,
+  PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
@@ -287,9 +287,9 @@ export function ManagerPayments() {
   }, [mergedRows, bucket, propertyFilter, activeResidentFilter, houseSort]);
 
   const filterRow = (
-    <div className="flex flex-col gap-4">
+    <ManagerPortalFilterRow>
       <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
-    </div>
+    </ManagerPortalFilterRow>
   );
 
   return (
@@ -309,19 +309,15 @@ export function ManagerPayments() {
             residentValue={activeResidentFilter}
             onResidentChange={setResidentFilter}
           />
-          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
-            <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>
-            {propertyFilter ? "Sort resident" : "Sort house"}
-            </span>
-            <select
-              value={houseSort}
-              onChange={(e) => setHouseSort(e.target.value as HouseSort)}
-              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
-            >
-              <option value="house-asc">A-Z</option>
-              <option value="house-desc">Z-A</option>
-            </select>
-          </label>
+          <PortalToolbarSortSelect
+            label={propertyFilter ? "Sort resident" : "Sort house"}
+            value={houseSort}
+            onChange={setHouseSort}
+            options={[
+              { value: "house-asc", label: "A-Z" },
+              { value: "house-desc", label: "Z-A" },
+            ]}
+          />
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddOpen(true)}>
             Add payment
           </Button>

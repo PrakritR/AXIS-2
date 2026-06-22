@@ -32,8 +32,9 @@ function migrateLegacyPerspective(p: string): ProRelationshipPerspective {
   return "manager_tab";
 }
 
-function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
-  if (!r || typeof r !== "object") return null;
+export function normalizeProRelationshipRecord(raw: unknown): ProRelationshipRecord | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
   const id = r.id;
   const linkedAxisId = r.linkedAxisId;
   if (typeof id !== "string" || typeof linkedAxisId !== "string") return null;
@@ -56,6 +57,10 @@ function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
     canEditListing: r.canEditListing === true ? true : undefined,
     createdAt: typeof r.createdAt === "string" ? r.createdAt : new Date().toISOString(),
   };
+}
+
+function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
+  return normalizeProRelationshipRecord(r);
 }
 
 export function readProRelationships(userId: string): ProRelationshipRecord[] {

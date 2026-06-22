@@ -176,7 +176,7 @@ export function OwnerInboxPanel({ tabId }: { tabId: string }) {
 
       showToast(
         p.includesAxisAdmin && !p.includesDirectoryRecipients
-          ? "Message sent to Axis Housing admin."
+          ? "Message sent to Axis admin."
           : "Message sent.",
       );
       router.push(`${portalBase}/inbox/sent`);

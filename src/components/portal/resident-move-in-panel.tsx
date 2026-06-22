@@ -47,6 +47,12 @@ export async function ResidentMoveInPanel({ residentEmail }: ResidentMoveInPanel
                 <div className="mt-3 whitespace-pre-wrap text-slate-700">{resolved.generalHouseInfo}</div>
               </div>
             ) : null}
+            {resolved.houseRulesText ? (
+              <div className="mb-5">
+                <h2 className="text-base font-semibold text-slate-900">House rules</h2>
+                <div className="mt-3 whitespace-pre-wrap text-slate-700">{resolved.houseRulesText}</div>
+              </div>
+            ) : null}
             <h2 className="text-base font-semibold text-slate-900">Instructions &amp; details</h2>
             <div className="mt-3 whitespace-pre-wrap text-slate-700">
               {resolved.instructions ?? (

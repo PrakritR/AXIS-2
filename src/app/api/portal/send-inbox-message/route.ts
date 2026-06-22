@@ -145,7 +145,7 @@ export async function POST(req: Request) {
     const toUserIds = normalizeUserIds(body.toUserIds);
     const subject = String(body.subject ?? "").trim();
     const text = String(body.text ?? "").trim();
-    const fromName = String(body.fromName ?? "Axis Housing Portal").trim();
+    const fromName = String(body.fromName ?? "Axis Portal").trim();
     const deliverToPortalInbox = body.deliverToPortalInbox !== false;
     const deliverViaEmail = body.deliverViaEmail !== false;
     const deliverViaSms = body.deliverViaSms === true;
@@ -309,8 +309,8 @@ export async function POST(req: Request) {
       if (!apiKey) {
         return NextResponse.json({ ok: false, error: "Email delivery not configured (RESEND_API_KEY missing)." }, { status: 503 });
       }
-      const from = process.env.RESEND_FROM?.trim() || "Axis Housing <onboarding@resend.dev>";
-      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via Axis Housing portal by ${fromName}</p>`;
+      const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via Axis portal by ${fromName}</p>`;
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

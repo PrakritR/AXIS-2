@@ -1,4 +1,5 @@
 import { emitAdminUi } from "@/lib/demo-admin-ui";
+import { normalizeBugFeedbackRow } from "@/lib/portal-bug-feedback-utils";
 
 export type BugFeedbackType = "bug" | "feedback";
 export type BugFeedbackReporterRole = "manager" | "resident" | "owner" | "admin" | "pro";
@@ -34,37 +35,6 @@ function rid() {
   return `bf-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function normalizeRow(row: unknown): PortalBugFeedbackRow | null {
-  if (!row || typeof row !== "object") return null;
-  const r = row as Record<string, unknown>;
-  const id = String(r.id ?? "").trim();
-  const type = r.type === "feedback" ? "feedback" : "bug";
-  if (!id) return null;
-  return {
-    id,
-    type,
-    reporterUserId: String(r.reporterUserId ?? "").trim(),
-    reporterName: String(r.reporterName ?? "").trim(),
-    reporterEmail: String(r.reporterEmail ?? "").trim().toLowerCase(),
-    reporterRole: (["manager", "resident", "owner", "admin", "pro"].includes(String(r.reporterRole))
-      ? r.reporterRole
-      : "manager") as BugFeedbackReporterRole,
-    pageUrl: String(r.pageUrl ?? "").trim(),
-    title: String(r.title ?? "").trim(),
-    description: String(r.description ?? "").trim(),
-    stepsToReproduce: typeof r.stepsToReproduce === "string" ? r.stepsToReproduce.trim() : undefined,
-    severity: (["low", "medium", "high", "critical"].includes(String(r.severity))
-      ? r.severity
-      : undefined) as BugSeverity | undefined,
-    status: (["open", "reviewing", "resolved", "closed"].includes(String(r.status))
-      ? r.status
-      : "open") as BugFeedbackStatus,
-    adminNotes: typeof r.adminNotes === "string" ? r.adminNotes.trim() : undefined,
-    createdAt: String(r.createdAt ?? new Date().toISOString()),
-    updatedAt: String(r.updatedAt ?? new Date().toISOString()),
-  };
-}
-
 function writeLocal(rows: PortalBugFeedbackRow[]) {
   if (!isBrowser()) return;
   cachedRows = rows;
@@ -93,7 +63,7 @@ export async function syncBugFeedbackFromServer(opts?: { force?: boolean }): Pro
     const data = (await res.json().catch(() => ({}))) as { rows?: unknown[] };
     if (!res.ok) return cachedRows;
     const rows = (Array.isArray(data.rows) ? data.rows : [])
-      .map(normalizeRow)
+      .map(normalizeBugFeedbackRow)
       .filter((r): r is PortalBugFeedbackRow => Boolean(r));
     cachedRows = rows;
     syncedFromServer = true;

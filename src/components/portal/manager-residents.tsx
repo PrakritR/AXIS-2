@@ -9,11 +9,9 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
+  ManagerPortalStatusPills,
+  ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_TOOLBAR_GROUP,
-  PORTAL_TOOLBAR_LABEL,
-  PORTAL_TOOLBAR_PILL_BUTTON,
-  PORTAL_TOOLBAR_SELECT,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -147,7 +145,6 @@ type ActiveResident = {
 };
 
 type ResidentsTabId = "current" | "previous";
-type ResidentsSort = "name-asc" | "name-desc";
 
 function shortDateLabel(iso: string): string {
   const parts = iso.trim().split("-").map(Number);
@@ -298,7 +295,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [srTick, setSrTick] = useState(0);
   const [inboxTick, setInboxTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
-  const [residentsSort, setResidentsSort] = useState<ResidentsSort>("name-asc");
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
   const [prevTabId, setPrevTabId] = useState(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -648,7 +644,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       ? inTab.filter((r) => r.propertyId === propertyFilter)
       : inTab;
 
-    const nameDirection = residentsSort === "name-asc" ? 1 : -1;
     return [...base].sort((a, b) => {
       if (!propertyFilter) {
         const propCmp = a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" });
@@ -656,13 +651,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       }
 
       const nameCmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-      if (nameCmp !== 0) return nameDirection * nameCmp;
+      if (nameCmp !== 0) return nameCmp;
 
       const aNum = parseInt(a.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
       const bNum = parseInt(b.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
       return aNum - bNum;
     });
-  }, [residents, residentsTab, propertyFilter, residentsSort]);
+  }, [residents, residentsTab, propertyFilter]);
 
   const currentResidentsCount = useMemo(() => residents.filter((resident) => !resident.isPrevious).length, [residents]);
   const previousResidentsCount = useMemo(() => residents.filter((resident) => resident.isPrevious).length, [residents]);
@@ -1005,7 +1000,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       "",
       "Please log into your resident portal to view details and submit payment.",
       "",
-      "— Axis Housing",
+      "— Axis",
     ].join("\n");
     setReminderPreview({ res, subject, body });
   }
@@ -1090,7 +1085,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       "",
       "If you have any questions before signing, reply in your Axis inbox and we will help.",
       "",
-      "Axis Housing",
+      "Axis",
     ].filter(Boolean).join("\n");
 
     setLeaseReminderPreview({
@@ -1439,50 +1434,27 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         title="Residents"
         titleAside={
           <>
-            <div className={PORTAL_TOOLBAR_GROUP}>
-              <button
-                type="button"
-                onClick={() => setResidentsTab("current")}
-                className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${
-                  residentsTab === "current"
-                    ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
-                    : "bg-transparent text-slate-600 hover:bg-white"
-                }`}
-              >
-                Current ({currentResidentsCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setResidentsTab("previous")}
-                className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${
-                  residentsTab === "previous"
-                    ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
-                    : "bg-transparent text-slate-600 hover:bg-white"
-                }`}
-              >
-                Previous ({previousResidentsCount})
-              </button>
-            </div>
-            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
-              + Add resident
-            </Button>
             <PortalPropertyFilterPill
               propertyOptions={propertyOptions}
               propertyValue={propertyFilter}
               onPropertyChange={setPropertyFilter}
             />
-            <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
-              <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort resident</span>
-              <select
-                value={residentsSort}
-                onChange={(e) => setResidentsSort(e.target.value as ResidentsSort)}
-                className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
-              >
-                <option value="name-asc">A-Z</option>
-                <option value="name-desc">Z-A</option>
-              </select>
-            </label>
+            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
+              + Add resident
+            </Button>
           </>
+        }
+        filterRow={
+          <ManagerPortalFilterRow>
+            <ManagerPortalStatusPills
+              tabs={[
+                { id: "current", label: "Current", count: currentResidentsCount },
+                { id: "previous", label: "Previous", count: previousResidentsCount },
+              ]}
+              activeId={residentsTab}
+              onChange={(id) => setResidentsTab(id as ResidentsTabId)}
+            />
+          </ManagerPortalFilterRow>
         }
       >
       {filtered.length === 0 ? (

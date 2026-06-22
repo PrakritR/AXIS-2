@@ -175,7 +175,7 @@ function ManagerDetailRow({
             </Button>
             {confirmDelete ? (
               <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5">
-                <span className="text-xs font-semibold text-rose-800">Delete permanently?</span>
+                <span className="text-xs font-semibold text-rose-800">Delete manager and all properties?</span>
                 <button
                   type="button"
                   className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
@@ -295,7 +295,11 @@ function SimpleAccountDetailRow({
             </Button>
             {confirmDelete ? (
               <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5">
-                <span className="text-xs font-semibold text-rose-800">Delete permanently?</span>
+                <span className="text-xs font-semibold text-rose-800">
+                  {apiPath === "/api/admin/residents"
+                    ? "Delete resident, leases, and payments?"
+                    : "Delete permanently?"}
+                </span>
                 <button
                   type="button"
                   className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"

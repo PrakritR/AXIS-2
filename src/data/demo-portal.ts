@@ -3,6 +3,7 @@
  */
 
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
+import type { ApplicationBackgroundCheckStatus } from "@/lib/application-background-check";
 
 export const demoKpis = {
   applications: { pending: "0", approved: "0", rejected: "0" },
@@ -50,6 +51,8 @@ export type DemoApplicantRow = {
   manuallyAdded?: boolean;
   /** Move-in instructions set by the manager from the Residents tab. */
   moveInInstructions?: string;
+  /** Background screening outcome shown to managers (automation fills this later). */
+  backgroundCheckStatus?: ApplicationBackgroundCheckStatus;
   /** Extra fields only present on manually-added residents. */
   manualResidentDetails?: {
     moveInDate?: string;

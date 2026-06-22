@@ -416,7 +416,7 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
 
     return `<!doctype html><html><head><meta charset="utf-8"/><title>Short-Term Room Stay Agreement</title><style>${leaseCss()}</style></head><body>
 <h1>SHORT-TERM ROOM STAY AGREEMENT</h1>
-<p class="sub">${durationDays ? `${durationDays}-Day Stay` : "Temporary Room Stay"} · Generated ${generatedDate} via Axis Property Platform</p>
+<p class="sub">${durationDays ? `${durationDays}-Day Stay` : "Temporary Room Stay"} · Generated ${generatedDate} via Axis</p>
 
 <h2>1. Parties</h2>
 <table>
@@ -466,14 +466,14 @@ ${houseRules ? `<p>${houseRules}</p>` : ""}
 <p>Guest agrees to leave the room and shared areas in clean, undamaged condition. Owner/Host may deduct unpaid amounts, cleaning costs, missing items, or damage beyond ordinary use from the deposit.</p>
 
 <h2>11. Electronic Signature</h2>
-<p>Owner/Host and Guest each sign this agreement <strong>once</strong> through the Axis property portal. The <strong>Electronic Signature Certificate</strong> at the end of the signed document is the official record of both signatures. No handwritten signature blocks appear here.</p>
+<p>Owner/Host and Guest each sign this agreement <strong>once</strong> through the Axis portal. The <strong>Electronic Signature Certificate</strong> at the end of the signed document is the official record of both signatures. No handwritten signature blocks appear here.</p>
 </body></html>`;
   }
 
   const body = `
 <h1>RESIDENTIAL ROOM RENTAL AGREEMENT</h1>
 <p class="sub">State of Washington · King County</p>
-<p class="generated">Generated ${generatedDate} via Axis Property Platform</p>
+<p class="generated">Generated ${generatedDate} via Axis</p>
 
 <h2>1. Parties</h2>
 <table>
@@ -653,7 +653,7 @@ ${houseRules
 </table>
 
 <h2>${proratedSection ? "26" : "25"}. Electronic Signature</h2>
-<p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement <strong>one time</strong> through the Axis property portal (one manager signature and one resident signature). The <strong>Electronic Signature Certificate</strong> appended to the signed copy is the binding record for both parties. No duplicate handwritten signature lines are included in this document.</p>
+<p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement <strong>one time</strong> through the Axis portal (one manager signature and one resident signature). The <strong>Electronic Signature Certificate</strong> appended to the signed copy is the binding record for both parties. No duplicate handwritten signature lines are included in this document.</p>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div class="addendum page-break">

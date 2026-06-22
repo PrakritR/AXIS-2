@@ -11,7 +11,7 @@ export const adminPortal: PortalDefinition = {
     { section: "properties", label: "Properties", tabs: [] },
     { section: "axis-users", label: "Axis users", tabs: [] },
     { section: "leases", label: "Leases", tabs: [] },
-    { section: "events", label: "Calendar", tabs: [] },
+    { section: "events", label: "Tours", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",
@@ -24,7 +24,7 @@ export const adminPortal: PortalDefinition = {
     },
     {
       section: "bugs-feedback",
-      label: "Bugs & feedback",
+      label: "Feedback",
       tabs: [
         { id: "bugs", label: "Bugs" },
         { id: "feedback", label: "Feedback" },

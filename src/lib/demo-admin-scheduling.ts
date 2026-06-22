@@ -589,7 +589,7 @@ export function acceptPartnerInquiry(id: string, opts?: { instructions?: string;
   logDemoOutboundEmail(
     row.email,
     row.kind === "tour" ? "Your Axis tour is scheduled" : "Your Axis partner meeting is scheduled",
-    `Hi ${row.name},\n\nYour ${row.kind === "tour" ? "tour" : "meeting"} is confirmed for:\n${when}.${extra}\n\n— Axis Housing (outbound mail is logged for review).`,
+    `Hi ${row.name},\n\nYour ${row.kind === "tour" ? "tour" : "meeting"} is confirmed for:\n${when}.${extra}\n\n— Axis (outbound mail is logged for review).`,
   );
   return true;
 }
@@ -628,7 +628,7 @@ export async function acceptPartnerInquiryFromServer(
     logDemoOutboundEmail(
       row.email,
       "Your Axis tour is scheduled",
-      `Hi ${row.name},\n\nYour tour is confirmed for:\n${when}.${extra}\n\n— Axis Housing (outbound mail is logged for review).`,
+      `Hi ${row.name},\n\nYour tour is confirmed for:\n${when}.${extra}\n\n— Axis (outbound mail is logged for review).`,
     );
     await syncScheduleRecordsFromServer({ force: true });
     return true;

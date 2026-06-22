@@ -204,7 +204,7 @@ function ComposeModal({
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            fromName: "Axis Housing Admin",
+            fromName: "Axis Admin",
             toUserIds,
             subject: topicTrim,
             text: bodyTrim,

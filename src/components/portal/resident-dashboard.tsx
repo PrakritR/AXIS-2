@@ -274,7 +274,7 @@ export function ResidentDashboard({
               <NotifBanner tone="violet">
                 <span>Your lease is ready — <span className="font-semibold">signature required</span></span>
                 <Link href={`${BASE}/lease`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Sign now →
+                  Lease →
                 </Link>
               </NotifBanner>
             )}
@@ -286,8 +286,8 @@ export function ResidentDashboard({
                   </span>{" "}
                   outstanding balance — {pendingCharges.length} pending charge{pendingCharges.length === 1 ? "" : "s"}
                 </span>
-                <Link href={`${BASE}/charges`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  View charges →
+                <Link href={`${BASE}/payments`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
+                  Payments →
                 </Link>
               </NotifBanner>
             )}
@@ -297,7 +297,7 @@ export function ResidentDashboard({
                   <span className="font-semibold">{inbox}</span> unread message{inbox === 1 ? "" : "s"} in your inbox
                 </span>
                 <Link href={`${BASE}/inbox/unopened`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Open inbox →
+                  Inbox →
                 </Link>
               </NotifBanner>
             )}
@@ -307,7 +307,7 @@ export function ResidentDashboard({
                   <span className="font-semibold">{openWO}</span> open maintenance request{openWO === 1 ? "" : "s"} awaiting scheduling
                 </span>
                 <Link href={`${BASE}/services/work-orders`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  View →
+                  Work orders →
                 </Link>
               </NotifBanner>
             )}
@@ -329,7 +329,7 @@ export function ResidentDashboard({
                 ) : null}
               </div>
               <Link href={`${BASE}/lease`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                {lease.cta ? "Sign your lease →" : "View lease details →"}
+                Lease →
               </Link>
             </InfoCard>
 
@@ -347,8 +347,8 @@ export function ResidentDashboard({
                   </p>
                 </>
               )}
-              <Link href={`${BASE}/charges`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                View all charges →
+              <Link href={`${BASE}/payments`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
+                Payments →
               </Link>
             </InfoCard>
 
@@ -382,7 +382,7 @@ export function ResidentDashboard({
                   )}
                 </div>
                 <Link href={`${BASE}/services/work-orders`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                  {openWO + scheduledWO > 0 ? "Manage requests →" : "Submit a request →"}
+                  {openWO + scheduledWO > 0 ? "Work orders →" : "Services →"}
                 </Link>
               </InfoCard>
             ) : (
@@ -401,7 +401,7 @@ export function ResidentDashboard({
                 <p className="text-sm text-slate-500">No unread messages.</p>
               )}
               <Link href={`${BASE}/inbox/unopened`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                Open inbox →
+                Inbox →
               </Link>
             </InfoCard>
 
@@ -429,7 +429,7 @@ export function ResidentDashboard({
                 <p className="text-sm text-slate-500">No unread messages.</p>
               )}
               <Link href={`${BASE}/inbox/unopened`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                Open inbox →
+                Inbox →
               </Link>
             </InfoCard>
           </div>

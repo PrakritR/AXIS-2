@@ -11,6 +11,7 @@ export type ResidentMoveInResolved = {
   earliestMoveInDateLabel: string | null;
   instructions: string | null;
   generalHouseInfo: string | null;
+  houseRulesText: string | null;
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -201,6 +202,7 @@ export function resolveResidentMoveInFromApplications(
     ) || null;
   const instructions = firstNonEmpty(roomLevelInstructions, row.moveInInstructions);
   const generalHouseInfo = sub?.generalHouseInfo?.trim() || null;
+  const houseRulesText = sub?.houseRulesText?.trim() || null;
 
   return {
     propertyLabel:
@@ -214,6 +216,7 @@ export function resolveResidentMoveInFromApplications(
     earliestMoveInDateLabel,
     instructions,
     generalHouseInfo,
+    houseRulesText,
   };
 }
 

@@ -3,6 +3,7 @@ import {
   createDefaultListingServiceOptions,
   createDefaultListingSubmission,
   isListingFeeAmountFilled,
+  LISTING_SERVICE_QUICK_ADDS,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
 } from "@/lib/manager-listing-submission";
@@ -26,11 +27,15 @@ describe("manager-listing-submission new fields", () => {
     expect(sub.applicationFeeOtherInstructions).toBe("Pay by check at office.");
   });
 
-  it("createDefaultListingServiceOptions returns starter services", () => {
-    const options = createDefaultListingServiceOptions();
-    expect(options.length).toBeGreaterThanOrEqual(4);
-    expect(options.every((o) => o.available)).toBe(true);
-    expect(options.map((o) => o.name)).toContain("Weekly cleaning");
+  it("createDefaultListingServiceOptions starts empty", () => {
+    expect(createDefaultListingServiceOptions()).toEqual([]);
+  });
+
+  it("LISTING_SERVICE_QUICK_ADDS includes cleaning, linen, and storage", () => {
+    const names = LISTING_SERVICE_QUICK_ADDS.map((o) => o.name);
+    expect(names).toContain("Weekly cleaning");
+    expect(names).toContain("Linen refresh");
+    expect(names).toContain("Storage locker");
   });
 });
 

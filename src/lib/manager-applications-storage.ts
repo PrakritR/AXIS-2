@@ -1,5 +1,10 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
+import {
+  defaultBackgroundCheckStatusForRow,
+  normalizeBackgroundCheckStatus,
+  resolveBackgroundCheckStatus,
+} from "@/lib/application-background-check";
 
 export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
 const MANAGER_APPLICATIONS_SESSION_KEY_PREFIX = "axis:manager-applications:v2";
@@ -46,7 +51,13 @@ export function resolveResidentPortalAxisId(input: {
 function normalizeApplicationRow(row: DemoApplicantRow): DemoApplicantRow {
   const nextId = normalizeApplicationAxisId(row.id);
   const next = nextId === row.id ? row : { ...row, id: nextId };
-  return syncSignedRentFields(next);
+  const withRent = syncSignedRentFields(next);
+  const backgroundCheckStatus =
+    normalizeBackgroundCheckStatus(withRent.backgroundCheckStatus) ??
+    defaultBackgroundCheckStatusForRow(withRent);
+  return backgroundCheckStatus === withRent.backgroundCheckStatus
+    ? withRent
+    : { ...withRent, backgroundCheckStatus };
 }
 
 function parseSignedRentValue(value: unknown): number | null {
@@ -121,6 +132,10 @@ function mergeApplicationRow(existing: DemoApplicantRow | undefined, incoming: D
     managerUserId: chooseString(incoming.managerUserId ?? undefined, existing.managerUserId ?? undefined) ?? null,
     moveInInstructions: chooseString(incoming.moveInInstructions, existing.moveInInstructions),
     signedMonthlyRent: chooseNumber(incoming.signedMonthlyRent, existing.signedMonthlyRent),
+    backgroundCheckStatus:
+      normalizeBackgroundCheckStatus(incoming.backgroundCheckStatus) ??
+      normalizeBackgroundCheckStatus(existing.backgroundCheckStatus) ??
+      resolveBackgroundCheckStatus({ ...existing, ...incoming }),
     manuallyAdded: incoming.manuallyAdded ?? existing.manuallyAdded,
     application: incoming.application ?? existing.application,
     manualResidentDetails: incoming.manualResidentDetails ?? existing.manualResidentDetails,

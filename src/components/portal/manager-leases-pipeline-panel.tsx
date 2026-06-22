@@ -115,7 +115,7 @@ export function ManagerLeasesPipelinePanel({
       "",
       "If you have any questions before signing, reply in your Axis inbox and we will help.",
       "",
-      "Axis Housing",
+      "Axis",
     ].filter(Boolean);
     return lines.join("\n");
   }

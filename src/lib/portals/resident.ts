@@ -22,7 +22,7 @@ const residentPortalLimited: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
-    { section: "bugs-feedback", label: "Bugs & feedback", tabs: [] },
+    { section: "bugs-feedback", label: "Feedback", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
   ],
 };
@@ -55,7 +55,7 @@ const residentPortalApproved: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
-    { section: "bugs-feedback", label: "Bugs & feedback", tabs: [] },
+    { section: "bugs-feedback", label: "Feedback", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
   ],
 };

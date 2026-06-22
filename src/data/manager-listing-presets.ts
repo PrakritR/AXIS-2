@@ -42,22 +42,36 @@ export const SHARED_SPACE_AMENITY_PRESETS = [
   { id: "toaster-oven", label: "Toaster / toaster oven" },
   { id: "island", label: "Kitchen island" },
   { id: "pantry", label: "Pantry storage" },
+  { id: "range-hood", label: "Range hood / vent" },
+  { id: "garbage-disposal", label: "Garbage disposal" },
+  { id: "bar-stools", label: "Bar / counter seating" },
   // Dining & living
   { id: "dining-table", label: "Dining table & chairs" },
   { id: "sofa", label: "Couch / sofa" },
   { id: "smart-tv", label: "Smart TV" },
   { id: "coffee-table", label: "Coffee table" },
+  { id: "hardwood-floors", label: "Hardwood / tile floors" },
+  { id: "bookshelf-living", label: "Bookshelves" },
   // Laundry
   { id: "washer-dryer", label: "Washer / dryer" },
   { id: "laundry-sink", label: "Laundry sink" },
+  { id: "drying-rack", label: "Drying rack" },
+  { id: "iron-board", label: "Iron / ironing board" },
+  { id: "detergent-storage", label: "Detergent / supply storage" },
   // Work
   { id: "desk", label: "Desk / workspace" },
   { id: "office-chair", label: "Office chair" },
   { id: "printer", label: "Shared printer" },
+  { id: "whiteboard", label: "Whiteboard" },
+  { id: "monitor", label: "Monitor / display" },
+  { id: "quiet-space", label: "Quiet / sound-dampened" },
   // Outdoor
   { id: "patio-seating", label: "Patio / deck seating" },
   { id: "bbq-grill", label: "BBQ grill" },
   { id: "fire-pit", label: "Fire pit" },
+  { id: "yard-lawn", label: "Yard / lawn" },
+  { id: "garden", label: "Garden / planters" },
+  { id: "shade-umbrella", label: "Umbrella / shade" },
   // Storage & extras
   { id: "storage-locker", label: "Personal storage locker" },
   { id: "bike-storage", label: "Bike storage" },
@@ -93,11 +107,35 @@ const SHARED_SPACE_AMENITY_IDS_BY_KIND: Record<SharedSpaceKind, readonly string[
     "island",
     "pantry",
     "dining-table",
+    "range-hood",
+    "garbage-disposal",
+    "bar-stools",
   ],
-  living: ["dining-table", "sofa", "smart-tv", "coffee-table", "lounge-seating", "tv-common", "pool-table"],
-  laundry: ["washer-dryer", "laundry-sink"],
-  outdoor: ["patio-seating", "bbq-grill", "fire-pit", "pool", "hot-tub", "parking-spot"],
-  workspace: ["desk", "office-chair", "printer"],
+  living: [
+    "dining-table",
+    "sofa",
+    "smart-tv",
+    "coffee-table",
+    "lounge-seating",
+    "tv-common",
+    "pool-table",
+    "hardwood-floors",
+    "bookshelf-living",
+  ],
+  laundry: ["washer-dryer", "laundry-sink", "drying-rack", "iron-board", "detergent-storage"],
+  outdoor: [
+    "patio-seating",
+    "bbq-grill",
+    "fire-pit",
+    "pool",
+    "hot-tub",
+    "parking-spot",
+    "yard-lawn",
+    "garden",
+    "shade-umbrella",
+    "bike-storage",
+  ],
+  workspace: ["desk", "office-chair", "printer", "whiteboard", "monitor", "quiet-space"],
   other: SHARED_SPACE_AMENITY_PRESETS.map((p) => p.id),
 };
 
@@ -126,15 +164,16 @@ export function sharedSpaceAmenityPresetsForKind(
   return presets.filter((p) => allowed.has(p.id));
 }
 
-/** Drop amenity lines that don't apply to the selected shared-space type. */
+/** Drop preset amenity lines that don't apply to the selected shared-space type; keep custom lines. */
 export function pruneSharedSpaceAmenitiesForKind(
   amenitiesText: string,
   kind: SharedSpaceKind | undefined,
   presets: readonly { id: string; label: string }[] = SHARED_SPACE_AMENITY_PRESETS,
 ): string {
-  const allowed = new Set(sharedSpaceAmenityPresetsForKind(kind, presets).map((p) => p.label));
+  const allowedPresets = new Set(sharedSpaceAmenityPresetsForKind(kind, presets).map((p) => p.label));
+  const allPresetLabels = new Set(presets.map((p) => p.label));
   return splitLineList(amenitiesText)
-    .filter((line) => allowed.has(line))
+    .filter((line) => !allPresetLabels.has(line) || allowedPresets.has(line))
     .join("\n");
 }
 
