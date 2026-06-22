@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
-import { getManagerPurchaseSku } from "@/lib/manager-access";
-import { platformFeeCents } from "@/lib/platform-fees";
 import { resolveAppOrigin } from "@/lib/app-url";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
+import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { axisPaymentsEnabledOnListing } from "@/lib/payment-policy";
+import {
+  APPLICATION_FEE_CHECKOUT_PURPOSE,
+  createAxisAchCheckoutSession,
+  stripeNotConfiguredError,
+} from "@/lib/stripe-axis-ach-checkout";
+import { resolveManagerConnectAccountId } from "@/lib/stripe-application-fee";
 
 export const runtime = "nodejs";
-
-const PURPOSE = "rental_application_fee";
 
 type Body = {
   propertyId?: string;
@@ -22,14 +26,21 @@ type Body = {
 function clampAmountCents(n: number): number {
   if (!Number.isFinite(n)) return 0;
   const x = Math.round(n);
-  /** $1 .. $1000 */
   if (x < 100 || x > 100_000) return 0;
   return x;
 }
 
+function listingFromPropertyData(propertyData: unknown): ManagerListingSubmissionV1 | null {
+  if (!propertyData || typeof propertyData !== "object") return null;
+  const submission = (propertyData as { listingSubmission?: unknown }).listingSubmission;
+  if (!submission || typeof submission !== "object") return null;
+  if ((submission as { v?: unknown }).v !== 1) return null;
+  return normalizeManagerListingSubmissionV1(submission as ManagerListingSubmissionV1);
+}
+
 /**
- * Creates a Stripe Checkout Session (payment mode) with Connect destination charges:
- * funds go to the listing manager’s connected account; Axis takes a platform fee by tier.
+ * Creates a Stripe Checkout Session (ACH / US bank account) with Connect destination charges
+ * for the rental application fee when Axis payments are enabled on the listing.
  */
 export async function POST(req: Request) {
   try {
@@ -47,94 +58,71 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid amount (must be between $1.00 and $1000.00)." }, { status: 400 });
     }
 
-    const appUrl = resolveAppOrigin(req);
-
-    const supabase = createSupabaseServiceRoleClient();
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("stripe_connect_account_id")
-      .eq("id", managerUserId)
+    const db = createSupabaseServiceRoleClient();
+    const { data: propertyRow } = await db
+      .from("manager_property_records")
+      .select("property_data")
+      .eq("id", propertyId)
       .maybeSingle();
 
-    if (profileErr) {
-      return NextResponse.json({ error: profileErr.message }, { status: 500 });
-    }
-
-    const destination =
-      (profile as { stripe_connect_account_id?: string | null } | null)?.stripe_connect_account_id?.trim() ?? "";
-
-    if (!destination) {
+    const listing = listingFromPropertyData(propertyRow?.property_data);
+    if (!axisPaymentsEnabledOnListing(listing)) {
       return NextResponse.json(
         {
-          code: "MANAGER_NO_CONNECT_ACCOUNT",
-          error:
-            "This property manager has not connected Stripe payouts yet. Use Zelle or Venmo for the application fee if the listing offers it, or contact the manager.",
+          code: "AXIS_PAYMENTS_DISABLED",
+          error: "Bank (ACH) payments are not enabled for this property. Use Zelle or Venmo if available.",
         },
         { status: 422 },
       );
     }
 
-    const { tier } = await getManagerPurchaseSku(managerUserId);
-    const applicationFeeAmount = platformFeeCents(amountCents, "application_fee", tier);
-    if (applicationFeeAmount > 0 && applicationFeeAmount >= amountCents) {
+    const destination = await resolveManagerConnectAccountId(db, managerUserId);
+    if (!destination) {
       return NextResponse.json(
-        { error: "Platform fee configuration prevents this charge; contact Axis support." },
-        { status: 500 },
+        {
+          code: "MANAGER_NO_CONNECT_ACCOUNT",
+          error:
+            "This property manager has not connected Stripe payouts yet. Use Zelle or Venmo for the application fee if the listing offers it.",
+        },
+        { status: 422 },
       );
     }
 
+    const appUrl = resolveAppOrigin(req);
     const stripe = getStripe();
 
     const metadata: Record<string, string> = {
-      purpose: PURPOSE,
+      purpose: APPLICATION_FEE_CHECKOUT_PURPOSE,
       property_id: propertyId.slice(0, 450),
       resident_email: residentEmail.toLowerCase().slice(0, 450),
       manager_user_id: managerUserId,
     };
     if (residentName) metadata.resident_name = residentName.slice(0, 450);
 
-    const paymentIntentData: {
-      transfer_data: { destination: string };
-      metadata: Record<string, string>;
-      application_fee_amount?: number;
-    } = {
-      transfer_data: { destination },
+    const result = await createAxisAchCheckoutSession(stripe, {
+      residentEmail,
+      amountCents,
+      productName: "Rental application fee",
+      productDescription: `Listing ${propertyId.slice(0, 120)}`,
       metadata,
-    };
-    if (applicationFeeAmount > 0) {
-      paymentIntentData.application_fee_amount = applicationFeeAmount;
+      mode: "hosted",
+      destinationAccountId: destination,
+      successUrl: `${appUrl}/rent/apply?fee_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${appUrl}/rent/apply?fee_checkout=cancel`,
+    });
+
+    if (result.mode !== "hosted") {
+      return NextResponse.json({ error: "Hosted checkout URL was not returned." }, { status: 500 });
     }
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      customer_email: residentEmail,
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: "Rental application fee",
-              description: `Listing ${propertyId.slice(0, 120)}`,
-            },
-            unit_amount: amountCents,
-          },
-          quantity: 1,
-        },
-      ],
-      metadata,
-      payment_intent_data: paymentIntentData,
-      success_url: `${appUrl}/rent/apply?fee_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/rent/apply?fee_checkout=cancel`,
-    } as Parameters<typeof stripe.checkout.sessions.create>[0]);
-
-    if (!session.url) {
-      return NextResponse.json({ error: "Stripe did not return a checkout URL." }, { status: 500 });
-    }
-
-    return NextResponse.json({ url: session.url, sessionId: session.id });
+    return NextResponse.json({
+      url: result.url,
+      sessionId: result.sessionId,
+      platformFeeCents: result.platformFeeCents,
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Checkout failed";
-    if (message.includes("STRIPE_SECRET_KEY") || message.includes("Missing STRIPE")) {
+    if (stripeNotConfiguredError(message)) {
       return NextResponse.json(
         { code: "STRIPE_NOT_CONFIGURED", error: "Stripe is not configured on the server (missing STRIPE_SECRET_KEY)." },
         { status: 503 },

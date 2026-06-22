@@ -2034,18 +2034,20 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 id="edit-zelle"
-                title="Application fee payment methods"
-                description="Choose how applicants can pay the application fee."
+                title="Resident payment methods"
+                description="When Axis payments (ACH) is enabled, applicants and residents pay application fees, rent, utilities, and other charges by bank transfer. Zelle and Venmo remain manual options."
               >
                 <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
                   <label className="flex cursor-pointer items-center gap-3">
                     <input
                       type="checkbox"
                       className="h-4 w-4 rounded border-slate-300"
-                      checked={sub.applicationFeeStripeEnabled !== false}
-                      onChange={(e) => setSub((s) => ({ ...s, applicationFeeStripeEnabled: e.target.checked }))}
+                      checked={sub.axisPaymentsEnabled !== false}
+                      onChange={(e) => setSub((s) => ({ ...s, axisPaymentsEnabled: e.target.checked }))}
                     />
-                    <span className="text-sm font-medium text-slate-800">Stripe (card)</span>
+                    <span className="text-sm font-medium text-slate-800">
+                      Axis payments (ACH) — low {0.8}% processing fee
+                    </span>
                   </label>
                   <label className="flex cursor-pointer items-center gap-3">
                     <input
@@ -2061,7 +2063,7 @@ export function ManagerAddListingForm({
                         }));
                       }}
                     />
-                    <span className="text-sm font-medium text-slate-800">Zelle</span>
+                    <span className="text-sm font-medium text-slate-800">Zelle (no platform fee)</span>
                   </label>
                   <label className="flex cursor-pointer items-center gap-3">
                     <input
@@ -2077,12 +2079,12 @@ export function ManagerAddListingForm({
                         }));
                       }}
                     />
-                    <span className="text-sm font-medium text-slate-800">Venmo</span>
+                    <span className="text-sm font-medium text-slate-800">Venmo (no platform fee)</span>
                   </label>
                 </div>
                 {sub.zellePaymentsEnabled ? (
                   <div className="mt-3">
-                    <FieldLabel hint="Shown to applicants when they select Zelle.">Zelle phone or email</FieldLabel>
+                    <FieldLabel hint="Shown to residents when they pay via Zelle.">Zelle phone or email</FieldLabel>
                     <Input
                       value={sub.zelleContact ?? ""}
                       onChange={(e) => setSub((s) => ({ ...s, zelleContact: e.target.value }))}
@@ -2092,7 +2094,7 @@ export function ManagerAddListingForm({
                 ) : null}
                 {sub.venmoPaymentsEnabled ? (
                   <div className="mt-3">
-                    <FieldLabel hint="Shown to applicants when they select Venmo.">Venmo username, phone, or email</FieldLabel>
+                    <FieldLabel hint="Shown to residents when they pay via Venmo.">Venmo username, phone, or email</FieldLabel>
                     <Input
                       value={sub.venmoContact ?? ""}
                       onChange={(e) => setSub((s) => ({ ...s, venmoContact: e.target.value }))}
@@ -2100,6 +2102,86 @@ export function ManagerAddListingForm({
                     />
                   </div>
                 ) : null}
+              </ListingSubsection>
+
+              <ListingSubsection
+                title="Rent due date & late fees"
+                description="First month rent is always due on move-in. Recurring rent follows the schedule below."
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <GridField>
+                    <FieldLabel hint="When recurring rent and utilities are due each month.">Monthly due date</FieldLabel>
+                    <Select
+                      value={sub.rentDueDayMode ?? "first_of_month"}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          rentDueDayMode: e.target.value === "last_of_month" ? "last_of_month" : "first_of_month",
+                        }))
+                      }
+                    >
+                      <option value="first_of_month">1st of the month</option>
+                      <option value="last_of_month">Last day of the month</option>
+                    </Select>
+                  </GridField>
+                  <GridField>
+                    <FieldLabel hint="Days after the due date before a late fee is added automatically.">Late fee grace period (days)</FieldLabel>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={30}
+                      value={String(sub.lateFeeGraceDays ?? 5)}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          lateFeeGraceDays: Math.max(0, Math.min(30, Math.round(Number(e.target.value) || 0))),
+                        }))
+                      }
+                    />
+                  </GridField>
+                  <GridField>
+                    <FieldLabel hint="Flat fee added once per overdue charge after the grace period.">Late fee amount</FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                      <Input
+                        className="pl-8"
+                        inputMode="decimal"
+                        value={(sub.lateFeeAmount ?? "50").replace(/^\$/, "").trim()}
+                        onChange={(e) => setSub((s) => ({ ...s, lateFeeAmount: e.target.value }))}
+                        placeholder="50"
+                      />
+                    </div>
+                  </GridField>
+                  <GridField>
+                    <FieldLabel>Automatic late fees</FieldLabel>
+                    <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={sub.lateFeeEnabled !== false}
+                        onChange={(e) => setSub((s) => ({ ...s, lateFeeEnabled: e.target.checked }))}
+                      />
+                      <span className="text-sm text-slate-800">Create late fee charges & send messages</span>
+                    </label>
+                  </GridField>
+                </div>
+              </ListingSubsection>
+
+              <ListingSubsection
+                title="Application fee payment methods"
+                description="Choose how applicants can pay the application fee."
+              >
+                <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                  <label className="flex cursor-pointer items-center gap-3">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300"
+                      checked={sub.applicationFeeStripeEnabled !== false}
+                      onChange={(e) => setSub((s) => ({ ...s, applicationFeeStripeEnabled: e.target.checked }))}
+                    />
+                    <span className="text-sm font-medium text-slate-800">Stripe (card)</span>
+                  </label>
+                </div>
               </ListingSubsection>
             </div>
           </FormSection>

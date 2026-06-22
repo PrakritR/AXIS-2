@@ -7,6 +7,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Input, Select } from "@/components/ui/input";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { createManagerCharge } from "@/lib/household-charges";
+import { MANAGER_PAYMENT_PRESETS, type ManagerPaymentPresetId } from "@/lib/payment-policy";
 
 function dueLabelFromIso(iso: string): string {
   const d = new Date(`${iso}T12:00:00`);
@@ -30,17 +31,26 @@ export function ManagerAddPaymentModal({
   const [roomNumber, setRoomNumber] = useState("");
   const [residentName, setResidentName] = useState("");
   const [residentEmail, setResidentEmail] = useState("");
-  const [chargeTitle, setChargeTitle] = useState("");
+  const [preset, setPreset] = useState<ManagerPaymentPresetId>("rent");
+  const [chargeTitle, setChargeTitle] = useState("Monthly rent");
   const [amount, setAmount] = useState("");
   const [dueIso, setDueIso] = useState(() => new Date().toISOString().slice(0, 10));
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
+
+  const onPresetChange = (next: ManagerPaymentPresetId) => {
+    setPreset(next);
+    if (next === "other") return;
+    const match = MANAGER_PAYMENT_PRESETS.find((p) => p.id === next);
+    if (match) setChargeTitle(match.label);
+  };
 
   const reset = () => {
     setPropertyName("");
     setRoomNumber("");
     setResidentName("");
     setResidentEmail("");
-    setChargeTitle("");
+    setPreset("rent");
+    setChargeTitle("Monthly rent");
     setAmount("");
     setDueIso(new Date().toISOString().slice(0, 10));
     setBucket("pending");
@@ -67,7 +77,6 @@ export function ManagerAddPaymentModal({
       return;
     }
 
-    // Derive a stable propertyId slug from the property name so charges group correctly.
     const propertyId = `prop_mgr_${propertyName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 
     const titleWithRoom = roomNumber.trim()
@@ -103,6 +112,16 @@ export function ManagerAddPaymentModal({
       panelClassName="relative z-[71] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:my-4 sm:p-6"
     >
       <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+          <span className="font-medium text-slate-700">Payment type</span>
+          <Select value={preset} onChange={(e) => onPresetChange(e.target.value as ManagerPaymentPresetId)}>
+            {MANAGER_PAYMENT_PRESETS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium text-slate-700">Property</span>
           <Input value={propertyName} onChange={(e) => setPropertyName(e.target.value)} placeholder="Demo Building" autoComplete="off" />
@@ -126,7 +145,7 @@ export function ManagerAddPaymentModal({
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-slate-700">Charge</span>
+          <span className="font-medium text-slate-700">Charge title</span>
           <Input value={chargeTitle} onChange={(e) => setChargeTitle(e.target.value)} placeholder="April rent" autoComplete="off" />
         </label>
         <label className="flex flex-col gap-1 text-sm">

@@ -2,8 +2,10 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { StripeCheckoutModal } from "@/components/stripe-checkout-modal";
 import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -28,6 +30,9 @@ import {
   syncHouseholdChargesFromServer,
   type HouseholdCharge,
 } from "@/lib/household-charges";
+import { getPropertyById } from "@/lib/rental-application/data";
+import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { axisAchFeeDisplayLabel, axisPaymentsEnabledOnListing } from "@/lib/payment-policy";
 import { syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 
@@ -44,12 +49,23 @@ function centsFromLabel(label: string): number {
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
+function canPayWithAxisAch(row: HouseholdCharge): boolean {
+  if (row.status === "paid") return false;
+  const prop = getPropertyById(row.propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  return Boolean(sub && axisPaymentsEnabledOnListing(sub));
+}
+
 export function ResidentPaymentsPanel() {
   const { showToast } = useAppUi();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const session = usePortalSession();
   const [tab, setTab] = useState<PayTab>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
+  const [checkoutBusyId, setCheckoutBusyId] = useState<string | null>(null);
   const email = session.email?.trim() ?? null;
   const userId = session.userId;
 
@@ -78,6 +94,75 @@ export function ResidentPaymentsPanel() {
       await syncHouseholdChargesFromServer(true, { skipReconcile: true });
     })().finally(refresh);
   }, [email, refresh, session.ready, session.userId]);
+
+  useEffect(() => {
+    const achCheckout = searchParams.get("ach_checkout");
+    const sessionId = searchParams.get("session_id")?.trim();
+    if (!achCheckout || !sessionId) return;
+
+    if (achCheckout === "cancel") {
+      showToast("Bank payment cancelled.");
+      router.replace("/resident/payments");
+      return;
+    }
+
+    if (achCheckout !== "success" && achCheckout !== "return") return;
+
+    void (async () => {
+      const res = await fetch(`/api/stripe/household-charge-verify?session_id=${encodeURIComponent(sessionId)}`);
+      const data = (await res.json().catch(() => ({}))) as {
+        paid?: boolean;
+        processing?: boolean;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        showToast(typeof data.error === "string" ? data.error : "Could not verify bank payment.");
+        router.replace("/resident/payments");
+        return;
+      }
+
+      if (data.paid) {
+        await syncHouseholdChargesFromServer(true, { skipReconcile: true });
+        refresh();
+        showToast("Payment received — thank you.");
+      } else if (data.processing) {
+        showToast("Bank transfer submitted. We will mark this paid when the transfer clears (usually 3–5 business days).");
+      } else {
+        showToast(typeof data.error === "string" ? data.error : "Payment not completed yet.");
+      }
+      router.replace("/resident/payments");
+    })();
+  }, [refresh, router, searchParams, showToast]);
+
+  const startAchCheckout = async (chargeId: string) => {
+    setCheckoutBusyId(chargeId);
+    try {
+      const res = await fetch("/api/stripe/household-charge-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chargeId, embedded: true }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        clientSecret?: string;
+        url?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        showToast(typeof payload.error === "string" ? payload.error : "Could not start bank payment.");
+        return;
+      }
+      if (payload.clientSecret) {
+        setCheckoutSecret(payload.clientSecret);
+        return;
+      }
+      if (payload.url && typeof window !== "undefined") {
+        window.location.href = payload.url;
+      }
+    } finally {
+      setCheckoutBusyId(null);
+    }
+  };
 
   const charges = useMemo(() => {
     void tick;
@@ -220,11 +305,29 @@ export function ResidentPaymentsPanel() {
                                 the note. Your manager marks this paid when they receive it.
                               </p>
                             </div>
-                          ) : (
-                            <p className="leading-relaxed">
-                              All charges are updated by your manager when they receive payment via Zelle, Venmo, ACH, or cash.
-                            </p>
-                          )}
+                          ) : (() => {
+                            const prop = getPropertyById(row.propertyId);
+                            const sub =
+                              prop?.listingSubmission?.v === 1
+                                ? normalizeManagerListingSubmissionV1(prop.listingSubmission)
+                                : null;
+                            if (sub && axisPaymentsEnabledOnListing(sub)) {
+                              return (
+                                <div className="rounded-lg border border-violet-200/70 bg-violet-50/50 px-3 py-2.5 text-violet-950">
+                                  <p className="text-xs font-semibold">Pay with Axis (ACH)</p>
+                                  <p className="mt-1 text-sm leading-relaxed">
+                                    Pay by bank transfer securely through Stripe — {axisAchFeeDisplayLabel()}. Transfers
+                                    typically clear in 3–5 business days.
+                                  </p>
+                                </div>
+                              );
+                            }
+                            return (
+                              <p className="leading-relaxed">
+                                All charges are updated by your manager when they receive payment via Zelle, Venmo, ACH, or cash.
+                              </p>
+                            );
+                          })()}
                           {row.status === "paid" && row.paidAt ? (
                             <p className="mt-2 text-xs text-slate-500">Marked paid {safeFormatDateTime(row.paidAt)}</p>
                           ) : null}
@@ -238,6 +341,17 @@ export function ResidentPaymentsPanel() {
                             </p>
                           ) : null}
                           <PortalTableDetailActions>
+                            {row.status === "pending" && canPayWithAxisAch(row) ? (
+                              <Button
+                                type="button"
+                                variant="primary"
+                                className={PORTAL_DETAIL_BTN}
+                                disabled={checkoutBusyId === row.id}
+                                onClick={() => void startAchCheckout(row.id)}
+                              >
+                                {checkoutBusyId === row.id ? "Opening…" : "Pay with bank (ACH)"}
+                              </Button>
+                            ) : null}
                             <Button
                               type="button"
                               variant="outline"
@@ -266,6 +380,15 @@ export function ResidentPaymentsPanel() {
           </div>
         </div>
       )}
+      {checkoutSecret ? (
+        <StripeCheckoutModal
+          clientSecret={checkoutSecret}
+          onClose={() => {
+            setCheckoutSecret(null);
+            void syncHouseholdChargesFromServer(true, { skipReconcile: true }).then(refresh);
+          }}
+        />
+      ) : null}
     </ManagerPortalPageShell>
   );
 }

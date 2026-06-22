@@ -81,7 +81,7 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     digitalSignature: "",
     dateSigned: todayISO(),
     applicationFeeAcknowledged: false,
-    applicationFeePayChannel: "stripe",
+    applicationFeePayChannel: "ach",
     applicationFeeZelleSentConfirmed: false,
   };
 }

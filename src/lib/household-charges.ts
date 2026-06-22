@@ -7,6 +7,11 @@ import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  rentDueDayModeFromSubmission,
+  resolveRentDueDayForMonth,
+  type RentDueDayMode,
+} from "@/lib/payment-policy";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import type { DemoApplicantRow } from "@/data/demo-portal";
@@ -46,7 +51,8 @@ export type HouseholdChargeKind =
   | "move_in_fee"
   | "other_cost"
   | "payment_at_signing"
-  | "work_order_charge";
+  | "work_order_charge"
+  | "late_fee";
 
 export type HouseholdCharge = {
   id: string;
@@ -75,8 +81,12 @@ export type HouseholdCharge = {
   recurringRentProfileId?: string;
   rentMonth?: string;
   dueDay?: number;
+  /** When set, dueDay is computed per month (1st vs last day). */
+  dueDayMode?: RentDueDayMode;
   dueDateLabel?: string;
-  cancelledReminders?: Array<"3d" | "12h">;
+  cancelledReminders?: Array<"7d" | "5d" | "3d" | "12h" | "overdue_daily">;
+  /** Late fee assessed against this original charge id. */
+  sourceChargeId?: string;
 };
 
 export type RecurringRentProfile = {
@@ -92,6 +102,7 @@ export type RecurringRentProfile = {
   /** Full monthly utilities/RUBS from listing or manager override — billed each month with rent. */
   monthlyUtilities?: number;
   dueDay: number;
+  dueDayMode?: RentDueDayMode;
   startMonth: string;
   /** ISO date YYYY-MM-DD — last day of the lease; used to prorate the final partial month. */
   leaseEnd?: string;
@@ -475,18 +486,29 @@ function dedupeCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
   return [...byKey.values()];
 }
 
-function formatRecurringRentDueLabel(month: string, dueDay: number) {
+function formatRecurringRentDueLabel(month: string, dueDay: number, dueDayMode?: RentDueDayMode) {
+  const day = effectiveDueDayForMonth(dueDay, dueDayMode, month);
   const [year, monthIndex] = month.split("-").map(Number);
-  const dt = new Date(year!, (monthIndex ?? 1) - 1, dueDay, 12, 0, 0, 0);
+  const dt = new Date(year!, (monthIndex ?? 1) - 1, day, 12, 0, 0, 0);
   return Number.isNaN(dt.getTime())
-    ? `${month}-${String(dueDay).padStart(2, "0")}`
+    ? `${month}-${String(day).padStart(2, "0")}`
     : dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function recurringRentDueDate(month: string | undefined, dueDay: number | undefined): Date | null {
+function effectiveDueDayForMonth(dueDay: number | undefined, dueDayMode: RentDueDayMode | undefined, monthKey: string): number {
+  const mode = dueDayMode ?? "first_of_month";
+  if (mode === "last_of_month") return resolveRentDueDayForMonth("last_of_month", monthKey);
+  return Math.min(28, Math.max(1, Math.round(dueDay ?? 1)));
+}
+
+function recurringRentDueDate(
+  month: string | undefined,
+  dueDay: number | undefined,
+  dueDayMode?: RentDueDayMode,
+): Date | null {
   if (!month) return null;
   const [year, monthIndex] = month.split("-").map(Number);
-  const day = Math.min(28, Math.max(1, Math.round(dueDay ?? 1)));
+  const day = effectiveDueDayForMonth(dueDay, dueDayMode, month);
   const dt = new Date(year!, (monthIndex ?? 1) - 1, day, 12, 0, 0, 0);
   return Number.isNaN(dt.getTime()) ? null : dt;
 }
@@ -511,7 +533,7 @@ export function householdChargeDueDate(charge: HouseholdCharge): Date | null {
     (charge.kind === "rent" || (charge.kind === "utilities" && charge.recurringRentProfileId)) &&
     charge.rentMonth
   ) {
-    return recurringRentDueDate(charge.rentMonth, charge.dueDay ?? 1);
+    return recurringRentDueDate(charge.rentMonth, charge.dueDay ?? 1, charge.dueDayMode);
   }
   return parseDueDateLabelToDate(charge.dueDateLabel);
 }
@@ -554,7 +576,7 @@ export function chargeDueLabel(charge: HouseholdCharge): string {
     (charge.kind === "rent" || (charge.kind === "utilities" && charge.recurringRentProfileId)) &&
     charge.rentMonth
   ) {
-    return formatRecurringRentDueLabel(charge.rentMonth, charge.dueDay ?? 1);
+    return formatRecurringRentDueLabel(charge.rentMonth, charge.dueDay ?? 1, charge.dueDayMode);
   }
   switch (charge.kind) {
     case "application_fee":
@@ -603,6 +625,8 @@ function chargeTitle(kind: HouseholdChargeKind): string {
       return "Payment due at signing";
     case "work_order_charge":
       return "Work order charge";
+    case "late_fee":
+      return "Late payment fee";
     default:
       return "Charge";
   }
@@ -1076,7 +1100,7 @@ function syncAllRecurringRentCharges(): boolean {
   const profileById = new Map(profiles.map((p) => [p.id, p]));
 
   for (const profile of profiles) {
-    const dueDay = Math.min(28, Math.max(1, Math.round(profile.dueDay ?? 1)));
+    const dueDayMode = profile.dueDayMode ?? "first_of_month";
     const profileStartMonth = profile.startMonth?.trim() || currentRentMonth();
 
     // Parse lease end for last-month proration
@@ -1093,6 +1117,7 @@ function syncAllRecurringRentCharges(): boolean {
     for (const rentMonth of [...monthsToGenerate].sort()) {
       const [candidateYear, candidateMonthNum] = rentMonth.split("-").map(Number);
       if (!candidateYear || !candidateMonthNum) continue;
+      const dueDay = effectiveDueDayForMonth(profile.dueDay, dueDayMode, rentMonth);
 
       // Skip months after lease end
       if (leaseEndYear && leaseEndMonthNum) {
@@ -1101,7 +1126,7 @@ function syncAllRecurringRentCharges(): boolean {
       }
 
       const candidateDate = new Date(candidateYear, candidateMonthNum - 1, dueDay, 12, 0, 0, 0);
-      const dueLabel = formatRecurringRentDueLabel(rentMonth, dueDay);
+      const dueLabel = formatRecurringRentDueLabel(rentMonth, dueDay, dueDayMode);
       const monthLabel = candidateDate.toLocaleString("default", { month: "long", year: "numeric" });
 
       // Determine if this is a partial last month
@@ -1144,6 +1169,7 @@ function syncAllRecurringRentCharges(): boolean {
             recurringRentProfileId: profile.id,
             rentMonth,
             dueDay,
+            dueDayMode,
             dueDateLabel: isPartialLastMonth
               ? `By ${new Date(leaseEndYear!, leaseEndMonthNum! - 1, leaseEndDay!).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
               : dueLabel,
@@ -1180,6 +1206,7 @@ function syncAllRecurringRentCharges(): boolean {
             recurringRentProfileId: profile.id,
             rentMonth,
             dueDay,
+            dueDayMode,
             dueDateLabel: isPartialLastMonth
               ? `By ${new Date(leaseEndYear!, leaseEndMonthNum! - 1, leaseEndDay!).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
               : dueLabel,
@@ -1310,6 +1337,7 @@ export function upsertRecurringRentProfile(input: {
   monthlyRent: number;
   monthlyUtilities?: number;
   dueDay?: number;
+  dueDayMode?: RentDueDayMode;
   startMonth?: string;
   leaseEnd?: string;
   zelleContact?: string;
@@ -1335,6 +1363,7 @@ export function upsertRecurringRentProfile(input: {
     monthlyRent: input.monthlyRent,
     monthlyUtilities,
     dueDay: Math.min(28, Math.max(1, input.dueDay ?? 1)),
+    dueDayMode: input.dueDayMode ?? existing?.dueDayMode ?? "first_of_month",
     startMonth: input.startMonth ?? currentRentMonth(),
     leaseEnd: input.leaseEnd?.trim() || undefined,
     active: true,
@@ -1470,7 +1499,7 @@ export function deleteHouseholdCharge(chargeId: string, managerUserId: string | 
 
 export function cancelHouseholdChargeReminder(
   chargeId: string,
-  slot: "3d" | "12h",
+  slot: "7d" | "5d" | "3d" | "12h" | "overdue_daily",
   managerUserId: string | null,
 ): boolean {
   if (!isBrowser()) return false;
@@ -1487,7 +1516,7 @@ export function cancelHouseholdChargeReminder(
 
 export function uncancelHouseholdChargeReminder(
   chargeId: string,
-  slot: "3d" | "12h",
+  slot: "7d" | "5d" | "3d" | "12h" | "overdue_daily",
   managerUserId: string | null,
 ): boolean {
   if (!isBrowser()) return false;
@@ -1854,6 +1883,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         row.assignedRoomChoice?.trim() ||
         row.application?.roomChoice1?.trim() ||
         "Room";
+      const dueDayMode = rentDueDayModeFromSubmission(sub);
       upsertRecurringRentProfile({
         residentEmail,
         residentName,
@@ -1863,7 +1893,8 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         managerUserId: effectiveManagerUserId,
         monthlyRent: rentAmount,
         monthlyUtilities: utilities.amount > 0 ? Number(utilities.amount.toFixed(2)) : 0,
-        dueDay: 1,
+        dueDay: resolveRentDueDayForMonth(dueDayMode, computedStartMonth),
+        dueDayMode,
         startMonth: computedStartMonth,
         leaseEnd,
         zelleContact: zelleSnap,
@@ -2305,7 +2336,7 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     cancelledReminders: c.cancelledReminders,
     notes:
       c.kind === "rent"
-        ? `Recurring tenant rent. Current cycle: ${c.rentMonth ?? currentRentMonth()}. Due ${formatRecurringRentDueLabel(c.rentMonth ?? currentRentMonth(), c.dueDay ?? 1)}.`
+        ? `Recurring tenant rent. Current cycle: ${c.rentMonth ?? currentRentMonth()}. Due ${formatRecurringRentDueLabel(c.rentMonth ?? currentRentMonth(), c.dueDay ?? 1, c.dueDayMode)}.`
         : c.kind === "application_fee"
         ? c.status === "paid"
           ? "Application fee recorded as paid."

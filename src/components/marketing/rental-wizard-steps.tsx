@@ -2,7 +2,8 @@
 
 import type { ReactNode } from "react";
 import { Input, Select, Textarea } from "@/components/ui/input";
-import { listingApplicationFeeChannels, resolveApplicationFeePayChannel } from "@/lib/rental-application/application-fee-channel";
+import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
+import { axisAchFeeDisplayLabel } from "@/lib/payment-policy";
 import {
   LEASE_TERM_OPTIONS,
   SHORT_TERM_LEASE_TERM,
@@ -1439,17 +1440,17 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const channels = listingApplicationFeeChannels(sub);
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     const enabledChannels = [
-      channels.stripe ? ("stripe" as const) : null,
+      channels.ach ? ("ach" as const) : null,
       channels.zelle ? ("zelle" as const) : null,
       channels.venmo ? ("venmo" as const) : null,
-    ].filter((channel): channel is "stripe" | "zelle" | "venmo" => Boolean(channel));
+    ].filter((channel): channel is "ach" | "zelle" | "venmo" => Boolean(channel));
     const showChannelPick = applicationFeeGate.needsFee && enabledChannels.length > 1;
     const showZelleInstructions = applicationFeeGate.needsFee && payChannel === "zelle" && sub?.zelleContact?.trim();
     const showVenmoInstructions = applicationFeeGate.needsFee && payChannel === "venmo" && sub?.venmoContact?.trim();
     const singleChannelLabel =
       enabledChannels.length === 1
-        ? enabledChannels[0] === "stripe"
-          ? "Stripe"
+        ? enabledChannels[0] === "ach"
+          ? "Bank transfer (ACH)"
           : enabledChannels[0] === "zelle"
             ? "Zelle"
             : "Venmo"
@@ -1478,19 +1479,19 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         {showChannelPick ? (
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
             <p className="text-sm font-semibold text-slate-900">Payment method</p>
-            {channels.stripe ? (
+            {channels.ach ? (
               <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                 <input
                   type="radio"
                   name="application-fee-channel"
                   className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-primary"
-                  checked={form.applicationFeePayChannel === "stripe"}
-                  onChange={() => patch({ applicationFeePayChannel: "stripe" })}
+                  checked={payChannel === "ach"}
+                  onChange={() => patch({ applicationFeePayChannel: "ach" })}
                 />
                 <span>
-                  <span className="text-sm font-semibold text-slate-900">Stripe</span>
+                  <span className="text-sm font-semibold text-slate-900">Bank transfer (ACH)</span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
-                    Pay now with card.
+                    Pay securely via bank account — {axisAchFeeDisplayLabel()}. Clears in 3–5 business days.
                   </span>
                 </span>
               </label>
@@ -1536,9 +1537,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <span className="font-semibold text-slate-900">Payment method:</span> {singleChannelLabel}
           </div>
         ) : null}
-        {applicationFeeGate.needsFee && payChannel === "stripe" ? (
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700">
-            Pay with Stripe and your application will submit after payment succeeds.
+        {applicationFeeGate.needsFee && isAchApplicationFeeChannel(payChannel) ? (
+          <div className="rounded-2xl border border-violet-200/80 bg-violet-50/60 px-4 py-4 text-sm text-violet-950">
+            Pay by bank transfer (ACH). Your application submits after payment is authorized; the fee is marked paid when
+            the transfer clears (usually 3–5 business days).
           </div>
         ) : null}
         {showZelleInstructions ? (

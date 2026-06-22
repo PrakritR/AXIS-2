@@ -200,6 +200,16 @@ export type ManagerListingSubmissionV1 = {
    * Default true when Venmo is on; ignored when Venmo is off.
    */
   applicationFeeVenmoEnabled?: boolean;
+  /** When monthly rent and utilities are due each cycle. Default first of month. */
+  rentDueDayMode?: "first_of_month" | "last_of_month";
+  /** Automatically assess a late fee after grace period on overdue rent/utilities. Default on. */
+  lateFeeEnabled?: boolean;
+  /** Days after due date before a late fee charge is created. Default 5. */
+  lateFeeGraceDays?: number;
+  /** Flat late fee amount (e.g. "50" or "$50"). Default $50. */
+  lateFeeAmount?: string;
+  /** When true, residents can pay rent via Axis ACH (low platform fee). Default true. */
+  axisPaymentsEnabled?: boolean;
   rooms: ManagerRoomSubmission[];
   bathrooms: ManagerBathroomSubmission[];
   /** Optional bundle rows for the listing; if empty, copy is derived from rooms. */
@@ -576,6 +586,14 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,
     applicationFeeVenmoEnabled,
+    rentDueDayMode: sub.rentDueDayMode === "last_of_month" ? "last_of_month" : "first_of_month",
+    lateFeeEnabled: sub.lateFeeEnabled !== false,
+    lateFeeGraceDays: (() => {
+      const n = Number(sub.lateFeeGraceDays ?? 5);
+      return Number.isFinite(n) ? Math.max(0, Math.min(30, Math.round(n))) : 5;
+    })(),
+    lateFeeAmount: typeof sub.lateFeeAmount === "string" ? sub.lateFeeAmount : "50",
+    axisPaymentsEnabled: sub.axisPaymentsEnabled !== false,
     housePhotoDataUrls,
     houseVideoDataUrl: typeof (sub as Record<string, unknown>).houseVideoDataUrl === "string"
       ? ((sub as Record<string, unknown>).houseVideoDataUrl as string) || null
@@ -785,6 +803,11 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     applicationFeeStripeEnabled: true,
     applicationFeeZelleEnabled: false,
     applicationFeeVenmoEnabled: false,
+    rentDueDayMode: "first_of_month",
+    lateFeeEnabled: true,
+    lateFeeGraceDays: 5,
+    lateFeeAmount: "50",
+    axisPaymentsEnabled: true,
     rooms: [{ ...emptyRoom(0), name: "", availability: "" }],
     bathrooms: [],
     bundles: [],

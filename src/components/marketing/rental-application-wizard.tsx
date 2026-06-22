@@ -28,7 +28,7 @@ import {
   isRoomPendingConflict,
   LISTING_ROOM_CHOICE_SEP,
 } from "@/lib/rental-application/data";
-import { resolveApplicationFeePayChannel } from "@/lib/rental-application/application-fee-channel";
+import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
@@ -316,8 +316,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     const prop = pid ? getPropertyById(pid) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
-    if (payChannel === "stripe") {
-      return checkoutBusy ? "Opening Stripe…" : applicationFeeGate.paid ? "Submit application" : "Pay with Stripe";
+    if (isAchApplicationFeeChannel(payChannel)) {
+      return checkoutBusy ? "Opening bank checkout…" : applicationFeeGate.paid ? "Submit application" : "Pay with bank (ACH)";
     }
     if (payChannel === "zelle" || payChannel === "venmo") {
       return "Submit application";
@@ -357,6 +357,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       const res = await fetch(`/api/stripe/application-fee-verify?session_id=${encodeURIComponent(sessionId)}`);
       const data = (await res.json().catch(() => ({}))) as {
         paid?: boolean;
+        processing?: boolean;
         error?: string;
         propertyId?: string | null;
         residentEmail?: string | null;
@@ -367,6 +368,19 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         return;
       }
       if (!data.paid) {
+        if (data.processing) {
+          ensurePendingApplicationFeeCharge({
+            residentEmail: form.email,
+            residentName: form.fullLegalName,
+            residentUserId: feeStepUserId,
+            propertyId: pid,
+          });
+          processedApplicationFeeSessions.add(sessionId);
+          showToast("Bank transfer submitted. Your application fee will be marked paid when the transfer clears.");
+          finalizeApplicationSubmit(feeStepUserId);
+          router.replace("/rent/apply");
+          return;
+        }
         showToast(typeof data.error === "string" ? data.error : "Payment not completed yet.");
         router.replace("/rent/apply");
         return;
@@ -424,7 +438,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         const { amount } = listingApplicationFeeAmount(pid);
         const needsFee = Boolean(pid && emailTrim.includes("@") && amount > 0);
 
-        if (needsFee && payChannel === "stripe") {
+        if (needsFee && isAchApplicationFeeChannel(payChannel)) {
           const charge = findApplicationFeeCharge(form.email, pid, residentUserId);
           if (charge?.status === "paid") {
             finalizeApplicationSubmit(residentUserId);
@@ -458,7 +472,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             };
 
             if (!res.ok) {
-              showToast(typeof payload.error === "string" ? payload.error : "Could not start Stripe payment.");
+              showToast(typeof payload.error === "string" ? payload.error : "Could not start bank payment.");
               return;
             }
 

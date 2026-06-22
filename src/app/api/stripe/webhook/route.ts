@@ -10,6 +10,8 @@ import {
 import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-session";
 import { stripeInvoiceSubscriptionId } from "@/lib/stripe-subscription-helpers";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { markApplicationFeePaidFromStripeSession } from "@/lib/stripe-application-fee";
+import { markHouseholdChargePaidFromStripeSession } from "@/lib/stripe-household-charge";
 
 export const runtime = "nodejs";
 
@@ -71,7 +73,21 @@ export async function POST(req: Request) {
     if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
       const session = event.data.object as Stripe.Checkout.Session;
       logCheckoutCompleted(session);
-      if (session.metadata?.purpose !== "rental_application_fee") {
+      if (session.metadata?.purpose === "rental_application_fee") {
+        try {
+          const db = createSupabaseServiceRoleClient();
+          await markApplicationFeePaidFromStripeSession(db, session);
+        } catch (e) {
+          console.error("[stripe webhook] rental_application_fee checkout", e);
+        }
+      } else if (session.metadata?.purpose === "household_charge") {
+        try {
+          const db = createSupabaseServiceRoleClient();
+          await markHouseholdChargePaidFromStripeSession(db, session);
+        } catch (e) {
+          console.error("[stripe webhook] household_charge checkout", e);
+        }
+      } else {
         try {
           await recordPaidManagerCheckoutSession(session);
           const uid = session.metadata?.userId?.trim();
@@ -79,12 +95,10 @@ export async function POST(req: Request) {
             try {
               await reconcileManagerPurchaseWithStripe(uid);
             } catch (reconcileErr) {
-               
               console.error("[stripe webhook] reconcileManagerPurchaseWithStripe", reconcileErr);
             }
           }
         } catch (e) {
-           
           console.error("[stripe webhook] recordPaidManagerCheckoutSession", e);
         }
       }

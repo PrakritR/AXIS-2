@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
+import { axisAchCheckoutPaid, axisAchCheckoutProcessing } from "@/lib/stripe-axis-ach-checkout";
+import { isApplicationFeeCheckoutSession, markApplicationFeePaidFromStripeSession } from "@/lib/stripe-application-fee";
 
 export const runtime = "nodejs";
 
 /**
- * Confirms a completed Checkout Session for `rental_application_fee` metadata (return URL flow).
+ * Confirms a completed Checkout Session for `rental_application_fee` (ACH return URL flow).
  */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -17,16 +20,18 @@ export async function GET(req: Request) {
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-    if (session.metadata?.purpose !== "rental_application_fee") {
+    if (!isApplicationFeeCheckoutSession(session)) {
       return NextResponse.json({ error: "Not an application fee checkout session." }, { status: 400 });
     }
 
-    const paid = session.payment_status === "paid" || session.payment_status === "no_payment_required";
+    const paid = axisAchCheckoutPaid(session);
+    const processing = axisAchCheckoutProcessing(session);
 
-    if (!paid) {
+    if (!paid && !processing) {
       return NextResponse.json(
         {
           paid: false,
+          processing: false,
           paymentStatus: session.payment_status,
           status: session.status,
           error: "Payment is not completed yet. Wait a moment and try again.",
@@ -35,12 +40,25 @@ export async function GET(req: Request) {
       );
     }
 
+    let chargeId: string | null = null;
+    let alreadyPaid = false;
+    if (paid) {
+      const db = createSupabaseServiceRoleClient();
+      const result = await markApplicationFeePaidFromStripeSession(db, session);
+      chargeId = result.chargeId ?? null;
+      alreadyPaid = result.alreadyPaid ?? false;
+    }
+
     return NextResponse.json({
-      paid: true,
+      paid,
+      processing,
+      paymentStatus: session.payment_status,
       sessionId: session.id,
       propertyId: session.metadata?.property_id ?? null,
       residentEmail: session.metadata?.resident_email ?? null,
       managerUserId: session.metadata?.manager_user_id ?? null,
+      chargeId,
+      alreadyPaid,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to verify session";
