@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 function dashToEmpty(v: string) {
@@ -199,7 +200,13 @@ export function PortalProfileClient({
           </div>
         }
       >
-        <Card className="rounded-3xl border border-slate-200/80 p-6 sm:p-8">{inner}</Card>
+        <div className="space-y-4">
+          <Card className="rounded-3xl border border-slate-200/80 p-6 sm:p-8">{inner}</Card>
+          <PortalChangePasswordPanel
+            accountEmail={dashToEmpty(initialEmail) || initialEmail}
+            accountLabel="your property portal account"
+          />
+        </div>
       </ManagerPortalPageShell>
     );
   }
@@ -224,6 +231,12 @@ export function PortalProfileClient({
         </div>
       </div>
       {inner}
+      <div className="mt-6">
+        <PortalChangePasswordPanel
+          accountEmail={dashToEmpty(initialEmail) || initialEmail}
+          accountLabel="your admin account"
+        />
+      </div>
     </div>
   );
 }

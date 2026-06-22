@@ -73,6 +73,22 @@ describe("inbox trash tab remount scenarios (manager/resident)", () => {
 
     expect(merged[0]?.folder).toBe("trash");
   });
+
+  it("keeps sent message trash state when only that row changed locally", () => {
+    const server = [
+      thread({ id: "msg_sent", folder: "sent", subject: "Lease ready" }),
+      thread({ id: "msg_inbox", folder: "inbox", subject: "Tour request" }),
+    ];
+    const localAfterTrash = [
+      thread({ id: "msg_sent", folder: "trash", previousFolder: "sent", subject: "Lease ready" }),
+      thread({ id: "msg_inbox", folder: "inbox", subject: "Tour request" }),
+    ];
+
+    const merged = mergeInboxRowsWithLocalTrash(server, localAfterTrash);
+
+    expect(merged.find((row) => row.id === "msg_sent")?.folder).toBe("trash");
+    expect(merged.find((row) => row.id === "msg_inbox")?.folder).toBe("inbox");
+  });
 });
 
 describe("inbox trash tab remount scenarios (admin)", () => {

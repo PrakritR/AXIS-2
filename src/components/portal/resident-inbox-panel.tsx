@@ -22,6 +22,7 @@ import {
   loadPersistedInbox,
   RESIDENT_INBOX_STORAGE_KEY,
   syncPersistedInboxFromServer,
+  upsertPersistedInboxRows,
 } from "@/lib/portal-inbox-storage";
 
 type InboxThread = PersistedInboxThread;
@@ -151,13 +152,17 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         const prev = local;
         const target = prev.find((t) => t.id === id);
         if (!target || target.folder === "trash" || (target.folder !== "inbox" && target.folder !== "sent")) return;
-        const next = prev.map((t) =>
-          t.id === id ? { ...t, folder: "trash" as const, previousFolder: t.folder, unread: false } : t,
-        );
+        const updated: InboxThread = {
+          ...target,
+          folder: "trash",
+          previousFolder: target.folder,
+          unread: false,
+        };
+        const next = prev.map((t) => (t.id === id ? updated : t));
         persistInboxRef.current = false;
         setLocal(next);
         setExpandedId(null);
-        const ok = await persistInboxAwait(RESIDENT_INBOX_STORAGE_KEY, next);
+        const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
         persistInboxRef.current = true;
         if (!ok) {
           setLocal(prev);
@@ -174,15 +179,20 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     (id: string) => {
       void (async () => {
         const prev = local;
-        const next = prev.map((t) => {
-          if (t.id !== id || t.folder !== "trash") return t;
-          const dest = inferPreviousFolder(t);
-          return { ...t, folder: dest, previousFolder: undefined, unread: dest === "inbox" ? t.unread : false };
-        });
+        const target = prev.find((t) => t.id === id && t.folder === "trash");
+        if (!target) return;
+        const dest = inferPreviousFolder(target);
+        const updated: InboxThread = {
+          ...target,
+          folder: dest,
+          previousFolder: undefined,
+          unread: dest === "inbox" ? target.unread : false,
+        };
+        const next = prev.map((t) => (t.id === id ? updated : t));
         persistInboxRef.current = false;
         setLocal(next);
         setExpandedId(null);
-        const ok = await persistInboxAwait(RESIDENT_INBOX_STORAGE_KEY, next);
+        const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
         persistInboxRef.current = true;
         if (!ok) {
           setLocal(prev);

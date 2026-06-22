@@ -5,6 +5,7 @@
 
 import type { CoManagerPermissions } from "@/lib/co-manager-permissions";
 import { coManagerPermissionsFromLegacy } from "@/lib/co-manager-permissions";
+import type { AccountLinkInviteDto } from "@/lib/account-links";
 
 export const AXIS_ID_LABEL = "Axis ID";
 
@@ -61,6 +62,27 @@ export function normalizeProRelationshipRecord(raw: unknown): ProRelationshipRec
 
 function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
   return normalizeProRelationshipRecord(r);
+}
+
+export function proRelationshipRowsFromInvites(invites: AccountLinkInviteDto[]): ProRelationshipRecord[] {
+  return invites
+    .filter((inv) => inv.status === "accepted")
+    .map((inv) => {
+      const perms = coManagerPermissionsFromLegacy({
+        coManagerPermissions: inv.coManagerPermissions,
+      });
+      return {
+        id: inv.id,
+        linkedAxisId: inv.linkedAxisId,
+        linkedDisplayName: inv.linkedDisplayName ?? undefined,
+        perspective: "manager_tab" as const,
+        payoutPercentForManager: inv.payoutPercentForManager,
+        assignedPropertyIds: inv.assignedPropertyIds,
+        coManagerPermissions: perms,
+        canEditListing: perms.editListings ? true : undefined,
+        createdAt: inv.createdAt,
+      };
+    });
 }
 
 export function readProRelationships(userId: string): ProRelationshipRecord[] {

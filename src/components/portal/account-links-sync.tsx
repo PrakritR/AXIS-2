@@ -2,8 +2,11 @@
 
 import { useEffect } from "react";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
-import { normalizeCoManagerPermissions } from "@/lib/co-manager-permissions";
-import { readProRelationships, writeProRelationships } from "@/lib/pro-relationships";
+import {
+  proRelationshipRowsFromInvites,
+  readProRelationships,
+  writeProRelationships,
+} from "@/lib/pro-relationships";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 export function AccountLinksSync() {
@@ -16,6 +19,11 @@ export function AccountLinksSync() {
       try {
         if (!session.userId || cancelled) return;
 
+        await fetch("/api/pro/purge-orphaned-co-manager-links", {
+          method: "POST",
+          credentials: "include",
+        }).catch(() => undefined);
+
         const res = await fetch("/api/pro/account-links", { credentials: "include" });
         const body = (await res.json()) as {
           invites?: AccountLinkInviteDto[];
@@ -24,61 +32,25 @@ export function AccountLinksSync() {
         if (!res.ok || body.migrationRequired || cancelled) return;
 
         const active = (body.invites ?? []).filter((inv) => inv.status === "accepted");
+        const next = proRelationshipRowsFromInvites(active);
         const existing = readProRelationships(session.userId);
-        const existingById = new Map(existing.map((row) => [row.id, row]));
-
-        let changed = false;
-        const next = [...existing];
-
-        for (const inv of active) {
-          const prev = existingById.get(inv.id);
-          const perms = normalizeCoManagerPermissions(inv.coManagerPermissions);
-          if (
-            prev &&
-            prev.linkedAxisId === inv.linkedAxisId &&
-            prev.linkedDisplayName === (inv.linkedDisplayName ?? undefined) &&
-            prev.perspective === "manager_tab" &&
-            prev.payoutPercentForManager === inv.payoutPercentForManager &&
-            prev.assignedPropertyIds.join("|") === inv.assignedPropertyIds.join("|") &&
-            JSON.stringify(prev.coManagerPermissions ?? {}) === JSON.stringify(perms)
-          ) {
-            continue;
-          }
-
-          const row = {
-            id: inv.id,
-            linkedAxisId: inv.linkedAxisId,
-            linkedDisplayName: inv.linkedDisplayName ?? undefined,
-            perspective: "manager_tab" as const,
-            payoutPercentForManager: inv.payoutPercentForManager,
-            assignedPropertyIds: inv.assignedPropertyIds,
-            coManagerPermissions: perms,
-            canEditListing: perms.editListings ? true : undefined,
-            createdAt: inv.createdAt,
-          };
-
-          if (prev) {
-            const idx = next.findIndex((item) => item.id === inv.id);
-            if (idx >= 0) next[idx] = row;
-          } else {
-            next.push(row);
-          }
-          changed = true;
-        }
-
-        const activeIds = new Set(active.map((inv) => inv.id));
-        const filtered = next.filter((row) => {
-          if (!existingById.has(row.id)) return true;
-          if (!active.some((inv) => inv.id === row.id)) return true;
-          return activeIds.has(row.id);
-        });
-
-        if (filtered.length !== next.length) {
-          changed = true;
-        }
+        const nextIds = new Set(next.map((row) => row.id));
+        const nextAxisIds = new Set(next.map((row) => row.linkedAxisId.trim().toLowerCase()));
+        const changed =
+          next.length !== existing.length ||
+          existing.some(
+            (row) =>
+              !nextIds.has(row.id) ||
+              !nextAxisIds.has(row.linkedAxisId.trim().toLowerCase()) ||
+              !active.some((inv) => inv.id === row.id),
+          ) ||
+          next.some((row) => {
+            const prev = existing.find((item) => item.id === row.id);
+            return !prev || JSON.stringify(prev) !== JSON.stringify(row);
+          });
 
         if (changed) {
-          writeProRelationships(session.userId, filtered);
+          writeProRelationships(session.userId, next);
         }
       } catch {
         /* ignore */

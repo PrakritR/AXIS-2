@@ -8,13 +8,19 @@ import {
 } from "@/lib/listings-search";
 import { isRoomChoiceAvailable, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 
+export type RoomListingSlide = {
+  roomName: string;
+  kind: "photo" | "video";
+  src: string;
+};
+
 export type RoomListingRow = {
   key: string;
   propertyId: string;
   roomId: string;
   roomName: string;
   floorLabel: string;
-  /** e.g. "First Floor — Room 1" */
+  /** e.g. "Second Floor bedroom · University District" */
   title: string;
   /** Short street line, uppercased like marketing cards */
   streetUpper: string;
@@ -35,10 +41,8 @@ export type RoomListingRow = {
   priceOverlayLabel: string;
   /** Raw listing availability string (for traffic-light styling on search cards). */
   availabilityRaw: string;
-  /** Room photos only (no house-level fallback on room cards). */
-  photoUrls: string[];
-  /** Uploaded room videos for this room listing. */
-  videoUrls: string[];
+  /** Property-wide room media for search card carousel (Room 1, Room 2, … when uploaded). */
+  mediaSlides: RoomListingSlide[];
 };
 
 function streetUpperFromProperty(p: MockProperty): string {
@@ -77,9 +81,49 @@ function priceOverlayLabelForProperty(p: MockProperty): string {
   return `$${min.toLocaleString("en-US")}–$${max.toLocaleString("en-US")}`;
 }
 
-function formatRoomTitle(floorLabel: string, roomName: string): string {
-  const floor = floorLabel.replace(/\b\w/g, (ch) => ch.toUpperCase());
-  return `${floor} — ${roomName}`;
+function titleCaseWords(s: string): string {
+  return s.replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+/** Strip manager bathroom grouping labels like "Bathroom 3 · Second Floor". */
+function humanizeFloorLabel(raw: string): string {
+  const t = raw.trim();
+  if (!t || /other bedrooms|not specified|floor plan/i.test(t)) return "";
+
+  if (t.includes("·")) {
+    const parts = t.split("·").map((p) => p.trim()).filter(Boolean);
+    const floorPart = parts.find((p) => /floor|level|basement|ground|main|upper|lower|story|stories/i.test(p));
+    if (floorPart) return titleCaseWords(floorPart);
+    const nonBath = parts.find((p) => !/^bathroom\b/i.test(p));
+    if (nonBath) return titleCaseWords(nonBath);
+    return "";
+  }
+
+  if (/^bathroom\b/i.test(t)) return "";
+  return titleCaseWords(t);
+}
+
+/** Short, renter-friendly line under the room name on search cards. */
+export function formatRoomListingSubtitle(opts: {
+  floorLabel: string;
+  room: ListingRoomRow;
+  neighborhood: string;
+}): string {
+  const floorFromRoom = opts.room.modal.floorLine?.trim();
+  const floor = floorFromRoom ? titleCaseWords(floorFromRoom) : humanizeFloorLabel(opts.floorLabel);
+  const neighborhood = opts.neighborhood.trim();
+
+  let lead: string;
+  if (floor) {
+    lead = /floor|level|basement|ground|story|stories/i.test(floor)
+      ? `${floor} bedroom`
+      : `${floor} room`;
+  } else {
+    lead = "Private bedroom";
+  }
+
+  if (neighborhood) return `${lead} · ${neighborhood}`;
+  return lead;
 }
 
 function availabilityLabel(room: ListingRoomRow): string {
@@ -161,6 +205,28 @@ export function roomMatchesBathroomFilter(room: ListingRoomRow, bathroomId: stri
   return roomMatchesBathroomFilterHeuristic(room, bathroomId);
 }
 
+/** Collect room photos/videos across the listing for search-card sliders (Room 1, Room 2, …). */
+export function collectPropertyMediaSlides(rich: ReturnType<typeof getListingRichContent>): RoomListingSlide[] {
+  const slides: RoomListingSlide[] = [];
+  for (const floor of rich.floorPlans) {
+    for (const room of floor.rooms) {
+      const videoSrc = room.modal.videoSrc?.trim();
+      if (videoSrc) slides.push({ roomName: room.name, kind: "video", src: videoSrc });
+      for (const url of room.modal.photoUrls ?? []) {
+        const src = url.trim();
+        if (src) slides.push({ roomName: room.name, kind: "photo", src });
+      }
+    }
+  }
+  if (slides.length === 0) {
+    for (const url of rich.heroHousePhotoUrls ?? []) {
+      const src = url.trim();
+      if (src) slides.push({ roomName: "House", kind: "photo", src });
+    }
+  }
+  return slides.slice(0, 12);
+}
+
 export function filterRoomListings(
   properties: MockProperty[],
   opts: {
@@ -187,6 +253,7 @@ export function filterRoomListings(
 
   for (const p of properties) {
     const rich = getListingRichContent(p);
+    const mediaSlides = collectPropertyMediaSlides(rich);
     const geoOk = centerZip === null ? true : propertyMatchesZipRadius(p.zip, opts.zipRaw, opts.radiusMiles);
     if (!geoOk) continue;
 
@@ -214,7 +281,7 @@ export function filterRoomListings(
           roomId: room.id,
           roomName: room.name,
           floorLabel: floor.floorLabel,
-          title: formatRoomTitle(floor.floorLabel, room.name),
+          title: formatRoomListingSubtitle({ floorLabel: floor.floorLabel, room, neighborhood: p.neighborhood }),
           streetUpper: streetUpperFromProperty(p),
           neighborhood: p.neighborhood,
           priceLabel: room.price.includes("/mo") ? room.price : room.price.replace("/month", "/month"),
@@ -230,8 +297,7 @@ export function filterRoomListings(
           listingTags: listingTags(p),
           priceOverlayLabel: priceOverlayLabelForProperty(p),
           availabilityRaw: room.availability,
-          photoUrls: room.modal.photoUrls?.length ? room.modal.photoUrls : [],
-          videoUrls: room.modal.videoSrc ? [room.modal.videoSrc] : [],
+          mediaSlides,
         });
       }
     }

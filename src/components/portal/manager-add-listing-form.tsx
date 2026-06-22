@@ -498,7 +498,7 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
   bathrooms: "Bathroom name, location, and amenities for the public listing.",
   spaces:    "Shared areas — name, location, and amenities (kitchen, laundry, lounge, outdoor).",
   lease:     "How the home is rented (by room or entire place), rent, utilities, proration, deposits, and fees.",
-  move:      "Earliest move-in dates and access instructions for residents.",
+  move:      "Move-in access instructions for residents.",
   services:  "Optional paid or free services residents can request from their portal.",
   finish:    "Sidebar quick facts and final submit.",
 };
@@ -2962,31 +2962,21 @@ export function ManagerAddListingForm({
             title="Move info"
             description={
               isEntireHome
-                ? "Earliest move-in date and access instructions for the entire home."
-                : "Set move-in details for each bedroom — shown to placed residents."
+                ? "Access instructions for the entire home."
+                : "Set move-in instructions for each bedroom — shown to placed residents."
             }
           >
             {isEntireHome ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
                 <p className="text-sm font-bold text-slate-900">Entire home</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <GridField>
-                    <FieldLabel hint="YYYY-MM-DD">Earliest move-in date</FieldLabel>
-                    <Input
-                      type="date"
-                      value={sub.houseMoveInAvailableDate ?? ""}
-                      onChange={(e) => setSub((s) => ({ ...s, houseMoveInAvailableDate: e.target.value }))}
-                    />
-                  </GridField>
-                  <div className="sm:col-span-2">
-                    <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
-                    <Textarea
-                      rows={4}
-                      value={sub.houseMoveInInstructions ?? ""}
-                      onChange={(e) => setSub((s) => ({ ...s, houseMoveInInstructions: e.target.value }))}
-                      placeholder="Where to pick up keys, parking spot, gate codes, move-in window…"
-                    />
-                  </div>
+                <div className="mt-3">
+                  <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
+                  <Textarea
+                    rows={4}
+                    value={sub.houseMoveInInstructions ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, houseMoveInInstructions: e.target.value }))}
+                    placeholder="Where to pick up keys, parking spot, gate codes, move-in window…"
+                  />
                 </div>
               </div>
             ) : (
@@ -2994,24 +2984,14 @@ export function ManagerAddListingForm({
                 {sub.rooms.map((room, i) => (
                   <div key={room.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
                     <p className="text-sm font-bold text-slate-900">{room.name.trim() || `Room ${i + 1}`}</p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <GridField>
-                        <FieldLabel hint="YYYY-MM-DD">Earliest move-in date</FieldLabel>
-                        <Input
-                          type="date"
-                          value={room.moveInAvailableDate}
-                          onChange={(e) => setRoom(i, { moveInAvailableDate: e.target.value })}
-                        />
-                      </GridField>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
-                        <Textarea
-                          rows={3}
-                          value={room.moveInInstructions}
-                          onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
-                          placeholder="Room-specific access, parking, and move-in details…"
-                        />
-                      </div>
+                    <div className="mt-3">
+                      <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
+                      <Textarea
+                        rows={3}
+                        value={room.moveInInstructions}
+                        onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
+                        placeholder="Room-specific access, parking, and move-in details…"
+                      />
                     </div>
                   </div>
                 ))}

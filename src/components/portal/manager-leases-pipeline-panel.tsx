@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Textarea } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import {
   appendLeaseThreadMessage,
@@ -38,6 +39,7 @@ import {
   sendLeaseToResident,
   hasBothLeaseSignatures,
   residentHasSignedLease,
+  syncLeasePipelineFromServer,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 
@@ -105,6 +107,12 @@ export function ManagerLeasesPipelinePanel({
     subject: string;
     body: string;
   } | null>(null);
+  const [amendLeaseRow, setAmendLeaseRow] = useState<LeasePipelineRow | null>(null);
+
+  const handleAmendLeaseSuccess = useCallback(async () => {
+    await syncLeasePipelineFromServer(managerUserId, { force: true });
+    setAmendLeaseRow(null);
+  }, [managerUserId]);
 
   function leaseSentToResidentBody(row: LeasePipelineRow): string {
     const unit = row.unit.trim() || "your unit";
@@ -655,6 +663,16 @@ export function ManagerLeasesPipelinePanel({
                             >
                               Download lease
                             </Button>
+                            {hasBothLeaseSignatures(row) && row.status === "Fully Signed" ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => setAmendLeaseRow(row)}
+                              >
+                                Renew or extend lease
+                              </Button>
+                            ) : null}
                             {!row.managerSignature && residentHasSignedLease(row) && !row.managerUploadedPdf?.dataUrl ? (
                               <Button
                                 type="button"
@@ -803,6 +821,19 @@ export function ManagerLeasesPipelinePanel({
           </tbody>
         </table>
       </div>
+
+      {amendLeaseRow ? (
+        <LeaseAmendMoveOutModal
+          open
+          onClose={() => setAmendLeaseRow(null)}
+          currentEnd={amendLeaseRow.application?.leaseEnd ?? ""}
+          leaseStart={amendLeaseRow.application?.leaseStart ?? ""}
+          checkUrl="/api/manager/amend-lease"
+          amendUrl="/api/manager/amend-lease"
+          amendBody={{ leaseId: amendLeaseRow.id }}
+          onSuccess={() => void handleAmendLeaseSuccess()}
+        />
+      ) : null}
     </div>
   );
 }

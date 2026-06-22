@@ -11,6 +11,8 @@
 import type { MockProperty } from "@/data/types";
 import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { loadRentalWizardDraft } from "@/lib/rental-application/drafts";
+import { parseFlexibleLocalDate, resolvePlacementLeaseDates } from "@/lib/rental-application/lease-dates";
+import { resolveApplicationPersonalFields } from "@/lib/application-personal-fields";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
@@ -110,11 +112,24 @@ export type LeaseGenerationContext = {
 };
 
 export function leaseContextFromApplication(application: Partial<RentalWizardFormState>): LeaseGenerationContext {
-  const leasedRoom = resolveLeasedRoomProperty(application);
-  const listingProperty = resolveApplicationListing(application) ?? leasedRoom;
+  const dates = resolvePlacementLeaseDates({
+    leaseTerm: application.leaseTerm,
+    leaseStart: application.leaseStart,
+    leaseEnd: application.leaseEnd,
+    rentalType: application.rentalType,
+  });
+  const normalizedApplication: Partial<RentalWizardFormState> = {
+    ...application,
+    ...resolveApplicationPersonalFields({ name: application.fullLegalName, email: application.email, application }),
+    leaseTerm: dates.leaseTerm || application.leaseTerm,
+    leaseStart: dates.leaseStart,
+    leaseEnd: dates.leaseEnd,
+  };
+  const leasedRoom = resolveLeasedRoomProperty(normalizedApplication);
+  const listingProperty = resolveApplicationListing(normalizedApplication) ?? leasedRoom;
   const submission = submissionFor(listingProperty) ?? submissionFor(leasedRoom);
   return {
-    application,
+    application: normalizedApplication,
     leasedRoom,
     listingProperty,
     submission,
@@ -244,7 +259,7 @@ function proratedBlock(monthlyRentStr: string, utilitiesStr: string, leaseStartS
   const rent = parseAmount(monthlyRentStr);
   if (!rent || !leaseStartStr || leaseStartStr === "—") return "";
   try {
-    const start = parseLocalDateOnly(leaseStartStr);
+    const start = parseFlexibleLocalDate(leaseStartStr);
     if (!start || isNaN(start.getTime())) return "";
     const day = start.getDate();
     if (day === 1) return "";

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/ui/password-input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
 import {
   normalizeApplicationAxisId,
   readManagerApplicationRows,
@@ -24,9 +24,6 @@ export function ResidentProfilePanel() {
   const [axisId, setAxisId] = useState("");
   const [emName, setEmName] = useState("");
   const [emPhone, setEmPhone] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordBusy, setPasswordBusy] = useState(false);
 
   useEffect(() => {
     if (!session.userId) return;
@@ -135,33 +132,6 @@ export function ResidentProfilePanel() {
     }
   };
 
-  const changePassword = async () => {
-    if (newPassword.length < 8) {
-      showToast("New password must be at least 8 characters.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      showToast("Passwords do not match.");
-      return;
-    }
-    setPasswordBusy(true);
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) {
-        showToast(error.message || "Could not update password.");
-        return;
-      }
-      setNewPassword("");
-      setConfirmPassword("");
-      showToast("Password updated.");
-    } catch {
-      showToast("Could not update password.");
-    } finally {
-      setPasswordBusy(false);
-    }
-  };
-
   return (
     <ManagerPortalPageShell
       title="Profile"
@@ -198,35 +168,7 @@ export function ResidentProfilePanel() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Change password</p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              Update the password used for this resident account.
-            </p>
-          </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-700">New password</label>
-              <PasswordInput value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-700">Confirm new password</label>
-              <PasswordInput value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
-            </div>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              disabled={passwordBusy}
-              onClick={() => void changePassword()}
-            >
-              {passwordBusy ? "Updating..." : "Update password"}
-            </Button>
-          </div>
-        </div>
+        <PortalChangePasswordPanel accountEmail={email} accountLabel="this resident account" />
       </div>
     </ManagerPortalPageShell>
   );

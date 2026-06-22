@@ -45,6 +45,11 @@ export function ManagerLeases() {
   const [propertyFilter, setPropertyFilter] = useState("");
   const [houseSort, setHouseSort] = useState<HouseSort>("house-asc");
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
+  const [clientReady, setClientReady] = useState(false);
+
+  useEffect(() => {
+    setClientReady(true);
+  }, []);
 
   useEffect(() => {
     if (!authReady || !userId) return;
@@ -67,6 +72,7 @@ export function ManagerLeases() {
   }, [authReady, userId]);
 
   const propertyOptions = useMemo(() => {
+    if (!clientReady) return [];
     void tick;
     void propertyTick;
     const base = buildManagerPropertyFilterOptions(userId);
@@ -79,9 +85,10 @@ export function ManagerLeases() {
     return [...labelById.entries()]
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [userId, tick, propertyTick]);
+  }, [clientReady, userId, tick, propertyTick]);
 
   const rows = useMemo(() => {
+    if (!clientReady) return [];
     void tick;
     const allRows = readLeasePipeline(userId);
     const filtered = !propertyFilter.trim()
@@ -106,7 +113,7 @@ export function ManagerLeases() {
       const bTs = Date.parse(b.updatedAtIso || "");
       return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
     });
-  }, [tick, propertyFilter, houseSort, userId]);
+  }, [clientReady, tick, propertyFilter, houseSort, userId]);
 
   useEffect(() => {
     const emails = [...new Set(rows.map((row) => row.residentEmail.trim().toLowerCase()).filter(Boolean))];
@@ -168,17 +175,19 @@ export function ManagerLeases() {
             className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => {
               const result = regenerateAllLeaseHtml(userId);
-              // Re-sync charges for all approved applications so payment tabs reflect current lease values
               const approvedRows = readManagerApplicationRows().filter((r) => r.bucket === "approved");
               for (const appRow of approvedRows) {
                 recordApprovedApplicationCharges(appRow, userId ?? null);
               }
               setTick((t) => t + 1);
-              showToast(
-                result.updated > 0
-                  ? `Regenerated ${result.updated} lease${result.updated === 1 ? "" : "s"}.`
-                  : "No leases with application data to regenerate.",
-              );
+              const parts: string[] = [];
+              if (result.snapshotsRefreshed > 0) {
+                parts.push(`refreshed ${result.snapshotsRefreshed} application snapshot${result.snapshotsRefreshed === 1 ? "" : "s"}`);
+              }
+              if (result.updated > 0) {
+                parts.push(`regenerated ${result.updated} lease${result.updated === 1 ? "" : "s"}`);
+              }
+              showToast(parts.length > 0 ? parts.join("; ") + "." : "No leases with application data to regenerate.");
             }}
           >
             Regenerate all

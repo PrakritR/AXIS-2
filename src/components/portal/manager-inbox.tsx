@@ -18,6 +18,7 @@ import {
   persistInbox,
   persistInboxAwait,
   syncPersistedInboxFromServer,
+  upsertPersistedInboxRows,
 } from "@/lib/portal-inbox-storage";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
 import { readManagerApplicationRows, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
@@ -186,13 +187,17 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       const prev = local;
       const target = prev.find((t) => t.id === id);
       if (!target || target.folder === "trash" || (target.folder !== "inbox" && target.folder !== "sent")) return;
-      const next = prev.map((t) =>
-        t.id === id ? { ...t, folder: "trash" as const, previousFolder: t.folder, unread: false } : t,
-      );
+      const updated: InboxThread = {
+        ...target,
+        folder: "trash",
+        previousFolder: target.folder,
+        unread: false,
+      };
+      const next = prev.map((t) => (t.id === id ? updated : t));
       persistInboxRef.current = false;
       setLocal(next);
       setExpandedId((e) => (e === id ? null : e));
-      const ok = await persistInboxAwait(MANAGER_INBOX_STORAGE_KEY, next);
+      const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
       persistInboxRef.current = true;
       if (!ok) {
         setLocal(prev);
@@ -212,15 +217,15 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   const restoreFromTrash = (id: string) => {
     void (async () => {
       const prev = local;
-      const next = prev.map((t) => {
-        if (t.id !== id || t.folder !== "trash") return t;
-        const dest = inferPreviousFolder(t);
-        return { ...t, folder: dest, previousFolder: undefined, unread: false };
-      });
+      const target = prev.find((t) => t.id === id && t.folder === "trash");
+      if (!target) return;
+      const dest = inferPreviousFolder(target);
+      const updated: InboxThread = { ...target, folder: dest, previousFolder: undefined, unread: false };
+      const next = prev.map((t) => (t.id === id ? updated : t));
       persistInboxRef.current = false;
       setLocal(next);
       setExpandedId((e) => (e === id ? null : e));
-      const ok = await persistInboxAwait(MANAGER_INBOX_STORAGE_KEY, next);
+      const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
       persistInboxRef.current = true;
       if (!ok) {
         setLocal(prev);

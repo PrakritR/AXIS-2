@@ -1,4 +1,5 @@
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { purgeOrphanedCoManagerLinks } from "@/lib/auth/purge-orphaned-co-manager-links";
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
 
@@ -180,6 +181,12 @@ export async function purgeOrphanedPortalRecords(db: ServiceDb): Promise<{
     await db.from("portal_inbox_thread_records").delete().in("id", orphanInboxIds);
   }
   deleted["portal_inbox_thread_records"] = orphanInboxIds.length;
+
+  const coManagerCleanup = await purgeOrphanedCoManagerLinks(db);
+  deleted.portal_pro_relationship_records =
+    (deleted.portal_pro_relationship_records ?? 0) + coManagerCleanup.deleted.portal_pro_relationship_records;
+  deleted.account_link_invites =
+    (deleted.account_link_invites ?? 0) + coManagerCleanup.deleted.account_link_invites;
 
   return { deleted, purgedEmails: [...purgedEmails] };
 }

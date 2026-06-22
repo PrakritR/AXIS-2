@@ -6,7 +6,7 @@
 
 import { type ManagerLeaseBucket } from "@/data/demo-portal";
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
-import { effectiveApplicationForRow, readManagerApplicationRows, signedRentLabelForRow } from "@/lib/manager-applications-storage";
+import { effectiveApplicationForRow, enrichApplicationForLease, readManagerApplicationRows, signedRentLabelForRow } from "@/lib/manager-applications-storage";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
@@ -567,7 +567,7 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       managerUserId: seeded.managerUserId ?? managerUserId ?? current.managerUserId ?? null,
       roomChoice: seeded.roomChoice,
       signedRentLabel: seeded.signedRentLabel,
-      application: effectiveApplicationForRow(app),
+      application: enrichApplicationForLease(app, effectiveApplicationForRow(app), current.application),
     });
     if (JSON.stringify(merged) !== JSON.stringify(current)) {
       next[idx] = merged;
@@ -596,8 +596,9 @@ function enrichFromApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] {
       managerUserId: app.managerUserId ?? r.managerUserId ?? null,
       roomChoice: app.assignedRoomChoice?.trim() || app.application?.roomChoice1?.trim() || r.roomChoice,
       signedRentLabel: signedRentLabelForRow(app) ?? r.signedRentLabel,
-      application: effectiveApplicationForRow(app),
-      residentName: app.name || r.residentName,
+      application: enrichApplicationForLease(app, effectiveApplicationForRow(app), r.application),
+      residentName: app.name?.trim() || r.residentName,
+      residentEmail: app.email?.trim().toLowerCase() || r.residentEmail,
     };
   });
 }
@@ -889,6 +890,14 @@ export function appendLeaseThreadMessage(
   return true;
 }
 
+function applicationSnapshotForLeaseRow(row: LeasePipelineRow): Partial<RentalWizardFormState> | undefined {
+  if (!row.application || !Object.keys(row.application).length) return undefined;
+  if (!row.axisId) return row.application;
+  const appRow = readManagerApplicationRows().find((a) => a.id === row.axisId);
+  if (!appRow?.application) return row.application;
+  return enrichApplicationForLease(appRow, effectiveApplicationForRow(appRow), row.application);
+}
+
 export function generateLeaseHtmlForRow(
   rowId: string,
   managerUserId?: string | null,
@@ -899,7 +908,7 @@ export function generateLeaseHtmlForRow(
   if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
     return { ok: false, error: "This lease can no longer be regenerated after signatures. Void/restart it first." };
   }
-  const app = row.application;
+  const app = applicationSnapshotForLeaseRow(row);
   if (!app || !Object.keys(app).length) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
@@ -914,6 +923,7 @@ export function generateLeaseHtmlForRow(
   const ok = updateLeasePipelineRow(
     rowId,
     {
+      application: app,
       generatedHtml: html,
       managerUploadedPdf: null,
       generatedAtIso: new Date().toISOString(),
@@ -929,20 +939,80 @@ export function generateLeaseHtmlForRow(
 }
 
 /**
+ * Persist enriched application snapshots (phone, email, DOB, name) from linked application records.
+ */
+export function refreshAllLeaseApplicationSnapshots(managerUserId?: string | null): number {
+  const raw = [...materializeLeasePipeline(managerUserId)];
+  const apps = readManagerApplicationRows();
+  let refreshed = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const row = raw[i]!;
+    if (!row.axisId) continue;
+    const app = apps.find((a) => a.id === row.axisId);
+    if (!app?.application) continue;
+    const enrichedApp = enrichApplicationForLease(app, effectiveApplicationForRow(app), row.application);
+    const nextRow = normalizeLeasePipelineRow({
+      ...row,
+      application: enrichedApp,
+      residentName: app.name?.trim() || row.residentName,
+      residentEmail: app.email?.trim().toLowerCase() || row.residentEmail,
+    });
+    if (JSON.stringify(nextRow.application) === JSON.stringify(row.application) &&
+        nextRow.residentName === row.residentName &&
+        nextRow.residentEmail === row.residentEmail) {
+      continue;
+    }
+    raw[i] = nextRow;
+    refreshed++;
+  }
+  if (refreshed > 0) write(raw, managerUserId);
+  return refreshed;
+}
+
+/**
  * Regenerates lease HTML for every row that has application data.
  * Returns a summary of how many rows were updated vs skipped.
  */
-export function regenerateAllLeaseHtml(managerUserId?: string | null): { updated: number; skipped: number } {
+export function regenerateAllLeaseHtml(managerUserId?: string | null): {
+  updated: number;
+  skipped: number;
+  snapshotsRefreshed: number;
+} {
+  const snapshotsRefreshed = refreshAllLeaseApplicationSnapshots(managerUserId);
   const rows = readLeasePipeline(managerUserId);
   let updated = 0;
   let skipped = 0;
   for (const row of rows) {
-    if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
+    if (row.status === "Voided") {
       skipped++;
       continue;
     }
-    const app = row.application;
+    const app = applicationSnapshotForLeaseRow(row);
     if (!app || !Object.keys(app).length) {
+      skipped++;
+      continue;
+    }
+    const signed = row.status === "Fully Signed" || hasBothLeaseSignatures(row);
+    if (signed) {
+      try {
+        const ctx = leaseContextFromApplication(app as RentalWizardFormState);
+        const html = buildAiGeneratedLeaseHtml(ctx);
+        updateLeasePipelineRow(
+          row.id,
+          {
+            application: app,
+            generatedHtml: html,
+            generatedAtIso: new Date().toISOString(),
+          },
+          managerUserId,
+        );
+        updated++;
+      } catch {
+        skipped++;
+      }
+      continue;
+    }
+    if (hasAnyLeaseSignature(row)) {
       skipped++;
       continue;
     }
@@ -968,7 +1038,7 @@ export function regenerateAllLeaseHtml(managerUserId?: string | null): { updated
       skipped++;
     }
   }
-  return { updated, skipped };
+  return { updated, skipped, snapshotsRefreshed };
 }
 
 export function downloadLeaseFromRow(row: LeasePipelineRow): void {

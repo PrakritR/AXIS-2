@@ -132,6 +132,12 @@ export function ResidentDashboard({
 
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
+  /** Avoid reading session/local storage during SSR — prevents hydration mismatches on lease badge, inbox, etc. */
+  const [clientReady, setClientReady] = useState(false);
+
+  useEffect(() => {
+    setClientReady(true);
+  }, []);
 
   useEffect(() => {
     void Promise.allSettled([
@@ -217,6 +223,19 @@ export function ResidentDashboard({
 
   const data = useMemo(() => {
     void tick;
+    if (!clientReady) {
+      return {
+        leaseRow: null,
+        lease: leaseBadge(null, appStatus === "approved"),
+        openWO: 0,
+        scheduledWO: 0,
+        completedWO: 0,
+        inbox: 0,
+        pendingCharges: [] as ReturnType<typeof readChargesForResident>,
+        pendingTotal: 0,
+      };
+    }
+
     const leaseRow = email ? findLeaseForResidentEmail(email) : null;
     const lease = leaseBadge(leaseRow, appStatus === "approved");
 
@@ -237,7 +256,7 @@ export function ResidentDashboard({
     }, 0);
 
     return { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, pendingCharges, pendingTotal };
-  }, [tick, email, appStatus, residentUserId]);
+  }, [tick, email, appStatus, residentUserId, clientReady]);
 
   const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, pendingCharges, pendingTotal } = data;
 

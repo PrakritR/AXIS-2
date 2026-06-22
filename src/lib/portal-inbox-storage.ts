@@ -173,6 +173,52 @@ export function invalidatePersistedInboxCache(key: string): void {
   inboxLastSyncedAtByKey.set(key, 0);
 }
 
+async function postInboxRows(
+  action: "replace" | "upsert",
+  key: string,
+  rows: PersistedInboxThread[],
+): Promise<boolean> {
+  try {
+    const res = await fetch("/api/portal-inbox-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(
+        action === "replace"
+          ? { action, rows: rows.map((thread) => ({ ...thread, scope: key })) }
+          : { action, row: { ...rows[0]!, scope: key } },
+      ),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    return data.ok !== false;
+  } catch {
+    return false;
+  }
+}
+
+function commitInboxMemory(key: string, threads: PersistedInboxThread[]): void {
+  memoryByKey.set(key, threads);
+  persistInboxToSession(key, threads);
+  inboxLastSyncedAtByKey.set(key, Date.now());
+  window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
+}
+
+/** Upsert one or more changed rows without deleting threads missing from the payload. */
+export async function upsertPersistedInboxRows(
+  key: string,
+  changedRows: PersistedInboxThread[],
+  allRows: PersistedInboxThread[],
+): Promise<boolean> {
+  if (!canUse() || changedRows.length === 0) return false;
+  commitInboxMemory(key, allRows);
+  for (const row of changedRows) {
+    const ok = await postInboxRows("upsert", key, [row]);
+    if (!ok) return false;
+  }
+  return true;
+}
+
 export async function persistInboxAwait(key: string, threads: PersistedInboxThread[]): Promise<boolean> {
   if (!canUse()) return false;
   const existing = memoryByKey.get(key) ?? [];
@@ -182,21 +228,8 @@ export async function persistInboxAwait(key: string, threads: PersistedInboxThre
     const deleted = await deleteInboxThreadIds(removedIds);
     if (!deleted) return false;
   }
-  memoryByKey.set(key, threads);
-  persistInboxToSession(key, threads);
-  inboxLastSyncedAtByKey.set(key, Date.now());
-  window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
-  try {
-    const res = await fetch("/api/portal-inbox-threads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ action: "replace", rows: threads.map((thread) => ({ ...thread, scope: key })) }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+  commitInboxMemory(key, threads);
+  return postInboxRows("replace", key, threads);
 }
 
 export function persistInbox(key: string, threads: PersistedInboxThread[]): void {

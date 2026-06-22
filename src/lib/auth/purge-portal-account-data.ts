@@ -1,4 +1,5 @@
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { purgeCoManagerReferencesToUser } from "@/lib/auth/purge-orphaned-co-manager-links";
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
 
@@ -62,6 +63,8 @@ export async function purgeResidentPortalData(
 /** Remove properties, resident records, payments, leases, and other portal rows for a manager. */
 export async function purgeManagerPortalData(db: ServiceDb, managerUserId: string): Promise<void> {
   if (!managerUserId) return;
+
+  await purgeCoManagerReferencesToUser(db, managerUserId);
 
   const results = await Promise.all([
     db.from("manager_property_records").delete().eq("manager_user_id", managerUserId),

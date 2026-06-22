@@ -648,7 +648,7 @@ export function ManagerPlan() {
               ))}
             </div>
           ) : (
-            <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            <div className="mt-5 grid gap-4 lg:grid-cols-3 lg:items-stretch">
               {planTiers.map((t) => {
                 const tierId = t.id as ManagerSkuTier;
                 const pb = priceView === "monthly" ? t.monthly : t.annual;
@@ -661,7 +661,7 @@ export function ManagerPlan() {
                 return (
                   <article
                     key={t.id}
-                    className={`relative flex flex-col rounded-2xl border p-6 transition ${
+                    className={`relative flex h-full flex-col rounded-2xl border p-6 transition ${
                       isCurrent
                         ? "border-2 border-primary bg-primary/[0.04] shadow-[0_4px_24px_-12px_rgba(0,122,255,0.35)]"
                         : "border-slate-200 bg-white hover:border-slate-300"
@@ -672,45 +672,50 @@ export function ManagerPlan() {
                         Popular
                       </span>
                     ) : null}
-                    {isCurrent ? (
-                      <span className="mb-3 inline-flex w-fit rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                        Current plan
-                      </span>
-                    ) : isScheduled ? (
-                      <span className="mb-3 inline-flex w-fit rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
-                        Starts {renewalLabel ?? "at renewal"}
-                      </span>
-                    ) : (
-                      <span className="mb-3 inline-flex w-fit rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                        {t.label}
-                      </span>
-                    )}
 
-                    <div className="flex items-baseline gap-1">
+                    <div className="min-h-[28px]">
+                      {isCurrent ? (
+                        <span className="inline-flex rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                          Current plan
+                        </span>
+                      ) : isScheduled ? (
+                        <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+                          Starts {renewalLabel ?? "at renewal"}
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                          {t.label}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-3 flex items-baseline gap-1">
                       <span className="text-3xl font-black tracking-tight text-slate-900">{pb.headline}</span>
                       {pb.period ? <span className="text-sm font-medium text-slate-400">{pb.period}</span> : null}
                     </div>
-                    <p className="mt-2 min-h-[40px] text-sm leading-snug text-slate-500">{pb.sub}</p>
+                    <p className="mt-2 min-h-[4.5rem] text-sm leading-snug text-slate-500">{pb.sub}</p>
 
-                    {isCurrent ? (
-                      <div className="mt-5 flex min-h-[48px] items-center justify-center rounded-xl border border-primary/20 bg-primary/5 px-4 text-sm font-semibold text-primary">
-                        You're on this plan
-                      </div>
-                    ) : isScheduled ? (
-                      <div className="mt-5 flex min-h-[48px] items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-900">
-                        Downgrade scheduled
-                      </div>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant={isUpgrade ? "primary" : "outline"}
-                        className="mt-5 w-full rounded-xl py-5 text-[15px] font-semibold"
-                        disabled={anyBusy && !busyHere}
-                        onClick={() => void changePlan(tierId)}
-                      >
-                        {busyHere ? "Processing…" : actionLabel}
-                      </Button>
-                    )}
+                    <div className="mt-5 min-h-[52px]">
+                      {isCurrent ? (
+                        <div className="flex h-[52px] items-center justify-center rounded-xl border border-primary/20 bg-primary/5 px-4 text-sm font-semibold text-primary">
+                          You&apos;re on this plan
+                        </div>
+                      ) : isScheduled ? (
+                        <div className="flex h-[52px] items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-900">
+                          Downgrade scheduled
+                        </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant={isUpgrade ? "primary" : "outline"}
+                          className="h-[52px] w-full rounded-xl text-[15px] font-semibold"
+                          disabled={anyBusy && !busyHere}
+                          onClick={() => void changePlan(tierId)}
+                        >
+                          {busyHere ? "Processing…" : actionLabel}
+                        </Button>
+                      )}
+                    </div>
 
                     <ul className="mt-5 space-y-2.5 border-t border-slate-100 pt-5">
                       {t.features.map((f) => (

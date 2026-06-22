@@ -7,6 +7,10 @@ import {
   shouldAutoComputeLeaseEnd,
 } from "@/lib/rental-application/lease-dates";
 import {
+  enrichApplicationForLease,
+  resolveApplicationPersonalFields,
+} from "@/lib/application-personal-fields";
+import {
   defaultBackgroundCheckStatusForRow,
   normalizeBackgroundCheckStatus,
   resolveBackgroundCheckStatus,
@@ -381,7 +385,7 @@ export function appendManagerApplicationRow(row: DemoApplicantRow): void {
  * Returns the application answers with the manager's final property / room placement
  * applied on top of the original applicant submission.
  */
-export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "application" | "assignedPropertyId" | "assignedRoomChoice" | "signedMonthlyRent">):
+export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "application" | "assignedPropertyId" | "assignedRoomChoice" | "signedMonthlyRent" | "name" | "email">):
   | Partial<RentalWizardFormState>
   | undefined {
   if (!row.application) return undefined;
@@ -391,8 +395,10 @@ export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "applicat
     leaseEnd: row.application.leaseEnd,
     rentalType: row.application.rentalType,
   });
+  const personal = resolveApplicationPersonalFields(row);
   const next: Partial<RentalWizardFormState> = {
     ...row.application,
+    ...personal,
     leaseTerm: dates.leaseTerm || row.application.leaseTerm,
     leaseStart: dates.leaseStart,
     leaseEnd: dates.leaseEnd,
@@ -412,3 +418,5 @@ export function signedRentLabelForRow(row: Pick<DemoApplicantRow, "signedMonthly
   if (!Number.isFinite(row.signedMonthlyRent ?? NaN) || (row.signedMonthlyRent ?? 0) <= 0) return null;
   return `$${Number(row.signedMonthlyRent).toFixed(2)} / month`;
 }
+
+export { enrichApplicationForLease, resolveApplicationPersonalFields } from "@/lib/application-personal-fields";

@@ -39,6 +39,7 @@ import {
   effectiveApplicationForRow,
   normalizeApplicationAxisId,
   readManagerApplicationRows,
+  resolveApplicationPersonalFields,
   syncManagerApplicationsFromServer,
   writeManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
@@ -1062,9 +1063,8 @@ function ManagerApplicationsContent() {
                               <div className="mt-4">
                                 <ManagerApplicationReadonlyReview
                                   partial={{
-                                    fullLegalName: row.name || undefined,
-                                    email: row.email || undefined,
                                     ...(effectiveApplicationForRow(row) ?? row.application),
+                                    ...resolveApplicationPersonalFields(row),
                                   }}
                                   assignedPropertyId={row.assignedPropertyId}
                                   assignedRoomChoice={row.assignedRoomChoice}

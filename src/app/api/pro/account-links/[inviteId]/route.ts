@@ -80,6 +80,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
       if (upErr) {
         return NextResponse.json({ error: upErr.message }, { status: 500 });
       }
+
+      await svc.from("portal_pro_relationship_records").delete().eq("id", id);
+      const coManagerAxisId = String(invite.invitee_axis_id ?? "").trim();
+      if (coManagerAxisId) {
+        await svc.from("portal_pro_relationship_records").delete().filter("row_data->>linkedAxisId", "eq", coManagerAxisId);
+      }
+
       return NextResponse.json({ ok: true, invite: serializeInvite(updated as InviteRow, user.id) });
     }
 

@@ -21,8 +21,10 @@ import {
 import {
   AXIS_ID_LABEL,
   generateRelationshipId,
+  proRelationshipRowsFromInvites,
   readProRelationships,
   writeProRelationships,
+  syncProRelationshipsFromServer,
   type ProRelationshipRecord,
 } from "@/lib/pro-relationships";
 import { maxAccountLinksForTier, normalizeManagerSkuTier } from "@/lib/manager-access";
@@ -127,6 +129,23 @@ export function ProAccountLinksPanel({
     const id = window.setTimeout(() => void loadRemoteInvites(), 0);
     return () => window.clearTimeout(id);
   }, [loadRemoteInvites]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/pro/purge-orphaned-co-manager-links", {
+      method: "POST",
+      credentials: "include",
+    })
+      .then(() => syncProRelationshipsFromServer(userId))
+      .then(() => loadRemoteInvites())
+      .then(() => {
+        if (!cancelled) refreshLocal();
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, loadRemoteInvites, refreshLocal]);
 
   useEffect(() => {
     let cancelled = false;
@@ -427,6 +446,9 @@ export function ProAccountLinksPanel({
   const removeLink = async (id: string) => {
     if (useRemote && remoteLoaded) {
       await patchInvite(id, { action: "revoke" }, "Link removed.");
+      writeProRelationships(userId, readProRelationships(userId).filter((row) => row.id !== id));
+      await loadRemoteInvites();
+      refreshLocal();
       return;
     }
     const all = readProRelationships(userId).filter((r) => r.id !== id);
@@ -447,39 +469,16 @@ export function ProAccountLinksPanel({
     await patchInvite(id, { action: "cancel" }, "Invite withdrawn.");
   };
 
-  // Sync accepted remote invites into this user's localStorage so collectAccessiblePropertyIds
-  // picks up linked property IDs (enables Applications and Residents tabs to filter correctly).
+  // Sync accepted remote invites into relationship storage for portfolio access checks.
   useEffect(() => {
-    if (!useRemote || activeRemote.length === 0) return;
-    const existing = readProRelationships(userId);
-    const existingIds = new Set(existing.map((r) => r.id));
-    let changed = false;
-    const next = [...existing];
-    for (const inv of activeRemote) {
-      if (existingIds.has(inv.id)) continue;
-      next.push({
-        id: inv.id,
-        linkedAxisId: inv.linkedAxisId,
-        linkedDisplayName: inv.linkedDisplayName ?? undefined,
-        perspective: "manager_tab",
-        payoutPercentForManager: inv.payoutPercentForManager,
-        assignedPropertyIds: inv.assignedPropertyIds,
-        coManagerPermissions: inv.coManagerPermissions,
-        canEditListing: inv.coManagerPermissions.editListings ? true : undefined,
-        createdAt: inv.createdAt,
-      });
-      changed = true;
+    if (!useRemote || activeRemote.length === 0) {
+      if (useRemote && remoteLoaded) {
+        writeProRelationships(userId, []);
+      }
+      return;
     }
-    // Remove synced records that are no longer accepted.
-    const activeIds = new Set(activeRemote.map((i) => i.id));
-    const filtered = next.filter((r) => {
-      if (activeRemote.some((i) => i.id === r.id)) return activeIds.has(r.id);
-      return true;
-    });
-    if (changed || filtered.length !== next.length) {
-      writeProRelationships(userId, filtered);
-    }
-  }, [activeRemote, useRemote, userId]);
+    writeProRelationships(userId, proRelationshipRowsFromInvites(activeRemote));
+  }, [activeRemote, remoteLoaded, useRemote, userId]);
 
   const activeCards = useRemote ? activeRemote : localRows;
 

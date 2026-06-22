@@ -1,0 +1,338 @@
+import { formatPacificDate } from "@/lib/pacific-time";
+import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
+import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
+import type { MockProperty } from "@/data/types";
+import type { ManagerListingSubmissionV1, ManagerRoomUnavailableRange } from "@/lib/manager-listing-submission";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+function asObject(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  return v as Record<string, unknown>;
+}
+
+function asString(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+export function hasBothLeaseSignatures(row: LeasePipelineRow): boolean {
+  const mgr = row.managerSignature as Record<string, unknown> | null | undefined;
+  const res = row.residentSignature as Record<string, unknown> | null | undefined;
+  const legacyName = typeof row.signatureName === "string" ? row.signatureName : null;
+  const legacyAt = typeof row.signedAtIso === "string" ? row.signedAtIso : null;
+  return Boolean(mgr?.name && mgr?.signedAtIso && ((res?.name && res?.signedAtIso) || (legacyName && legacyAt)));
+}
+
+function rangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+export function propertyFromRecord(record: { id: string; property_data: unknown; row_data: unknown }): MockProperty | undefined {
+  const pd = asObject(record.property_data);
+  if (pd) {
+    const id = asString(pd.id) || record.id;
+    return {
+      id,
+      title: asString(pd.title) || asString(pd.buildingName) || "Property",
+      tagline: asString(pd.tagline),
+      address: asString(pd.address),
+      zip: asString(pd.zip),
+      neighborhood: asString(pd.neighborhood),
+      beds: typeof pd.beds === "number" ? pd.beds : 0,
+      baths: typeof pd.baths === "number" ? pd.baths : 0,
+      rentLabel: asString(pd.rentLabel),
+      available: asString(pd.available),
+      petFriendly: Boolean(pd.petFriendly),
+      buildingId: asString(pd.buildingId) || id,
+      buildingName: asString(pd.buildingName) || asString(pd.title) || "Property",
+      unitLabel: asString(pd.unitLabel),
+      listingSubmission: pd.listingSubmission as MockProperty["listingSubmission"],
+      managerUserId: asString(pd.managerUserId) || undefined,
+      adminPublishLive: Boolean(pd.adminPublishLive),
+    };
+  }
+  const rd = asObject(record.row_data);
+  if (!rd) return undefined;
+  const sub = asObject(rd.submission);
+  const buildingName = asString(rd.buildingName) || asString(sub?.buildingName) || "Property";
+  return {
+    id: record.id,
+    title: buildingName,
+    tagline: asString(rd.tagline),
+    address: asString(rd.address) || asString(sub?.address),
+    zip: asString(rd.zip) || asString(sub?.zip),
+    neighborhood: asString(rd.neighborhood),
+    beds: typeof rd.beds === "number" ? rd.beds : 0,
+    baths: typeof rd.baths === "number" ? rd.baths : 0,
+    rentLabel: "",
+    available: "",
+    petFriendly: Boolean(rd.petFriendly),
+    buildingId: record.id,
+    buildingName,
+    unitLabel: asString(rd.unitLabel),
+    listingSubmission: sub as MockProperty["listingSubmission"],
+    managerUserId: undefined,
+    adminPublishLive: false,
+  };
+}
+
+function formatAvailabilityLabel(isoDate: string): string {
+  const parts = isoDate.split("-").map(Number);
+  if (parts.length !== 3) return `Available from ${isoDate}`;
+  const [y, m, d] = parts as [number, number, number];
+  const dt = new Date(y, m - 1, d);
+  if (Number.isNaN(dt.getTime())) return `Available from ${isoDate}`;
+  return `Available from ${formatPacificDate(dt, { year: "numeric", month: "long", day: "numeric" })}`;
+}
+
+export async function checkMoveOutAvailabilityForLease(
+  db: SupabaseClient,
+  leaseRow: LeasePipelineRow,
+  leaseRecord: { property_id?: string | null },
+  newLeaseEnd: string,
+  excludeResidentEmail?: string,
+): Promise<
+  | { ok: true; direction: "extend" | "decrease" | "same" }
+  | { ok: false; direction: "extend" | "decrease" | "same"; reason: string; nextAvailableDate?: string | null }
+> {
+  const currentEnd = leaseRow.application?.leaseEnd ?? "";
+  const currentStart = leaseRow.application?.leaseStart ?? "";
+  const direction =
+    newLeaseEnd < currentEnd ? "decrease" : newLeaseEnd > currentEnd ? "extend" : ("same" as const);
+
+  if (direction === "decrease") {
+    if (currentStart && newLeaseEnd < currentStart) {
+      return { ok: false, direction, reason: "New move-out date cannot be before the lease start date." };
+    }
+    return { ok: true, direction };
+  }
+  if (direction === "same") return { ok: true, direction };
+
+  const extensionStart = (() => {
+    const d = new Date(currentEnd + "T00:00:00");
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const roomChoice = leaseRow.roomChoice ?? leaseRow.application?.roomChoice1 ?? "";
+  const sep = "::";
+  const sepIdx = roomChoice.indexOf(sep);
+  const roomId = sepIdx >= 0 ? roomChoice.slice(sepIdx + sep.length) : null;
+  const propertyId = leaseRecord.property_id ?? leaseRow.propertyId ?? "";
+
+  if (!propertyId || !roomId) return { ok: true, direction };
+
+  const { data: propRecord } = await db
+    .from("manager_property_records")
+    .select("id, property_data, row_data")
+    .eq("id", propertyId)
+    .maybeSingle();
+
+  if (propRecord) {
+    const pd = asObject(propRecord.property_data);
+    if (pd?.listingSubmission) {
+      const rawSub = pd.listingSubmission as ManagerListingSubmissionV1;
+      if (rawSub.v === 1) {
+        const norm = normalizeManagerListingSubmissionV1(rawSub);
+        const room = norm.rooms.find((r) => r.id === roomId);
+        if (room) {
+          const blocked = (room.manualUnavailableRanges ?? []).find((range: ManagerRoomUnavailableRange) =>
+            rangesOverlap(extensionStart, newLeaseEnd, range.start, range.end),
+          );
+          if (blocked) {
+            return {
+              ok: false,
+              direction,
+              reason: `This room has a blocked period from ${blocked.start} to ${blocked.end}.`,
+              nextAvailableDate: blocked.end,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  const email = excludeResidentEmail?.trim().toLowerCase() ?? leaseRow.residentEmail.trim().toLowerCase();
+  const { data: otherLeases } = await db
+    .from("portal_lease_pipeline_records")
+    .select("id, row_data, resident_email")
+    .eq("property_id", propertyId)
+    .neq("resident_email", email)
+    .order("updated_at", { ascending: false });
+
+  for (const rec of otherLeases ?? []) {
+    const row = asObject(rec.row_data) as unknown as LeasePipelineRow | null;
+    if (!row || !hasBothLeaseSignatures(row) || row.status === "Voided") continue;
+    const otherRoomChoice = row.roomChoice ?? row.application?.roomChoice1 ?? "";
+    const otherSepIdx = otherRoomChoice.indexOf(sep);
+    const otherRoomId = otherSepIdx >= 0 ? otherRoomChoice.slice(otherSepIdx + sep.length) : null;
+    if (otherRoomId !== roomId) continue;
+    const otherStart = asString(row.application?.leaseStart);
+    const otherEnd = asString(row.application?.leaseEnd);
+    if (!otherStart) continue;
+    if (rangesOverlap(extensionStart, newLeaseEnd, otherStart, otherEnd || "9999-12-31")) {
+      return {
+        ok: false,
+        direction,
+        reason: `This room is already booked by another resident starting ${otherStart}.`,
+        nextAvailableDate: otherEnd || null,
+      };
+    }
+  }
+
+  return { ok: true, direction };
+}
+
+async function syncApplicationLeaseDates(
+  db: SupabaseClient,
+  axisId: string | null | undefined,
+  newLeaseEnd: string,
+  iso: string,
+): Promise<void> {
+  const id = axisId?.trim();
+  if (!id) return;
+  const { data: appRecord } = await db.from("manager_application_records").select("id, row_data").eq("id", id).maybeSingle();
+  if (!appRecord?.row_data || typeof appRecord.row_data !== "object") return;
+  const rowData = appRecord.row_data as Record<string, unknown>;
+  const application = asObject(rowData.application) ?? {};
+  const manual = asObject(rowData.manualResidentDetails) ?? {};
+  await db
+    .from("manager_application_records")
+    .update({
+      row_data: {
+        ...rowData,
+        application: { ...application, leaseEnd: newLeaseEnd },
+        manualResidentDetails: { ...manual, moveOutDate: newLeaseEnd },
+      },
+      updated_at: iso,
+    })
+    .eq("id", id);
+}
+
+export async function amendLeaseMoveOutDate(
+  db: SupabaseClient,
+  leaseRecord: {
+    id: string;
+    manager_user_id?: string | null;
+    property_id?: string | null;
+    row_data: unknown;
+  },
+  newLeaseEnd: string,
+): Promise<{ ok: true; direction: "extend" | "decrease"; newLeaseEnd: string } | { ok: false; error: string }> {
+  const leaseRow = leaseRecord.row_data as LeasePipelineRow;
+  if (!hasBothLeaseSignatures(leaseRow) || leaseRow.status === "Voided") {
+    return { ok: false, error: "Only fully signed leases can be renewed or extended." };
+  }
+
+  const currentStart = leaseRow.application?.leaseStart ?? "";
+  if (currentStart && newLeaseEnd < currentStart) {
+    return { ok: false, error: "New move-out date cannot be before the lease start date." };
+  }
+  const currentEnd = leaseRow.application?.leaseEnd ?? "";
+  if (newLeaseEnd === currentEnd) {
+    return { ok: false, error: "New move-out date is the same as the current date." };
+  }
+
+  const availability = await checkMoveOutAvailabilityForLease(db, leaseRow, leaseRecord, newLeaseEnd);
+  if (!availability.ok) {
+    return { ok: false, error: availability.reason };
+  }
+
+  const updatedApplication = { ...(leaseRow.application ?? {}), leaseEnd: newLeaseEnd };
+  const iso = new Date().toISOString();
+  let newHtml: string | null = null;
+
+  try {
+    const propertyId = leaseRecord.property_id ?? leaseRow.propertyId ?? "";
+    const propertyRecord = propertyId
+      ? (await db.from("manager_property_records").select("id, property_data, row_data").eq("id", propertyId).maybeSingle()).data
+      : null;
+    if (propertyRecord) {
+      const prop = propertyFromRecord(propertyRecord as { id: string; property_data: unknown; row_data: unknown });
+      if (prop) {
+        const ctx = leaseContextFromApplication({ ...updatedApplication, propertyId });
+        const finalCtx = ctx.submission
+          ? ctx
+          : {
+              ...ctx,
+              leasedRoom: prop,
+              listingProperty: prop,
+              submission:
+                prop.listingSubmission?.v === 1
+                  ? normalizeManagerListingSubmissionV1(prop.listingSubmission as ManagerListingSubmissionV1)
+                  : ctx.submission,
+            };
+        newHtml = buildAiGeneratedLeaseHtml(finalCtx);
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  const updatedRow: Partial<LeasePipelineRow> = {
+    ...leaseRow,
+    application: updatedApplication,
+    managerSignature: null,
+    residentSignature: null,
+    signatureName: null,
+    signedAtIso: null,
+    bucket: "manager",
+    status: "Manager Review",
+    currentActorRole: "manager",
+    updatedAtIso: iso,
+    updated: "just now",
+    ...(newHtml ? { generatedHtml: newHtml, generatedAtIso: iso } : {}),
+  };
+
+  const { error: upsertError } = await db.from("portal_lease_pipeline_records").upsert({
+    id: leaseRecord.id,
+    manager_user_id: leaseRecord.manager_user_id,
+    resident_user_id: leaseRow.residentUserId ?? null,
+    resident_email: leaseRow.residentEmail.trim().toLowerCase(),
+    property_id: leaseRecord.property_id ?? null,
+    status: "manager",
+    row_data: updatedRow,
+    updated_at: iso,
+  });
+  if (upsertError) return { ok: false, error: upsertError.message };
+
+  await syncApplicationLeaseDates(db, leaseRow.axisId, newLeaseEnd, iso);
+
+  try {
+    const propertyId = leaseRecord.property_id ?? leaseRow.propertyId ?? "";
+    const roomChoice = leaseRow.roomChoice ?? leaseRow.application?.roomChoice1 ?? "";
+    const sep = "::";
+    const sepIdx = roomChoice.indexOf(sep);
+    const roomId = sepIdx >= 0 ? roomChoice.slice(sepIdx + sep.length) : null;
+    if (propertyId && roomId) {
+      const { data: propRecord } = await db
+        .from("manager_property_records")
+        .select("id, property_data, row_data")
+        .eq("id", propertyId)
+        .maybeSingle();
+      if (propRecord) {
+        const pd = asObject(propRecord.property_data);
+        if (pd?.listingSubmission) {
+          const sub = pd.listingSubmission as ManagerListingSubmissionV1;
+          if (sub.v === 1) {
+            const norm = normalizeManagerListingSubmissionV1(sub);
+            const updatedRooms = norm.rooms.map((r) =>
+              r.id === roomId
+                ? { ...r, moveInAvailableDate: newLeaseEnd, availability: formatAvailabilityLabel(newLeaseEnd) }
+                : r,
+            );
+            await db
+              .from("manager_property_records")
+              .update({ property_data: { ...pd, listingSubmission: { ...norm, rooms: updatedRooms } }, updated_at: iso })
+              .eq("id", propertyId);
+          }
+        }
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  const direction = newLeaseEnd < currentEnd ? "decrease" : "extend";
+  return { ok: true, direction, newLeaseEnd };
+}
