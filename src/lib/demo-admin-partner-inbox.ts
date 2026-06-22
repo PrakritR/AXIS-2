@@ -1,4 +1,5 @@
 import { emitAdminUi } from "@/lib/demo-admin-ui";
+import { deleteInboxThreadIds } from "@/lib/portal-inbox-storage";
 
 let inboxMessages: InboxMessage[] = [];
 
@@ -53,12 +54,49 @@ function writeAllLocal(rows: InboxMessage[]) {
 
 function writeAll(rows: InboxMessage[]) {
   writeAllLocal(rows);
-  void fetch("/api/portal-inbox-threads", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ action: "replace", rows: rows.map((row) => ({ ...row, scope: "admin" })) }),
-  }).catch(() => undefined);
+  void persistInboxMessagesAwait(rows).catch(() => undefined);
+}
+
+async function persistInboxMessagesAwait(rows: InboxMessage[]): Promise<boolean> {
+  if (!isBrowser()) return false;
+  writeAllLocal(rows);
+  try {
+    const res = await fetch("/api/portal-inbox-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "replace", rows: rows.map((row) => ({ ...row, scope: "admin" })) }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export function mergeAdminInboxWithLocalTrash(
+  serverRows: InboxMessage[],
+  localRows: InboxMessage[],
+  excludeIds?: Set<string>,
+): InboxMessage[] {
+  const localById = new Map(localRows.map((row) => [row.id, row]));
+  const serverIds = new Set(serverRows.map((row) => row.id));
+  const merged = serverRows
+    .filter((row) => !excludeIds?.has(row.id))
+    .map((serverRow) => {
+      const localRow = localById.get(serverRow.id);
+      if (localRow?.folder === "trash" && serverRow.folder !== "trash") {
+        return { ...serverRow, folder: "trash" as const, trashedFrom: localRow.trashedFrom };
+      }
+      if (localRow && localRow.folder !== "trash" && serverRow.folder === "trash") {
+        return { ...serverRow, folder: localRow.folder, trashedFrom: undefined, read: localRow.read };
+      }
+      return serverRow;
+    });
+  for (const localRow of localRows) {
+    if (excludeIds?.has(localRow.id) || serverIds.has(localRow.id)) continue;
+    merged.push(localRow);
+  }
+  return merged;
 }
 
 export function readInboxMessages(): InboxMessage[] {
@@ -74,7 +112,7 @@ function looksLikeInboxMessage(row: unknown): row is InboxMessage {
 let syncedFromServer = false;
 
 /** Hydrate the in-memory admin inbox from the server (admin inbox is otherwise lost on every fresh page load). */
-export async function syncInboxMessagesFromServer(opts?: { force?: boolean }): Promise<InboxMessage[]> {
+export async function syncInboxMessagesFromServer(opts?: { force?: boolean; excludeIds?: Set<string> }): Promise<InboxMessage[]> {
   if (!isBrowser()) return readAll();
   if (syncedFromServer && !opts?.force) return readAll();
   try {
@@ -82,9 +120,11 @@ export async function syncInboxMessagesFromServer(opts?: { force?: boolean }): P
     if (!res.ok) return readAll();
     const body = (await res.json()) as { rows?: unknown[] };
     const rows = (Array.isArray(body.rows) ? body.rows : []).filter(looksLikeInboxMessage);
+    const existing = readAll();
+    const merged = mergeAdminInboxWithLocalTrash(rows, existing, opts?.excludeIds);
     syncedFromServer = true;
-    writeAllLocal(rows);
-    return rows;
+    writeAllLocal(merged);
+    return merged;
   } catch {
     return readAll();
   }
@@ -170,7 +210,7 @@ export function appendThreadReply(messageId: string, authorLabel: string, body: 
   return true;
 }
 
-export function moveInboxMessageToTrash(id: string): boolean {
+export async function moveInboxMessageToTrash(id: string): Promise<boolean> {
   const rows = readAll();
   const idx = rows.findIndex((r) => r.id === id);
   if (idx === -1) return false;
@@ -180,11 +220,10 @@ export function moveInboxMessageToTrash(id: string): boolean {
   const trashedFrom: "inbox" | "sent" = from === "sent" ? "sent" : "inbox";
   const next = [...rows];
   next[idx] = { ...row, folder: "trash", trashedFrom };
-  writeAll(next);
-  return true;
+  return persistInboxMessagesAwait(next);
 }
 
-export function restoreInboxMessageFromTrash(id: string): boolean {
+export async function restoreInboxMessageFromTrash(id: string): Promise<boolean> {
   const rows = readAll();
   const idx = rows.findIndex((r) => r.id === id);
   if (idx === -1) return false;
@@ -197,23 +236,28 @@ export function restoreInboxMessageFromTrash(id: string): boolean {
   } else {
     next[idx] = { ...row, folder: "inbox", trashedFrom: undefined, read: false };
   }
-  writeAll(next);
-  return true;
+  return persistInboxMessagesAwait(next);
 }
 
 /** Remove a message from storage (e.g. from Trash). */
-export function permanentlyDeleteInboxMessage(id: string): boolean {
+export async function permanentlyDeleteInboxMessage(id: string): Promise<boolean> {
   const rows = readAll();
   const next = rows.filter((r) => r.id !== id);
   if (next.length === rows.length) return false;
-  writeAllLocal(next);
-  void fetch("/api/portal-inbox-threads", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ action: "deleteIds", ids: [id] }),
-  }).catch(() => undefined);
-  return true;
+  const deleted = await deleteInboxThreadIds([id]);
+  if (!deleted) return false;
+  return persistInboxMessagesAwait(next);
+}
+
+/** Permanently delete all messages in the admin trash folder. */
+export async function emptyAdminInboxTrash(): Promise<boolean> {
+  const rows = readAll();
+  const trashIds = rows.filter((r) => r.folder === "trash").map((r) => r.id).filter(Boolean);
+  if (trashIds.length === 0) return true;
+  const deleted = await deleteInboxThreadIds(trashIds);
+  if (!deleted) return false;
+  const next = rows.filter((r) => r.folder !== "trash");
+  return persistInboxMessagesAwait(next);
 }
 
 export type AdminComposeSendMode =

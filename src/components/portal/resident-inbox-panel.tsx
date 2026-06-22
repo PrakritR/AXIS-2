@@ -79,7 +79,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   useEffect(() => {
     persistInboxRef.current = false;
-    void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+    void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY).then((rows) => {
       setLocal(rows as InboxThread[]);
       setPersistReady(true);
       persistInboxRef.current = true;
@@ -139,22 +139,60 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     [showToast],
   );
 
+  function inferPreviousFolder(t: InboxThread): "inbox" | "sent" {
+    if (t.previousFolder) return t.previousFolder;
+    if (/^(sent_|msg_|welcome_)/.test(t.id)) return "sent";
+    return "inbox";
+  }
+
   const moveToTrash = useCallback(
     (id: string) => {
-      setLocal((prev) => prev.map((t) => (t.id === id ? { ...t, folder: "trash" as const } : t)));
-      setExpandedId(null);
-      showToast("Moved to trash.");
+      void (async () => {
+        const prev = local;
+        const target = prev.find((t) => t.id === id);
+        if (!target || target.folder === "trash" || (target.folder !== "inbox" && target.folder !== "sent")) return;
+        const next = prev.map((t) =>
+          t.id === id ? { ...t, folder: "trash" as const, previousFolder: t.folder, unread: false } : t,
+        );
+        persistInboxRef.current = false;
+        setLocal(next);
+        setExpandedId(null);
+        const ok = await persistInboxAwait(RESIDENT_INBOX_STORAGE_KEY, next);
+        persistInboxRef.current = true;
+        if (!ok) {
+          setLocal(prev);
+          showToast("Could not move message to trash.");
+          return;
+        }
+        showToast("Moved to trash.");
+      })();
     },
-    [showToast],
+    [local, showToast],
   );
 
   const restoreFromTrash = useCallback(
     (id: string) => {
-      setLocal((prev) => prev.map((t) => (t.id === id ? { ...t, folder: "inbox" as const } : t)));
-      setExpandedId(null);
-      showToast("Restored to inbox.");
+      void (async () => {
+        const prev = local;
+        const next = prev.map((t) => {
+          if (t.id !== id || t.folder !== "trash") return t;
+          const dest = inferPreviousFolder(t);
+          return { ...t, folder: dest, previousFolder: undefined, unread: dest === "inbox" ? t.unread : false };
+        });
+        persistInboxRef.current = false;
+        setLocal(next);
+        setExpandedId(null);
+        const ok = await persistInboxAwait(RESIDENT_INBOX_STORAGE_KEY, next);
+        persistInboxRef.current = true;
+        if (!ok) {
+          setLocal(prev);
+          showToast("Could not restore message.");
+          return;
+        }
+        showToast("Restored.");
+      })();
     },
-    [showToast],
+    [local, showToast],
   );
 
   const deleteForever = useCallback(
@@ -171,8 +209,9 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         setLocal(next);
         setExpandedId(null);
         await persistInboxAwait(RESIDENT_INBOX_STORAGE_KEY, next);
-        const synced = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
-        setLocal(synced as InboxThread[]);
+        const deletedIds = new Set([id]);
+        const synced = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true, excludeIds: deletedIds });
+        setLocal((synced as InboxThread[]).filter((t) => !deletedIds.has(t.id)));
         persistInboxRef.current = true;
         showToast("Deleted permanently.");
       })();
@@ -200,8 +239,9 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       setLocal(next);
       setExpandedId(null);
       await persistInboxAwait(RESIDENT_INBOX_STORAGE_KEY, next);
-      const synced = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
-      setLocal(synced as InboxThread[]);
+      const deletedIds = new Set(ids);
+      const synced = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true, excludeIds: deletedIds });
+      setLocal((synced as InboxThread[]).filter((t) => !deletedIds.has(t.id)));
       persistInboxRef.current = true;
       showToast("Trash emptied.");
     })().catch(() => showToast("Could not empty trash."));

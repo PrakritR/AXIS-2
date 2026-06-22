@@ -23,6 +23,7 @@ import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
   appendInboxMessage,
   appendThreadReply,
+  emptyAdminInboxTrash,
   markInboxMessageRead,
   moveInboxMessageToTrash,
   permanentlyDeleteInboxMessage,
@@ -464,6 +465,27 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setComposeOpen(true)}>
             New message
           </Button>
+          {tabId === "trash" && folderCounts.trash > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              onClick={() => {
+                if (!window.confirm(`Delete all ${folderCounts.trash} trash message${folderCounts.trash === 1 ? "" : "s"}? This cannot be undone.`)) return;
+                void emptyAdminInboxTrash().then((ok) => {
+                  if (ok) {
+                    showToast("Trash cleared.");
+                    setExpandedId(null);
+                    setTick((t) => t + 1);
+                  } else {
+                    showToast("Could not clear trash.");
+                  }
+                });
+              }}
+            >
+              Delete all trash
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
             Refresh
           </Button>
@@ -550,11 +572,15 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                     variant="outline"
                                     className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-emerald-200 text-emerald-900 hover:bg-emerald-50`}
                                     onClick={() => {
-                                      if (restoreInboxMessageFromTrash(row.id)) {
-                                        showToast("Restored.");
-                                        setExpandedId(null);
-                                        setTick((t) => t + 1);
-                                      }
+                                      void restoreInboxMessageFromTrash(row.id).then((ok) => {
+                                        if (ok) {
+                                          showToast("Restored.");
+                                          setExpandedId(null);
+                                          setTick((t) => t + 1);
+                                        } else {
+                                          showToast("Could not restore message.");
+                                        }
+                                      });
                                     }}
                                   >
                                     Restore
@@ -564,11 +590,15 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                     variant="outline"
                                     className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-rose-200 text-rose-800 hover:bg-rose-50`}
                                     onClick={() => {
-                                      if (permanentlyDeleteInboxMessage(row.id)) {
-                                        showToast("Deleted permanently.");
-                                        setExpandedId(null);
-                                        setTick((t) => t + 1);
-                                      }
+                                      void permanentlyDeleteInboxMessage(row.id).then((ok) => {
+                                        if (ok) {
+                                          showToast("Deleted permanently.");
+                                          setExpandedId(null);
+                                          setTick((t) => t + 1);
+                                        } else {
+                                          showToast("Could not delete message.");
+                                        }
+                                      });
                                     }}
                                   >
                                     Delete forever
@@ -580,11 +610,15 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   variant="outline"
                                   className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
                                   onClick={() => {
-                                    if (moveInboxMessageToTrash(row.id)) {
-                                      showToast("Moved to trash.");
-                                      setExpandedId(null);
-                                      setTick((t) => t + 1);
-                                    }
+                                    void moveInboxMessageToTrash(row.id).then((ok) => {
+                                      if (ok) {
+                                        showToast("Moved to trash.");
+                                        setExpandedId(null);
+                                        setTick((t) => t + 1);
+                                      } else {
+                                        showToast("Could not move message to trash.");
+                                      }
+                                    });
                                   }}
                                 >
                                   Move to trash

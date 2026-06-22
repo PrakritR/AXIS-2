@@ -79,7 +79,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
   useEffect(() => {
     persistInboxRef.current = false;
-    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY).then((rows) => {
       setLocal(rows as InboxThread[]);
       setInboxSynced(true);
       persistInboxRef.current = true;
@@ -182,15 +182,25 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   }, [local]);
 
   const moveToTrash = (id: string) => {
-    setLocal((prev) =>
-      prev.map((t) =>
-        t.id === id && (t.folder === "inbox" || t.folder === "sent")
-          ? { ...t, folder: "trash" as const, previousFolder: t.folder, unread: false }
-          : t,
-      ),
-    );
-    setExpandedId((e) => (e === id ? null : e));
-    showToast("Moved to trash.");
+    void (async () => {
+      const prev = local;
+      const target = prev.find((t) => t.id === id);
+      if (!target || target.folder === "trash" || (target.folder !== "inbox" && target.folder !== "sent")) return;
+      const next = prev.map((t) =>
+        t.id === id ? { ...t, folder: "trash" as const, previousFolder: t.folder, unread: false } : t,
+      );
+      persistInboxRef.current = false;
+      setLocal(next);
+      setExpandedId((e) => (e === id ? null : e));
+      const ok = await persistInboxAwait(MANAGER_INBOX_STORAGE_KEY, next);
+      persistInboxRef.current = true;
+      if (!ok) {
+        setLocal(prev);
+        showToast("Could not move message to trash.");
+        return;
+      }
+      showToast("Moved to trash.");
+    })();
   };
 
   function inferPreviousFolder(t: InboxThread): "inbox" | "sent" {
@@ -200,15 +210,25 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   }
 
   const restoreFromTrash = (id: string) => {
-    setLocal((prev) =>
-      prev.map((t) => {
+    void (async () => {
+      const prev = local;
+      const next = prev.map((t) => {
         if (t.id !== id || t.folder !== "trash") return t;
         const dest = inferPreviousFolder(t);
         return { ...t, folder: dest, previousFolder: undefined, unread: false };
-      }),
-    );
-    setExpandedId((e) => (e === id ? null : e));
-    showToast("Restored.");
+      });
+      persistInboxRef.current = false;
+      setLocal(next);
+      setExpandedId((e) => (e === id ? null : e));
+      const ok = await persistInboxAwait(MANAGER_INBOX_STORAGE_KEY, next);
+      persistInboxRef.current = true;
+      if (!ok) {
+        setLocal(prev);
+        showToast("Could not restore message.");
+        return;
+      }
+      showToast("Restored.");
+    })();
   };
 
   const deleteForever = (id: string) => {
@@ -224,8 +244,9 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       setLocal(next);
       setExpandedId((e) => (e === id ? null : e));
       await persistInboxAwait(MANAGER_INBOX_STORAGE_KEY, next);
-      const synced = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
-      setLocal(synced as InboxThread[]);
+      const deletedIds = new Set([id]);
+      const synced = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true, excludeIds: deletedIds });
+      setLocal((synced as InboxThread[]).filter((t) => !deletedIds.has(t.id)));
       persistInboxRef.current = true;
       showToast("Message deleted.");
     })();
@@ -252,8 +273,9 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       setLocal(next);
       setExpandedId(null);
       await persistInboxAwait(MANAGER_INBOX_STORAGE_KEY, next);
-      const synced = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
-      setLocal(synced as InboxThread[]);
+      const deletedIds = new Set(ids);
+      const synced = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true, excludeIds: deletedIds });
+      setLocal((synced as InboxThread[]).filter((t) => !deletedIds.has(t.id)));
       persistInboxRef.current = true;
       showToast("Trash cleared.");
     })().catch(() => showToast("Could not clear trash."));

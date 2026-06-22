@@ -3,6 +3,7 @@
 export type PersistedInboxThread = {
   id: string;
   folder: "inbox" | "sent" | "trash";
+  previousFolder?: "inbox" | "sent";
   from: string;
   email: string;
   subject: string;
@@ -62,12 +63,49 @@ function looksLikeThread(row: unknown): row is PersistedInboxThread {
   return typeof r.id === "string" && typeof r.folder === "string";
 }
 
+/** Prefer local trash/restore state when server sync is stale (e.g. tab remount before persist completes). */
+export function mergeInboxRowsWithLocalTrash(
+  serverRows: PersistedInboxThread[],
+  localRows: PersistedInboxThread[],
+  opts?: { excludeIds?: Set<string> },
+): PersistedInboxThread[] {
+  const excludeIds = opts?.excludeIds ?? new Set<string>();
+  const localById = new Map(localRows.map((row) => [row.id, row]));
+  const serverIds = new Set(serverRows.map((row) => row.id));
+  const merged = serverRows
+    .filter((row) => !excludeIds.has(row.id))
+    .map((serverRow) => {
+      const localRow = localById.get(serverRow.id);
+      if (!localRow) return serverRow;
+      if (localRow.folder === "trash" && serverRow.folder !== "trash") {
+        return {
+          ...serverRow,
+          folder: "trash" as const,
+          previousFolder: localRow.previousFolder,
+          unread: false,
+        };
+      }
+      if (localRow.folder !== "trash" && serverRow.folder === "trash" && localRow.folder !== serverRow.folder) {
+        return { ...serverRow, folder: localRow.folder, previousFolder: undefined, unread: localRow.unread };
+      }
+      return serverRow;
+    });
+  for (const localRow of localRows) {
+    if (excludeIds.has(localRow.id) || serverIds.has(localRow.id)) continue;
+    merged.push(localRow);
+  }
+  return merged;
+}
+
 /** Unopened count for KPIs / badges (matches inbox tab filters). */
 export function countUnopenedPersistedInbox(key: string, fallback: PersistedInboxThread[]): number {
   return loadPersistedInbox(key, fallback).filter((t) => t.folder === "inbox" && t.unread).length;
 }
 
-export async function syncPersistedInboxFromServer(key: string, opts?: { force?: boolean }): Promise<PersistedInboxThread[]> {
+export async function syncPersistedInboxFromServer(
+  key: string,
+  opts?: { force?: boolean; excludeIds?: Set<string> },
+): Promise<PersistedInboxThread[]> {
   if (!canUse()) return [];
   hydrateInboxFromSession(key);
   const force = opts?.force === true;
@@ -83,13 +121,14 @@ export async function syncPersistedInboxFromServer(key: string, opts?: { force?:
     const body = (await res.json()) as { rows?: PersistedInboxThread[] };
     const rows = (Array.isArray(body.rows) ? body.rows : []).filter(looksLikeThread);
     const existing = memoryByKey.get(key) ?? [];
-    memoryByKey.set(key, rows);
-    persistInboxToSession(key, rows);
+    const merged = mergeInboxRowsWithLocalTrash(rows, existing, { excludeIds: opts?.excludeIds });
+    memoryByKey.set(key, merged);
+    persistInboxToSession(key, merged);
     inboxLastSyncedAtByKey.set(key, Date.now());
-    if (inboxRowsChanged(existing, rows)) {
+    if (inboxRowsChanged(existing, merged)) {
       window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
     }
-    return rows;
+    return merged;
   })();
   inboxSyncPromiseByKey.set(key, promise);
   try {
