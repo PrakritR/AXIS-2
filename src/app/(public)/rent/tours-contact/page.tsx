@@ -18,6 +18,9 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import Link from "next/link";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
+import { Button } from "@/components/ui/button";
+import { Input, Select, Textarea } from "@/components/ui/input";
+import { WizardShell } from "@/components/ui/wizard-shell";
 import {
   PropertySearchPicker,
   buildingGroupsToSearchOptions,
@@ -145,7 +148,7 @@ export default function ToursContactPage() {
   return (
     <div className="min-h-screen px-4 py-12 sm:py-16">
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-3xl font-bold tracking-tight text-[#0d1f4e]">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
           {tab === "tour" ? "Schedule tour" : "Message Axis"}
         </h1>
 
@@ -281,24 +284,39 @@ function TourFlow({
     selectedSlotIndex !== null &&
     managersAtSelectedSlot.length > 0;
 
-  const steps = [
-    { n: 1, label: "Property & room" },
-    { n: 2, label: "Date & time" },
-    { n: 3, label: "Your details" },
+  const tourWizardSteps = [
+    { id: "property", label: "Property & room" },
+    { id: "datetime", label: "Date & time" },
+    { id: "details", label: "Your details" },
   ];
+
+  const handleTourBack = () => {
+    if (step === 2) {
+      setStep(1);
+      if (selectedProperty) {
+        setStep1Phase("room");
+        setSelectedBuildingId(selectedProperty.buildingId);
+      } else {
+        setStep1Phase("property");
+        setSelectedBuildingId(null);
+      }
+      return;
+    }
+    setStep((s) => (s - 1) as TourStep);
+  };
 
   if (submitted) {
     return (
-      <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-white p-7 shadow-sm">
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Tour request sent</p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">Your tour request is in</h2>
-          <p className="mt-3 text-sm leading-relaxed text-slate-700">
+      <div className="glass-card mt-4 overflow-hidden rounded-3xl p-7">
+        <div className="rounded-2xl border border-[var(--status-confirmed-bg)] bg-[var(--status-confirmed-bg)] px-5 py-5">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--status-confirmed-fg)]">Tour request sent</p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Your tour request is in</h2>
+          <p className="mt-3 text-sm leading-relaxed text-muted">
             We sent your tour request to the Axis team. Check your email for tour confirmation, the meeting link if needed,
             and next steps.
           </p>
           {selectedProperty ? (
-            <p className="mt-3 text-sm font-medium text-slate-800">
+            <p className="mt-3 text-sm font-medium text-foreground">
               Requested tour: {selectedProperty.title}
               {selectedDay && selectedSlotIndex != null
                 ? ` · ${MONTHS[calMonth]} ${selectedDay}, ${calYear} · ${formatAvailabilitySlotLabel(selectedSlotIndex)}`
@@ -308,8 +326,9 @@ function TourFlow({
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => {
               setSubmitted(false);
               setStep(1);
@@ -320,14 +339,10 @@ function TourFlow({
               setSelectedDay(null);
               setSelectedSlotIndex(null);
             }}
-            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             Request another tour
-          </button>
-          <Link
-            href="/rent/listings"
-            className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
-          >
+          </Button>
+          <Link href="/rent/listings" className="btn-cobalt inline-flex items-center rounded-full px-5 py-2 text-sm font-semibold">
             Back to listings
           </Link>
         </div>
@@ -336,50 +351,37 @@ function TourFlow({
   }
 
   return (
-    <div className="mt-4 rounded-3xl border border-slate-200/80 bg-white p-7 shadow-sm">
-      {/* Step indicator */}
-      <div className="flex items-center gap-2 text-sm">
-        {steps.map((s, i) => (
-          <div key={s.n} className="flex items-center gap-2">
-            {i > 0 && <div className="h-px w-6 bg-slate-200" />}
-            <button
-              type="button"
-              onClick={() => {
-                if (s.n === 1) {
-                  setStep(1);
-                  if (selectedProperty) {
-                    setStep1Phase("room");
-                    setSelectedBuildingId(selectedProperty.buildingId);
-                  } else {
-                    setStep1Phase("property");
-                    setSelectedBuildingId(null);
-                  }
-                }
-                if (s.n === 2 && canContinue1) setStep(2);
-                if (s.n === 3 && canContinue1 && canContinue2) setStep(3);
-              }}
-              className="flex items-center gap-2"
-            >
-              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                step === s.n
-                  ? "bg-primary text-white"
-                  : s.n < step
-                  ? "bg-primary/20 text-primary"
-                  : "bg-slate-100 text-slate-400"
-              }`}>
-                {s.n < step ? <CheckSmIcon /> : s.n}
-              </span>
-              <span className={`hidden sm:inline text-sm ${
-                step === s.n ? "font-semibold text-slate-800" : "text-slate-400"
-              }`}>
-                {s.label}
-              </span>
-            </button>
+    <div className="glass-card mt-4 overflow-hidden rounded-3xl">
+      <WizardShell
+        steps={tourWizardSteps}
+        currentStepIndex={step - 1}
+        footer={
+          <div className={`flex w-full ${step > 1 ? "justify-between" : "justify-end"}`}>
+            {step > 1 ? (
+              <Button type="button" variant="outline" onClick={handleTourBack}>
+                Back
+              </Button>
+            ) : (
+              <span />
+            )}
+            {step < 3 ? (
+              <Button
+                type="button"
+                disabled={step === 1 ? !canContinue1 : !canContinue2}
+                onClick={() => setStep((s) => (s + 1) as TourStep)}
+              >
+                Continue
+              </Button>
+            ) : null}
           </div>
-        ))}
-      </div>
+        }
+      >
+        <div className="mb-6 border-b border-border pb-4">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Step {step} of 3</p>
+          <p className="mt-1 text-lg font-bold tracking-tight text-foreground">{tourWizardSteps[step - 1]?.label}</p>
+        </div>
 
-      <div className="mt-6">
+        <div>
         {step === 1 && (
           <Step1
             buildings={buildings}
@@ -537,43 +539,8 @@ function TourFlow({
             }}
           />
         )}
-      </div>
-
-      {/* Footer nav */}
-      <div className={`mt-6 flex ${step > 1 ? "justify-between" : "justify-end"}`}>
-        {step > 1 && (
-          <button
-            type="button"
-            onClick={() => {
-              if (step === 2) {
-                setStep(1);
-                if (selectedProperty) {
-                  setStep1Phase("room");
-                  setSelectedBuildingId(selectedProperty.buildingId);
-                } else {
-                  setStep1Phase("property");
-                  setSelectedBuildingId(null);
-                }
-                return;
-              }
-              setStep((s) => (s - 1) as TourStep);
-            }}
-            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            Back
-          </button>
-        )}
-        {step < 3 && (
-          <button
-            type="button"
-            disabled={step === 1 ? !canContinue1 : !canContinue2}
-            onClick={() => setStep((s) => (s + 1) as TourStep)}
-            className="rounded-full bg-primary px-7 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-          >
-            Continue
-          </button>
-        )}
-      </div>
+        </div>
+      </WizardShell>
     </div>
   );
 }
@@ -600,7 +567,7 @@ function Step1({
   if (phase === "property") {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-slate-500">Choose a property to tour. You&apos;ll pick a specific room next.</p>
+        <p className="text-sm text-muted">Choose a property to tour. You&apos;ll pick a specific room next.</p>
         <PropertySearchPicker
           options={buildingOptions}
           value={selectedBuildingId}
@@ -618,7 +585,7 @@ function Step1({
 
   const building = buildings.find((x) => x.buildingId === selectedBuildingId);
   if (!building) {
-    return <p className="text-sm text-slate-500">Select a property to see available rooms.</p>;
+    return <p className="text-sm text-muted">Select a property to see available rooms.</p>;
   }
 
   const roomOptions: PropertySearchOption[] = building.units.flatMap((p) =>
@@ -634,8 +601,8 @@ function Step1({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-slate-500">
-          Choose a room at <span className="font-semibold text-slate-800">{building.buildingName}</span>.
+        <p className="text-sm text-muted">
+          Choose a room at <span className="font-semibold text-foreground">{building.buildingName}</span>.
         </p>
         <button
           type="button"
@@ -705,25 +672,25 @@ function Step2({
           No tour windows are published for this property yet. Pick a different house or send a message to Axis.
         </p>
       ) : (
-        <p className="text-sm text-slate-600">
-          Pick one published 30-minute window for <span className="font-semibold text-slate-800">{property.title}</span>.
+        <p className="text-sm text-muted">
+          Pick one published 30-minute window for <span className="font-semibold text-foreground">{property.title}</span>.
         </p>
       )}
       {/* Calendar */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <button type="button" onClick={onPrevMonth} className="rounded-full p-1.5 hover:bg-slate-100">
+          <button type="button" onClick={onPrevMonth} className="rounded-full p-1.5 hover:bg-accent">
             <ChevronLeftIcon />
           </button>
-          <p className="text-sm font-semibold text-slate-800">{MONTHS[calMonth]} {calYear}</p>
-          <button type="button" onClick={onNextMonth} className="rounded-full p-1.5 hover:bg-slate-100">
+          <p className="text-sm font-semibold text-foreground">{MONTHS[calMonth]} {calYear}</p>
+          <button type="button" onClick={onNextMonth} className="rounded-full p-1.5 hover:bg-accent">
             <ChevronRightIcon />
           </button>
         </div>
 
         <div className="grid grid-cols-7 gap-1">
           {DAYS.map((d) => (
-            <div key={d} className="py-1 text-center text-[11px] font-semibold uppercase text-slate-400">{d}</div>
+            <div key={d} className="py-1 text-center text-[11px] font-semibold uppercase text-muted/70">{d}</div>
           ))}
           {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
           {Array.from({ length: daysInMonth }).map((_, i) => {
@@ -743,8 +710,8 @@ function Step2({
                   isSelected
                     ? "bg-primary text-white shadow-sm"
                     : isAvailable && !isPast
-                    ? "bg-white text-slate-800 hover:bg-primary/[0.08] hover:text-primary"
-                    : "cursor-not-allowed text-slate-300"
+                    ? "bg-card text-foreground hover:bg-primary/[0.08] hover:text-primary"
+                    : "cursor-not-allowed text-muted/40"
                 }`}
               >
                 {day}
@@ -757,11 +724,11 @@ function Step2({
       {/* Time slots */}
       {selectedDay && (
         <div>
-          <p className="mb-3 text-sm font-semibold text-slate-700">
+          <p className="mb-3 text-sm font-semibold text-muted">
             Available times — {MONTHS[calMonth]} {selectedDay}
           </p>
           {openSlots.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+            <p className="rounded-2xl border border-dashed border-border bg-accent/30 px-4 py-3 text-sm text-muted">
               No published tour windows for this day.
             </p>
           ) : (
@@ -774,7 +741,7 @@ function Step2({
                   className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
                     selectedSlotIndex === slotIndex
                       ? "border-primary bg-primary text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
+                      : "border-border bg-card text-muted hover:border-primary hover:text-primary"
                   }`}
                 >
                   {formatAvailabilitySlotLabel(slotIndex)}
@@ -787,8 +754,8 @@ function Step2({
 
       {selectedSlotIndex != null && managersAtSelectedSlot.length > 1 && (
         <div>
-          <p className="mb-3 text-sm font-semibold text-slate-700">Multiple managers are available</p>
-          <p className="mb-3 text-xs text-slate-500">
+          <p className="mb-3 text-sm font-semibold text-muted">Multiple managers are available</p>
+          <p className="mb-3 text-xs text-muted">
             We&apos;ll send this request to every available manager for this house. The first manager to approve gets the tour.
           </p>
         </div>
@@ -814,33 +781,33 @@ function Step3({
   return (
     <div className="space-y-5">
       {/* Summary */}
-      <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm">
-        <p className="font-semibold text-slate-800">{roomLabel || property?.title}</p>
-        <p className="mt-0.5 text-slate-500">
+      <div className="rounded-2xl border border-border/60 bg-accent/30 px-4 py-3 text-sm">
+        <p className="font-semibold text-foreground">{roomLabel || property?.title}</p>
+        <p className="mt-0.5 text-muted">
           {MONTHS[month]} {day}, {year} · {slotIndex != null ? formatAvailabilitySlotLabel(slotIndex) : ""}
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name *">
-          <input id="tour-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Smith" className={inputCls} />
+          <Input id="tour-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Smith" />
         </Field>
         <Field label="Email *">
-          <input id="tour-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@email.com" className={inputCls} />
+          <Input id="tour-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@email.com" />
         </Field>
       </div>
       <Field label="Phone">
-        <input id="tour-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(206) 555-0100" className={inputCls} />
+        <Input id="tour-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(206) 555-0100" />
       </Field>
       <Field label="Notes (optional)">
-        <textarea id="tour-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything we should prepare in advance?" className={`${inputCls} resize-none`} />
+        <Textarea id="tour-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything we should prepare in advance?" />
       </Field>
 
       <button
         type="button"
         disabled={submitting}
         onClick={() => onSubmit({ name, email, phone, notes })}
-        className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(47,107,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
       >
         {submitting ? "Booking..." : "Book tour"}
@@ -879,25 +846,25 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
   return (
     <div className="mt-4 space-y-3">
       {/* Topic */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-bold text-slate-900">Topic</h2>
-        <p className="mt-1 text-sm leading-relaxed text-slate-500">
+      <div className="glass-card rounded-3xl p-6">
+        <h2 className="text-base font-bold text-foreground">Topic</h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">
           For rent, payments, maintenance, or portal login issues, use the{" "}
           <Link href="/resident/dashboard" className="font-semibold text-primary hover:underline">
             resident portal
           </Link>
           . These topics are for leasing questions, the area around our homes, and availability.
         </p>
-        <p className="mt-4 text-xs font-semibold text-slate-600">What do you need help with? *</p>
+        <p className="mt-4 text-xs font-semibold text-muted">What do you need help with? *</p>
         <div className="relative mt-2">
-          <select
+          <Select
             value={topic}
             onChange={(e) => {
               const v = e.target.value;
               setTopic(v);
               if (v !== "Other") setOtherTopicDetail("");
             }}
-            className={`${inputCls} appearance-none pr-8`}
+            className="appearance-none pr-8"
           >
             <option value="">Select a topic</option>
             {TOPICS.map((t) => (
@@ -905,20 +872,19 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
                 {t}
               </option>
             ))}
-          </select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+          </Select>
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted/70">
             <ChevronDownIcon />
           </span>
         </div>
         {isOther ? (
           <div className="mt-4">
             <Field label="Describe your topic *">
-              <input
+              <Input
                 type="text"
                 value={otherTopicDetail}
                 onChange={(e) => setOtherTopicDetail(e.target.value)}
                 placeholder="Type what you need help with"
-                className={inputCls}
               />
             </Field>
           </div>
@@ -926,9 +892,9 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
       </div>
 
       {/* Property context */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-bold text-slate-900">Property context</h2>
-        <p className="mt-1 text-sm text-slate-500">Optional — helps us answer about a specific listing.</p>
+      <div className="glass-card rounded-3xl p-6">
+        <h2 className="text-base font-bold text-foreground">Property context</h2>
+        <p className="mt-1 text-sm text-muted">Optional — helps us answer about a specific listing.</p>
 
         {msgPhase === "building" ? (
           <div className="mt-4">
@@ -954,7 +920,7 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
         ) : (
           <div className="mt-4 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-slate-800">
+              <p className="text-sm font-semibold text-foreground">
                 {msgBuilding ? `Rooms at ${msgBuilding.buildingName}` : "Choose a room"}
               </p>
               <button
@@ -1007,35 +973,30 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
       </div>
 
       {/* Contact & message */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-bold text-slate-900">Your contact & message</h2>
-        <p className="mt-1 text-sm text-slate-500">We will reply to the email you provide</p>
+      <div className="glass-card rounded-3xl p-6">
+        <h2 className="text-base font-bold text-foreground">Your contact & message</h2>
+        <p className="mt-1 text-sm text-muted">We will reply to the email you provide</p>
         <div className="mt-5 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name *">
-              <input type="text" placeholder="Jane Smith" className={inputCls} />
+              <Input type="text" placeholder="Jane Smith" />
             </Field>
             <Field label="Email *">
-              <input type="email" placeholder="jane@email.com" className={inputCls} />
+              <Input type="email" placeholder="jane@email.com" />
             </Field>
           </div>
           <Field label="Phone">
-            <input type="tel" placeholder="(206) 555-0100" className={inputCls} />
+            <Input type="tel" placeholder="(206) 555-0100" />
           </Field>
           <Field label="Message *">
-            <textarea rows={4} placeholder="Tell us more so we can help…" className={`${inputCls} resize-none`} />
+            <Textarea rows={4} placeholder="Tell us more so we can help…" />
           </Field>
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={handleSend}
-        className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98]"
-        style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
-      >
+      <Button type="button" className="btn-cobalt w-full rounded-2xl py-3.5" onClick={handleSend}>
         Send message
-      </button>
+      </Button>
     </div>
   );
 }
@@ -1044,23 +1005,12 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-semibold text-slate-500">{label}</p>
+      <p className="mb-1.5 text-xs font-semibold text-muted">{label}</p>
       {children}
     </div>
   );
 }
 
-
-const inputCls =
-  "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all duration-150 placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15 hover:border-slate-300";
-
-function CheckSmIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
 function ChevronLeftIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

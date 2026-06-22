@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import {
+  PORTAL_DASHBOARD_TILE_LINK,
+  PORTAL_KPI_LABEL,
+  PORTAL_KPI_VALUE,
+  PORTAL_SECTION_SURFACE,
+} from "@/components/portal/portal-metrics";
+import { Badge } from "@/components/ui/badge";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { readInboxMessages } from "@/lib/demo-admin-partner-inbox";
 import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
@@ -30,17 +36,21 @@ function NotifBanner({
   tone,
   children,
 }: {
-  tone: "amber" | "blue" | "violet" | "rose";
+  tone: "pending" | "approved" | "confirmed" | "overdue";
   children: React.ReactNode;
 }) {
   const cls = {
-    amber: "border-amber-200/80 bg-amber-50/80 text-amber-950",
-    blue: "border-blue-200/80 bg-blue-50/80 text-blue-950",
-    violet: "border-violet-200/80 bg-violet-50/80 text-violet-950",
-    rose: "border-rose-200/80 bg-rose-50/80 text-rose-950",
+    pending:
+      "border-[color-mix(in_srgb,var(--status-pending-fg)_28%,transparent)] bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]",
+    approved:
+      "border-[color-mix(in_srgb,var(--status-approved-fg)_28%,transparent)] bg-[var(--status-approved-bg)] text-[var(--status-approved-fg)]",
+    confirmed:
+      "border-[color-mix(in_srgb,var(--status-confirmed-fg)_28%,transparent)] bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]",
+    overdue:
+      "border-[color-mix(in_srgb,var(--status-overdue-fg)_28%,transparent)] bg-[var(--status-overdue-bg)] text-[var(--status-overdue-fg)]",
   }[tone];
   return (
-    <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
+    <div className={`glass-card flex items-start justify-between gap-3 rounded-2xl px-4 py-3 text-sm backdrop-blur-xl ${cls}`}>
       {children}
     </div>
   );
@@ -62,13 +72,13 @@ function Tile({
   return (
     <Link
       href={href}
-      className={`group flex flex-col gap-1 rounded-2xl border bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition hover:shadow-md ${
-        urgent ? "border-amber-300/80 ring-1 ring-amber-200/60" : "border-slate-200/80 hover:border-slate-300"
+      className={`${PORTAL_DASHBOARD_TILE_LINK} group flex min-h-[7.5rem] flex-col justify-center gap-1 py-5 ${
+        urgent ? "ring-1 ring-[color-mix(in_srgb,var(--status-pending-fg)_35%,transparent)]" : ""
       }`}
     >
-      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-slate-900">{value}</p>
-      <p className="text-sm font-medium text-slate-600">{label}</p>
-      {sub ? <p className="text-xs text-slate-400">{sub}</p> : null}
+      <p className={`${PORTAL_KPI_VALUE} text-[2rem] leading-none`}>{value}</p>
+      <p className="text-sm font-medium text-muted">{label}</p>
+      {sub ? <p className={`${PORTAL_KPI_LABEL} mt-0`}>{sub}</p> : null}
     </Link>
   );
 }
@@ -189,13 +199,26 @@ export function AdminDashboard() {
 
   return (
     <div className={`${PORTAL_SECTION_SURFACE} space-y-5`}>
-      <h1 className="text-[1.75rem] font-bold tracking-[-0.02em] text-slate-900">Dashboard</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div className="min-w-0">
+          <h1 className="text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem]">Dashboard</h1>
+          <p className="mt-1.5 text-sm text-muted">
+            Platform overview — review queues and activity across Axis Housing.
+          </p>
+        </div>
+        <Link
+          href="/admin/create-manager"
+          className="btn-cobalt inline-flex min-h-10 shrink-0 items-center rounded-full px-5 py-2 text-sm font-semibold transition hover:brightness-105"
+        >
+          Create manager
+        </Link>
+      </div>
 
       {/* ── Action-required banners ── */}
       {(pendingProps > 0 || leasesInAdminReview > 0 || inboxUnread > 0 || pendingMeetings > 0 || pendingTours > 0) && (
         <div className="space-y-2">
           {pendingProps > 0 && (
-            <NotifBanner tone="amber">
+            <NotifBanner tone="pending">
               <span>
                 <span className="font-semibold">{pendingProps}</span> propert{pendingProps === 1 ? "y" : "ies"} pending your approval
               </span>
@@ -205,7 +228,7 @@ export function AdminDashboard() {
             </NotifBanner>
           )}
           {leasesInAdminReview > 0 && (
-            <NotifBanner tone="violet">
+            <NotifBanner tone="approved">
               <span>
                 <span className="font-semibold">{leasesInAdminReview}</span> lease{leasesInAdminReview === 1 ? "" : "s"} in admin review
               </span>
@@ -215,7 +238,7 @@ export function AdminDashboard() {
             </NotifBanner>
           )}
           {inboxUnread > 0 && (
-            <NotifBanner tone="blue">
+            <NotifBanner tone="approved">
               <span>
                 <span className="font-semibold">{inboxUnread}</span> unread message{inboxUnread === 1 ? "" : "s"} in admin inbox
               </span>
@@ -225,7 +248,7 @@ export function AdminDashboard() {
             </NotifBanner>
           )}
           {pendingTours > 0 && (
-            <NotifBanner tone="amber">
+            <NotifBanner tone="pending">
               <span>
                 <span className="font-semibold">{pendingTours}</span> pending tour request{pendingTours === 1 ? "" : "s"} awaiting confirmation
               </span>
@@ -235,7 +258,7 @@ export function AdminDashboard() {
             </NotifBanner>
           )}
           {pendingMeetings > 0 && (
-            <NotifBanner tone="blue">
+            <NotifBanner tone="approved">
               <span>
                 <span className="font-semibold">{pendingMeetings}</span> meeting request{pendingMeetings === 1 ? "" : "s"} need confirmation
               </span>
@@ -290,33 +313,29 @@ export function AdminDashboard() {
 
       {/* ── Upcoming meetings ── */}
       {upcomingMeetings.length > 0 && (
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+        <div className="glass-card rounded-2xl p-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Upcoming meetings</h2>
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Upcoming meetings</h2>
             <Link href="/admin/events" className="text-xs font-semibold text-primary hover:underline underline-offset-2">
               View all →
             </Link>
           </div>
           <ul className="mt-3 space-y-2">
             {upcomingMeetings.slice(0, 6).map((m) => (
-              <li key={m.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+              <li key={m.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-[var(--glass-fill)] px-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">{m.label}</p>
-                  <p className="text-xs text-slate-500">{fmt(m.start)}</p>
+                  <p className="truncate text-sm font-semibold text-foreground">{m.label}</p>
+                  <p className="text-xs text-muted">{fmt(m.start)}</p>
                 </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
-                  m.kind === "pending"
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-emerald-100 text-emerald-800"
-                }`}>
+                <Badge tone={m.kind === "pending" ? "pending" : "confirmed"}>
                   {m.kind === "pending" ? "Pending" : "Confirmed"}
-                </span>
+                </Badge>
               </li>
             ))}
           </ul>
           {nextMeeting && (
-            <p className="mt-3 text-xs text-slate-500">
-              Next: <span className="font-semibold text-slate-700">{nextMeeting.label}</span> at {fmt(nextMeeting.start)}
+            <p className="mt-3 text-xs text-muted">
+              Next: <span className="font-semibold text-foreground">{nextMeeting.label}</span> at {fmt(nextMeeting.start)}
             </p>
           )}
         </div>

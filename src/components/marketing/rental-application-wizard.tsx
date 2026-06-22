@@ -37,6 +37,7 @@ import { maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
 import { appendManagerApplicationRow, syncPublicApprovedApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { RentalWizardStepBody } from "./rental-wizard-steps";
+import { WizardShell } from "@/components/ui/wizard-shell";
 
 const processedApplicationFeeSessions = new Set<string>();
 
@@ -66,7 +67,7 @@ export function RentalApplicationWizard({ showToast }: { showToast: (msg: string
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-3xl px-4 py-16 text-center text-slate-600">Loading application…</div>
+        <div className="mx-auto max-w-3xl px-4 py-16 text-center text-muted">Loading application…</div>
       }
     >
       <RentalApplicationWizardInner showToast={showToast} />
@@ -575,16 +576,16 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   };
 
   const meta = STEP_META[step - 1];
-  const progressPct = Math.round((step / RENTAL_WIZARD_STEP_COUNT) * 100);
+  const wizardSteps = STEP_META.map((s) => ({ id: String(s.n), label: s.title }));
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
+    <div className="mx-auto max-w-5xl px-4 py-10 sm:py-14">
       <div className="text-center sm:text-left">
-        <h1 className="text-2xl font-bold tracking-tight text-[#0d1f4e] sm:text-3xl md:text-4xl">Residential rental application</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Residential rental application</h1>
       </div>
 
-      <div className="mt-6 rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:p-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Choose your form</p>
+      <div className="glass-card mt-6 rounded-3xl p-5 sm:p-6">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Choose your form</p>
         <div className="mt-4">
           <SegmentedTwo
             value={applicationPath}
@@ -594,7 +595,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             className="max-w-md"
           />
         </div>
-        <p className="mt-4 text-sm leading-relaxed text-slate-600">
+        <p className="mt-4 text-sm leading-relaxed text-muted">
           {applicationPath === "signer"
             ? "Use the signer form if you are the main applicant for the lease."
             : "Filing as a co-signer on someone else's application? Open the co-signer form."}
@@ -612,13 +613,10 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
       {applicationPath === "signer" ? (
         postSubmit ? (
-          <div
-            className="mt-8 rounded-3xl border border-emerald-200/90 bg-emerald-50/40 p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
-            style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
-          >
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>
-            <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Save your application ID</h2>
-            <p className="mt-3 text-sm leading-relaxed text-slate-700">
+          <div className="glass-card mt-8 rounded-3xl border border-[var(--status-confirmed-bg)] p-6 sm:p-9 md:p-11">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--status-confirmed-fg)]">Application received</p>
+            <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Save your application ID</h2>
+            <p className="mt-3 text-sm leading-relaxed text-muted">
               Use this application ID when you create your resident account (open signup below with it filled in), and
               use the same email address from this application. Share it with a co-signer if they apply separately.
               This ID only grants resident account creation. Until you create that resident account, your application
@@ -626,14 +624,14 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               <strong>Payments</strong>, <strong>Profile</strong>, and <strong>Inbox</strong> until the manager confirms your
               application fee and approves your application. Stripe payments are marked paid automatically after checkout.
             </p>
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Application ID</p>
-              <p className="mt-2 font-mono text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{postSubmit.axisId}</p>
+            <div className="mt-6 rounded-2xl border border-border bg-card px-5 py-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Application ID</p>
+              <p className="mt-2 font-mono text-xl font-bold tracking-tight text-foreground sm:text-2xl">{postSubmit.axisId}</p>
             </div>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Link
                 href={`/auth/create-account?role=resident&axis_id=${encodeURIComponent(postSubmit.axisId)}`}
-                className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-8 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:translate-y-px"
+                className="btn-metallic inline-flex min-h-[48px] items-center justify-center rounded-full px-8 text-[14px] font-semibold text-foreground transition hover:-translate-y-0.5 active:translate-y-px"
               >
                 Create resident account
               </Link>
@@ -643,24 +641,33 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             </div>
           </div>
         ) : (
-          <div
-            className="mt-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
-            style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
-          >
-            <div className="border-b border-slate-100 pb-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                Step {step} of {RENTAL_WIZARD_STEP_COUNT}
-              </p>
-              <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{meta.title}</p>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-                  style={{ width: `${progressPct}%` }}
-                />
+          <div className="glass-card mt-8 overflow-hidden rounded-3xl">
+            <WizardShell
+              steps={wizardSteps}
+              currentStepIndex={step - 1}
+              footer={
+                <div className="flex w-full flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+                  <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack} disabled={step <= 1}>
+                    {reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
+                    onClick={handleContinue}
+                    disabled={checkoutBusy}
+                  >
+                    {primaryButtonLabel}
+                  </Button>
+                </div>
+              }
+            >
+              <div className="mb-6 border-b border-border pb-4 sm:mb-8 sm:pb-6">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
+                  Step {step} of {RENTAL_WIZARD_STEP_COUNT}
+                </p>
+                <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">{meta.title}</p>
               </div>
-            </div>
 
-            <div className="pt-8">
               <RentalWizardStepBody
                 step={step}
                 form={form}
@@ -680,21 +687,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 goToStep={goToStep}
                 editFromReview={editFromReview}
               />
-            </div>
-
-            <div className="mt-10 flex flex-col-reverse gap-3 border-t border-slate-100 pt-8 sm:flex-row sm:items-center sm:justify-between">
-              <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack} disabled={step <= 1}>
-                {reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
-              </Button>
-              <Button
-                type="button"
-                className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
-                onClick={handleContinue}
-                disabled={checkoutBusy}
-              >
-                {primaryButtonLabel}
-              </Button>
-            </div>
+            </WizardShell>
           </div>
         )
       ) : null}

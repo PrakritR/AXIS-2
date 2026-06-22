@@ -209,11 +209,11 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   ];
 
   return (
-    <div className="mt-4 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-7">
+    <div className="glass-card mt-4 rounded-3xl p-6 sm:p-7">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {steps.map((s, i) => (
           <div key={s.n} className="flex items-center gap-2">
-            {i > 0 ? <div className="h-px w-4 bg-slate-200 sm:w-6" /> : null}
+            {i > 0 ? <div className="h-px w-4 bg-border sm:w-6" /> : null}
             <button
               type="button"
               onClick={() => {
@@ -224,12 +224,12 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             >
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                  step === s.n ? "bg-primary text-white" : s.n < step ? "bg-primary/20 text-primary" : "bg-slate-100 text-slate-400"
+                  step === s.n ? "bg-primary text-white" : s.n < step ? "bg-primary/20 text-primary" : "border border-border bg-card text-muted"
                 }`}
               >
                 {s.n}
               </span>
-              <span className={`hidden sm:inline text-sm ${step === s.n ? "font-semibold text-slate-800" : "text-slate-400"}`}>
+              <span className={`hidden text-sm sm:inline ${step === s.n ? "font-semibold text-foreground" : "text-muted"}`}>
                 {s.label}
               </span>
             </button>
@@ -253,7 +253,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                 )}
               </p>
             ) : (
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-muted">
                 Pick one or more 30-minute windows that work for you. Only highlighted days and times match what
                 your Axis contact published in the admin portal.
               </p>
@@ -270,12 +270,12 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                     } else setCalMonth((m) => m - 1);
                     resetPickers();
                   }}
-                  className="rounded-full p-1.5 text-slate-600 hover:bg-slate-100"
+                  className="rounded-full p-1.5 text-muted hover:bg-accent/50"
                   aria-label="Previous month"
                 >
                   <ChevronLeftIcon />
                 </button>
-                <p className="text-sm font-semibold text-slate-800">
+                <p className="text-sm font-semibold text-foreground">
                   {MONTHS[calMonth]} {calYear}
                 </p>
                 <button
@@ -287,7 +287,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                     } else setCalMonth((m) => m + 1);
                     resetPickers();
                   }}
-                  className="rounded-full p-1.5 text-slate-600 hover:bg-slate-100"
+                  className="rounded-full p-1.5 text-muted hover:bg-accent/50"
                   aria-label="Next month"
                 >
                   <ChevronRightIcon />
@@ -296,7 +296,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
 
               <div className="grid grid-cols-7 gap-1">
                 {DAYS.map((d) => (
-                  <div key={d} className="py-1 text-center text-[11px] font-semibold uppercase text-slate-400">
+                  <div key={d} className="py-1 text-center text-[11px] font-semibold uppercase text-muted">
                     {d}
                   </div>
                 ))}
@@ -321,8 +321,8 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                         isSelected
                           ? "bg-primary text-white shadow-sm"
                           : open && !isPast
-                            ? "bg-white text-slate-800 hover:bg-primary/[0.08] hover:text-primary"
-                            : "cursor-not-allowed text-slate-300"
+                            ? "border border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                            : "cursor-not-allowed text-muted/40"
                       }`}
                     >
                       {day}
@@ -334,11 +334,11 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
 
             {selectedDay != null && selectedDateStr ? (
               <div>
-                <p className="mb-3 text-sm font-semibold text-slate-700">
+                <p className="mb-3 text-sm font-semibold text-foreground">
                   Available times — {MONTHS[calMonth]} {selectedDay}
                 </p>
                 {openSlots.length === 0 ? (
-                  <p className="text-sm text-slate-500">No open half-hour blocks on this day.</p>
+                  <p className="text-sm text-muted">No open half-hour blocks on this day.</p>
                 ) : (
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
                     {openSlots.map((slotIndex) => {
@@ -352,7 +352,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                         className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
                           isSelected
                             ? "border-primary bg-primary text-white"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
+                            : "border-border bg-card text-foreground hover:border-primary hover:text-primary"
                         }`}
                       >
                         {formatAvailabilitySlotLabel(slotIndex)}
@@ -365,15 +365,15 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             ) : null}
 
             {selectedWindows.length > 0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="glass-card rounded-2xl px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-800">
+                  <p className="text-sm font-semibold text-foreground">
                     {selectedWindows.length} requested {selectedWindows.length === 1 ? "window" : "windows"}
                   </p>
                   <button
                     type="button"
                     onClick={() => setSelectedSlotKeys([])}
-                    className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+                    className="text-xs font-semibold text-muted hover:text-foreground"
                   >
                     Clear all
                   </button>
@@ -384,7 +384,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                       <button
                         type="button"
                         onClick={() => toggleSlot(window.dateStr, window.slotIndex)}
-                        className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-primary shadow-sm"
+                        className="rounded-full bg-card px-3 py-1.5 text-xs font-semibold text-primary shadow-sm"
                       >
                         {window.start.toLocaleDateString(undefined, {
                           weekday: "short",
@@ -394,10 +394,10 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                         · {formatAvailabilitySlotLabel(window.slotIndex)} ×
                       </button>
                       {window.hosts.length > 1 ? (
-                        <label className="mt-3 block text-xs font-semibold text-slate-600">
+                        <label className="mt-3 block text-xs font-semibold text-muted">
                           Choose admin
                           <select
-                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                            className="mt-1 w-full rounded-xl border border-border bg-[var(--glass-fill)] px-3 py-2 text-xs text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                             value={window.selectedAdminUserId}
                             onChange={(e) => setSelectedHostBySlot((prev) => ({ ...prev, [window.key]: e.target.value }))}
                           >
@@ -410,7 +410,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                           </select>
                         </label>
                       ) : window.hosts[0] ? (
-                        <p className="mt-2 text-xs font-medium text-slate-600">With {window.hosts[0].adminLabel}</p>
+                        <p className="mt-2 text-xs font-medium text-muted">With {window.hosts[0].adminLabel}</p>
                       ) : null}
                     </div>
                   ))}
@@ -426,9 +426,9 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
         ) : (
           <div className="space-y-5">
             {selectedWindows.length > 0 ? (
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm">
-                <p className="font-semibold text-slate-800">Requested windows</p>
-                <div className="mt-2 space-y-1 text-slate-600">
+              <div className="glass-card rounded-2xl px-4 py-3 text-sm">
+                <p className="font-semibold text-foreground">Requested windows</p>
+                <div className="mt-2 space-y-1 text-muted">
                   {selectedWindows.map((window) => (
                     <p key={window.key}>
                       {window.start.toLocaleDateString(undefined, {
@@ -483,7 +483,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             <button
               type="button"
               onClick={submit}
-              className="w-full rounded-2xl bg-[#0d1f4e] py-3.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#162d6e] active:scale-[0.98]"
+              className="btn-cobalt w-full rounded-2xl py-3.5 text-sm font-semibold transition-all duration-150 active:scale-[0.98]"
             >
               Request meeting
             </button>
@@ -496,7 +496,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
           <button
             type="button"
             onClick={() => setStep(1)}
-            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            className="btn-metallic rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground"
           >
             Back
           </button>
@@ -506,7 +506,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             type="button"
             disabled={!canContinue}
             onClick={() => setStep(2)}
-            className="rounded-full bg-primary px-7 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            className="btn-cobalt rounded-full px-7 py-2 text-sm font-semibold shadow-sm transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Continue
           </button>
@@ -519,11 +519,11 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-semibold text-slate-500">{label}</p>
+      <p className="mb-1.5 text-xs font-semibold text-muted">{label}</p>
       {children}
     </div>
   );
 }
 
 const inputCls =
-  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all duration-150 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15 hover:border-slate-300";
+  "w-full rounded-xl border border-border/60 bg-[var(--glass-fill)] px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted/60 focus:border-primary/30 focus:bg-card focus:ring-2 focus:ring-primary/25 hover:bg-card/80";

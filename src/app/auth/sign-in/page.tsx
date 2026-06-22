@@ -162,11 +162,11 @@ function SignInForm() {
 
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Portal sign-in</h1>
+      <h1 className="text-center text-[22px] font-semibold tracking-tight text-foreground">Portal sign-in</h1>
 
       <div className="mt-8 space-y-4">
         <div>
-          <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
+          <label className="text-xs font-semibold text-muted" htmlFor="email">
             Email
           </label>
           <Input
@@ -179,7 +179,7 @@ function SignInForm() {
           />
         </div>
         <div>
-          <label className="text-xs font-semibold text-[#334155]" htmlFor="pw">
+          <label className="text-xs font-semibold text-muted" htmlFor="pw">
             Password
           </label>
           <PasswordInput
@@ -200,7 +200,7 @@ function SignInForm() {
             onChange={(event) => setRememberEmail(event.target.checked)}
             className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
           />
-          <label htmlFor="remember-email" className="text-sm text-slate-600">
+          <label htmlFor="remember-email" className="text-sm text-muted">
             Remember my email for next time
           </label>
         </div>
@@ -222,9 +222,9 @@ function SignInForm() {
       >
         {isSigningIn ? "Signing in…" : "Sign in"}
       </Button>
-      {isLoadingPortal ? <p className="mt-3 text-center text-sm text-slate-500">Loading your portal...</p> : null}
+      {isLoadingPortal ? <p className="mt-3 text-center text-sm text-muted">Loading your portal...</p> : null}
 
-      <p className="mt-8 text-center text-sm text-slate-600">
+      <p className="mt-8 text-center text-sm text-muted">
         New here?{" "}
         <Link className="font-semibold text-primary hover:opacity-90" href="/auth/create-account">
           Create account
@@ -236,7 +236,7 @@ function SignInForm() {
 
 export default function SignInPage() {
   return (
-    <Suspense fallback={<AuthCard><p className="text-center text-sm text-slate-600">Loading…</p></AuthCard>}>
+    <Suspense fallback={<AuthCard><p className="text-center text-sm text-muted">Loading…</p></AuthCard>}>
       <SignInForm />
     </Suspense>
   );

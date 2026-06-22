@@ -480,18 +480,18 @@ export function ResidentLeasePanel() {
     return (
       <ManagerPortalPageShell title="Lease">
         <div className="flex flex-col items-center gap-4 py-16 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
-            <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--glass-fill)] ring-1 ring-border">
+            <svg className="h-8 w-8 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
             </svg>
           </div>
           <div>
-            <p className="text-lg font-bold text-slate-900">Your lease is being prepared</p>
-            <p className="mt-1.5 max-w-sm text-sm text-slate-600">
+            <p className="text-lg font-bold text-foreground">Your lease is being prepared</p>
+            <p className="mt-1.5 max-w-sm text-sm text-muted">
               Once your manager finalises and sends your lease to you, it will appear here ready for review and signature.
             </p>
           </div>
-          <p className="text-xs text-slate-400">Check back soon — this page updates automatically.</p>
+          <p className="text-xs text-muted">Check back soon — this page updates automatically.</p>
         </div>
       </ManagerPortalPageShell>
     );
@@ -582,20 +582,20 @@ export function ResidentLeasePanel() {
               emptyHint="Your manager will generate or upload your lease here. When it's ready, the full agreement appears in this preview."
             />
             {pipelineRow.managerSignature || pipelineRow.residentSignature ? (
-              <Card className="mt-4 border-emerald-200/80 bg-emerald-50/60 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Signature status</p>
+              <Card className="glass-card mt-4 border-[color-mix(in_srgb,var(--status-confirmed-fg)_25%,transparent)] p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-[var(--status-confirmed-fg)]">Signature status</p>
                 <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                   <div>
-                    <p className="font-semibold text-slate-800">Manager</p>
-                    <p className={pipelineRow.managerSignature ? "text-emerald-800" : "text-amber-700"}>
+                    <p className="font-semibold text-foreground">Manager</p>
+                    <p className={pipelineRow.managerSignature ? "text-[var(--status-confirmed-fg)]" : "text-[var(--status-pending-fg)]"}>
                       {pipelineRow.managerSignature
                         ? `Signed by ${pipelineRow.managerSignature.name} · ${safeFormatDateTime(pipelineRow.managerSignature.signedAtIso)}`
                         : "Pending signature"}
                     </p>
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-800">Resident</p>
-                    <p className={pipelineRow.residentSignature ? "text-emerald-800" : "text-amber-700"}>
+                    <p className="font-semibold text-foreground">Resident</p>
+                    <p className={pipelineRow.residentSignature ? "text-[var(--status-confirmed-fg)]" : "text-[var(--status-pending-fg)]"}>
                       {pipelineRow.residentSignature
                         ? `Signed by ${pipelineRow.residentSignature.name} · ${safeFormatDateTime(pipelineRow.residentSignature.signedAtIso)}`
                         : "Pending signature"}
@@ -605,7 +605,7 @@ export function ResidentLeasePanel() {
               </Card>
             ) : null}
             {pipelineRow.managerUploadedPdf?.dataUrl && pipelineRow.status === "Resident Signature Pending" ? (
-              <Card className="mt-4 border-sky-200/80 bg-sky-50/70 p-4 text-sm text-sky-950">
+              <Card className="glass-card mt-4 border-[color-mix(in_srgb,var(--status-approved-fg)_25%,transparent)] p-4 text-sm text-[var(--status-approved-fg)]">
                 This lease was uploaded as a manual PDF. Review it here, sign it offline, and return the signed lease to your manager.
               </Card>
             ) : null}
@@ -613,14 +613,14 @@ export function ResidentLeasePanel() {
         ) : null}
 
         {leaseVisibleToResident && pipelineRow && email ? (
-          <Card className="border-slate-200/80 p-5">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Messages</p>
+          <Card className="glass-card border-border p-5">
+            <p className="text-xs font-bold uppercase tracking-wide text-muted">Messages</p>
             <textarea
               rows={3}
               value={editRequestDraft}
               onChange={(e) => setEditRequestDraft(e.target.value)}
               placeholder={residentLeaseActions ? "Ask for changes, or send a message to your manager…" : "Send a message to your manager…"}
-              className="mt-3 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="mt-3 w-full resize-none rounded-2xl border border-border bg-[var(--glass-fill)] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/25"
             />
             <div className="mt-2.5">
               <Button
@@ -661,9 +661,9 @@ export function ResidentLeasePanel() {
         ) : null}
 
         {upgradeBreakdown ? (
-          <Card className="mt-6 border-blue-200/80 bg-blue-50/40 p-5">
-            <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Upgrade to long-term rental</p>
-            <p className="mt-1.5 text-sm text-slate-700">
+          <Card className="glass-card mt-6 border-border p-5">
+            <p className="text-xs font-bold uppercase tracking-wide text-[var(--status-approved-fg)]">Upgrade to long-term rental</p>
+            <p className="mt-1.5 text-sm text-muted">
               You are currently on a short-term stay. Upgrading creates a new long-term lease. Rent is due on the <strong>1st of every month</strong>; your first month will be prorated based on your move-in date.
             </p>
             <div className="mt-4 space-y-1 text-sm">

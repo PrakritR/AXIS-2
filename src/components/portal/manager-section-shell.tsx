@@ -5,7 +5,7 @@ import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
+import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PORTAL_TOOLBAR_GROUP, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
 
 export type ShellAction = {
   label: string;
@@ -15,7 +15,7 @@ export type ShellAction = {
 };
 
 const selectClass =
-  "h-10 rounded-full border border-slate-200/90 bg-white/95 px-3.5 text-sm text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] outline-none transition focus:ring-4 focus:ring-primary/10";
+  "h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:ring-4 focus:ring-ring";
 
 /** Property dropdown wrapped like admin filter chips (rounded shell). */
 export function PortalPropertyFilterPill({
@@ -48,7 +48,7 @@ export function PortalPropertyFilterPill({
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
-    <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1">
+    <div className={`${PORTAL_TOOLBAR_GROUP} min-w-0 max-w-full flex-wrap`}>
       <PortalPropertyFilter
         applications={applications}
         residents={residents}

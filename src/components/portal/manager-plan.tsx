@@ -390,13 +390,13 @@ export function ManagerPlan() {
     <ManagerPortalPageShell title="Plan">
       <div className="mx-auto max-w-6xl space-y-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end">
-          <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+          <div className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-[var(--glass-fill)] p-1 backdrop-blur-xl`}>
             <button
               type="button"
               disabled={billingSyncBusy || annualLocked}
               onClick={() => changeBillingInterval("monthly")}
               className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                pendingBilling === "monthly" ? "bg-primary text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                pendingBilling === "monthly" ? "bg-primary text-white shadow-sm" : "text-muted hover:text-foreground"
               }`}
             >
               Monthly
@@ -406,13 +406,13 @@ export function ManagerPlan() {
               disabled={billingSyncBusy}
               onClick={() => changeBillingInterval("annual")}
               className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                pendingBilling === "annual" ? "bg-primary text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                pendingBilling === "annual" ? "bg-primary text-white shadow-sm" : "text-muted hover:text-foreground"
               }`}
             >
               Annual
               <span
                 className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                  pendingBilling === "annual" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700"
+                  pendingBilling === "annual" ? "bg-card/20 text-white" : "bg-emerald-100 text-emerald-700"
                 }`}
               >
                 Save ~20%
@@ -434,7 +434,7 @@ export function ManagerPlan() {
         {!sub ? (
           <div className="grid gap-5 lg:grid-cols-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-[420px] animate-pulse rounded-2xl border border-slate-200 bg-slate-100/80" aria-hidden />
+              <div key={i} className="h-[420px] animate-pulse rounded-2xl border border-border bg-accent/40" aria-hidden />
             ))}
           </div>
         ) : (
@@ -499,11 +499,11 @@ export function ManagerPlan() {
               return (
                 <div
                   key={t.id}
-                  className={`relative flex flex-col rounded-2xl border p-7 shadow-[0_12px_42px_-34px_rgba(15,23,42,0.26)] transition-shadow ${
+                  className={`relative flex flex-col rounded-2xl p-7 transition-shadow ${
                     current
-                      ? "border-2 border-primary bg-primary/[0.07] shadow-[0_8px_28px_-10px_rgba(0,122,255,0.35)] ring-1 ring-primary/20"
-                      : "border border-slate-200 bg-white hover:border-slate-300"
-                  } ${pendingSelection ? "ring-1 ring-slate-200" : ""}`}
+                      ? "glass-card border-2 border-primary bg-primary/[0.07] shadow-[0_8px_28px_-10px_rgba(47,107,255,0.35)] ring-1 ring-primary/20"
+                      : "glass-card hover:border-primary/30"
+                  } ${pendingSelection ? "ring-1 ring-border" : ""}`}
                 >
                   {tierId === "pro" ? (
                     <span className="absolute right-5 top-5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
@@ -511,15 +511,15 @@ export function ManagerPlan() {
                     </span>
                   ) : null}
 
-                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{t.label}</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted">{t.label}</p>
 
                   <div className="mt-4 flex flex-nowrap items-baseline gap-x-1">
-                    <span className="shrink-0 text-4xl font-black tracking-tight text-slate-900">{pb.headline}</span>
+                    <span className="shrink-0 text-4xl font-black tracking-tight text-foreground">{pb.headline}</span>
                     {pb.period ? (
-                      <span className="whitespace-nowrap text-sm font-medium leading-none text-slate-400">{pb.period}</span>
+                      <span className="whitespace-nowrap text-sm font-medium leading-none text-muted">{pb.period}</span>
                     ) : null}
                   </div>
-                  <p className="mt-2 min-h-[40px] text-sm text-slate-500">{pb.sub}</p>
+                  <p className="mt-2 min-h-[40px] text-sm text-muted">{pb.sub}</p>
 
                   <Button
                     type="button"
@@ -531,15 +531,15 @@ export function ManagerPlan() {
                     {busyHere ? "Redirecting…" : ctaLabel}
                   </Button>
 
-                  <div className="my-6 border-t border-slate-100" />
+                  <div className="my-6 border-t border-border" />
 
                   <ul className="space-y-3">
                     {t.features.map((f) => (
                       <li key={f.text} className="flex items-start gap-3 text-sm">
-                        <span className={f.included ? "mt-0.5 text-primary" : "mt-0.5 text-slate-300"}>
+                        <span className={f.included ? "mt-0.5 text-primary" : "mt-0.5 text-muted/40"}>
                           <CheckIcon />
                         </span>
-                        <span className={f.included ? "text-slate-700" : "text-slate-400"}>{f.text}</span>
+                        <span className={f.included ? "text-foreground/80" : "text-muted"}>{f.text}</span>
                       </li>
                     ))}
                   </ul>
@@ -606,9 +606,9 @@ export function ManagerPlan() {
           </div>
         ) : null}
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-          <p className="text-sm font-semibold text-slate-900">Billing</p>
-          <p className="mt-1.5 text-sm text-slate-600">
+        <div className="glass-card rounded-2xl px-5 py-4">
+          <p className="text-sm font-semibold text-foreground">Billing</p>
+          <p className="mt-1.5 text-sm text-muted">
             {sub?.stripeManaged
               ? "Update your card, download invoices, or review subscription details in Stripe."
               : "After you join Pro or Business, your payment method and invoices are available in Stripe."}

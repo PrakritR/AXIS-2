@@ -2,17 +2,28 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
-import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
-const LABELS: Record<AuthRole, string> = {
-  admin: "Admin portal",
-  manager: "Property portal",
-  resident: "Resident portal",
-  owner: "Axis Property Portal (ownership)",
+const ROLE_META: Record<AuthRole, { label: string; description: string }> = {
+  admin: {
+    label: "Admin portal",
+    description: "Platform operations, review queues, and user management.",
+  },
+  manager: {
+    label: "Property portal",
+    description: "Manage listings, leases, residents, and property workflows.",
+  },
+  resident: {
+    label: "Resident portal",
+    description: "Your lease, payments, maintenance, and move-in status.",
+  },
+  owner: {
+    label: "Axis Property Portal (ownership)",
+    description: "Portfolio overview and properties linked by your team.",
+  },
 };
 
 function ChoosePortalForm() {
@@ -79,37 +90,59 @@ function ChoosePortalForm() {
 
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Choose a portal</h1>
-      <p className="mt-3 text-center text-sm text-slate-600">Your account has access to more than one portal. Pick where to go.</p>
+      <h1 className="text-center text-[22px] font-semibold tracking-tight text-foreground">Choose a portal</h1>
+      <p className="mt-3 text-center text-sm text-muted">Your account has access to more than one portal. Pick where to go.</p>
 
       {error ? <p className="mt-4 text-center text-sm text-rose-600">{error}</p> : null}
 
       <div className="mt-8 space-y-3">
         {roles === null ? (
-          <p className="text-center text-sm text-slate-500">Loading…</p>
+          <p className="text-center text-sm text-muted">Loading…</p>
         ) : roles.length === 0 ? (
-          <p className="text-center text-sm text-slate-500">No portal roles found.</p>
+          <p className="text-center text-sm text-muted">No portal roles found.</p>
         ) : (
-          roles.map((r) => (
-            <Button
-              key={r}
-              type="button"
-              variant="outline"
-              className="w-full rounded-full py-3 text-base font-semibold"
-              disabled={busy !== null}
-              onClick={() => void choose(r)}
-            >
-              {busy === r ? "Opening…" : LABELS[r]}
-            </Button>
-          ))
+          roles.map((r) => {
+            const meta = ROLE_META[r];
+            const selected = busy === r;
+            return (
+              <button
+                key={r}
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void choose(r)}
+                className="group w-full text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <div
+                  className={`rounded-[18px] transition-all duration-200 ${
+                    selected
+                      ? "bg-[linear-gradient(135deg,var(--primary),var(--sky))] p-[2px] shadow-[0_12px_32px_-12px_rgba(47,107,255,0.35)]"
+                      : "glass-card hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]"
+                  }`}
+                >
+                  <div className={`${selected ? "rounded-[16px] bg-[var(--glass-fill)] p-4 backdrop-blur-[24px]" : "p-4"}`}>
+                    <div className="flex items-start gap-3">
+                      <span
+                        className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary shadow-[0_0_8px_rgba(47,107,255,0.55)]"
+                        aria-hidden
+                      />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground">{busy === r ? "Opening…" : meta.label}</p>
+                        <p className="mt-0.5 text-sm leading-relaxed text-muted">{meta.description}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })
         )}
       </div>
 
-      <button type="button" className="mt-6 w-full text-center text-sm font-semibold text-slate-500 hover:text-slate-800" onClick={() => void signOut()}>
+      <button type="button" className="mt-6 w-full text-center text-sm font-semibold text-muted hover:text-foreground" onClick={() => void signOut()}>
         Sign out
       </button>
 
-      <p className="mt-6 text-center text-sm text-slate-600">
+      <p className="mt-6 text-center text-sm text-muted">
         <Link className="font-semibold text-primary hover:opacity-90" href="/auth/sign-in">
           Back to sign-in
         </Link>
@@ -120,7 +153,7 @@ function ChoosePortalForm() {
 
 export default function ChoosePortalPage() {
   return (
-    <Suspense fallback={<AuthCard><p className="text-center text-sm text-slate-600">Loading…</p></AuthCard>}>
+    <Suspense fallback={<AuthCard><p className="text-center text-sm text-muted">Loading…</p></AuthCard>}>
       <ChoosePortalForm />
     </Suspense>
   );

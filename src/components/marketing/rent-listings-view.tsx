@@ -114,70 +114,76 @@ export function RentListingsView() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-5 sm:py-14">
-      <div className="border-b border-slate-200/70 pb-6">
+      <div className="border-b border-border/60 pb-6">
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Listings</p>
-        <h1 className="mt-2 text-2xl font-bold tracking-[-0.02em] text-slate-950 sm:text-3xl">
+        <h1 className="mt-2 text-2xl font-bold tracking-[-0.02em] text-foreground sm:text-3xl">
           {showRooms ? "Available rooms" : "Available properties"}
         </h1>
       </div>
 
       {showRooms ? (
-        <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3.5 text-sm text-slate-700 shadow-[var(--shadow-sm)] sm:flex-row sm:items-center sm:justify-between sm:px-5">
-          <p>
+        <div className="glass-card mt-6 flex flex-col gap-3 rounded-2xl px-4 py-3.5 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <p className="flex flex-wrap items-center gap-x-1 gap-y-1">
             {centerZip !== null ? (
               <>
-                <span className="font-semibold text-slate-900">ZIP {search.zipRaw}</span>
-                <span className="text-slate-500"> · </span>
-                <span>
-                  Within <span className="font-semibold text-slate-900">{search.radiusMiles} mi</span>
+                <span className="inline-flex rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-xs font-semibold text-foreground">
+                  ZIP {search.zipRaw}
+                </span>
+                <span className="inline-flex rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-xs font-semibold text-foreground">
+                  {search.radiusMiles} mi
                 </span>
               </>
             ) : (
-              <span className="font-semibold text-slate-900">All ZIPs</span>
+              <span className="inline-flex rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-xs font-semibold text-foreground">
+                All ZIPs
+              </span>
             )}
-            <span className="text-slate-500"> · </span>
-            Move-in {search.moveIn}
+            <span className="inline-flex rounded-full border border-primary/20 bg-primary/5 px-2.5 py-0.5 text-xs font-semibold text-primary">
+              Move-in {search.moveIn}
+            </span>
             {search.moveOut ? (
-              <>
-                <span className="text-slate-500"> · </span>
+              <span className="inline-flex rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-xs font-medium text-muted">
                 Move-out {search.moveOut}
-              </>
+              </span>
             ) : null}
             {search.maxBudgetNum !== null ? (
-              <>
-                <span className="text-slate-500"> · </span>
+              <span className="inline-flex rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-xs font-semibold text-foreground">
                 Max ${search.maxBudgetNum.toLocaleString()}/mo
-              </>
+              </span>
             ) : null}
             {search.bathroom && search.bathroom !== "any" ? (
-              <>
-                <span className="text-slate-500"> · </span>
+              <span className="inline-flex rounded-full border border-border/60 bg-card px-2.5 py-0.5 text-xs font-medium text-muted">
                 Bath: {search.bathroom}
-              </>
+              </span>
             ) : null}
             {roomResults.length > 0 ? (
-              <>
-                <span className="text-slate-500"> · </span>
-                <span className="font-semibold text-slate-900">
-                  {roomResults.length} room{roomResults.length === 1 ? "" : "s"}
-                </span>
-              </>
+              <span className="inline-flex rounded-full border border-primary/20 bg-primary/5 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                {roomResults.length} room{roomResults.length === 1 ? "" : "s"}
+              </span>
             ) : null}
           </p>
-          <Link href="/rent/listings" className="shrink-0 text-sm font-semibold text-primary hover:opacity-90">
+          <Link href="/rent/listings" className="link-premium shrink-0 text-sm font-semibold text-primary">
             Clear search
           </Link>
         </div>
       ) : null}
 
       {showRooms && roomResults.length === 0 ? (
-        <div className="mt-12 rounded-[1.5rem] border border-dashed border-slate-200/90 bg-white/70 px-6 py-14 text-center shadow-[var(--shadow-sm)]">
-          <p className="text-base font-semibold text-slate-800">No rooms match these filters</p>
-          <p className="mt-2 text-sm text-slate-600">
+        <div className="glass-card mt-12 rounded-[1.5rem] border border-dashed border-border px-6 py-14 text-center">
+          <p className="text-base font-semibold text-foreground">No rooms match these filters</p>
+          <p className="mt-2 text-sm text-muted">
             Try a later move-in date, a larger radius, a higher max rent, or set bathroom to Any.
           </p>
-          <Link href="/rent/listings" className="mt-6 inline-flex text-sm font-semibold text-primary hover:opacity-90">
+          <Link href="/rent/listings" className="link-premium mt-6 inline-flex text-sm font-semibold text-primary">
             View all properties
+          </Link>
+        </div>
+      ) : combined.length === 0 ? (
+        <div className="glass-card mt-12 rounded-[1.5rem] border border-dashed border-border px-6 py-14 text-center">
+          <p className="text-base font-semibold text-foreground">Loading listings…</p>
+          <p className="mt-2 text-sm text-muted">Properties appear here as they are published to the site.</p>
+          <Link href="/" className="link-premium mt-6 inline-flex text-sm font-semibold text-primary">
+            Search from home
           </Link>
         </div>
       ) : (

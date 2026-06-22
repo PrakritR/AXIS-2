@@ -406,14 +406,20 @@ export default function CreateAccountClient() {
     }
   };
 
-  const readOnlyInputClass = "mt-1.5 bg-[#f1f5f9] text-slate-800 cursor-default";
+  const readOnlyInputClass = "mt-1.5 bg-auth-input-bg text-foreground cursor-default";
+
+  const confirmedContextLabel = sessionIdFromUrl
+    ? "Checkout confirmed — finish account setup below."
+    : slotFromUrl
+      ? `Owner invite linked — slot ${slotFromUrl}.`
+      : null;
 
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Create account</h1>
+      <h1 className="text-center text-[22px] font-semibold tracking-tight text-foreground">Create account</h1>
 
       <div className="mt-7">
-        <label className="text-xs font-semibold text-[#334155]" htmlFor="account-type">
+        <label className="text-xs font-semibold text-muted" htmlFor="account-type">
           Portal type
         </label>
         <Select
@@ -430,17 +436,17 @@ export default function CreateAccountClient() {
         </Select>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-[#e0e4ec] bg-[#f8fafc] p-4 text-sm leading-relaxed text-slate-600">
+      <div className="mt-6 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-fill)] p-4 text-sm leading-relaxed text-muted backdrop-blur-[24px]">
         {managerPostCheckout ? (
           <>
             {isAxisIntentSignup ? (
               <>
-                Your <span className="font-semibold text-slate-800">Axis ID</span> is reserved for this signup—use it
+                Your <span className="font-semibold text-foreground">Axis ID</span> is reserved for this signup—use it
                 when you need support. Set a password below to finish {managerSignupFinishPhrase(effectiveCheckoutPreview?.tier)}.
               </>
             ) : (
               <>
-                Payment confirmed. Your <span className="font-semibold text-slate-800">Axis ID</span> is tied to this
+                Payment confirmed. Your <span className="font-semibold text-foreground">Axis ID</span> is tied to this
                 checkout. Set a password below to finish {managerSignupFinishPhrase(effectiveCheckoutPreview?.tier)}.
               </>
             )}
@@ -458,7 +464,7 @@ export default function CreateAccountClient() {
             <Link className="font-semibold text-primary hover:opacity-90" href="/partner/pricing">
               Partner pricing
             </Link>
-            : choose <span className="font-semibold text-slate-800">Free</span> (no payment) or a paid plan (checkout). You
+            : choose <span className="font-semibold text-foreground">Free</span> (no payment) or a paid plan (checkout). You
             will return here with your Axis ID to set your password.
           </>
         ) : role === "owner" ? (
@@ -484,6 +490,16 @@ export default function CreateAccountClient() {
         </div>
       ) : null}
 
+      {confirmedContextLabel ? (
+        <div className="mt-6 flex items-center gap-2.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-fill)] px-4 py-2.5 backdrop-blur-[24px]">
+          <span
+            className="h-2 w-2 shrink-0 rounded-full bg-[var(--status-confirmed-fg)] shadow-[0_0_8px_rgba(31,138,91,0.45)]"
+            aria-hidden
+          />
+          <p className="text-sm font-medium text-foreground">{confirmedContextLabel}</p>
+        </div>
+      ) : null}
+
       <div className="mt-6 space-y-4">
         {existingAccountHint ? (
           <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-medium leading-relaxed text-sky-950">
@@ -494,7 +510,7 @@ export default function CreateAccountClient() {
         {managerPostCheckout && effectiveCheckoutPreview ? (
           <>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="manager-id">
+              <label className="text-xs font-semibold text-muted" htmlFor="manager-id">
                 Axis ID
               </label>
               <Input
@@ -507,14 +523,14 @@ export default function CreateAccountClient() {
             </div>
             {effectiveCheckoutPreview.fullName ? (
               <div>
-                <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-name">
+                <label className="text-xs font-semibold text-muted" htmlFor="mgr-name">
                   Full name
                 </label>
                 <Input id="mgr-name" readOnly className={readOnlyInputClass} value={effectiveCheckoutPreview.fullName} tabIndex={-1} />
               </div>
             ) : null}
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-email">
+              <label className="text-xs font-semibold text-muted" htmlFor="mgr-email">
                 Email
                 <Req />
               </label>
@@ -528,7 +544,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw">
+              <label className="text-xs font-semibold text-muted" htmlFor="mgr-pw">
                 {passwordLabel}
                 <Req />
               </label>
@@ -542,7 +558,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw2">
+              <label className="text-xs font-semibold text-muted" htmlFor="mgr-pw2">
                 Confirm password
                 <Req />
               </label>
@@ -558,7 +574,7 @@ export default function CreateAccountClient() {
         ) : managerNeedsPricing ? (
           <>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-id-input">
+              <label className="text-xs font-semibold text-muted" htmlFor="mgr-id-input">
                 Axis ID
               </label>
               <Input
@@ -573,7 +589,7 @@ export default function CreateAccountClient() {
               </p>
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-email-input">
+              <label className="text-xs font-semibold text-muted" htmlFor="mgr-email-input">
                 Email <Req />
               </label>
               <Input
@@ -587,7 +603,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw-activate">
+              <label className="text-xs font-semibold text-muted" htmlFor="mgr-pw-activate">
                 {passwordLabel} <Req />
               </label>
               <PasswordInput
@@ -600,7 +616,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw2-activate">
+              <label className="text-xs font-semibold text-muted" htmlFor="mgr-pw2-activate">
                 Confirm password <Req />
               </label>
               <PasswordInput
@@ -616,7 +632,7 @@ export default function CreateAccountClient() {
           <>
             {role === "admin" ? (
               <div>
-                <label className="text-xs font-semibold text-[#334155]" htmlFor="admin-key">
+                <label className="text-xs font-semibold text-muted" htmlFor="admin-key">
                   Admin registration key
                   <Req />
                 </label>
@@ -632,7 +648,7 @@ export default function CreateAccountClient() {
             ) : null}
             {role === "resident" ? (
               <div>
-                <label className="text-xs font-semibold text-[#334155]" htmlFor="app">
+                <label className="text-xs font-semibold text-muted" htmlFor="app">
                   Axis ID
                   <Req />
                 </label>
@@ -647,7 +663,7 @@ export default function CreateAccountClient() {
             ) : null}
             {role === "manager" || role === "owner" ? (
               <div>
-                <label className="text-xs font-semibold text-[#334155]" htmlFor="name">
+                <label className="text-xs font-semibold text-muted" htmlFor="name">
                   Full name
                 </label>
                 <Input
@@ -661,7 +677,7 @@ export default function CreateAccountClient() {
             ) : null}
             {role === "owner" ? (
               <div>
-                <label className="text-xs font-semibold text-[#334155]" htmlFor="invite">
+                <label className="text-xs font-semibold text-muted" htmlFor="invite">
                   Invite reference
                   <Req />
                 </label>
@@ -675,7 +691,7 @@ export default function CreateAccountClient() {
               </div>
             ) : null}
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
+              <label className="text-xs font-semibold text-muted" htmlFor="email">
                 Email
                 <Req />
               </label>
@@ -690,7 +706,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="pw">
+              <label className="text-xs font-semibold text-muted" htmlFor="pw">
                 {passwordLabel}
                 <Req />
               </label>

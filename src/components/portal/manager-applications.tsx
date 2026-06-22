@@ -13,6 +13,7 @@ import {
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_TOOLBAR_LABEL,
   PORTAL_TOOLBAR_SELECT,
+  PORTAL_TOOLBAR_GROUP,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
@@ -73,7 +74,7 @@ function CosignerSection({ applicationId }: { applicationId: string }) {
     <div className="mt-6 space-y-6">
       {subs.map((cosub, i) => (
         <div key={i}>
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">
             Co-signer on file{subs.length > 1 ? ` (${i + 1} of ${subs.length})` : ""}
           </p>
           <div className="mt-3">
@@ -87,18 +88,18 @@ function CosignerSection({ applicationId }: { applicationId: string }) {
 
 function ApplicantIds({ axisId }: { axisId: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-5 sm:p-6">
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Axis ID</p>
-      <p className="mt-3 font-mono text-sm font-medium leading-relaxed text-slate-900">{axisId}</p>
+    <div className="rounded-2xl border border-border bg-accent/40 p-5 sm:p-6">
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Axis ID</p>
+      <p className="mt-3 font-mono text-sm font-medium leading-relaxed text-foreground">{axisId}</p>
     </div>
   );
 }
 
 function ApplicationInfoCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white px-5 py-4 shadow-sm sm:py-[1.125rem]">
-      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</p>
-      <div className="mt-2 text-sm font-semibold leading-snug text-slate-900">{value}</div>
+    <div className="rounded-2xl border border-border bg-card px-5 py-4 shadow-sm sm:py-[1.125rem]">
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">{label}</p>
+      <div className="mt-2 text-sm font-semibold leading-snug text-foreground">{value}</div>
     </div>
   );
 }
@@ -272,12 +273,12 @@ function ManagerApplicationPlacementEditor({
   ].filter(Boolean).join(" · ");
 
   return (
-    <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm sm:p-7">
-      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+    <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-7">
+      <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Final placement</p>
-          <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-slate-950">House, room, lease dates, and charges</h3>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Final placement</p>
+          <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-foreground">House, room, lease dates, and charges</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
             Update the final resident setup here. These saved values drive lease details and resident payment charges.
           </p>
         </div>
@@ -297,10 +298,10 @@ function ManagerApplicationPlacementEditor({
 
       <div className="mt-7 space-y-7">
         <section>
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Placement</p>
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-muted">Placement</p>
           <div className="grid gap-4 lg:grid-cols-4">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">House</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">House</span>
             <Select
               value={propertyId}
               onChange={(e) => {
@@ -320,7 +321,7 @@ function ManagerApplicationPlacementEditor({
             </Select>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Room</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Room</span>
             <Select
               value={roomChoice}
               onChange={(e) => {
@@ -342,14 +343,14 @@ function ManagerApplicationPlacementEditor({
             </Select>
           </label>
           <label className="block lg:col-span-2">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Signed monthly rent</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Signed monthly rent</span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={signedRent}
               onChange={(e) => { userEditedRentRef.current = true; setSignedRent(e.target.value); }}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="800"
             />
           </label>
@@ -357,10 +358,10 @@ function ManagerApplicationPlacementEditor({
         </section>
 
         <section>
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Dates</p>
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-muted">Dates</p>
           <div className="grid gap-4 md:grid-cols-3">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Stay type</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Stay type</span>
             <Select
               value={leaseTerm}
               onChange={(e) => {
@@ -381,16 +382,16 @@ function ManagerApplicationPlacementEditor({
             </Select>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move-in date</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Move-in date</span>
             <input
               type="date"
               value={leaseStart}
               onChange={(e) => setLeaseStart(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">
               {leaseTerm === SHORT_TERM_LEASE_TERM ? "Move-out date" : leaseTerm === "Month-to-Month" ? "Move-out date" : "Lease end"}
             </span>
             <input
@@ -398,70 +399,70 @@ function ManagerApplicationPlacementEditor({
               value={leaseEnd}
               onChange={(e) => setLeaseEnd(e.target.value)}
               disabled={leaseTerm === "Month-to-Month"}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-400 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition disabled:bg-accent/40 disabled:text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
           </label>
           </div>
         </section>
 
         <section>
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Charges</p>
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-muted">Charges</p>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Utilities</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Utilities</span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={utilitiesOverride}
               onChange={(e) => setUtilitiesOverride(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="175"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Security deposit</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Security deposit</span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={securityDepositOverride}
               onChange={(e) => setSecurityDepositOverride(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="400"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move-in cost</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Move-in cost</span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={moveInFeeOverride}
               onChange={(e) => setMoveInFeeOverride(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="200"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Other cost label</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Other cost label</span>
             <input
               type="text"
               value={otherCostLabel}
               onChange={(e) => setOtherCostLabel(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="Month-to-month fee"
             />
           </label>
           <label className="block sm:col-span-2">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Other cost amount</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Other cost amount</span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={otherCostAmount}
               onChange={(e) => setOtherCostAmount(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="25"
             />
           </label>
@@ -469,24 +470,24 @@ function ManagerApplicationPlacementEditor({
         </section>
         </div>
 
-      <div className="mt-5 grid gap-4 rounded-2xl bg-slate-50/90 p-5 text-sm text-slate-600 lg:grid-cols-3">
+      <div className="mt-5 grid gap-4 rounded-2xl bg-accent/40 p-5 text-sm text-muted lg:grid-cols-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Applicant choices</p>
-          <p className="mt-1.5 text-slate-800">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Applicant choices</p>
+          <p className="mt-1.5 text-foreground">
             {applicantChoices.length ? applicantChoices.map((choice) => getRoomChoiceLabel(choice)).filter(Boolean).join(" · ") : "No room choices saved."}
           </p>
         </div>
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Submitted lease timing</p>
-          <p className="mt-1.5 text-slate-800">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Submitted lease timing</p>
+          <p className="mt-1.5 text-foreground">
             {row.application?.leaseStart?.trim()
               ? `${row.application.leaseStart}${row.application?.leaseEnd?.trim() ? ` to ${row.application.leaseEnd}` : ""}`
               : "No lease dates submitted."}
           </p>
         </div>
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Approved charges</p>
-          <p className="mt-1.5 text-slate-800">{chargeSummary || "Using the listing defaults."}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Approved charges</p>
+          <p className="mt-1.5 text-foreground">{chargeSummary || "Using the listing defaults."}</p>
         </div>
       </div>
 
@@ -521,7 +522,7 @@ function ManagerApplicationPlacementEditor({
 
 export function ManagerApplications() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading applications…</div>}>
+    <Suspense fallback={<div className="p-6 text-sm text-muted">Loading applications…</div>}>
       <ManagerApplicationsContent />
     </Suspense>
   );
@@ -829,7 +830,7 @@ function ManagerApplicationsContent() {
             propertyValue={propertyFilter}
             onPropertyChange={(id) => setPropertyFilter(id)}
           />
-          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+          <label className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
             <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort room</span>
             <select
               value={roomSortDir}
@@ -848,7 +849,7 @@ function ManagerApplicationsContent() {
       filterRow={
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-          {propertyDataLoading ? <p className="text-xs text-slate-500">Loading properties from backend…</p> : null}
+          {propertyDataLoading ? <p className="text-xs text-muted">Loading properties from backend…</p> : null}
         </div>
       }
     >
@@ -866,13 +867,13 @@ function ManagerApplicationsContent() {
             <tbody>
               {!authReady ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
                     Loading applications…
                   </td>
                 </tr>
               ) : rowsForBucket.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
                     {scopedRows.length === 0
                       ? "No applications yet for your listings and linked properties."
                       : propertyFilter.trim()
@@ -885,9 +886,9 @@ function ManagerApplicationsContent() {
                   <Fragment key={row.id}>
                     <tr id={`portal-application-${row.id}`} className={PORTAL_TABLE_TR}>
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                        <p className="font-medium leading-snug text-slate-900">{row.name}</p>
-                        {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{row.email}</p> : null}
-                        <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-slate-400">{row.id}</p>
+                        <p className="font-medium leading-snug text-foreground">{row.name}</p>
+                        {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{row.email}</p> : null}
+                        <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-muted">{row.id}</p>
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
@@ -932,7 +933,7 @@ function ManagerApplicationsContent() {
                           </PortalTableDetailActions>
 
                           {row.application ? (
-                            <div className="max-h-[min(72vh,600px)] overflow-y-auto overscroll-contain rounded-3xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/50 p-5 shadow-[0_2px_20px_-12px_rgba(15,23,42,0.12)] sm:p-7">
+                            <div className="glass-card max-h-[min(72vh,600px)] overflow-y-auto overscroll-contain rounded-3xl p-5 sm:p-7">
                               <ManagerApplicationPlacementEditor
                                 key={[
                                   row.id,
@@ -975,8 +976,8 @@ function ManagerApplicationsContent() {
                                   )
                                 }
                               />
-                              <div className="mt-8 border-t border-slate-200/80 pt-8">
-                              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">Application on file</p>
+                              <div className="mt-8 border-t border-border pt-8">
+                              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Application on file</p>
                               <div className="mt-4">
                                 <ManagerApplicationReadonlyReview
                                   partial={{
@@ -993,11 +994,11 @@ function ManagerApplicationsContent() {
                             </div>
                           ) : null}
 
-                          <div className="space-y-5 rounded-2xl border border-slate-200/70 bg-white/80 p-5 sm:p-6">
+                          <div className="space-y-5 rounded-2xl border border-border bg-card/80 p-5 sm:p-6">
                           <ApplicantIds axisId={row.id} />
 
-                          <p className="text-sm leading-relaxed text-slate-600">
-                            <span className="font-medium text-slate-800">Manager notes</span> — {row.detail}
+                          <p className="text-sm leading-relaxed text-muted">
+                            <span className="font-medium text-foreground">Manager notes</span> — {row.detail}
                           </p>
                           </div>
                           </div>

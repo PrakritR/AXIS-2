@@ -25,7 +25,11 @@ export function PortalTopBanners({
   return (
     <>
       {showPreviewBanner ? <AdminPreviewBanner label={previewLabel} /> : null}
-      {showPlanBanner && !onPlanPage ? <ManagerPlanBanner planHref={planHref} /> : null}
+      {showPlanBanner && !onPlanPage ? (
+        <div className="shrink-0 border-b border-[rgba(160,107,21,0.28)] bg-[rgba(253,236,203,0.42)] backdrop-blur-xl [&>div]:border-0 [&>div]:bg-transparent">
+          <ManagerPlanBanner planHref={planHref} />
+        </div>
+      ) : null}
     </>
   );
 }

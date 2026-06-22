@@ -42,7 +42,7 @@ import {
   PORTAL_INBOX_CHANGED_EVENT,
   syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_DASHBOARD_TILE_LINK } from "@/components/portal/portal-metrics";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 
 const BASE = "/portal";
@@ -61,18 +61,21 @@ function NotifBanner({
   tone,
   children,
 }: {
-  tone: "amber" | "blue" | "yellow" | "violet" | "rose";
+  tone: "pending" | "approved" | "confirmed" | "overdue";
   children: React.ReactNode;
 }) {
   const cls = {
-    amber: "border-amber-200/80 bg-amber-50/80 text-amber-950",
-    blue: "border-blue-200/80 bg-blue-50/80 text-blue-950",
-    yellow: "border-yellow-200/80 bg-yellow-50/80 text-yellow-950",
-    violet: "border-violet-200/80 bg-violet-50/80 text-violet-950",
-    rose: "border-rose-200/80 bg-rose-50/80 text-rose-950",
+    pending:
+      "border-[color-mix(in_srgb,var(--status-pending-fg)_28%,transparent)] bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]",
+    approved:
+      "border-[color-mix(in_srgb,var(--status-approved-fg)_28%,transparent)] bg-[var(--status-approved-bg)] text-[var(--status-approved-fg)]",
+    confirmed:
+      "border-[color-mix(in_srgb,var(--status-confirmed-fg)_28%,transparent)] bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]",
+    overdue:
+      "border-[color-mix(in_srgb,var(--status-overdue-fg)_28%,transparent)] bg-[var(--status-overdue-bg)] text-[var(--status-overdue-fg)]",
   }[tone];
   return (
-    <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
+    <div className={`glass-card flex items-start justify-between gap-3 rounded-2xl px-4 py-3.5 text-sm backdrop-blur-xl ${cls}`}>
       {children}
     </div>
   );
@@ -94,13 +97,13 @@ function Tile({
   return (
     <Link
       href={href}
-      className={`group flex flex-col gap-1 rounded-2xl border bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition hover:shadow-md ${
-        urgent ? "border-amber-300/80 ring-1 ring-amber-200/60" : "border-slate-200/80 hover:border-slate-300"
+      className={`${PORTAL_DASHBOARD_TILE_LINK} group flex flex-col gap-1 p-5 ${
+        urgent ? "border-amber-300/80 ring-1 ring-amber-200/60" : "hover:border-primary/30"
       }`}
     >
-      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-slate-900">{value}</p>
-      <p className="text-sm font-medium text-slate-600">{label}</p>
-      {sub ? <p className="text-xs text-slate-400">{sub}</p> : null}
+      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-foreground">{value}</p>
+      <p className="text-sm font-medium text-muted">{label}</p>
+      {sub ? <p className="text-xs text-muted/70">{sub}</p> : null}
     </Link>
   );
 }
@@ -108,7 +111,7 @@ function Tile({
 function SectionHeader({ title, href, linkLabel }: { title: string; href?: string; linkLabel?: string }) {
   return (
     <div className="flex items-center justify-between">
-      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">{title}</h2>
+      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
       {href && linkLabel ? (
         <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
           {linkLabel}
@@ -248,7 +251,18 @@ export function ManagerDashboard() {
   const nextTour = tours.find((t) => t.status === "confirmed") ?? null;
 
   return (
-    <ManagerPortalPageShell title="Dashboard">
+    <ManagerPortalPageShell
+      title="Dashboard"
+      subtitle="Welcome back — here's what needs your attention today."
+      titleAside={
+        <Link
+          href={`${BASE}/properties`}
+          className="btn-cobalt inline-flex min-h-10 items-center rounded-full px-5 py-2 text-sm font-semibold transition hover:brightness-105"
+        >
+          Add listing
+        </Link>
+      }
+    >
       <div className="space-y-5">
 
         {/* ── Action-required banners ── */}
@@ -261,7 +275,7 @@ export function ManagerDashboard() {
           overdueCharges.length > 0) && (
           <div className="space-y-2">
             {pendingApps.length > 0 && (
-              <NotifBanner tone="amber">
+              <NotifBanner tone="pending">
                 <span>
                   <span className="font-semibold">{pendingApps.length}</span> application{pendingApps.length === 1 ? "" : "s"} waiting for a decision
                 </span>
@@ -271,7 +285,7 @@ export function ManagerDashboard() {
               </NotifBanner>
             )}
             {needsManagerSig > 0 && (
-              <NotifBanner tone="violet">
+              <NotifBanner tone="approved">
                 <span>
                   <span className="font-semibold">{needsManagerSig}</span> lease{needsManagerSig === 1 ? "" : "s"} need{needsManagerSig === 1 ? "s" : ""} your signature
                 </span>
@@ -281,7 +295,7 @@ export function ManagerDashboard() {
               </NotifBanner>
             )}
             {inbox > 0 && (
-              <NotifBanner tone="blue">
+              <NotifBanner tone="approved">
                 <span>
                   <span className="font-semibold">{inbox}</span> unread message{inbox === 1 ? "" : "s"} in your inbox
                 </span>
@@ -291,7 +305,7 @@ export function ManagerDashboard() {
               </NotifBanner>
             )}
             {pendingTours.length > 0 && (
-              <NotifBanner tone="amber">
+              <NotifBanner tone="pending">
                 <span>
                   <span className="font-semibold">{pendingTours.length}</span> pending tour request{pendingTours.length === 1 ? "" : "s"} awaiting your approval
                 </span>
@@ -301,7 +315,7 @@ export function ManagerDashboard() {
               </NotifBanner>
             )}
             {nextTour && (
-              <NotifBanner tone="yellow">
+              <NotifBanner tone="confirmed">
                 <span>
                   Next confirmed tour{tours.filter((t) => t.status === "confirmed").length > 1 ? ` (${tours.filter((t) => t.status === "confirmed").length} total)` : ""}: <span className="font-semibold">{nextTour.label}</span>{nextTour.propertyTitle ? ` · ${nextTour.propertyTitle}` : ""} at <span className="font-semibold">{fmt(nextTour.start)}</span>
                 </span>
@@ -311,7 +325,7 @@ export function ManagerDashboard() {
               </NotifBanner>
             )}
             {pendingProperties > 0 && (
-              <NotifBanner tone="rose">
+              <NotifBanner tone="overdue">
                 <span>
                   <span className="font-semibold">{pendingProperties}</span> propert{pendingProperties === 1 ? "y" : "ies"} pending Axis approval
                 </span>
@@ -321,7 +335,7 @@ export function ManagerDashboard() {
               </NotifBanner>
             )}
             {overdueCharges.length > 0 && (
-              <NotifBanner tone="amber">
+              <NotifBanner tone="pending">
                 <span>
                   <span className="font-semibold">{overdueCharges.length}</span> overdue charge{overdueCharges.length === 1 ? "" : "s"} totalling <span className="font-semibold">{dollars(overdueTotal)}</span> across residents
                 </span>
@@ -369,23 +383,23 @@ export function ManagerDashboard() {
         <div className="grid gap-4 lg:grid-cols-3">
 
           {/* Pending applications */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <div className="glass-card rounded-2xl p-5">
             <SectionHeader
               title="Pending applications"
               href={`${BASE}/applications`}
               linkLabel={pendingApps.length > 4 ? `View all ${pendingApps.length}` : "View all"}
             />
             {pendingApps.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No pending applications — you&apos;re all caught up.</p>
+              <p className="mt-4 text-sm text-muted">No pending applications — you&apos;re all caught up.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {pendingApps.slice(0, 5).map((app: DemoApplicantRow) => (
-                  <li key={app.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                  <li key={app.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/50 px-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{app.name || app.email || "Unknown"}</p>
-                      <p className="truncate text-xs text-slate-500">{app.property || "—"}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{app.name || app.email || "Unknown"}</p>
+                      <p className="truncate text-xs text-muted">{app.property || "—"}</p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                    <span className="shrink-0 rounded-full bg-[var(--status-pending-bg)] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--status-pending-fg)]">
                       {app.stage || "Pending"}
                     </span>
                   </li>
@@ -395,26 +409,26 @@ export function ManagerDashboard() {
           </div>
 
           {/* Service requests */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <div className="glass-card rounded-2xl p-5">
             <SectionHeader
               title="Service requests"
               href={`${BASE}/services/requests`}
               linkLabel="View all"
             />
             {pendingServiceRequests.length + approvedServiceRequests.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No active service requests right now.</p>
+              <p className="mt-4 text-sm text-muted">No active service requests right now.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {[...pendingServiceRequests, ...approvedServiceRequests].slice(0, 5).map((sr) => (
-                  <li key={sr.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                  <li key={sr.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/50 px-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{sr.offerName}</p>
-                      <p className="truncate text-xs text-slate-500">{sr.residentName || sr.residentEmail || "—"}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{sr.offerName}</p>
+                      <p className="truncate text-xs text-muted">{sr.residentName || sr.residentEmail || "—"}</p>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
                       sr.status === "pending"
-                        ? "bg-amber-100 text-amber-800"
-                        : "bg-sky-100 text-sky-800"
+                        ? "bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]"
+                        : "bg-[var(--status-approved-bg)] text-[var(--status-approved-fg)]"
                     }`}>
                       {sr.status === "pending" ? "Pending" : "Approved"}
                     </span>
@@ -425,23 +439,23 @@ export function ManagerDashboard() {
           </div>
 
           {/* Pending tours */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <div className="glass-card rounded-2xl p-5">
             <SectionHeader
               title="Pending tour requests"
               href={`${BASE}/calendar`}
               linkLabel="Calendar →"
             />
             {pendingTours.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No pending tour requests right now.</p>
+              <p className="mt-4 text-sm text-muted">No pending tour requests right now.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {pendingTours.slice(0, 5).map((tour) => (
-                  <li key={tour.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                  <li key={tour.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/50 px-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{tour.label}</p>
-                      <p className="truncate text-xs text-slate-500">{tour.propertyTitle || "—"} · {fmt(tour.start)}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{tour.label}</p>
+                      <p className="truncate text-xs text-muted">{tour.propertyTitle || "—"} · {fmt(tour.start)}</p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                    <span className="shrink-0 rounded-full bg-[var(--status-pending-bg)] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--status-pending-fg)]">
                       Pending
                     </span>
                   </li>

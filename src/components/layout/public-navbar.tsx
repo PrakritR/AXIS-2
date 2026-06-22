@@ -2,6 +2,7 @@
 
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import { PublicNavbarPortalStrip } from "@/components/layout/public-navbar-portal-strip";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -63,10 +64,11 @@ export function PublicNavbar() {
   return (
     <div
       id="axis-public-navbar"
-      className={`sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)] transition-[background,box-shadow,border-color,backdrop-filter] duration-300 ease-out ${
+      data-scrolled={scrolled ? "true" : "false"}
+      className={`glass-nav sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)] transition-[background,box-shadow,border-color,backdrop-filter] duration-300 ease-out ${
         scrolled
-          ? "border-slate-200/80 bg-background/85 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_36px_-24px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/78"
-          : "border-transparent bg-background/96 shadow-none backdrop-blur-none"
+          ? "border-border bg-[var(--glass-fill)] shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_36px_-24px_rgba(15,23,42,0.12)] supports-[backdrop-filter]:bg-[var(--glass-fill)]"
+          : "border-transparent bg-[var(--glass-fill)]/80 shadow-none"
       }`}
     >
       <div className="mx-auto grid min-h-[56px] w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 sm:px-5 lg:grid-cols-[auto_1fr_auto]">
@@ -118,6 +120,7 @@ export function PublicNavbar() {
         </nav>
 
         <div className="flex items-center justify-end justify-self-end gap-2">
+          <ThemeToggle className="hidden lg:inline-flex" />
           <div className="hidden lg:block">
             <PublicNavbarPortalStrip />
           </div>
@@ -125,7 +128,7 @@ export function PublicNavbar() {
           {/* Mobile menu button */}
           <button
             type="button"
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition hover:bg-slate-50 lg:hidden"
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-[var(--shadow-sm)] transition hover:bg-accent lg:hidden"
             onClick={() => setMobileOpen((v) => !v)}
           >
           {mobileOpen ? (
@@ -144,7 +147,7 @@ export function PublicNavbar() {
           mobileOpen ? "max-h-[520px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
-        <div className="border-t border-slate-100 bg-white px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 sm:px-5">
+        <div className="glass-nav border-t border-border bg-[var(--glass-fill)] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 sm:px-5">
           <div className="space-y-1">
             <MobileSection label="Rent with Axis">
               <MobileLink href="/" label="Axis Housing home" active={pathname === "/"} onClose={() => setMobileOpen(false)} />
@@ -172,15 +175,16 @@ export function PublicNavbar() {
               </MobileSection>
             </div>
             <div className="pt-4">
-              <div className="flex w-full flex-col items-stretch gap-2">
+              <div className="flex w-full flex-col items-stretch gap-3">
+                <ThemeToggle className="w-full justify-center" />
                 <PublicNavbarPortalStrip className="w-full justify-center" onInteract={() => setMobileOpen(false)} />
               </div>
             </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-black/[0.06] pt-3 text-xs">
-              <Link href="/auth/sign-in" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border pt-3 text-xs">
+              <Link href="/auth/sign-in" className="font-semibold text-primary" onClick={() => setMobileOpen(false)}>
                 Sign in
               </Link>
-              <Link href="/auth/create-account" className="font-semibold text-[#007aff]" onClick={() => setMobileOpen(false)}>
+              <Link href="/auth/create-account" className="font-semibold text-primary" onClick={() => setMobileOpen(false)}>
                 Create account
               </Link>
             </div>
@@ -205,8 +209,8 @@ function RentWithAxisTrigger({
       <Link
         href="/"
         className={`relative flex min-h-10 items-center rounded-full px-3 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
-          active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
-        } ${open ? "bg-white" : "hover:bg-white/70"}`}
+          active ? "text-primary" : "text-foreground/85 hover:text-foreground"
+        } ${open ? "bg-card" : "hover:bg-card/70"}`}
       >
         Rent with Axis
       </Link>
@@ -220,15 +224,15 @@ function RentWithAxisTrigger({
           onToggleChevron();
         }}
         className={`relative flex min-h-10 min-w-10 items-center justify-center rounded-full p-2 outline-none transition-colors duration-200 ${
-          active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
-        } ${open ? "bg-white" : "hover:bg-white/70"}`}
+          active ? "text-primary" : "text-foreground/85 hover:text-foreground"
+        } ${open ? "bg-card" : "hover:bg-card/70"}`}
       >
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden className={`shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
           <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
       {active && (
-        <span className="pointer-events-none absolute bottom-0 left-2 right-8 h-[2px] rounded-full bg-[#007aff] transition-all duration-300" />
+        <span className="pointer-events-none absolute bottom-0 left-2 right-8 h-[2px] rounded-full bg-primary transition-all duration-300" />
       )}
     </div>
   );
@@ -253,15 +257,15 @@ function PartnerDropdownTrigger({
         aria-haspopup="menu"
         onClick={onToggle}
         className={`relative flex min-h-10 items-center gap-1.5 rounded-full px-4 py-2 text-[15px] font-medium outline-none transition-colors duration-200 ${
-          active ? "text-[#007aff]" : "text-[#1d1d1f]/85 hover:text-[#1d1d1f]"
-        } ${open ? "bg-white" : "hover:bg-white/70"}`}
+          active ? "text-primary" : "text-foreground/85 hover:text-foreground"
+        } ${open ? "bg-card" : "hover:bg-card/70"}`}
       >
         <span>{label}</span>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden className={`shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
           <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         {active && (
-          <span className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full bg-[#007aff] transition-all duration-300" />
+          <span className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full bg-primary transition-all duration-300" />
         )}
       </button>
     </div>
@@ -288,7 +292,7 @@ function DropdownPanel({
       }`}
       onMouseEnter={cancelClose}
     >
-      <div className="min-w-[220px] overflow-hidden rounded-[22px] border border-black/[0.06] bg-white/92 py-1.5 shadow-[0_22px_50px_-28px_rgba(15,23,42,0.18)] backdrop-blur-2xl">
+      <div className="glass-card min-w-[220px] overflow-hidden rounded-[22px] py-1.5">
         {links.map(({ href, label: linkLabel }) => {
           const isActive = activeHref === href;
           return (
@@ -298,11 +302,11 @@ function DropdownPanel({
               onClick={() => onNavigate()}
               className={`flex items-center gap-3 px-4 py-2.5 text-[14px] font-medium transition-[transform,background-color,color] duration-200 ease-out active:scale-[0.99] ${
                 isActive
-                  ? "bg-[#007aff]/[0.08] text-[#007aff]"
-                  : "text-[#1d1d1f]/80 hover:bg-black/[0.04] hover:text-[#1d1d1f]"
+                  ? "bg-accent text-primary"
+                  : "text-foreground/80 hover:bg-foreground/[0.04] hover:text-foreground"
               }`}
             >
-              {isActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#007aff]" />}
+              {isActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
               {!isActive && <span className="h-1.5 w-1.5 shrink-0" />}
               {linkLabel}
             </Link>
@@ -316,7 +320,7 @@ function DropdownPanel({
 function MobileSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-[#6e6e73]">{label}</p>
+      <p className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-muted">{label}</p>
       <div className="space-y-0.5">{children}</div>
     </div>
   );
@@ -328,10 +332,10 @@ function MobileLink({ href, label, active, onClose }: { href: string; label: str
       href={href}
       onClick={onClose}
       className={`flex min-h-[44px] items-center gap-2.5 rounded-xl px-3 py-3 text-[14px] font-medium transition-[background-color,color,transform] duration-200 sm:min-h-0 sm:py-2.5 ${
-        active ? "bg-[#007aff]/[0.08] font-semibold text-[#007aff]" : "text-[#1d1d1f]/80 hover:bg-black/[0.04]"
+        active ? "bg-accent font-semibold text-primary" : "text-foreground/80 hover:bg-foreground/[0.04]"
       }`}
     >
-      {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#007aff]" />}
+      {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
       {!active && <span className="h-1.5 w-1.5 shrink-0" />}
       {label}
     </Link>

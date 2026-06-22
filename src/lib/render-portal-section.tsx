@@ -57,13 +57,13 @@ function ResidentFreeTierFeatureNotice({ title }: { title: string }) {
   return (
     <div className="mx-auto max-w-2xl">
       <ManagerPortalPageShell title={title}>
-        <div className="rounded-3xl border border-amber-200/80 bg-amber-50/70 p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-900/70">Property plan</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950">Property is using the Free tier</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-700">
-            Access to <span className="font-semibold text-slate-900">{title.toLowerCase()}</span> is not available while
-            the property manager is on the Free tier. Ask your property manager to upgrade to Pro or Business to enable
-            this feature.
+        <div className="glass-card rounded-2xl px-5 py-6 sm:px-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Property plan</p>
+          <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-foreground">Awaiting your property manager</h2>
+          <p className="mt-3 text-sm leading-6 text-muted">
+            Access to <span className="font-semibold text-foreground">{title.toLowerCase()}</span> is not available while
+            the property team is on the Free plan. They can enable this feature by upgrading to Pro or Business — there is
+            nothing you need to do on your end.
           </p>
         </div>
       </ManagerPortalPageShell>
@@ -489,11 +489,24 @@ export async function renderPortalSection(
     if (!leaseSigned) {
       return (
         <ManagerPortalPageShell title="Move-in">
-          <div className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-5 py-4 text-sm text-amber-950">
-            <p className="font-semibold">Lease signature required</p>
-            <p className="mt-1 text-amber-800">
-              Your move-in details will be available here once your lease has been fully signed by both you and your
-              property manager. Head to the <strong>Lease</strong> tab to review and sign.
+          <div className="glass-card flex flex-col items-center rounded-2xl px-5 py-10 text-center">
+            <svg
+              className="h-10 w-10 text-muted"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <rect x="5" y="11" width="14" height="10" rx="2" />
+              <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+            </svg>
+            <p className="mt-4 text-base font-semibold text-foreground">Available once your lease is signed</p>
+            <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">
+              Your move-in details will appear here after your lease has been fully signed by you and your property
+              manager. Head to the <strong className="font-semibold text-foreground">Lease</strong> tab to review and sign.
             </p>
           </div>
         </ManagerPortalPageShell>

@@ -6,6 +6,7 @@ import {
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_TOOLBAR_LABEL,
   PORTAL_TOOLBAR_SELECT,
+  PORTAL_TOOLBAR_GROUP,
   MANAGER_TABLE_TH,
 } from "@/components/portal/portal-metrics";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -225,7 +226,7 @@ export function ManagerAllServicesPanel({
         <div className="flex flex-wrap items-center gap-3 pb-4">
           {/* Property filter */}
           {allPropertyOptions.length > 2 && (
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+            <div className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
               <label className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Property</label>
               <select
                 value={propertyFilter}
@@ -240,7 +241,7 @@ export function ManagerAllServicesPanel({
           )}
 
           {/* Sort */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+          <div className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
             <label className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort</label>
             <select
               value={sortKey}
@@ -265,9 +266,9 @@ export function ManagerAllServicesPanel({
         </div>
 
         {unified.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
-            <p className="text-sm font-medium text-slate-600">No services yet</p>
-            <p className="mt-1 max-w-xs text-xs text-slate-400">
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-accent/30 py-16 text-center">
+            <p className="text-sm font-medium text-muted">No services yet</p>
+            <p className="mt-1 max-w-xs text-xs text-muted">
               {typeFilter === "requests"
                 ? "Service requests from residents will appear here."
                 : "Work orders from residents will appear here."}
@@ -300,7 +301,7 @@ export function ManagerAllServicesPanel({
                   <Fragment key={`req-${req.id}`}>
                     <tr className={PORTAL_TABLE_TR}>
                       <td className={PORTAL_TABLE_TD}>Request</td>
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{req.offerName}</td>
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
                       <td className={PORTAL_TABLE_TD}>{req.residentName || req.residentEmail}</td>
                       <td className={PORTAL_TABLE_TD}>
                         {req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
@@ -308,7 +309,7 @@ export function ManagerAllServicesPanel({
                           : "—"}
                       </td>
                       <td className={PORTAL_TABLE_TD}>
-                        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[req.status] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
+                        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[req.status] ?? "bg-accent/40 text-muted ring-border"}`}>
                           {STATUS_LABEL[req.status] ?? req.status}
                         </span>
                       </td>
@@ -329,7 +330,7 @@ export function ManagerAllServicesPanel({
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
                         <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
                           <div className="space-y-3">
-                            {req.notes ? <p className="text-xs italic text-slate-500">&ldquo;{req.notes}&rdquo;</p> : null}
+                            {req.notes ? <p className="text-xs italic text-muted">&ldquo;{req.notes}&rdquo;</p> : null}
                         {req.status === "pending" ? (
                           <div className="flex flex-wrap gap-2">
                             <Button
@@ -351,12 +352,12 @@ export function ManagerAllServicesPanel({
                         ) : null}
 
                         {(req.status === "approved" || req.status === "returned") ? (
-                          <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Charges</p>
+                          <div className="rounded-xl bg-accent/40 p-3 ring-1 ring-border">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Charges</p>
                             <div className="space-y-2">
                               {req.price ? (
                                 <div className="flex items-center justify-between">
-                                  <span className="text-xs text-slate-700">Service fee · {req.price}</span>
+                                  <span className="text-xs text-foreground/80">Service fee · {req.price}</span>
                                   {req.servicePaid
                                     ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Paid</span>
                                     : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestServicePaid(req.id); setDataTick((t) => t + 1); showToast("Service charge marked paid."); }}>Mark paid</Button>
@@ -365,7 +366,7 @@ export function ManagerAllServicesPanel({
                               ) : null}
                               {needsReturn ? (
                                 <div className="flex items-center justify-between">
-                                  <span className="text-xs text-slate-700">Deposit · {req.deposit}</span>
+                                  <span className="text-xs text-foreground/80">Deposit · {req.deposit}</span>
                                   {req.depositPaid
                                     ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Refunded</span>
                                     : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestDepositPaid(req.id); setDataTick((t) => t + 1); showToast("Deposit marked refunded."); }}>Mark refunded</Button>
@@ -406,13 +407,13 @@ export function ManagerAllServicesPanel({
                 <Fragment key={`wo-${wo.id}`}>
                   <tr className={PORTAL_TABLE_TR}>
                     <td className={PORTAL_TABLE_TD}>Work order</td>
-                    <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{wo.title}</td>
+                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{wo.title}</td>
                     <td className={PORTAL_TABLE_TD}>{wo.residentName ?? wo.residentEmail ?? "Resident"}</td>
                     <td className={PORTAL_TABLE_TD}>
                       {[wo.propertyName, wo.unit].filter(Boolean).join(" · ") || "—"}
                     </td>
                     <td className={PORTAL_TABLE_TD}>
-                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[wo.bucket] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[wo.bucket] ?? "bg-accent/40 text-muted ring-border"}`}>
                         {STATUS_LABEL[wo.bucket] ?? wo.status}
                       </span>
                     </td>
@@ -431,20 +432,20 @@ export function ManagerAllServicesPanel({
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
                       <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
                         {wo.description ? (
-                          <p className="mb-3 text-sm leading-relaxed text-slate-600">{wo.description}</p>
+                          <p className="mb-3 text-sm leading-relaxed text-muted">{wo.description}</p>
                         ) : null}
                       <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
                         <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Preferred arrival</p>
-                          <p className="mt-1 text-slate-800">{wo.preferredArrival?.trim() || "Anytime"}</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Preferred arrival</p>
+                          <p className="mt-1 text-foreground">{wo.preferredArrival?.trim() || "Anytime"}</p>
                         </div>
                         <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Visit</p>
-                          <p className="mt-1 text-slate-800">{wo.scheduled && wo.scheduled !== "—" ? wo.scheduled : "Not scheduled"}</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Visit</p>
+                          <p className="mt-1 text-foreground">{wo.scheduled && wo.scheduled !== "—" ? wo.scheduled : "Not scheduled"}</p>
                         </div>
                         <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cost</p>
-                          <p className="mt-1 text-slate-800">{wo.cost !== "—" && wo.cost?.trim() ? wo.cost : "—"}</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Cost</p>
+                          <p className="mt-1 text-foreground">{wo.cost !== "—" && wo.cost?.trim() ? wo.cost : "—"}</p>
                         </div>
                       </div>
                       {wo.bucket !== "completed" ? (

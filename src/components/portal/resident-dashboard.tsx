@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -41,53 +42,45 @@ type AppStatus = "pending" | "approved" | "rejected";
 
 function leaseBadge(row: LeasePipelineRow | null, approved: boolean): {
   label: string;
-  tone: "emerald" | "amber" | "sky" | "slate" | "violet";
+  tone: "confirmed" | "pending" | "approved" | "neutral" | "overdue";
   cta: boolean;
 } {
-  if (!approved || !row) return { label: "Not started", tone: "slate", cta: false };
+  if (!approved || !row) return { label: "Not started", tone: "neutral", cta: false };
   if (!residentCanViewLeaseRow(row)) {
-    if (row.status === "Voided") return { label: "Voided", tone: "slate", cta: false };
-    return { label: "Being prepared", tone: "slate", cta: false };
+    if (row.status === "Voided") return { label: "Voided", tone: "neutral", cta: false };
+    return { label: "Being prepared", tone: "neutral", cta: false };
   }
   switch (row.status) {
-    case "Fully Signed": return { label: "Active ✓", tone: "emerald", cta: false };
-    case "Resident Signature Pending": return { label: "Sign now", tone: "violet", cta: true };
-    case "Manager Signature Pending": return { label: "Awaiting manager", tone: "sky", cta: false };
-    default: return { label: row.status || "In progress", tone: "amber", cta: false };
+    case "Fully Signed": return { label: "Active ✓", tone: "confirmed", cta: false };
+    case "Resident Signature Pending": return { label: "Sign now", tone: "approved", cta: true };
+    case "Manager Signature Pending": return { label: "Awaiting manager", tone: "approved", cta: false };
+    default: return { label: row.status || "In progress", tone: "pending", cta: false };
   }
 }
 
-function StatusBadge({ label, tone }: { label: string; tone: string }) {
-  const cls: Record<string, string> = {
-    emerald: "bg-emerald-100 text-emerald-800",
-    amber: "bg-amber-100 text-amber-900",
-    sky: "bg-sky-100 text-sky-800",
-    slate: "bg-slate-100 text-slate-700",
-    violet: "bg-violet-100 text-violet-800",
-    rose: "bg-rose-100 text-rose-800",
-  };
-  return (
-    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${cls[tone] ?? cls.slate}`}>
-      {label}
-    </span>
-  );
+function StatusBadge({ label, tone }: { label: string; tone: "pending" | "approved" | "confirmed" | "overdue" | "neutral" }) {
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
 function NotifBanner({
   tone,
   children,
 }: {
-  tone: "amber" | "blue" | "violet" | "rose";
+  tone: "pending" | "approved" | "confirmed" | "overdue";
   children: React.ReactNode;
 }) {
   const cls = {
-    amber: "border-amber-200/80 bg-amber-50/80 text-amber-950",
-    blue: "border-blue-200/80 bg-blue-50/80 text-blue-950",
-    violet: "border-violet-200/80 bg-violet-50/80 text-violet-950",
-    rose: "border-rose-200/80 bg-rose-50/80 text-rose-950",
+    pending:
+      "border-[color-mix(in_srgb,var(--status-pending-fg)_28%,transparent)] bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]",
+    approved:
+      "border-[color-mix(in_srgb,var(--status-approved-fg)_28%,transparent)] bg-[var(--status-approved-bg)] text-[var(--status-approved-fg)]",
+    confirmed:
+      "border-[color-mix(in_srgb,var(--status-confirmed-fg)_28%,transparent)] bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]",
+    overdue:
+      "border-[color-mix(in_srgb,var(--status-overdue-fg)_28%,transparent)] bg-[var(--status-overdue-bg)] text-[var(--status-overdue-fg)]",
   }[tone];
   return (
-    <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
+    <div className={`glass-card flex items-start justify-between gap-3 rounded-2xl px-4 py-3.5 text-sm backdrop-blur-xl ${cls}`}>
       {children}
     </div>
   );
@@ -95,11 +88,17 @@ function NotifBanner({
 
 function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">{title}</p>
+    <div className="glass-card min-h-[9.5rem] rounded-2xl p-6 transition-[border-color,box-shadow,transform] duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-card-hover)]">
+      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{title}</p>
       <div className="mt-3">{children}</div>
     </div>
   );
+}
+
+function residentInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
+  return (parts[0]?.slice(0, 2) ?? "R").toUpperCase();
 }
 
 export function ResidentDashboard({
@@ -243,35 +242,75 @@ export function ResidentDashboard({
   const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, pendingCharges, pendingTotal } = data;
 
   // ── Status banner copy ──
-  let statusTone = "border-amber-200/80 bg-amber-50/80 text-amber-950";
+  let statusTone: "pending" | "approved" | "confirmed" | "overdue" = "pending";
   let statusCopy = "Application submitted and pending manager review. Your portal will unlock after approval.";
   if (showTestAccessNote) {
-    statusTone = "border-sky-200/80 bg-sky-50/80 text-sky-950";
+    statusTone = "approved";
     statusCopy = "Test access active — resident portal is fully unlocked for this email.";
   } else if (appStatus === "approved") {
-    statusTone = "border-emerald-200/70 bg-emerald-50/80 text-emerald-950";
+    statusTone = "confirmed";
     statusCopy = appProperty && appRoom
-      ? `Approved for ${appProperty} - ${appRoom}.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`
+      ? `Approved for ${appProperty} · ${appRoom}.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`
       : appProperty
       ? `Approved for ${appProperty}.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`
       : `Approved and active.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`;
   } else if (appStatus === "rejected") {
-    statusTone = "border-rose-200/70 bg-rose-50/80 text-rose-950";
+    statusTone = "overdue";
     statusCopy = "Your most recent application is marked rejected. Contact your manager if you need help or want to reapply.";
   }
 
+  const firstName = displayName && displayName !== "Resident" ? displayName.split(" ")[0] : null;
+  const propertySubline = [appProperty, appRoom].filter(Boolean).join(" · ");
+  const statusBannerCls = {
+    pending:
+      "border-[color-mix(in_srgb,var(--status-pending-fg)_28%,transparent)] bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]",
+    approved:
+      "border-[color-mix(in_srgb,var(--status-approved-fg)_28%,transparent)] bg-[var(--status-approved-bg)] text-[var(--status-approved-fg)]",
+    confirmed:
+      "border-[color-mix(in_srgb,var(--status-confirmed-fg)_28%,transparent)] bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]",
+    overdue:
+      "border-[color-mix(in_srgb,var(--status-overdue-fg)_28%,transparent)] bg-[var(--status-overdue-bg)] text-[var(--status-overdue-fg)]",
+  }[statusTone];
+
   return (
-    <ManagerPortalPageShell title={`Welcome${displayName && displayName !== "Resident" ? `, ${displayName.split(" ")[0]}` : ""}`}>
+    <ManagerPortalPageShell
+      title={firstName ? `Welcome, ${firstName}` : "Welcome"}
+      titleAside={
+        <div
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white shadow-[0_8px_20px_-8px_rgba(47,107,255,0.55)]"
+          style={{ background: "linear-gradient(135deg, var(--cobalt-deep) 0%, var(--sky) 100%)" }}
+          aria-hidden
+        >
+          {residentInitials(displayName)}
+        </div>
+      }
+      filterRow={
+        propertySubline ? (
+          <p className="text-sm text-muted">{propertySubline}</p>
+        ) : undefined
+      }
+    >
       <div className="space-y-5">
 
         {/* ── Application status notice ── */}
-        <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>{statusCopy}</div>
+        <div className={`glass-card rounded-2xl px-4 py-3.5 text-sm backdrop-blur-xl ${statusBannerCls}`}>
+          {statusCopy}
+        </div>
+
+        {managerIsFree && appStatus === "approved" ? (
+          <div className="glass-card rounded-2xl border border-border px-4 py-3.5 text-sm text-muted backdrop-blur-xl">
+            <p className="font-medium text-foreground">Some features are awaiting your property manager</p>
+            <p className="mt-1 leading-relaxed">
+              Lease signing, maintenance, and related tools become available when your property team upgrades from the Free plan. There is nothing you need to do on your end.
+            </p>
+          </div>
+        ) : null}
 
         {/* ── Action-required banners (only when actionable) ── */}
         {(lease.cta || pendingCharges.length > 0 || inbox > 0 || (canUseFullPortal && openWO > 0)) && (
           <div className="space-y-2">
             {lease.cta && (
-              <NotifBanner tone="violet">
+              <NotifBanner tone="approved">
                 <span>Your lease is ready — <span className="font-semibold">signature required</span></span>
                 <Link href={`${BASE}/lease`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
                   Sign now →
@@ -279,7 +318,7 @@ export function ResidentDashboard({
               </NotifBanner>
             )}
             {pendingCharges.length > 0 && (
-              <NotifBanner tone="amber">
+              <NotifBanner tone="pending">
                 <span>
                   <span className="font-semibold">
                     ${(pendingTotal / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -292,7 +331,7 @@ export function ResidentDashboard({
               </NotifBanner>
             )}
             {inbox > 0 && (
-              <NotifBanner tone="blue">
+              <NotifBanner tone="approved">
                 <span>
                   <span className="font-semibold">{inbox}</span> unread message{inbox === 1 ? "" : "s"} in your inbox
                 </span>
@@ -302,7 +341,7 @@ export function ResidentDashboard({
               </NotifBanner>
             )}
             {canUseFullPortal && openWO > 0 && (
-              <NotifBanner tone="rose">
+              <NotifBanner tone="overdue">
                 <span>
                   <span className="font-semibold">{openWO}</span> open maintenance request{openWO === 1 ? "" : "s"} awaiting scheduling
                 </span>
@@ -322,7 +361,7 @@ export function ResidentDashboard({
               <div className="flex items-center justify-between gap-3">
                 <StatusBadge label={lease.label} tone={lease.tone} />
                 {leaseRow?.application?.leaseStart ? (
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-muted">
                     {leaseRow.application.leaseStart}
                     {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
                   </span>
@@ -336,10 +375,10 @@ export function ResidentDashboard({
             {/* Charges */}
             <InfoCard title="Charges & payments">
               {pendingCharges.length === 0 ? (
-                <p className="text-sm text-slate-500">No outstanding charges.</p>
+                <p className="text-sm text-muted">No outstanding charges.</p>
               ) : (
                 <>
-                  <p className="text-2xl font-bold tracking-tight text-slate-900">
+                  <p className="text-2xl font-bold tracking-tight text-foreground">
                     ${(pendingTotal / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-500">
@@ -357,19 +396,19 @@ export function ResidentDashboard({
               <InfoCard title="Maintenance">
                 <div className="space-y-1 text-sm">
                   {openWO + scheduledWO === 0 ? (
-                    <p className="text-slate-500">No active requests.</p>
+                    <p className="text-muted">No active requests.</p>
                   ) : (
                     <>
                       {openWO > 0 && (
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-600">Open</span>
-                          <span className="font-semibold text-rose-700">{openWO}</span>
+                          <span className="text-muted">Open</span>
+                          <span className="font-semibold text-[var(--status-overdue-fg)]">{openWO}</span>
                         </div>
                       )}
                       {scheduledWO > 0 && (
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-600">Scheduled</span>
-                          <span className="font-semibold text-sky-700">{scheduledWO}</span>
+                          <span className="text-muted">Scheduled</span>
+                          <span className="font-semibold text-[var(--status-approved-fg)]">{scheduledWO}</span>
                         </div>
                       )}
                       {completedWO > 0 && (
@@ -387,7 +426,7 @@ export function ResidentDashboard({
               </InfoCard>
             ) : (
               <InfoCard title="Maintenance">
-                <p className="text-sm text-slate-500">Available on upgraded property plans.</p>
+                <p className="text-sm text-muted">Available on upgraded property plans.</p>
               </InfoCard>
             )}
 

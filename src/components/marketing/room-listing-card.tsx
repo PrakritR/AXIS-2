@@ -129,7 +129,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
   const availabilityTone = roomAvailabilityTone(row.availabilityRaw);
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_10px_40px_-18px_rgba(15,23,42,0.2)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_50px_-14px_rgba(15,23,42,0.25)]">
+    <article className="glass-card flex h-full flex-col overflow-hidden rounded-[18px] transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]">
       <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-slate-200">
         {slides.map((slide, i) =>
           slide.kind === "photo" ? (
@@ -215,26 +215,26 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
       </div>
 
       <div className="flex flex-1 flex-col px-4 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-4">
-        <h2 className="text-lg font-bold leading-snug tracking-tight text-slate-900">{row.roomName}</h2>
-        <p className="mt-0.5 text-sm font-medium text-slate-700">{row.title}</p>
-        <p className="mt-0.5 text-sm text-slate-500">{row.headlineAddress}</p>
+        <h2 className="text-lg font-bold leading-snug tracking-tight text-foreground">{row.roomName}</h2>
+        <p className="mt-0.5 text-sm font-medium text-foreground/80">{row.title}</p>
+        <p className="mt-0.5 text-sm text-muted">{row.headlineAddress}</p>
 
-        <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
+        <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
           <span className="inline-flex items-center gap-1.5">
-            <BedIcon className="h-4 w-4 shrink-0 text-slate-400" />
+            <BedIcon className="h-4 w-4 shrink-0 text-muted/70" />
             <span>{bedLabel}</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <BathIcon className="h-4 w-4 shrink-0 text-slate-400" />
+            <BathIcon className="h-4 w-4 shrink-0 text-muted/70" />
             <span>{row.bathroomHint}</span>
           </span>
         </p>
 
-        <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-600">{row.descriptionBlurb}</p>
+        <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted">{row.descriptionBlurb}</p>
 
         <div className="mt-3 flex flex-wrap gap-2">
           {row.listingTags.map((tag) => (
-            <span key={tag} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200/80">
+            <span key={tag} className="rounded-full bg-accent px-3 py-1 text-xs font-medium text-muted ring-1 ring-border">
               {tag}
             </span>
           ))}
@@ -243,16 +243,16 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
           <Link
             href={listingHref}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_4px_20px_-4px_rgba(0,122,255,0.45)] transition hover:opacity-95"
+            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-card-hover)] transition hover:opacity-95"
           >
             View listing
             <ChevronRight className="h-4 w-4 shrink-0 opacity-95" />
           </Link>
           <Link
             href={applyHref}
-            className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 sm:min-w-[7.5rem]"
+            className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent sm:min-w-[7.5rem]"
           >
-            <ApplyIcon className="h-4 w-4 text-slate-500" />
+            <ApplyIcon className="h-4 w-4 text-muted" />
             Apply
           </Link>
         </div>

@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
+import { Badge } from "@/components/ui/badge";
 import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -50,51 +51,29 @@ function UsersEmptyIcon({ className }: { className?: string }) {
 }
 
 function StatusPill({ active }: { active: boolean }) {
-  if (active) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
-        Active
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />
-      Disabled
-    </span>
-  );
+  return <Badge tone={active ? "confirmed" : "neutral"}>{active ? "Active" : "Disabled"}</Badge>;
 }
 
 function RolePill({ kind }: { kind: AccountKind }) {
-  const styles: Record<AccountKind, string> = {
-    manager: "border-sky-200/90 bg-sky-50 text-sky-900",
-    owner: "border-sky-200/90 bg-sky-50 text-sky-900",
-    resident: "border-violet-200/90 bg-violet-50 text-violet-900",
-  };
   const labels: Record<AccountKind, string> = {
     manager: "Management",
     owner: "Management",
     resident: "Resident",
   };
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[kind]}`}>
+    <span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--status-approved-fg)_30%,transparent)] bg-[var(--status-approved-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--status-approved-fg)]">
       {labels[kind]}
     </span>
   );
 }
 
 function TierBadge({ tier }: { tier: string }) {
-  const colors: Record<string, string> = {
-    pro: "border-blue-200/90 bg-blue-50 text-blue-800",
-    business: "border-violet-200/90 bg-violet-50 text-violet-800",
-    free: "border-slate-200/90 bg-slate-100 text-slate-600",
-  };
-  const cls = colors[tier.toLowerCase()] ?? colors.free;
+  const key = tier.toLowerCase();
+  const tone = key === "pro" ? "approved" : key === "business" ? "confirmed" : "neutral";
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${cls}`}>
+    <Badge tone={tone}>
       {tier}
-    </span>
+    </Badge>
   );
 }
 
@@ -468,7 +447,7 @@ export function AdminAxisUsersClient() {
   return (
     <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Axis users</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Axis users</h1>
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => void load()}>
           Refresh
         </Button>
@@ -554,7 +533,7 @@ export function AdminAxisUsersClient() {
         ) : null}
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
+      <div className="mt-5 overflow-hidden rounded-2xl border border-border glass-card">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <p className="text-sm text-slate-400">Loading…</p>
@@ -613,8 +592,8 @@ export function AdminAxisUsersClient() {
                         <td className="px-5 py-4 text-right align-middle">
                           <Button
                             type="button"
-                            variant="outline"
-                            className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
+                            variant="secondary"
+                            className="rounded-full px-4 py-2 text-sm font-medium"
                             onClick={() => setExpandedKey(isOpen ? null : rowKey)}
                             aria-expanded={isOpen}
                           >

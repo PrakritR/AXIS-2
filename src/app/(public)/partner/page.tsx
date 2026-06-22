@@ -1,43 +1,42 @@
 import Link from "next/link";
+import { ChromeSubstrate } from "@/components/brand/chrome-substrate";
 
 export default function PartnerLandingPage() {
   return (
-    <div className="bg-white">
+    <div className="bg-background">
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-[#eef6ff] via-[#f5f9ff] to-white pb-24 pt-20 sm:pt-28">
-        <div className="mx-auto max-w-4xl px-6 text-center">
-          <h1 className="text-[2.6rem] font-bold leading-[1.1] tracking-tight text-[#0d1f4e] sm:text-5xl md:text-[3.25rem]">
+      <section className="hero-chrome-scene relative overflow-hidden pb-24 pt-20 sm:pt-28">
+        <ChromeSubstrate variant="full" />
+        <div className="relative mx-auto max-w-4xl px-6 text-center">
+          <h1 className="hero-title text-[2.6rem] font-bold leading-[1.1] tracking-tight sm:text-5xl md:text-[3.25rem]">
             We manage your property<br className="hidden sm:block" /> so you don&apos;t have to.
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-500">
-            We currently manage <strong className="font-semibold text-slate-700">3 properties</strong> and help owners maximize revenue while minimizing effort — from tenant sourcing to monthly reporting.
+          <p className="hero-subtitle mx-auto mt-6 max-w-2xl text-lg leading-relaxed">
+            We currently manage <strong className="font-semibold opacity-100">3 properties</strong> and help owners maximize revenue while minimizing effort — from tenant sourcing to monthly reporting.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
               href="/partner/contact?tab=schedule"
-              className="inline-flex items-center justify-center rounded-2xl px-8 py-3.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(0,122,255,0.34)] transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_36px_-8px_rgba(0,122,255,0.46)] hover:brightness-105 active:translate-y-px active:scale-[0.98]"
-              style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
+              className="btn-cobalt inline-flex items-center justify-center rounded-2xl px-8 py-3.5 text-sm font-semibold transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:brightness-105 active:translate-y-px active:scale-[0.98]"
             >
               Book a consultation
             </Link>
             <Link
               href="/partner/pricing"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-8 py-3.5 text-sm font-semibold text-slate-700 shadow-sm transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:shadow-md active:translate-y-px active:scale-[0.99]"
+              className="btn-metallic inline-flex items-center justify-center rounded-2xl px-8 py-3.5 text-sm font-semibold text-foreground transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 active:translate-y-px active:scale-[0.99]"
             >
               Use our software
             </Link>
           </div>
         </div>
-        <div className="pointer-events-none absolute -right-32 -top-32 h-[480px] w-[480px] rounded-full bg-primary/[0.06] blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-16 -left-24 h-[360px] w-[360px] rounded-full bg-[rgba(51,156,255,0.08)] blur-3xl" />
       </section>
 
       {/* ── What we handle ── */}
       <section className="mx-auto max-w-6xl px-6 py-20 sm:py-24">
         <div className="text-center">
           <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">What we handle</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0d1f4e] sm:text-4xl">
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Full-service, start to finish
           </h2>
         </div>
@@ -46,35 +45,35 @@ export default function PartnerLandingPage() {
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className="group rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm transition-all duration-200 hover:border-primary/25 hover:shadow-[0_8px_32px_-4px_rgba(0,122,255,0.12)]"
+              className="glass-card group rounded-2xl p-7 transition-all duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-card-hover)]"
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/[0.08] text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-white">
                 {f.icon}
               </div>
-              <h3 className="mt-5 text-base font-semibold text-slate-900">{f.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500">{f.body}</p>
+              <h3 className="mt-5 text-base font-semibold text-foreground">{f.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">{f.body}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* ── How it works ── */}
-      <section className="border-y border-slate-100 bg-slate-50/60 py-20 sm:py-24">
+      <section className="border-y border-border/60 bg-accent/20 py-20 sm:py-24">
         <div className="mx-auto max-w-5xl px-6">
           <div className="text-center">
             <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">How it works</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0d1f4e] sm:text-4xl">
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               Simple for you. Thorough for us.
             </h2>
           </div>
           <ol className="mt-14 grid gap-6 md:grid-cols-3">
             {HOW_STEPS.map((s, i) => (
-              <li key={s.title} className="relative rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+              <li key={s.title} className="glass-card rounded-2xl p-7">
                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
                   {i + 1}
                 </span>
-                <h3 className="mt-5 text-base font-semibold text-slate-900">{s.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-500">{s.body}</p>
+                <h3 className="mt-5 text-base font-semibold text-foreground">{s.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
               </li>
             ))}
           </ol>
@@ -82,7 +81,11 @@ export default function PartnerLandingPage() {
       </section>
 
       {/* ── CTA ── */}
-      <section id="consultation" className="py-20 sm:py-24" style={{ background: "linear-gradient(135deg, #005fd1 0%, var(--primary) 45%, var(--primary-alt) 100%)" }}>
+      <section
+        id="consultation"
+        className="py-20 sm:py-24"
+        style={{ background: "linear-gradient(135deg, var(--cobalt-deep) 0%, var(--primary) 45%, var(--sky) 100%)" }}
+      >
         <div className="mx-auto max-w-3xl px-6 text-center">
           <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
             Interested in working with us?
@@ -93,7 +96,7 @@ export default function PartnerLandingPage() {
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
               href="/partner/contact?tab=schedule"
-              className="inline-flex items-center justify-center rounded-2xl bg-white px-9 py-3.5 text-sm font-semibold text-primary shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-200 hover:bg-slate-50 active:scale-[0.98]"
+              className="btn-metallic inline-flex items-center justify-center rounded-2xl px-9 py-3.5 text-sm font-semibold text-foreground transition-all duration-200 active:scale-[0.98]"
             >
               Book Consultation
             </Link>

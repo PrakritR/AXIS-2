@@ -227,11 +227,11 @@ function ResidentWorkOrderCostEditor({
   void hcTick;
 
   if (row.bucket === "completed") {
-    return <span className="text-slate-700">{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>;
+    return <span className="text-foreground/80">{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>;
   }
 
   if (pendingCharge) {
-    return <span className="text-xs text-slate-600">Pending payment · {pendingCharge.balanceLabel}</span>;
+    return <span className="text-xs text-muted">Pending payment · {pendingCharge.balanceLabel}</span>;
   }
 
   const apply = () => {
@@ -1445,8 +1445,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                 onClick={() => setResidentsTab("current")}
                 className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${
                   residentsTab === "current"
-                    ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
-                    : "bg-transparent text-slate-600 hover:bg-white"
+                    ? "bg-primary text-primary-foreground shadow-[0_8px_20px_-8px_rgba(47,107,255,0.45)]"
+                    : "bg-transparent text-muted hover:bg-card"
                 }`}
               >
                 Current ({currentResidentsCount})
@@ -1456,8 +1456,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                 onClick={() => setResidentsTab("previous")}
                 className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${
                   residentsTab === "previous"
-                    ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
-                    : "bg-transparent text-slate-600 hover:bg-white"
+                    ? "bg-primary text-primary-foreground shadow-[0_8px_20px_-8px_rgba(47,107,255,0.45)]"
+                    : "bg-transparent text-muted hover:bg-card"
                 }`}
               >
                 Previous ({previousResidentsCount})
@@ -1471,7 +1471,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               propertyValue={propertyFilter}
               onPropertyChange={setPropertyFilter}
             />
-            <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+            <label className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
               <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort resident</span>
               <select
                 value={residentsSort}
@@ -1515,7 +1515,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                 {filtered.map((res) => (
                   <Fragment key={res.id}>
                     <tr className={PORTAL_TABLE_TR}>
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
                         <div className="flex items-center gap-2">
                           <span>{res.name || "—"}</span>
                           {(pendingServiceRequestCountByEmail.get(res.email.trim().toLowerCase()) ?? 0) > 0 ? (
@@ -1532,7 +1532,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                       <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseEnd ? shortDateLabel(res.leaseEnd) : "—"}</td>
                       <td className={PORTAL_TABLE_TD}>
                         {res.portalSetup === null ? (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-muted">—</span>
                         ) : res.portalSetup ? (
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200/80">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -1558,11 +1558,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                     </tr>
                     {selectedId === res.id && selected ? (
                       <tr>
-                        <td colSpan={8} className="bg-slate-50/60 px-4 py-5">
+                        <td colSpan={8} className="bg-accent/40 px-4 py-5">
                           <div className="flex flex-col gap-4">
-                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <div className="rounded-2xl border border-border bg-card p-4">
                               <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Account</p>
+                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Account</p>
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Button
                                     type="button"
@@ -1634,71 +1634,71 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               </div>
                               <div className="mt-3 grid gap-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
                                 <div>
-                                  <span className="text-slate-500">Axis ID</span>
-                                  <p className="font-mono font-medium text-slate-900">{selected.axisId}</p>
+                                  <span className="text-muted">Axis ID</span>
+                                  <p className="font-mono font-medium text-foreground">{selected.axisId}</p>
                                 </div>
                                 <div>
-                                  <span className="text-slate-500">Email</span>
-                                  <p className="font-medium text-slate-900">{selected.email}</p>
+                                  <span className="text-muted">Email</span>
+                                  <p className="font-medium text-foreground">{selected.email}</p>
                                 </div>
                                 <div>
-                                  <span className="text-slate-500">Property</span>
-                                  <p className="font-medium text-slate-900">{selected.propertyLabel || "—"}</p>
+                                  <span className="text-muted">Property</span>
+                                  <p className="font-medium text-foreground">{selected.propertyLabel || "—"}</p>
                                 </div>
                                 <div>
-                                  <span className="text-slate-500">Room</span>
-                                  <p className="font-medium text-slate-900">{selected.roomLabel || "—"}</p>
+                                  <span className="text-muted">Room</span>
+                                  <p className="font-medium text-foreground">{selected.roomLabel || "—"}</p>
                                 </div>
                                 {selected.signedMonthlyRent ? (
                                   <div>
-                                    <span className="text-slate-500">Monthly rent</span>
-                                    <p className="font-semibold text-slate-900">${selected.signedMonthlyRent.toFixed(2)}/mo</p>
+                                    <span className="text-muted">Monthly rent</span>
+                                    <p className="font-semibold text-foreground">${selected.signedMonthlyRent.toFixed(2)}/mo</p>
                                   </div>
                                 ) : null}
                                 {selected.manualResidentDetails?.moveInDate ? (
                                   <div>
-                                    <span className="text-slate-500">Move-in date</span>
-                                    <p className="font-medium text-slate-900">{selected.manualResidentDetails.moveInDate}</p>
+                                    <span className="text-muted">Move-in date</span>
+                                    <p className="font-medium text-foreground">{selected.manualResidentDetails.moveInDate}</p>
                                   </div>
                                 ) : null}
                                 {selected.manualResidentDetails?.moveOutDate ? (
                                   <div>
-                                    <span className="text-slate-500">Move-out date</span>
-                                    <p className="font-medium text-slate-900">{selected.manualResidentDetails.moveOutDate}</p>
+                                    <span className="text-muted">Move-out date</span>
+                                    <p className="font-medium text-foreground">{selected.manualResidentDetails.moveOutDate}</p>
                                   </div>
                                 ) : null}
                                 {selected.manualResidentDetails?.monthlyUtilities ? (
                                   <div>
-                                    <span className="text-slate-500">Monthly utilities</span>
-                                    <p className="font-medium text-slate-900">${selected.manualResidentDetails.monthlyUtilities}/mo</p>
+                                    <span className="text-muted">Monthly utilities</span>
+                                    <p className="font-medium text-foreground">${selected.manualResidentDetails.monthlyUtilities}/mo</p>
                                   </div>
                                 ) : null}
                                 {selected.manualResidentDetails?.moveInFee ? (
                                   <div>
-                                    <span className="text-slate-500">Move-in fee</span>
-                                    <p className="font-medium text-slate-900">${selected.manualResidentDetails.moveInFee}</p>
+                                    <span className="text-muted">Move-in fee</span>
+                                    <p className="font-medium text-foreground">${selected.manualResidentDetails.moveInFee}</p>
                                   </div>
                                 ) : null}
                                 {selected.manualResidentDetails?.securityDeposit ? (
                                   <div>
-                                    <span className="text-slate-500">Security deposit</span>
-                                    <p className="font-medium text-slate-900">${selected.manualResidentDetails.securityDeposit}</p>
+                                    <span className="text-muted">Security deposit</span>
+                                    <p className="font-medium text-foreground">${selected.manualResidentDetails.securityDeposit}</p>
                                   </div>
                                 ) : null}
                                 {selected.manualResidentDetails?.notes ? (
                                   <div className="sm:col-span-2 lg:col-span-3">
-                                    <span className="text-slate-500">Notes</span>
-                                    <p className="whitespace-pre-wrap font-medium text-slate-900">{selected.manualResidentDetails.notes}</p>
+                                    <span className="text-muted">Notes</span>
+                                    <p className="whitespace-pre-wrap font-medium text-foreground">{selected.manualResidentDetails.notes}</p>
                                   </div>
                                 ) : null}
                                 <div>
-                                  <span className="text-slate-500">Status</span>
+                                  <span className="text-muted">Status</span>
                                   <div className="mt-1 flex flex-wrap gap-2">
                                     <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200/80">
                                       Active resident
                                     </span>
                                     {selected.manuallyAdded ? (
-                                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                      <span className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold text-muted">
                                         Manually added
                                       </span>
                                     ) : null}
@@ -1725,11 +1725,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               </div>
                             </div>
 
-                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <div className="rounded-2xl border border-border bg-card p-4">
                               <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Lease</p>
-                                  <p className="mt-1 text-sm text-slate-600">
+                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Lease</p>
+                                  <p className="mt-1 text-sm text-muted">
                                     {residentLease
                                       ? `${residentLease.status ?? residentLease.stageLabel} · ${residentLease.application?.leaseStart || "No move-in"}${residentLease.application?.leaseEnd ? ` to ${residentLease.application.leaseEnd}` : ""}`
                                       : "No lease created yet for this resident."}
@@ -1825,7 +1825,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         </Button>
                                       </>
                                     ) : null}
-                                    <label className="inline-flex cursor-pointer items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-800 hover:bg-slate-50">
+                                    <label className="inline-flex cursor-pointer items-center rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent/40">
                                       {uploadingLeaseRowId === residentLease.id ? "Uploading..." : "Upload PDF"}
                                       <input
                                         type="file"
@@ -1868,9 +1868,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               </div>
                               {residentLease ? (
                                 <div className="mt-4">
-                                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3">
-                                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Lease document</p>
-                                    <p className="mt-1 text-xs text-slate-500">
+                                  <div className="rounded-2xl border border-border bg-accent/40 p-3">
+                                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Lease document</p>
+                                    <p className="mt-1 text-xs text-muted">
                                       Single active lease document. Signatures are applied to this same lease as the workflow advances.
                                     </p>
                                   </div>
@@ -1880,29 +1880,29 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     emptyHint="No lease document yet. Generate or upload one from Manager Review first."
                                   />
                                   {residentLease.thread.length ? (
-                                    <div className="mt-3 rounded-2xl border border-slate-200/80 bg-white p-4">
+                                    <div className="mt-3 rounded-2xl border border-border bg-card p-4">
                                       <div className="flex items-center justify-between gap-3">
                                         <div>
-                                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Lease messages</p>
-                                          <p className="mt-1 text-sm text-slate-500">
+                                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Lease messages</p>
+                                          <p className="mt-1 text-sm text-muted">
                                             Resident edit requests and lease-specific updates appear here.
                                           </p>
                                         </div>
-                                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+                                        <span className="rounded-full bg-accent px-2.5 py-1 text-[10px] font-semibold text-muted">
                                           {residentLease.status ?? residentLease.stageLabel}
                                         </span>
                                       </div>
                                       <div className="mt-3 space-y-2">
                                         {residentLease.thread.map((message) => (
-                                          <div key={message.id} className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2">
-                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                          <div key={message.id} className="rounded-xl border border-border bg-accent/50 px-3 py-2">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                                               {message.role}
-                                              <span className="normal-case tracking-normal text-slate-400">
+                                              <span className="normal-case tracking-normal text-muted">
                                                 {" "}
                                                 · {new Date(message.at).toLocaleString()}
                                               </span>
                                             </p>
-                                            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{message.body}</p>
+                                            <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/80">{message.body}</p>
                                           </div>
                                         ))}
                                       </div>
@@ -1910,13 +1910,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   ) : null}
                                 </div>
                               ) : (
-                                <p className="mt-3 text-sm text-slate-500">Approve the application and create or generate a lease here for this resident.</p>
+                                <p className="mt-3 text-sm text-muted">Approve the application and create or generate a lease here for this resident.</p>
                               )}
                             </div>
 
-                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <div className="rounded-2xl border border-border bg-card p-4">
                               <div className="flex items-center justify-between gap-3">
-                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Charges</p>
+                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Charges</p>
                                 <div className="flex flex-wrap items-center gap-2">
                                   {chargeCounts.pending > 0 ? (
                                     <Button
@@ -1947,8 +1947,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     onClick={() => setChargeTab(t)}
                                     className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                                       chargeTab === t
-                                        ? "bg-slate-900 text-white"
-                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                        ? "bg-primary text-primary-foreground"
+                                        : "bg-accent text-muted hover:bg-accent"
                                     }`}
                                   >
                                     {t === "pending" ? "Pending" : "Paid"}
@@ -1964,7 +1964,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 ) : null}
                               </div>
                               {visibleCharges.length === 0 ? (
-                                <p className="mt-3 text-sm text-slate-500">
+                                <p className="mt-3 text-sm text-muted">
                                   {residentCharges.length === 0
                                     ? "No charges for this resident yet. Approve their application with rent and deposit saved, or add a charge."
                                     : chargeTab === "pending"
@@ -1975,22 +1975,22 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 <div className="mt-3 overflow-x-auto">
                                   <table className="w-full border-collapse text-sm">
                                     <thead>
-                                      <tr className="border-b border-slate-200">
-                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Charge</th>
-                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Due</th>
-                                        <th className="pb-2 text-right text-xs font-semibold text-slate-500">Amount</th>
-                                        <th className="pb-2 text-right text-xs font-semibold text-slate-500">Balance</th>
-                                        <th className="pb-2 text-right text-xs font-semibold text-slate-500">Status</th>
-                                        <th className="pb-2 text-right text-xs font-semibold text-slate-500">Action</th>
+                                      <tr className="border-b border-border">
+                                        <th className="pb-2 text-left text-xs font-semibold text-muted">Charge</th>
+                                        <th className="pb-2 text-left text-xs font-semibold text-muted">Due</th>
+                                        <th className="pb-2 text-right text-xs font-semibold text-muted">Amount</th>
+                                        <th className="pb-2 text-right text-xs font-semibold text-muted">Balance</th>
+                                        <th className="pb-2 text-right text-xs font-semibold text-muted">Status</th>
+                                        <th className="pb-2 text-right text-xs font-semibold text-muted">Action</th>
                                       </tr>
                                     </thead>
                                     <tbody>
                                       {visibleCharges.map((c) => (
-                                        <tr key={c.id} className="border-b border-slate-100 last:border-0">
-                                          <td className="py-2 pr-4 font-medium text-slate-900">{c.title}</td>
-                                          <td className="py-2 pr-4 text-xs text-slate-600">{chargeDueLabel(c)}</td>
-                                          <td className="py-2 pr-4 text-right tabular-nums text-slate-700">{c.amountLabel}</td>
-                                          <td className="py-2 pr-4 text-right tabular-nums font-medium text-slate-800">{c.balanceLabel}</td>
+                                        <tr key={c.id} className="border-b border-border last:border-0">
+                                          <td className="py-2 pr-4 font-medium text-foreground">{c.title}</td>
+                                          <td className="py-2 pr-4 text-xs text-muted">{chargeDueLabel(c)}</td>
+                                          <td className="py-2 pr-4 text-right tabular-nums text-foreground/80">{c.amountLabel}</td>
+                                          <td className="py-2 pr-4 text-right tabular-nums font-medium text-foreground">{c.balanceLabel}</td>
                                           <td className="py-2 pr-4 text-right">
                                             <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusPill(c.status)}`}>
                                               {c.status === "paid" ? "Paid" : "Pending"}
@@ -2041,7 +2041,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                           type="button"
                                                           variant="outline"
                                                           title={isCancelled ? `Re-enable ${label}` : `Cancel ${label}`}
-                                                          className={`rounded-full px-2 py-0.5 text-xs ${isCancelled ? "text-slate-400 line-through" : "text-violet-700 hover:border-violet-300"}`}
+                                                          className={`rounded-full px-2 py-0.5 text-xs ${isCancelled ? "text-muted line-through" : "text-violet-700 hover:border-violet-300"}`}
                                                           onClick={() => {
                                                             if (isCancelled) {
                                                               uncancelHouseholdChargeReminder(c.id, slot, userId ?? null);
@@ -2087,11 +2087,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               )}
                             </div>
 
-                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <div className="rounded-2xl border border-border bg-card p-4">
                               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                                 <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Requests</p>
-                                  <p className="mt-1 text-sm text-slate-500">All requests and maintenance work orders from this resident.</p>
+                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Requests</p>
+                                  <p className="mt-1 text-sm text-muted">All requests and maintenance work orders from this resident.</p>
                                 </div>
                                 {residentServiceRequests.filter((r) => r.status === "pending").length > 0 ? (
                                   <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-amber-300/60">
@@ -2100,12 +2100,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 ) : null}
                               </div>
                               {residentServiceRequests.length === 0 && residentWorkOrders.length === 0 ? (
-                                <p className="text-sm text-slate-500">No requests or work orders for this resident yet.</p>
+                                <p className="text-sm text-muted">No requests or work orders for this resident yet.</p>
                               ) : (
                                 <div className="space-y-4">
                               {residentServiceRequests.length > 0 ? (
                                 <>
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Requests</p>
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Requests</p>
                                   <div className="space-y-3">
                                   {residentServiceRequests.map((req) => {
                                     const needsReturn = hasDeposit(req.deposit);
@@ -2122,21 +2122,21 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       denied: "Denied",
                                     };
                                     return (
-                                      <div key={req.id} className={`rounded-2xl border p-4 ${req.status === "pending" ? "border-amber-200 bg-amber-50/40" : "border-slate-200 bg-slate-50/60"}`}>
+                                      <div key={req.id} className={`rounded-2xl border p-4 ${req.status === "pending" ? "border-amber-200 bg-amber-50/40" : "border-border bg-accent/40"}`}>
                                         <div className="flex flex-wrap items-start justify-between gap-2">
                                           <div>
-                                            <p className="font-semibold text-slate-900">{req.offerName}</p>
+                                            <p className="font-semibold text-foreground">{req.offerName}</p>
                                             <div className="mt-1 flex flex-wrap gap-1">
-                                              {req.price ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">{req.price}</span> : null}
+                                              {req.price ? <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-foreground/80">{req.price}</span> : null}
                                               {needsReturn ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {req.deposit}</span> : null}
-                                              {req.returnByDate ? <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">Return by {formatPacificDate(req.returnByDate, { month: "short", day: "numeric" })}</span> : null}
+                                              {req.returnByDate ? <span className="rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border">Return by {formatPacificDate(req.returnByDate, { month: "short", day: "numeric" })}</span> : null}
                                             </div>
                                           </div>
-                                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${statusColors[req.status] ?? "bg-slate-50 text-slate-600 ring-slate-200"}`}>
+                                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${statusColors[req.status] ?? "bg-accent/40 text-muted ring-border"}`}>
                                             {statusLabels[req.status] ?? req.status}
                                           </span>
                                         </div>
-                                        {req.notes ? <p className="mt-2 text-xs text-slate-500 italic">&ldquo;{req.notes}&rdquo;</p> : null}
+                                        {req.notes ? <p className="mt-2 text-xs text-muted italic">&ldquo;{req.notes}&rdquo;</p> : null}
 
                                         {/* Pending — Approve / Deny */}
                                         {req.status === "pending" ? (
@@ -2161,12 +2161,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
                                         {/* Approved / Returned — charges */}
                                         {(req.status === "approved" || req.status === "returned") ? (
-                                          <div className="mt-3 rounded-xl bg-white p-3 ring-1 ring-slate-200">
-                                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Charges</p>
+                                          <div className="mt-3 rounded-xl bg-card p-3 ring-1 ring-border">
+                                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Charges</p>
                                             <div className="space-y-2">
                                               {req.price ? (
                                                 <div className="flex items-center justify-between">
-                                                  <span className="text-xs text-slate-700">Service fee · {req.price}</span>
+                                                  <span className="text-xs text-foreground/80">Service fee · {req.price}</span>
                                                   {req.servicePaid ? (
                                                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Paid</span>
                                                   ) : (
@@ -2178,7 +2178,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                               ) : null}
                                               {needsReturn ? (
                                                 <div className="flex items-center justify-between">
-                                                  <span className="text-xs text-slate-700">Deposit · {req.deposit}</span>
+                                                  <span className="text-xs text-foreground/80">Deposit · {req.deposit}</span>
                                                   {req.depositPaid ? (
                                                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Refunded</span>
                                                   ) : (
@@ -2194,8 +2194,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
                                         {req.returnPhotoDataUrl ? (
                                           <div className="mt-3">
-                                            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Return photo</p>
-                                            <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-28 overflow-hidden rounded-xl border border-slate-200">
+                                            <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Return photo</p>
+                                            <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-28 overflow-hidden rounded-xl border border-border">
                                               <Image src={req.returnPhotoDataUrl} alt="Return" width={112} height={84} className="h-20 w-full object-cover" unoptimized />
                                             </a>
                                           </div>
@@ -2211,46 +2211,46 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               ) : null}
                               {residentWorkOrders.length > 0 ? (
                                 <>
-                                  {residentServiceRequests.length > 0 ? <div className="border-t border-slate-100 my-2" /> : null}
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Work orders</p>
+                                  {residentServiceRequests.length > 0 ? <div className="border-t border-border my-2" /> : null}
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Work orders</p>
                                   <div className="space-y-4">
                                   {residentWorkOrders.map((workOrder) => {
                                     const pendingCharge = findPendingWorkOrderCharge(workOrder.id);
                                     return (
-                                      <div key={workOrder.id} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                                      <div key={workOrder.id} className="rounded-2xl border border-border bg-accent/40 p-4">
                                         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                           <div className="min-w-0 flex-1">
                                             <div className="flex flex-wrap items-center gap-2">
-                                              <p className="text-base font-semibold text-slate-900">{workOrder.title}</p>
-                                              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                                              <p className="text-base font-semibold text-foreground">{workOrder.title}</p>
+                                              <span className="inline-flex rounded-full bg-accent px-2.5 py-1 text-[11px] font-semibold text-foreground/80">
                                                 {workOrder.priority}
                                               </span>
-                                              <span className="inline-flex rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                                              <span className="inline-flex rounded-full bg-card px-2.5 py-1 text-[11px] font-semibold text-muted ring-1 ring-border">
                                                 {workOrder.status}
                                               </span>
                                             </div>
-                                            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{workOrder.description}</p>
+                                            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted">{workOrder.description}</p>
                                             <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
                                               <div>
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Preferred arrival</p>
-                                                <p className="mt-1 text-slate-800">{workOrder.preferredArrival?.trim() || "Anytime"}</p>
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Preferred arrival</p>
+                                                <p className="mt-1 text-foreground">{workOrder.preferredArrival?.trim() || "Anytime"}</p>
                                               </div>
                                               <div>
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Visit</p>
-                                                <p className="mt-1 text-slate-800">{workOrder.scheduled && workOrder.scheduled !== "—" ? workOrder.scheduled : "Not scheduled"}</p>
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Visit</p>
+                                                <p className="mt-1 text-foreground">{workOrder.scheduled && workOrder.scheduled !== "—" ? workOrder.scheduled : "Not scheduled"}</p>
                                               </div>
                                               <div>
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Current cost</p>
-                                                <p className="mt-1 text-slate-800">{workOrder.cost !== "—" && workOrder.cost.trim() ? workOrder.cost : "—"}</p>
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Current cost</p>
+                                                <p className="mt-1 text-foreground">{workOrder.cost !== "—" && workOrder.cost.trim() ? workOrder.cost : "—"}</p>
                                               </div>
                                               <div>
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Payment</p>
-                                                <p className="mt-1 text-slate-800">{pendingCharge ? `Pending · ${pendingCharge.balanceLabel}` : "No pending payment"}</p>
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Payment</p>
+                                                <p className="mt-1 text-foreground">{pendingCharge ? `Pending · ${pendingCharge.balanceLabel}` : "No pending payment"}</p>
                                               </div>
                                             </div>
                                             {workOrder.photoDataUrls?.length ? (
                                               <div className="mt-4">
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Photos</p>
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Photos</p>
                                                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                                                   {workOrder.photoDataUrls.map((src, index) => (
                                                     <a
@@ -2258,7 +2258,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                       href={src}
                                                       target="_blank"
                                                       rel="noreferrer"
-                                                      className="block overflow-hidden rounded-xl border border-slate-200 bg-white"
+                                                      className="block overflow-hidden rounded-xl border border-border bg-card"
                                                     >
                                                       <Image
                                                         src={src}
@@ -2275,9 +2275,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             ) : null}
                                           </div>
 
-                                          <div className="w-full rounded-2xl border border-slate-200 bg-white p-3 lg:w-[22rem]">
+                                          <div className="w-full rounded-2xl border border-border bg-card p-3 lg:w-[22rem]">
                                             <div>
-                                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cost</p>
+                                              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Cost</p>
                                               <div className="mt-2">
                                                 <ResidentWorkOrderCostEditor
                                                   key={`${workOrder.id}-${workOrder.cost}`}
@@ -2292,7 +2292,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                               </div>
                                             </div>
                                             <div className="mt-4">
-                                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Visit date & time</p>
+                                              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Visit date & time</p>
                                               <div className="mt-2 flex flex-col gap-2">
                                                 <Input
                                                   type="datetime-local"
@@ -2369,34 +2369,34 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               )}
                             </div>
 
-                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <div className="rounded-2xl border border-border bg-card p-4">
                               <div className="flex items-center justify-between gap-3">
                                 <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Inbox</p>
-                                  <p className="mt-1 text-sm text-slate-500">Messages for this specific resident appear here directly.</p>
+                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Inbox</p>
+                                  <p className="mt-1 text-sm text-muted">Messages for this specific resident appear here directly.</p>
                                 </div>
                                 <Button type="button" variant="outline" className="rounded-full px-3 py-1 text-xs" onClick={() => setMessageOpen(true)}>
                                   New message
                                 </Button>
                               </div>
                               {residentInboxThreads.length === 0 ? (
-                                <p className="mt-3 text-sm text-slate-500">No messages on file for this resident yet.</p>
+                                <p className="mt-3 text-sm text-muted">No messages on file for this resident yet.</p>
                               ) : (
                                 <div className="mt-3 space-y-3">
                                   {residentInboxThreads.map((thread) => (
-                                    <div key={thread.id} className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+                                    <div key={thread.id} className="rounded-xl border border-border bg-accent/50 p-3">
                                       <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div>
-                                          <p className="text-sm font-semibold text-slate-900">{thread.subject}</p>
-                                          <p className="text-xs text-slate-500">
+                                          <p className="text-sm font-semibold text-foreground">{thread.subject}</p>
+                                          <p className="text-xs text-muted">
                                             {thread.from} · {thread.time}
                                           </p>
                                         </div>
-                                        <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200/80">
+                                        <span className="rounded-full bg-card px-2.5 py-1 text-[10px] font-semibold text-muted ring-1 ring-border/80">
                                           {thread.folder === "sent" ? "Sent" : "Inbox"}
                                         </span>
                                       </div>
-                                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{thread.body}</p>
+                                      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/80">{thread.body}</p>
                                     </div>
                                   ))}
                                 </div>
@@ -2416,29 +2416,29 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <Modal open={addResidentOpen} title="Add resident" onClose={() => setAddResidentOpen(false)}>
         <div className="space-y-3">
-          <p className="text-xs text-slate-500">Creates an active resident record with an Axis ID. No application or lease is generated.</p>
+          <p className="text-xs text-muted">Creates an active resident record with an Axis ID. No application or lease is generated.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Full name *</span>
+              <span className="font-medium text-foreground/80">Full name *</span>
               <Input value={arName} onChange={(e) => setArName(e.target.value)} placeholder="Jane Smith" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Email *</span>
+              <span className="font-medium text-foreground/80">Email *</span>
               <Input type="email" value={arEmail} onChange={(e) => setArEmail(e.target.value)} placeholder="jane@example.com" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Property</span>
+              <span className="font-medium text-foreground/80">Property</span>
               <select
                 value={arPropertyId}
                 onChange={(e) => { setArPropertyId(e.target.value); setArRoomId(""); }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               >
                 <option value="">Select property…</option>
                 {propertyOptions.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
               </select>
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Lease term</span>
+              <span className="font-medium text-foreground/80">Lease term</span>
               <select
                 value={arLeaseTermSelectValue}
                 onChange={(e) => {
@@ -2451,7 +2451,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   }
                   setArLeaseTerm(selected);
                 }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               >
                 <option value="">Select…</option>
                 <option value="Month-to-month">Month-to-month</option>
@@ -2470,7 +2470,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               ) : null}
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Room</span>
+              <span className="font-medium text-foreground/80">Room</span>
               {arRoomOptions.length > 0 ? (
                 <select
                   value={arRoomId}
@@ -2478,7 +2478,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                     const roomId = e.target.value;
                     setArRoomId(roomId);
                   }}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 >
                   <option value="">Select room…</option>
                   {arRoomOptions.map((r) => (
@@ -2488,39 +2488,39 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   ))}
                 </select>
               ) : (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                <p className="rounded-xl border border-dashed border-border bg-accent/40 px-3 py-2 text-xs text-muted">
                   Add rooms to this property in listing setup to assign a resident room here.
                 </p>
               )}
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Monthly rent ($)</span>
+              <span className="font-medium text-foreground/80">Monthly rent ($)</span>
               <Input type="number" min={0} step={0.01} value={arRent} onChange={(e) => setArRent(e.target.value)} placeholder="875.00" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Monthly utilities ($)</span>
+              <span className="font-medium text-foreground/80">Monthly utilities ($)</span>
               <Input type="number" min={0} step={0.01} value={arUtilities} onChange={(e) => setArUtilities(e.target.value)} placeholder="175.00" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Move-in fee ($)</span>
+              <span className="font-medium text-foreground/80">Move-in fee ($)</span>
               <Input type="number" min={0} step={0.01} value={arMoveInFee} onChange={(e) => setArMoveInFee(e.target.value)} placeholder="200.00" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Security deposit ($)</span>
+              <span className="font-medium text-foreground/80">Security deposit ($)</span>
               <Input type="number" min={0} step={0.01} value={arSecurityDeposit} onChange={(e) => setArSecurityDeposit(e.target.value)} placeholder="875.00" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Move-in date</span>
+              <span className="font-medium text-foreground/80">Move-in date</span>
               <Input type="date" value={arMoveInDate} onChange={(e) => setArMoveInDate(e.target.value)} />
             </label>
             {!isMonthToMonthLease ? (
               <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-700">Move-out date</span>
+                <span className="font-medium text-foreground/80">Move-out date</span>
                 <Input type="date" value={arMoveOutDate} onChange={(e) => setArMoveOutDate(e.target.value)} />
               </label>
             ) : null}
             <label className="col-span-2 flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Notes</span>
+              <span className="font-medium text-foreground/80">Notes</span>
               <Textarea
                 className="min-h-[72px]"
                 value={arNotes}
@@ -2538,25 +2538,25 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <Modal open={editResidentOpen} title="Edit resident" onClose={() => setEditResidentOpen(false)}>
         <div className="space-y-3">
-          <p className="text-xs text-slate-500">Changes here update the resident record and application simultaneously.</p>
+          <p className="text-xs text-muted">Changes here update the resident record and application simultaneously.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Full name *</span>
+              <span className="font-medium text-foreground/80">Full name *</span>
               <Input value={erName} onChange={(e) => setErName(e.target.value)} placeholder="Jane Smith" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Email</span>
+              <span className="font-medium text-foreground/80">Email</span>
               <Input type="email" value={erEmail} onChange={(e) => setErEmail(e.target.value)} placeholder="resident@email.com" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Property</span>
+              <span className="font-medium text-foreground/80">Property</span>
               <select
                 value={erPropertyId}
                 onChange={(e) => {
                   setErPropertyId(e.target.value);
                   setErRoomId("");
                 }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               >
                 <option value="">Select property…</option>
                 {propertyOptions.map((p) => (
@@ -2567,7 +2567,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               </select>
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Lease term</span>
+              <span className="font-medium text-foreground/80">Lease term</span>
               <select
                 value={erLeaseTermSelectValue}
                 onChange={(e) => {
@@ -2580,7 +2580,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   }
                   setErLeaseTerm(selected);
                 }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               >
                 <option value="">Select…</option>
                 <option value="Month-to-month">Month-to-month</option>
@@ -2599,7 +2599,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               ) : null}
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Room</span>
+              <span className="font-medium text-foreground/80">Room</span>
               {erRoomOptions.length > 0 ? (
                 <select
                   value={erRoomId}
@@ -2607,7 +2607,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                     const roomId = e.target.value;
                     setErRoomId(roomId);
                   }}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 >
                   <option value="">Select room…</option>
                   {erRoomOptions.map((r) => (
@@ -2618,25 +2618,25 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   ))}
                 </select>
               ) : (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                <p className="rounded-xl border border-dashed border-border bg-accent/40 px-3 py-2 text-xs text-muted">
                   Add rooms to this property in listing setup to assign a resident room here.
                 </p>
               )}
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Monthly rent ($)</span>
+              <span className="font-medium text-foreground/80">Monthly rent ($)</span>
               <Input type="number" min={0} step={0.01} value={erRent} onChange={(e) => setErRent(e.target.value)} placeholder="875.00" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Monthly utilities ($)</span>
+              <span className="font-medium text-foreground/80">Monthly utilities ($)</span>
               <Input type="number" min={0} step={0.01} value={erUtilities} onChange={(e) => setErUtilities(e.target.value)} placeholder="175.00" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Move-in fee ($)</span>
+              <span className="font-medium text-foreground/80">Move-in fee ($)</span>
               <Input type="number" min={0} step={0.01} value={erMoveInFee} onChange={(e) => setErMoveInFee(e.target.value)} placeholder="200.00" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Security deposit ($)</span>
+              <span className="font-medium text-foreground/80">Security deposit ($)</span>
               <Input
                 type="number"
                 min={0}
@@ -2647,17 +2647,17 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Move-in date</span>
+              <span className="font-medium text-foreground/80">Move-in date</span>
               <Input type="date" value={erMoveInDate} onChange={(e) => setErMoveInDate(e.target.value)} />
             </label>
             {!isEditMonthToMonthLease ? (
               <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-700">Move-out date</span>
+                <span className="font-medium text-foreground/80">Move-out date</span>
                 <Input type="date" value={erMoveOutDate} onChange={(e) => setErMoveOutDate(e.target.value)} />
               </label>
             ) : null}
             <label className="col-span-2 flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">Notes</span>
+              <span className="font-medium text-foreground/80">Notes</span>
               <Textarea
                 className="min-h-[72px]"
                 value={erNotes}
@@ -2679,12 +2679,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <Modal open={addChargeOpen} title={editChargeId ? "Edit charge" : "Add charge"} onClose={() => setAddChargeOpen(false)}>
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted">
             {editChargeId ? "Updating" : "Adding"} charge for{" "}
-            <span className="font-semibold text-slate-900">{selected?.name || selected?.email}</span>.
+            <span className="font-semibold text-foreground">{selected?.name || selected?.email}</span>.
           </p>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Charge title</span>
+            <span className="font-medium text-foreground/80">Charge title</span>
             <Input
               value={chargeTitle}
               onChange={(e) => setChargeTitle(e.target.value)}
@@ -2692,7 +2692,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Amount ($)</span>
+            <span className="font-medium text-foreground/80">Amount ($)</span>
             <Input
               type="number"
               min={0}
@@ -2707,9 +2707,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               type="checkbox"
               checked={chargeBlocksLease}
               onChange={(e) => setChargeBlocksLease(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary"
+              className="h-4 w-4 rounded border-border text-primary"
             />
-            <span className="font-medium text-slate-700">Block lease signing until paid</span>
+            <span className="font-medium text-foreground/80">Block lease signing until paid</span>
           </label>
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddChargeOpen(false)}>
@@ -2729,16 +2729,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       >
         <div className="space-y-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{welcomePreviewFor?.email}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">To</p>
+            <p className="text-sm text-foreground">{welcomePreviewFor?.email}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{RESIDENT_WELCOME_EMAIL_SUBJECT}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Subject</p>
+            <p className="text-sm text-foreground">{RESIDENT_WELCOME_EMAIL_SUBJECT}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Message</p>
+            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-border bg-accent/40 p-3 text-sm leading-relaxed text-foreground/80">
               {welcomePreviewContent}
             </pre>
           </div>
@@ -2771,16 +2771,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       >
         <div className="space-y-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{reminderPreview?.res.email}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">To</p>
+            <p className="text-sm text-foreground">{reminderPreview?.res.email}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{reminderPreview?.subject}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Subject</p>
+            <p className="text-sm text-foreground">{reminderPreview?.subject}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Message</p>
+            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-border bg-accent/40 p-3 text-sm leading-relaxed text-foreground/80">
               {reminderPreview?.body}
             </pre>
           </div>
@@ -2811,16 +2811,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       >
         <div className="space-y-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{leaseReminderPreview?.recipient}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">To</p>
+            <p className="text-sm text-foreground">{leaseReminderPreview?.recipient}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{leaseReminderPreview?.subject}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Subject</p>
+            <p className="text-sm text-foreground">{leaseReminderPreview?.subject}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Message</p>
+            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-border bg-accent/40 p-3 text-sm leading-relaxed text-foreground/80">
               {leaseReminderPreview?.body}
             </pre>
           </div>
@@ -2848,15 +2848,15 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <Modal open={messageOpen} title="Message resident" onClose={() => setMessageOpen(false)}>
         <div className="space-y-3">
-          <p className="text-sm text-slate-600">
-            Sending to <span className="font-semibold text-slate-900">{selected?.email || "resident"}</span>.
+          <p className="text-sm text-muted">
+            Sending to <span className="font-semibold text-foreground">{selected?.email || "resident"}</span>.
           </p>
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Subject</span>
+            <span className="font-medium text-foreground/80">Subject</span>
             <Input className="mt-1.5" value={messageSubject} onChange={(e) => setMessageSubject(e.target.value)} placeholder="Subject" />
           </label>
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Message</span>
+            <span className="font-medium text-foreground/80">Message</span>
             <Textarea
               className="mt-1.5 min-h-[160px]"
               value={messageBody}

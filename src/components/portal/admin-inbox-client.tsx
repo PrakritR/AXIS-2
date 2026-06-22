@@ -230,15 +230,15 @@ function ComposeModal({
         onClick={onClose}
       />
       <div
-        className="fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] max-h-[min(100%-2rem,90vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
+        className="fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] max-h-[min(100%-2rem,90vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl glass-card p-5 shadow-[var(--shadow-card)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="admin-inbox-compose-title"
       >
-        <h2 id="admin-inbox-compose-title" className="text-lg font-semibold text-slate-900">
+        <h2 id="admin-inbox-compose-title" className="text-lg font-semibold text-foreground">
           New message
         </h2>
-        <p className="mt-1 text-sm text-slate-500">Broadcast to a group or choose specific managers, residents, or owners.</p>
+        <p className="mt-1 text-sm text-muted">Broadcast to a group or choose specific managers, residents, or owners.</p>
 
         <div className="mt-4 space-y-3">
           <div>
@@ -273,7 +273,7 @@ function ComposeModal({
           </div>
 
           {pickHeading && pickPool.length > 0 ? (
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3">
+            <div className="rounded-xl border border-border bg-[var(--glass-fill)] p-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">{pickHeading}</span>
                 <button
@@ -523,16 +523,16 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                         : row.email;
                     return (
                       <Fragment key={row.id}>
-                        <tr className={`${PORTAL_TABLE_TR} ${isOpen ? "bg-slate-50/30" : ""}`}>
+                        <tr className={`${PORTAL_TABLE_TR} ${isOpen ? "bg-[var(--accent)]" : ""}`}>
                           <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                            <p className="font-medium text-slate-900">{primaryName}</p>
-                            {primaryEmail ? <p className="mt-0.5 text-xs text-slate-500">{primaryEmail}</p> : null}
+                            <p className="font-medium text-foreground">{primaryName}</p>
+                            {primaryEmail ? <p className="mt-0.5 text-xs text-muted">{primaryEmail}</p> : null}
                           </td>
-                          <td className={`${PORTAL_TABLE_TD} align-middle text-slate-800`}>{row.topic}</td>
-                          <td className={`max-w-[220px] ${PORTAL_TABLE_TD} align-middle text-slate-600`}>
+                          <td className={`${PORTAL_TABLE_TD} align-middle text-foreground`}>{row.topic}</td>
+                          <td className={`max-w-[220px] ${PORTAL_TABLE_TD} align-middle text-muted`}>
                             <span className="line-clamp-2">{previewSnippet(row.body)}</span>
                           </td>
-                          <td className={`${PORTAL_TABLE_TD} align-middle text-slate-500`}>{formatWhen(row.createdAt)}</td>
+                          <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{formatWhen(row.createdAt)}</td>
                           <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
                             <div className="flex flex-wrap justify-end gap-1.5">
                               <Button
@@ -548,7 +548,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-emerald-200 text-emerald-900 hover:bg-emerald-50`}
+                                    className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
                                     onClick={() => {
                                       if (restoreInboxMessageFromTrash(row.id)) {
                                         showToast("Restored.");
@@ -561,8 +561,8 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   </Button>
                                   <Button
                                     type="button"
-                                    variant="outline"
-                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-rose-200 text-rose-800 hover:bg-rose-50`}
+                                    variant="danger"
+                                    className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
                                     onClick={() => {
                                       if (permanentlyDeleteInboxMessage(row.id)) {
                                         showToast("Deleted permanently.");

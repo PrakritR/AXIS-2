@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e7e5df; }
+  @keyframes dchromeFlow { 0% { transform: rotate(0deg) scale(1.5); } 100% { transform: rotate(360deg) scale(1.5); } }
+  code { font-family: ui-monospace,'SF Mono',monospace; background:#f3f6fd; padding:1px 5px; border-radius:4px; font-size:.92em; color:#1e4fd6; }
+</style>
+</helmet>
+<div style="min-height:100vh; padding:56px 24px; background:#e7e5df; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif; color:#16213a;">
+  <div style="max-width:880px; margin:0 auto; background:#ffffff; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.08), 0 40px 80px -50px rgba(15,23,42,.4); overflow:hidden;">
+
+    <!-- COVER -->
+    <div style="position:relative; padding:64px 64px 56px; background:#0b1120; overflow:hidden;">
+      <div style="position:absolute; inset:-40%; background:conic-gradient(from 0deg at 50% 50%, #cfd6e6, #2f6bff, #8fb4ff, #5a6a92, #d6deea, #2f6bff, #cfd6e6); filter:blur(70px) saturate(1.15); opacity:.55; animation:dchromeFlow 26s linear infinite;"></div>
+      <div style="position:absolute; inset:0; background:radial-gradient(ellipse 90% 80% at 50% 40%, rgba(11,17,32,.48), rgba(11,17,32,.9));"></div>
+      <div style="position:relative;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:44px;">
+          <div style="height:44px; width:44px; border-radius:13px; background:linear-gradient(150deg,rgba(255,255,255,.45),rgba(255,255,255,.08)); border:1px solid rgba(255,255,255,.4); box-shadow:inset 0 1px 0 rgba(255,255,255,.5); display:flex; align-items:center; justify-content:center;"><svg width="38" height="22" viewBox="0 0 46 26" fill="none"><path d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45" stroke="#fff" stroke-width="2.55" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 4L43 22" stroke="#bcd4ff" stroke-width="2.75" stroke-linecap="round"/><path d="M43 4L27 22" stroke="#dce8ff" stroke-width="2.55" stroke-linecap="round"/></svg></div>
+          <div style="line-height:1;"><div style="font-size:15px; font-weight:600; letter-spacing:-0.02em; color:#fff;">Axis Housing</div><div style="margin-top:3px; font-size:10px; font-weight:600; letter-spacing:0.22em; text-transform:uppercase; color:rgba(255,255,255,.6);">Blue Steel · Implementation spec</div></div>
+        </div>
+        <div style="font-family:ui-monospace,'SF Mono',monospace; font-size:12px; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:#bcd4ff; margin-bottom:14px;">Surface 05 / 05 · Resident</div>
+        <h1 style="margin:0; font-size:48px; line-height:1.04; font-weight:600; letter-spacing:-0.035em; color:#fff;">Resident Portal</h1>
+        <p style="margin:18px 0 0; max-width:560px; font-size:16px; line-height:1.55; color:rgba(255,255,255,.8);">The tenant's home base. The same Blue Steel app shell, tuned to feel welcoming and personal — status-led, action-forward, with a nav that grows as the resident's lease progresses.</p>
+        <div style="margin-top:38px; display:flex; gap:34px; font-size:12px; color:rgba(255,255,255,.7);">
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Sections</div>~10 routes/tabs</div>
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Nav</div>portals/resident.ts (dynamic)</div>
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Default theme</div>Light · dark available</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:54px 64px 70px;">
+
+      <div style="margin:0 0 44px; padding:18px 22px; border-left:3px solid #2f6bff; background:#f3f6fd; border-radius:0 10px 10px 0;"><p style="margin:0; font-size:14px; line-height:1.6; color:#3a445e;"><strong style="color:#16213a;">Read first.</strong> Inherits the app shell, status palette, and tables from the <strong style="color:#16213a;">Property Portal spec</strong>. Live reference: the resident dashboard in <strong style="color:#16213a;">"Axis Portal — Blue Steel Dashboards"</strong>. This sheet covers resident-specific behavior.</p></div>
+
+      <!-- 01 TONE -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">01</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Tone &amp; identity</h2></div>
+      <ul style="margin:0 0 14px; padding-left:20px; font-size:14px; line-height:1.75; color:#3a445e;">
+        <li><strong style="color:#16213a;">Default light</strong> — warmest, most approachable read; dark available via the same toggle.</li>
+        <li><strong style="color:#16213a;">Personal header:</strong> "Welcome, {name}" + property · room · neighborhood sub-line, with the resident's avatar (cobalt→sky gradient initials) top-right. Sidebar brand reads "Resident portal".</li>
+        <li><strong style="color:#16213a;">Status-led dashboard:</strong> lead with state banners (approval, lease-to-sign, balance) before the tile grid — the resident's first question is always "what do I need to do?"</li>
+      </ul>
+      <p style="margin:0 0 40px; font-size:13px; line-height:1.6; color:#6a7595;">Fewer, larger touch targets than the manager portal; this is often used on mobile. Tiles read as friendly cards, not data cells.</p>
+
+      <!-- 02 DYNAMIC NAV -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">02</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Dynamic nav by lease state</h2></div>
+      <p style="margin:0 0 18px; font-size:15px; line-height:1.65; color:#3a445e;"><code>getResidentPortalDefinition()</code> returns a different nav depending on access state. Style both the same; only the item set changes.</p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:20px;">
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-family:ui-monospace,monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:#8a96b4; margin-bottom:10px;">Limited · pre-approval</div><div style="font-size:13px; line-height:1.9; color:#3a445e;">Dashboard · Payments · Move-in · Inbox · Profile</div></div>
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-family:ui-monospace,monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:#8a96b4; margin-bottom:10px;">Full · approved + paid tier</div><div style="font-size:13px; line-height:1.9; color:#3a445e;">+ Lease · Services (requests + work-orders)</div></div>
+      </div>
+      <p style="margin:0 0 40px; font-size:13px; line-height:1.6; color:#6a7595;">Locked items (not yet available) may appear muted with a small lock glyph rather than disappearing, so residents understand what unlocks next — designer's call per item.</p>
+
+      <!-- 03 SECTIONS -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">03</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Sections &amp; patterns</h2></div>
+      <div style="margin-bottom:40px; border:1px solid #e6e9f0; border-radius:12px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#8a96b4; background:#f6f8fc; padding:11px 18px; border-bottom:1px solid #e6e9f0;"><span>Route</span><span>Component</span><span>Pattern</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/resident/dashboard</code><span style="color:#3a445e;">ResidentDashboard</span><span style="color:#3a445e;">Status banners + action tile grid</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/resident/payments</code><span style="color:#3a445e;">ResidentPaymentsPanel</span><span style="color:#3a445e;">Charge list; pay via Stripe</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/resident/lease</code><span style="color:#3a445e;">ResidentLeasePanel</span><span style="color:#3a445e;">View/sign; extend; move-out</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/resident/move-in</code><span style="color:#3a445e;">ResidentMoveInPanel</span><span style="color:#3a445e;">Room/address/date; gated on signed lease</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/resident/services/*</code><span style="color:#3a445e;">ResidentServicesPanel</span><span style="color:#3a445e;">Requests + work-orders</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/resident/inbox/*</code><span style="color:#3a445e;">ResidentInboxPanel</span><span style="color:#3a445e;">Thread list + reader (4 folders)</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45;"><code>/resident/profile</code><span style="color:#3a445e;">ResidentProfilePanel</span><span style="color:#3a445e;">Editable profile fields</span></div>
+      </div>
+
+      <!-- 04 KEY PATTERNS -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:18px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">04</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Key patterns</h2></div>
+      <div style="margin-bottom:40px;">
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">Status banners</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Approval = green glass, lease-to-sign = cobalt glass, balance due = amber glass. Each pairs a plain-language message with one accent action link. Stack at the top of the dashboard.</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">Action tiles</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Lease / Charges / Maintenance / Inbox / Property / Next payment. Each is a glass card with a mono label, the key value (badge, amount, counts), and a single accent "→" action. Maintenance shows open/scheduled/completed counts color-coded by status.</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">Pay / sign flows</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Primary money/lease actions use the metallic (dark) / cobalt→sky (light) pill. Stripe checkout opens in its own styling inside a glass frame. Autopay setup is a secondary action.</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; border-bottom:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">Move-in (gated)</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Until the lease is fully signed, show a calm locked state (muted card + lock glyph + "Available once your lease is signed") instead of the room/address details.</div></div>
+      </div>
+
+      <!-- 05 FREE-TIER GATING -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">05</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Manager-tier gating</h2></div>
+      <p style="margin:0 0 40px; font-size:15px; line-height:1.65; color:#3a445e;">If the resident's <em>manager</em> is on the Free tier, lease / services / inbox show an upgrade notice instead of full functionality. Frame it gently — a glass card explaining the feature is awaiting the manager, in neutral language (never blame the resident), with no loud CTA.</p>
+
+      <!-- 06 DO/DONT -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:18px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">06</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Do &amp; don't</h2></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+        <div style="border:1px solid #d6ead9; background:#f4fbf5; border-radius:12px; padding:20px;"><div style="font-size:13px; font-weight:700; color:#1f8a5b; margin-bottom:12px;">DO</div><ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#3a445e;"><li>Lead with status; surface the next action.</li><li>Keep targets large (mobile-first).</li><li>Reuse the shared status palette.</li><li>Frame gated states gently.</li></ul></div>
+        <div style="border:1px solid #f0d6d6; background:#fdf4f4; border-radius:12px; padding:20px;"><div style="font-size:13px; font-weight:700; color:#c0392b; margin-bottom:12px;">DON'T</div><ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#3a445e;"><li>Don't render dense manager-style tables.</li><li>Don't blame the resident for tier limits.</li><li>Don't bury balance/lease actions.</li><li>Don't diverge from the portal shell.</li></ul></div>
+      </div>
+
+      <div style="margin-top:40px; padding-top:24px; border-top:1px solid #eef1f6; display:flex; justify-content:space-between; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#a3adc4;"><span>Axis Housing · Blue Steel · Resident</span><span>Spec 0.1</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

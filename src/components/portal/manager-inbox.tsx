@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_LABEL, PORTAL_TOOLBAR_SELECT } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_LABEL, PORTAL_TOOLBAR_SELECT, PORTAL_TOOLBAR_GROUP } from "@/components/portal/portal-metrics";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
@@ -346,7 +346,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
             activeId={tabId}
             onChange={(id) => router.push(`${portalBase}/inbox/${id}`)}
           />
-          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+          <label className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
             <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort</span>
             <select
               value={sortBy}

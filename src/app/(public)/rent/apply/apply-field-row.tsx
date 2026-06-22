@@ -8,7 +8,7 @@ export function ApplyFieldRow({
   children,
   className = "",
   optional = false,
-  labelClassName = "text-xs font-semibold text-slate-800",
+  labelClassName = "text-xs font-semibold text-foreground",
 }: {
   label: ReactNode;
   hint?: string;
@@ -21,14 +21,14 @@ export function ApplyFieldRow({
 }) {
   return (
     <div
-      className={`grid gap-3 border-b border-slate-100 py-4 last:border-b-0 sm:border-b-0 sm:py-4 sm:grid-cols-[minmax(168px,220px)_minmax(0,1fr)] sm:items-start ${className}`}
+      className={`grid gap-3 border-b border-border/60 py-4 last:border-b-0 sm:border-b-0 sm:py-4 sm:grid-cols-[minmax(168px,220px)_minmax(0,1fr)] sm:items-start ${className}`}
     >
       <div className="sm:pt-2">
         <div className={labelClassName}>
           {label}
           {!optional ? <span className="font-semibold text-primary"> *</span> : null}
         </div>
-        {hint ? <p className="mt-1 text-[11px] leading-snug text-slate-400">{hint}</p> : null}
+        {hint ? <p className="mt-1 text-[11px] leading-snug text-muted/70">{hint}</p> : null}
       </div>
       <div className="min-w-0">
         {children}

@@ -8,6 +8,7 @@ import {
   ManagerPortalStatusPills,
   PORTAL_TOOLBAR_LABEL,
   PORTAL_TOOLBAR_SELECT,
+  PORTAL_TOOLBAR_GROUP,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
@@ -154,7 +155,7 @@ export function ManagerLeases() {
               onPropertyChange={setPropertyFilter}
             />
           </div>
-          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+          <label className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
             <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>{propertyFilter ? "Sort resident" : "Sort house"}</span>
             <select
               value={houseSort}

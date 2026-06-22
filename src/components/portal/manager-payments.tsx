@@ -9,6 +9,7 @@ import {
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_TOOLBAR_LABEL,
   PORTAL_TOOLBAR_SELECT,
+  PORTAL_TOOLBAR_GROUP,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
@@ -309,7 +310,7 @@ export function ManagerPayments() {
             residentValue={activeResidentFilter}
             onResidentChange={setResidentFilter}
           />
-          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+          <label className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
             <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>
             {propertyFilter ? "Sort resident" : "Sort house"}
             </span>

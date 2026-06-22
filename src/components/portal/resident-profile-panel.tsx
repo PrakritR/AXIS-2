@@ -172,25 +172,25 @@ export function ResidentProfilePanel() {
       }
     >
       <div className="space-y-4">
-        <div className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+        <div className="grid gap-5 glass-card rounded-2xl p-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Full name</label>
+            <label className="text-sm font-semibold text-foreground">Full name</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Email</label>
-            <Input value={email} readOnly className="bg-slate-50/80" />
+            <label className="text-sm font-semibold text-foreground">Email</label>
+            <Input value={email} readOnly className="bg-[var(--glass-fill)]" />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Phone</label>
+            <label className="text-sm font-semibold text-foreground">Phone</label>
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Axis ID</label>
-            <Input value={axisId} readOnly className="bg-slate-50/80 font-mono text-sm" />
+            <label className="text-sm font-semibold text-foreground">Axis ID</label>
+            <Input value={axisId} readOnly className="bg-[var(--glass-fill)] font-mono text-sm" />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <p className="text-sm font-semibold text-slate-800">Emergency contact</p>
+            <p className="text-sm font-semibold text-foreground">Emergency contact</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input value={emName} onChange={(e) => setEmName(e.target.value)} placeholder="Name" />
               <Input value={emPhone} onChange={(e) => setEmPhone(e.target.value)} placeholder="Phone" />
@@ -198,20 +198,20 @@ export function ResidentProfilePanel() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="glass-card rounded-2xl p-4">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Change password</p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+            <p className="text-sm font-semibold text-foreground">Change password</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted">
               Update the password used for this resident account.
             </p>
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-700">New password</label>
+              <label className="text-xs font-semibold text-muted">New password</label>
               <PasswordInput value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-700">Confirm new password</label>
+              <label className="text-xs font-semibold text-muted">Confirm new password</label>
               <PasswordInput value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
             </div>
           </div>

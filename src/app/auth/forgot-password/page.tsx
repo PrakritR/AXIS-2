@@ -11,13 +11,13 @@ export default function ForgotPasswordPage() {
 
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Reset password</h1>
-      <p className="mt-2 text-center text-sm text-slate-600">
+      <h1 className="text-center text-[22px] font-semibold tracking-tight text-foreground">Reset password</h1>
+      <p className="mt-2 text-center text-sm text-muted">
         Enter the email you use to sign in. We&apos;ll send reset instructions to that address (demo only).
       </p>
 
       <div className="mt-8">
-        <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
+        <label className="text-xs font-semibold text-muted" htmlFor="email">
           Email
         </label>
         <Input id="email" className="mt-1.5" placeholder="you@example.com" autoComplete="email" />

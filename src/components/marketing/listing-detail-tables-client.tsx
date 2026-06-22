@@ -438,7 +438,7 @@ function ListingDetailModal({
                 })}
                 className="flex-1"
               >
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply for this room
                 </span>
               </Link>
@@ -499,7 +499,7 @@ function ListingDetailModal({
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
               <Link href="/rent/tours-contact" className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Ask about this bathroom
                 </span>
               </Link>
@@ -554,7 +554,7 @@ function ListingDetailModal({
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
               <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply
                 </span>
               </Link>
@@ -597,7 +597,7 @@ function ListingDetailModal({
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
               <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply
                 </span>
               </Link>
@@ -646,7 +646,7 @@ function ListingDetailModal({
             <p className="mt-4 text-xs text-slate-500">Confirm availability, utilities, and final rent with leasing before applying.</p>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
               <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply for this bundle
                 </span>
               </Link>
@@ -676,7 +676,7 @@ function ListingDetailModal({
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
               <Link href="/rent/tours-contact" className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,122,255,0.28)] transition hover:opacity-95">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Ask a question
                 </span>
               </Link>

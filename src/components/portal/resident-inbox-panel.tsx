@@ -235,8 +235,8 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className={`${PORTAL_DETAIL_BTN} text-red-700 hover:bg-red-50`}
+              variant="danger"
+              className={PORTAL_DETAIL_BTN}
               onClick={() => deleteForever(row.id)}
             >
               Delete forever
@@ -252,8 +252,8 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className={`${PORTAL_DETAIL_BTN} text-red-700 hover:bg-red-50`}
+              variant="danger"
+              className={PORTAL_DETAIL_BTN}
               onClick={() => moveToTrash(row.id)}
             >
               Trash
@@ -264,8 +264,8 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       return (
         <Button
           type="button"
-          variant="outline"
-          className={`${PORTAL_DETAIL_BTN} text-red-700 hover:bg-red-50`}
+          variant="danger"
+          className={PORTAL_DETAIL_BTN}
           onClick={() => moveToTrash(row.id)}
         >
           Trash
@@ -296,7 +296,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 rounded-full text-red-700 hover:bg-red-50"
+              className="shrink-0 rounded-full text-[var(--status-overdue-fg)]"
               onClick={emptyTrash}
             >
               Empty trash

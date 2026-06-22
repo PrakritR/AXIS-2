@@ -14,19 +14,19 @@ const PARTNER_LINKS = [
 ];
 
 const sectionHeading =
-  "text-end text-[11px] font-normal uppercase tracking-[0.22em] text-slate-500";
+  "text-end text-[11px] font-normal uppercase tracking-[0.22em] text-muted";
 
 const footerLinkClass =
-  "block text-end text-[15px] font-normal text-slate-600 transition-[color,opacity] duration-200 hover:text-primary hover:opacity-95";
+  "block text-end text-[15px] font-normal text-muted transition-[color,opacity] duration-200 hover:text-primary hover:opacity-95";
 
 export function PublicFooter() {
   return (
-    <footer className="border-t border-slate-200/70 bg-background">
+    <footer className="glass-nav border-t border-border bg-[var(--glass-fill)]">
       <div className="mx-auto max-w-6xl rounded-t-2xl px-6 pb-6 pt-10 sm:px-5">
-        <div className="flex flex-col gap-8 border-b border-slate-200/60 pb-6 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
+        <div className="flex flex-col gap-8 border-b border-border pb-6 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
           <div className="max-w-[18rem] shrink-0 space-y-3">
             <AxisLogoLink href="/" />
-            <p className="text-[15px] font-normal leading-relaxed text-slate-600">
+            <p className="text-[15px] font-normal leading-relaxed text-muted">
               Software and visibility for property owners and managers.
             </p>
           </div>
@@ -64,9 +64,9 @@ export function PublicFooter() {
             <div className="min-w-0 lg:text-end">
               <p className={sectionHeading}>Locations</p>
               <div className="mt-3 flex flex-col items-end gap-1 text-end">
-                <p className="text-[15px] font-normal leading-snug text-slate-600">5259 Brooklyn Ave NE</p>
-                <p className="text-[15px] font-normal leading-snug text-slate-600">WA 98105</p>
-                <p className="pt-0.5 text-[15px] font-normal text-slate-500">United States</p>
+                <p className="text-[15px] font-normal leading-snug text-muted">5259 Brooklyn Ave NE</p>
+                <p className="text-[15px] font-normal leading-snug text-muted">WA 98105</p>
+                <p className="pt-0.5 text-[15px] font-normal text-muted/80">United States</p>
                 <div className="mt-2.5 flex w-full justify-end">
                   <a
                     href="https://www.google.com/maps/search/?api=1&query=5259+Brooklyn+Ave+NE%2C+98105"
@@ -88,14 +88,14 @@ export function PublicFooter() {
                 <PhoneIcon />
                 <a
                   href="tel:+15103098345"
-                  className="min-w-0 text-[15px] font-normal tabular-nums text-slate-600 transition-colors hover:text-primary"
+                  className="min-w-0 text-[15px] font-normal tabular-nums text-muted transition-colors hover:text-primary"
                 >
                   (510) 309-8345
                 </a>
                 <MailIcon />
                 <a
                   href="mailto:info@axis-seattle-housing.com"
-                  className="min-w-0 break-all text-[15px] font-normal leading-snug text-slate-600 transition-colors hover:text-primary"
+                  className="min-w-0 break-all text-[15px] font-normal leading-snug text-muted transition-colors hover:text-primary"
                 >
                   info@axis-seattle-housing.com
                 </a>
@@ -105,10 +105,10 @@ export function PublicFooter() {
         </div>
       </div>
 
-      <div className="border-t border-slate-200/60 bg-white/30 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-[2px] sm:px-6">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1.5 text-center text-[13px] font-normal text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:text-left">
+      <div className="glass-nav border-t border-border bg-[var(--glass-fill)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1.5 text-center text-[13px] font-normal text-muted sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <span>© 2026 Axis. All rights reserved.</span>
-          <span className="text-slate-500">Axis Housing</span>
+          <span className="text-muted">Axis Housing</span>
         </div>
       </div>
     </footer>

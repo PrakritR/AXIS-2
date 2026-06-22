@@ -27,9 +27,9 @@ function ProfileReadonlyField({
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <p className="text-sm font-medium text-muted">{label}</p>
       <div
-        className={`rounded-xl border border-slate-200/90 bg-slate-50/90 px-4 py-3 text-[15px] text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] ${
+        className={`rounded-xl border border-border bg-accent/40 px-4 py-3 text-[15px] text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] ${
           mono ? "break-all font-mono text-sm leading-relaxed" : ""
         }`}
       >
@@ -150,14 +150,14 @@ export function PortalProfileClient({
         {editing ? (
           <>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-800" htmlFor="pf-name">
+              <label className="text-sm font-semibold text-foreground" htmlFor="pf-name">
                 Full name
               </label>
               <Input id="pf-name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="rounded-xl" autoComplete="name" />
             </div>
             <ProfileReadonlyField label="Email" value={initialEmail} />
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-800" htmlFor="pf-phone">
+              <label className="text-sm font-semibold text-foreground" htmlFor="pf-phone">
                 Phone
               </label>
               <Input
@@ -172,7 +172,7 @@ export function PortalProfileClient({
             <ProfileReadonlyField label={idLabel} value={idValue} mono />
             {variant === "manager" && (
               <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-semibold text-slate-800" htmlFor="pf-sms-from">
+                <label className="text-sm font-semibold text-foreground" htmlFor="pf-sms-from">
                   SMS from number (Twilio)
                 </label>
                 <Input
@@ -183,7 +183,7 @@ export function PortalProfileClient({
                   inputMode="tel"
                   placeholder="+15551234567"
                 />
-                <p className="text-xs text-slate-500">Your Twilio phone number. Residents will receive SMS from this number.</p>
+                <p className="text-xs text-muted">Your Twilio phone number. Residents will receive SMS from this number.</p>
               </div>
             )}
           </>
@@ -215,7 +215,7 @@ export function PortalProfileClient({
                 key={a.label}
                 type="button"
                 variant={a.variant === "primary" ? "primary" : "outline"}
-                className="shrink-0 rounded-full border-slate-200/90 px-5 py-2.5 text-sm font-semibold"
+                className="shrink-0 rounded-full border-border px-5 py-2.5 text-sm font-semibold"
                 disabled={(saving && a.label !== "Cancel") || Boolean((a as { disabled?: boolean }).disabled)}
                 onClick={a.onClick}
               >
@@ -225,7 +225,7 @@ export function PortalProfileClient({
           </div>
         }
       >
-        <Card className="rounded-3xl border border-slate-200/80 p-6 sm:p-8">{inner}</Card>
+        <Card className="glass-card rounded-3xl p-6 sm:p-8">{inner}</Card>
       </ManagerPortalPageShell>
     );
   }
@@ -240,7 +240,7 @@ export function PortalProfileClient({
               key={a.label}
               type="button"
               variant={a.variant === "primary" ? "primary" : "outline"}
-              className="shrink-0 rounded-full border-slate-200/90 px-5 py-2.5 text-sm font-semibold"
+              className="shrink-0 rounded-full border-border px-5 py-2.5 text-sm font-semibold"
               disabled={saving && a.label !== "Cancel"}
               onClick={a.onClick}
             >
@@ -249,7 +249,7 @@ export function PortalProfileClient({
           ))}
         </div>
       </div>
-      {inner}
+      <Card className="glass-card mt-6 rounded-2xl p-6 sm:p-8">{inner}</Card>
     </div>
   );
 }

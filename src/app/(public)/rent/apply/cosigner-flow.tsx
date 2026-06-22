@@ -2,7 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
@@ -21,8 +21,17 @@ import {
 } from "./apply-validation";
 import { ApplyFieldRow } from "./apply-field-row";
 import { appendCosignerSubmission } from "@/lib/cosigner-submissions-storage";
+import { WizardShell } from "@/components/ui/wizard-shell";
 
 const COSIGNER_STEPS = 5;
+
+const COSIGNER_WIZARD_STEPS = [
+  { id: "link", label: "Link to Signer" },
+  { id: "info", label: "Co-Signer Info" },
+  { id: "employment", label: "Employment" },
+  { id: "background", label: "Background" },
+  { id: "signature", label: "Signature" },
+] as const;
 
 type CosignerFields = {
   signerAppId: string;
@@ -126,8 +135,6 @@ export function CosignerApplyFlow({
       return next;
     });
   };
-
-  const progress = useMemo(() => Math.round((step / COSIGNER_STEPS) * 100), [step]);
 
   const stepTitle = (() => {
     if (step === 1) return "Link to Signer";
@@ -273,34 +280,31 @@ export function CosignerApplyFlow({
   if (postSubmit) {
     const displayAxis = postSubmit.linkedAxisId ? normalizeApplicationAxisId(postSubmit.linkedAxisId) : "";
     return (
-      <div
-        className="mt-8 rounded-3xl border border-emerald-200/90 bg-emerald-50/40 p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
-        style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
-      >
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Co-signer form received</p>
-        <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Thank you — you&apos;re all set</h2>
-        <p className="mt-3 text-sm leading-relaxed text-slate-700">
+      <div className="glass-card mt-8 overflow-hidden rounded-3xl border border-[var(--status-confirmed-bg)] p-6 sm:p-9 md:p-11">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--status-confirmed-fg)]">Co-signer form received</p>
+        <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Thank you — you&apos;re all set</h2>
+        <p className="mt-3 text-sm leading-relaxed text-muted">
           Your co-signer details are on file and linked to the primary application. The property manager can review everything under{" "}
-          <strong className="text-slate-900">Property Portal → Applications</strong> on the primary applicant&apos;s record. The
+          <strong className="text-foreground">Property Portal → Applications</strong> on the primary applicant&apos;s record. The
           primary applicant does not need to resubmit.
         </p>
-        <div className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linked primary application</p>
+        <div className="mt-6 space-y-4 rounded-2xl border border-border bg-card px-5 py-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Linked primary application</p>
           {displayAxis ? (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Application ID (Axis ID)</p>
-              <p className="mt-1 font-mono text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{displayAxis}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted/70">Application ID (Axis ID)</p>
+              <p className="mt-1 font-mono text-lg font-bold tracking-tight text-foreground sm:text-xl">{displayAxis}</p>
             </div>
           ) : postSubmit.linkedSignerName ? (
-            <p className="text-sm font-medium text-slate-800">
-              Signer name: <span className="text-slate-900">{postSubmit.linkedSignerName}</span>
+            <p className="text-sm font-medium text-foreground">
+              Signer name: <span className="font-semibold">{postSubmit.linkedSignerName}</span>
             </p>
           ) : (
-            <p className="text-sm text-slate-600">Linked using the primary applicant&apos;s Axis ID or signer name from step 1.</p>
+            <p className="text-sm text-muted">Linked using the primary applicant&apos;s Axis ID or signer name from step 1.</p>
           )}
           {postSubmit.cosignerName ? (
-            <p className="border-t border-slate-100 pt-3 text-sm text-slate-700">
-              Co-signer: <span className="font-semibold text-slate-900">{postSubmit.cosignerName}</span>
+            <p className="border-t border-border pt-3 text-sm text-muted">
+              Co-signer: <span className="font-semibold text-foreground">{postSubmit.cosignerName}</span>
             </p>
           ) : null}
         </div>
@@ -326,7 +330,7 @@ export function CosignerApplyFlow({
             Back to rental application
           </Button>
         </div>
-        <p className="mt-6 text-center text-sm text-slate-600">
+        <p className="mt-6 text-center text-sm text-muted">
           <Link href="/rent/apply" className="font-semibold text-primary underline-offset-4 hover:underline">
             Main application home
           </Link>
@@ -336,24 +340,32 @@ export function CosignerApplyFlow({
   }
 
   return (
-    <div
-      className="mt-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
-      style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
-    >
-      <div className="border-b border-slate-100 pb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-          Step {step} of {COSIGNER_STEPS} — Co-signer form
-        </p>
-        <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{stepTitle}</p>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out" style={{ width: `${progress}%` }} />
+    <div className="glass-card mt-8 overflow-hidden rounded-3xl">
+      <WizardShell
+        steps={[...COSIGNER_WIZARD_STEPS]}
+        currentStepIndex={step - 1}
+        footer={
+          <div className="flex w-full flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack}>
+              Back
+            </Button>
+            <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={handleContinue}>
+              {step === 5 ? "Submit co-signer form" : "Continue"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="mb-6 border-b border-border pb-4 sm:mb-8 sm:pb-6">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
+            Step {step} of {COSIGNER_STEPS} — Co-signer form
+          </p>
+          <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">{stepTitle}</p>
         </div>
-      </div>
 
-      <div className="pt-8">
+        <div>
         {step === 1 ? (
           <>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-border/60">
               <Field label="Signer Axis ID" optional hint="Recommended if you have their Axis ID." error={fieldErrors.signerAppId}>
                 <Input
                   value={f.signerAppId}
@@ -382,7 +394,7 @@ export function CosignerApplyFlow({
 
         {step === 2 ? (
           <>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-border/60">
               <Field label="Full name" hint="First and last name required." error={fieldErrors.fullName}>
                 <Input
                   value={f.fullName}
@@ -500,9 +512,9 @@ export function CosignerApplyFlow({
 
         {step === 3 ? (
           <>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-border/60">
               <ApplyFieldRow label="Not employed" optional hint="Check if you are not currently working.">
-                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
                   <input
                     type="checkbox"
                     checked={f.notEmployed}
@@ -510,7 +522,7 @@ export function CosignerApplyFlow({
                       patchField(setF, "notEmployed", e.target.checked);
                       setFieldErrors({});
                     }}
-                    className="h-4 w-4 rounded border-slate-300 text-primary"
+                    className="h-4 w-4 rounded border-border text-primary"
                   />
                   I am not currently employed
                 </label>
@@ -633,7 +645,7 @@ export function CosignerApplyFlow({
 
         {step === 4 ? (
           <>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-border/60">
               <Field label="Bankruptcy history" error={fieldErrors.bankruptcy}>
                 <Select
                   value={f.bankruptcy}
@@ -668,14 +680,14 @@ export function CosignerApplyFlow({
               className={`mt-6 rounded-xl border p-4 ${
                 fieldErrors.consentCredit
                   ? "border-red-500 bg-red-50/50 ring-2 ring-red-100"
-                  : "border-slate-200 bg-slate-50/80"
+                  : "border-border bg-accent/30"
               }`}
             >
-              <p className="text-sm font-semibold text-slate-800">
+              <p className="text-sm font-semibold text-foreground">
                 Consent for Credit and Background Check
                 <span className="font-semibold text-primary"> *</span>
               </p>
-              <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+              <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-muted">
                 <input
                   type="checkbox"
                   checked={f.consentCredit}
@@ -683,7 +695,7 @@ export function CosignerApplyFlow({
                     patchField(setF, "consentCredit", e.target.checked);
                     clearError("consentCredit");
                   }}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+                  className="mt-0.5 h-4 w-4 rounded border-border text-primary"
                 />
                 I consent to a credit and background check.
               </label>
@@ -701,7 +713,7 @@ export function CosignerApplyFlow({
 
         {step === 5 ? (
           <>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-border/60">
               <Field label="Co-Signer Signature" error={fieldErrors.signature}>
                 <Input
                   value={f.signature}
@@ -727,16 +739,8 @@ export function CosignerApplyFlow({
             </div>
           </>
         ) : null}
-      </div>
-
-      <div className="mt-10 flex flex-col-reverse gap-3 border-t border-slate-100 pt-8 sm:flex-row sm:items-center sm:justify-between">
-        <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack}>
-          Back
-        </Button>
-        <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={handleContinue}>
-          {step === 5 ? "Submit co-signer form" : "Continue"}
-        </Button>
-      </div>
+        </div>
+      </WizardShell>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { PublicNavbar } from "@/components/layout/public-navbar";
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
+import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
 import { PORTAL_MAIN_CONTENT_CLASS } from "@/lib/portal-layout-classes";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
 
@@ -10,6 +11,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
+      <SurfaceThemeDefault theme="light" />
       <AccountLinksSync />
       <PublicNavbar />
       <div className="shrink-0">

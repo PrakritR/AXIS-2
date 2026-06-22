@@ -178,10 +178,10 @@ const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
 
 function FormSection({ id, title, description, children, accent }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode; accent?: string }) {
   return (
-    <section id={id} className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_6px_rgba(15,23,42,0.06)]">
-      <div className={`border-b border-slate-100 px-5 py-4 sm:px-6 ${accent ?? "bg-sky-50/60"}`}>
-        <h3 className="text-[15px] font-bold tracking-tight text-slate-900">{title}</h3>
-        {description ? <div className="mt-1 max-w-3xl text-[13px] leading-relaxed text-slate-500">{description}</div> : null}
+    <section id={id} className="glass-card mb-5 overflow-hidden rounded-2xl">
+      <div className={`border-b border-border px-5 py-4 sm:px-6 ${accent ?? "bg-primary/5"}`}>
+        <h3 className="text-[15px] font-bold tracking-tight text-foreground">{title}</h3>
+        {description ? <div className="mt-1 max-w-3xl text-[13px] leading-relaxed text-muted">{description}</div> : null}
       </div>
       <div className="p-5 sm:p-6">{children}</div>
     </section>
@@ -209,7 +209,7 @@ function mediaDropZoneClass(active: boolean) {
   return `rounded-xl border border-dashed p-4 transition ${
     active
       ? "border-primary/50 bg-primary/[0.06] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.18)]"
-      : "border-slate-200/90 bg-white hover:border-primary/30 hover:bg-primary/[0.03]"
+      : "border-border bg-card hover:border-primary/30 hover:bg-primary/[0.03]"
   }`;
 }
 
@@ -468,8 +468,8 @@ async function uploadVideoFile(file: File): Promise<string> {
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
     <div className="mb-1.5">
-      <p className="text-xs font-semibold text-slate-800">{children}</p>
-      {hint ? <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p> : null}
+      <p className="text-xs font-semibold text-foreground">{children}</p>
+      {hint ? <p className="mt-0.5 text-[11px] text-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -500,10 +500,10 @@ function ListingSubsection({
   children: React.ReactNode;
 }) {
   return (
-    <div id={id} className="rounded-xl border border-slate-200/90 bg-slate-50/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] sm:p-5">
-      <div className="border-b border-slate-200/70 pb-3">
-        <h4 className="text-sm font-bold text-slate-900">{title}</h4>
-        {description ? <div className="mt-1 text-xs leading-relaxed text-slate-600">{description}</div> : null}
+    <div id={id} className="rounded-xl border border-border bg-accent/30 p-4 sm:p-5">
+      <div className="border-b border-border pb-3">
+        <h4 className="text-sm font-bold text-foreground">{title}</h4>
+        {description ? <div className="mt-1 text-xs leading-relaxed text-muted">{description}</div> : null}
       </div>
       <div className="mt-4 space-y-4">{children}</div>
     </div>
@@ -1451,29 +1451,29 @@ export function ManagerAddListingForm({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-slate-900/50 px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
+      className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-foreground/40 px-2 py-2 backdrop-blur-sm sm:px-4 sm:py-3 lg:px-6 lg:py-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <form
         id="manager-add-listing-form"
         onSubmit={(e) => e.preventDefault()}
-        className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
+        className="glass-card relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
       >
         {/* ── Header ── */}
-        <div className="shrink-0 border-b border-slate-100 bg-white px-5 pt-5 pb-6 sm:px-6">
+        <div className="shrink-0 border-b border-border bg-card/80 px-5 pt-5 pb-6 backdrop-blur-xl sm:px-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
                 Step {stepIndex + 1} of {LISTING_STEP_COUNT}
               </p>
-              <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
+              <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
                 {isEditMode ? "Edit listing" : "New listing"} · {LISTING_FORM_STEPS[stepIndex]?.label}
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-muted hover:bg-accent/80 hover:text-foreground"
               aria-label="Close"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
@@ -1490,14 +1490,14 @@ export function ManagerAddListingForm({
                   onClick={() => { if (i < stepIndex || canContinueFromStep(stepIndex)) setStepIndex(i); }}
                   className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     i === stepIndex
-                      ? "bg-primary/10 text-primary"
+                      ? "bg-primary/10 text-primary ring-1 ring-primary/20"
                       : i < stepIndex
-                        ? "text-slate-600 hover:bg-slate-50"
-                        : "text-slate-400 hover:bg-slate-50"
+                        ? "text-muted hover:bg-accent/50"
+                        : "text-muted/70 hover:bg-accent/50"
                   }`}
                 >
                   <span className={`inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
-                    i < stepIndex ? "bg-emerald-100 text-emerald-700" : i === stepIndex ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-400"
+                    i < stepIndex ? "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]" : i === stepIndex ? "bg-primary text-primary-foreground shadow-[0_4px_12px_-4px_rgba(47,107,255,0.6)]" : "border border-border bg-card text-muted"
                   }`}>
                     {i < stepIndex ? "✓" : i + 1}
                   </span>
@@ -1508,15 +1508,18 @@ export function ManagerAddListingForm({
           </div>
 
           {/* Progress bar */}
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-border/60">
             <div
-              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-              style={{ width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%` }}
+              className="h-full rounded-full transition-[width] duration-300 ease-out"
+              style={{
+                width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%`,
+                background: "linear-gradient(90deg, var(--primary) 0%, var(--sky) 100%)",
+              }}
             />
           </div>
 
           {/* Step blurb */}
-          <p className="mt-3 text-[12px] leading-relaxed text-slate-500">
+          <p className="mt-3 text-[12px] leading-relaxed text-muted">
             {LISTING_STEP_BLURBS[LISTING_FORM_STEPS[stepIndex]!.id]}
           </p>
         </div>

@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeCheckoutModal } from "@/components/stripe-checkout-modal";
@@ -40,8 +41,8 @@ type PayTab = "pending" | "paid";
 
 function statusClass(label: string) {
   const l = label.toLowerCase();
-  if (l.includes("paid")) return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80";
-  return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
+  if (l.includes("paid")) return "approved" as const;
+  return "pending" as const;
 }
 
 function centsFromLabel(label: string): number {
@@ -223,14 +224,14 @@ export function ResidentPaymentsPanel() {
             activeId={tab}
             onChange={(id) => setTab(id as PayTab)}
           />
-          <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            Unpaid balance: <span className="tabular-nums text-slate-950">${(pendingTotal / 100).toFixed(2)}</span>
+          <div className="glass-card rounded-full border border-border px-4 py-2 text-sm font-semibold text-muted">
+            Unpaid balance: <span className="tabular-nums text-foreground">${(pendingTotal / 100).toFixed(2)}</span>
           </div>
         </div>
       }
     >
       {!email ? (
-        <p className="text-sm text-slate-600">Sign in to see your application fees, rent, and deposits.</p>
+        <p className="text-sm text-muted">Sign in to see your application fees, rent, and deposits.</p>
       ) : rows.length === 0 ? (
         <PortalDataTableEmpty
           message={
@@ -260,17 +261,15 @@ export function ResidentPaymentsPanel() {
                 {rows.map((row) => (
                   <Fragment key={row.id}>
                     <tr className={PORTAL_TABLE_TR}>
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
                       <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{row.propertyLabel}</td>
                       <td className={PORTAL_TABLE_TD}>{chargeDueLabel(row)}</td>
-                      <td className={`${PORTAL_TABLE_TD} tabular-nums text-slate-800`}>{row.amountLabel}</td>
-                      <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-slate-900 hidden sm:table-cell`}>{row.balanceLabel}</td>
+                      <td className={`${PORTAL_TABLE_TD} tabular-nums text-foreground`}>{row.amountLabel}</td>
+                      <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground hidden sm:table-cell`}>{row.balanceLabel}</td>
                       <td className={PORTAL_TABLE_TD}>
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusClass(row.status === "paid" ? "Paid" : "Unpaid")}`}
-                        >
+                        <Badge tone={statusClass(row.status === "paid" ? "Paid" : "Unpaid")}>
                           {row.status === "paid" ? "Paid" : "Unpaid"}
-                        </span>
+                        </Badge>
                       </td>
                       <td className={`${PORTAL_TABLE_TD} text-right`}>
                         <Button
@@ -285,12 +284,12 @@ export function ResidentPaymentsPanel() {
                     </tr>
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={7} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
-                          <p className="mb-3 text-sm text-slate-700">
-                            Due: <span className="font-semibold text-slate-900">{chargeDueLabel(row)}</span>
+                        <td colSpan={7} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                          <p className="mb-3 text-sm text-muted">
+                            Due: <span className="font-semibold text-foreground">{chargeDueLabel(row)}</span>
                           </p>
                           {row.zelleContactSnapshot ? (
-                            <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/50 px-3 py-2.5 text-emerald-950">
+                            <div className="glass-card rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
                               <p className="text-xs font-semibold">Pay with Zelle</p>
                               <p className="mt-1 text-sm leading-relaxed">
                                 Send to <span className="font-mono font-medium">{row.zelleContactSnapshot}</span>. Include your name and unit in
@@ -298,7 +297,7 @@ export function ResidentPaymentsPanel() {
                               </p>
                             </div>
                           ) : row.venmoContactSnapshot ? (
-                            <div className="rounded-lg border border-blue-200/70 bg-blue-50/50 px-3 py-2.5 text-blue-950">
+                            <div className="glass-card rounded-lg px-3 py-2.5 text-[var(--status-approved-fg)]">
                               <p className="text-xs font-semibold">Pay with Venmo</p>
                               <p className="mt-1 text-sm leading-relaxed">
                                 Send to <span className="font-mono font-medium">{row.venmoContactSnapshot}</span>. Include your name and unit in
@@ -313,7 +312,7 @@ export function ResidentPaymentsPanel() {
                                 : null;
                             if (sub && axisPaymentsEnabledOnListing(sub)) {
                               return (
-                                <div className="rounded-lg border border-violet-200/70 bg-violet-50/50 px-3 py-2.5 text-violet-950">
+                                <div className="glass-card rounded-lg px-3 py-2.5 text-[var(--status-approved-fg)]">
                                   <p className="text-xs font-semibold">Pay with Axis (ACH)</p>
                                   <p className="mt-1 text-sm leading-relaxed">
                                     Pay by bank transfer securely through Stripe — {axisAchFeeDisplayLabel()}. Transfers
