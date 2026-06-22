@@ -22,6 +22,14 @@ export const adminPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
+    {
+      section: "bugs-feedback",
+      label: "Bugs & feedback",
+      tabs: [
+        { id: "bugs", label: "Bugs" },
+        { id: "feedback", label: "Feedback" },
+      ],
+    },
     { section: "profile", label: "Profile", tabs: [] },
   ],
 };

@@ -23,6 +23,13 @@ import {
   buildingGroupsToSearchOptions,
   type PropertySearchOption,
 } from "@/components/marketing/property-search-picker";
+import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import {
+  TOUR_STEP_FIELD_ORDER,
+  scrollToFirstWizardFieldError,
+  wizardFieldErrorClass,
+  wizardSectionErrorClass,
+} from "@/lib/wizard-field-errors";
 
 type Tab = "tour" | "message";
 type TourStep = 1 | 2 | 3;
@@ -188,6 +195,7 @@ function TourFlow({
 }) {
   const { showToast } = useAppUi();
   const [step, setStep] = useState<TourStep>(1);
+  const [maxStepReached, setMaxStepReached] = useState<TourStep>(1);
   const [submitted, setSubmitted] = useState(false);
   const [tick, setTick] = useState(0);
   const [selectedProperty, setSelectedProperty] = useState<MockProperty | null>(null);
@@ -205,6 +213,7 @@ function TourFlow({
   const [slotHosts, setSlotHosts] = useState<Record<string, PropertyManagerEntry[]>>({});
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [bookingTour, setBookingTour] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const buildings = useMemo(() => groupByBuilding(properties), [properties]);
 
   const propertyFromInitialId = useMemo(() => {
@@ -275,12 +284,6 @@ function TourFlow({
     return slotManagerMap.get(`${dateStr}:${selectedSlotIndex}`) ?? [];
   }, [selectedDay, selectedSlotIndex, calYear, calMonth, slotManagerMap]);
 
-  const canContinue1 = selectedProperty !== null && selectedRoomKey !== null;
-  const canContinue2 =
-    selectedDay !== null &&
-    selectedSlotIndex !== null &&
-    managersAtSelectedSlot.length > 0;
-
   const steps = [
     { n: 1, label: "Property & room" },
     { n: 2, label: "Date & time" },
@@ -313,6 +316,7 @@ function TourFlow({
             onClick={() => {
               setSubmitted(false);
               setStep(1);
+              setMaxStepReached(1);
               setStep1Phase("property");
               setSelectedBuildingId(null);
               setSelectedProperty(null);
@@ -339,12 +343,16 @@ function TourFlow({
     <div className="mt-4 rounded-3xl border border-slate-200/80 bg-white p-7 shadow-sm">
       {/* Step indicator */}
       <div className="flex items-center gap-2 text-sm">
-        {steps.map((s, i) => (
+        {steps.map((s, i) => {
+          const reachable = canNavigateToWizardStep(s.n, maxStepReached);
+          return (
           <div key={s.n} className="flex items-center gap-2">
             {i > 0 && <div className="h-px w-6 bg-slate-200" />}
             <button
               type="button"
+              disabled={!reachable}
               onClick={() => {
+                if (!reachable) return;
                 if (s.n === 1) {
                   setStep(1);
                   if (selectedProperty) {
@@ -354,11 +362,11 @@ function TourFlow({
                     setStep1Phase("property");
                     setSelectedBuildingId(null);
                   }
+                } else {
+                  setStep(s.n as TourStep);
                 }
-                if (s.n === 2 && canContinue1) setStep(2);
-                if (s.n === 3 && canContinue1 && canContinue2) setStep(3);
               }}
-              className="flex items-center gap-2"
+              className={`flex items-center gap-2 ${reachable ? "" : "cursor-not-allowed opacity-45"}`}
             >
               <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
                 step === s.n
@@ -376,7 +384,8 @@ function TourFlow({
               </span>
             </button>
           </div>
-        ))}
+        );
+        })}
       </div>
 
       <div className="mt-6">
@@ -385,7 +394,13 @@ function TourFlow({
             buildings={buildings}
             phase={step1Phase}
             selectedBuildingId={selectedBuildingId}
+            fieldErrors={fieldErrors}
             onSelectBuilding={(id) => {
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                delete next.property;
+                return next;
+              });
               setSelectedBuildingId(id);
               setSelectedProperty(null);
               setSelectedRoomKey(null);
@@ -412,6 +427,12 @@ function TourFlow({
                 setSelectedSlotIndex(null);
                 return;
               }
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                delete next.property;
+                delete next.room;
+                return next;
+              });
               setSelectedProperty(p);
               setSelectedBuildingId(p.buildingId);
               setSelectedRoomKey(roomKey);
@@ -427,6 +448,7 @@ function TourFlow({
           <Step2
             property={selectedProperty}
             availability={selectedAvailability}
+            fieldErrors={fieldErrors}
             calMonth={calMonth}
             calYear={calYear}
             onPrevMonth={() => {
@@ -443,11 +465,23 @@ function TourFlow({
             }}
             selectedDay={selectedDay}
             onSelectDay={(day) => {
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                delete next.tourSlot;
+                return next;
+              });
               setSelectedDay(day);
               setSelectedSlotIndex(null);
             }}
             selectedSlotIndex={selectedSlotIndex}
-            onSelectSlotIndex={setSelectedSlotIndex}
+            onSelectSlotIndex={(slot) => {
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                delete next.tourSlot;
+                return next;
+              });
+              setSelectedSlotIndex(slot);
+            }}
             managersAtSelectedSlot={managersAtSelectedSlot}
             availabilityLoading={availabilityLoading}
           />
@@ -461,10 +495,24 @@ function TourFlow({
             month={calMonth}
             year={calYear}
             submitting={bookingTour}
+            fieldErrors={fieldErrors}
+            onFieldChange={(key) =>
+              setFieldErrors((prev) => {
+                if (!(key in prev)) return prev;
+                const next = { ...prev };
+                delete next[key];
+                return next;
+              })
+            }
             onSubmit={async ({ name, email, phone, notes }) => {
               if (bookingTour) return;
-              if (!name.trim() || !email.trim()) {
-                showToast("Please enter your name and email.");
+              const errs: Record<string, string> = {};
+              if (!name.trim()) errs.name = "Name is required.";
+              if (!email.trim()) errs.email = "Email is required.";
+              if (Object.keys(errs).length > 0) {
+                setFieldErrors(errs);
+                showToast("Please fix the highlighted fields before continuing.");
+                queueMicrotask(() => scrollToFirstWizardFieldError(TOUR_STEP_FIELD_ORDER[3] ?? [], errs));
                 return;
               }
               if (!selectedProperty || selectedDay == null || selectedSlotIndex == null) return;
@@ -566,9 +614,29 @@ function TourFlow({
         {step < 3 && (
           <button
             type="button"
-            disabled={step === 1 ? !canContinue1 : !canContinue2}
-            onClick={() => setStep((s) => (s + 1) as TourStep)}
-            className="rounded-full bg-primary px-7 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            onClick={() => {
+              const errs: Record<string, string> = {};
+              if (step === 1) {
+                if (!selectedProperty) errs.property = "Choose a property to tour.";
+                if (!selectedRoomKey) errs.room = "Choose a room to tour.";
+              }
+              if (step === 2) {
+                if (selectedDay === null || selectedSlotIndex === null || managersAtSelectedSlot.length === 0) {
+                  errs.tourSlot = "Select a date and time for your tour.";
+                }
+              }
+              if (Object.keys(errs).length > 0) {
+                setFieldErrors(errs);
+                showToast("Please fix the highlighted fields before continuing.");
+                queueMicrotask(() => scrollToFirstWizardFieldError(TOUR_STEP_FIELD_ORDER[step] ?? [], errs));
+                return;
+              }
+              setFieldErrors({});
+              const next = (step + 1) as TourStep;
+              setStep(next);
+              setMaxStepReached((m) => nextWizardMaxReached(m, next) as TourStep);
+            }}
+            className="rounded-full bg-primary px-7 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-105"
           >
             Continue
           </button>
@@ -586,6 +654,7 @@ function Step1({
   onBackToProperties,
   onSelectRoom,
   selectedRoomKey,
+  fieldErrors,
 }: {
   buildings: BuildingGroup[];
   phase: "property" | "room";
@@ -594,6 +663,7 @@ function Step1({
   onBackToProperties: () => void;
   onSelectRoom: (p: MockProperty | null, roomKey: string | null) => void;
   selectedRoomKey: string | null;
+  fieldErrors: Record<string, string>;
 }) {
   const buildingOptions = useMemo(() => buildingGroupsToSearchOptions(buildings), [buildings]);
 
@@ -601,17 +671,20 @@ function Step1({
     return (
       <div className="space-y-3">
         <p className="text-sm text-slate-500">Choose a property to tour. You&apos;ll pick a specific room next.</p>
-        <PropertySearchPicker
-          options={buildingOptions}
-          value={selectedBuildingId}
-          onChange={(id) => {
-            if (id) onSelectBuilding(id);
-          }}
-          placeholder="Search by address, neighborhood, or property name…"
-          listEmptyMessage="No listed housing is available for tours right now."
-          emptyMessage="No properties match your search. Try an address or neighborhood."
-          ariaLabel="Search properties to tour"
-        />
+        <div data-wizard-field="property" className={wizardSectionErrorClass(Boolean(fieldErrors.property))}>
+          <PropertySearchPicker
+            options={buildingOptions}
+            value={selectedBuildingId}
+            onChange={(id) => {
+              if (id) onSelectBuilding(id);
+            }}
+            placeholder="Search by address, neighborhood, or property name…"
+            listEmptyMessage="No listed housing is available for tours right now."
+            emptyMessage="No properties match your search. Try an address or neighborhood."
+            ariaLabel="Search properties to tour"
+          />
+          {fieldErrors.property ? <p className="mt-2 text-xs font-medium text-red-600">{fieldErrors.property}</p> : null}
+        </div>
       </div>
     );
   }
@@ -645,24 +718,27 @@ function Step1({
           ← All properties
         </button>
       </div>
-      <PropertySearchPicker
-        options={roomOptions}
-        value={selectedRoomKey}
-        onChange={(roomKey) => {
-          if (!roomKey) {
-            onSelectRoom(null, null);
-            return;
-          }
-          const hit = building.units
-            .flatMap((p) => roomOptionsForProperty(p).map((o) => ({ ...o, property: p })))
-            .find((o) => o.key === roomKey);
-          if (hit) onSelectRoom(hit.property, roomKey);
-        }}
-        placeholder="Search rooms by name, floor, or rent…"
-        emptyMessage="No rooms match your search."
-        listEmptyMessage="No rooms listed for this property."
-        ariaLabel="Search rooms to tour"
-      />
+      <div data-wizard-field="room" className={wizardSectionErrorClass(Boolean(fieldErrors.room))}>
+        <PropertySearchPicker
+          options={roomOptions}
+          value={selectedRoomKey}
+          onChange={(roomKey) => {
+            if (!roomKey) {
+              onSelectRoom(null, null);
+              return;
+            }
+            const hit = building.units
+              .flatMap((p) => roomOptionsForProperty(p).map((o) => ({ ...o, property: p })))
+              .find((o) => o.key === roomKey);
+            if (hit) onSelectRoom(hit.property, roomKey);
+          }}
+          placeholder="Search rooms by name, floor, or rent…"
+          emptyMessage="No rooms match your search."
+          listEmptyMessage="No rooms listed for this property."
+          ariaLabel="Search rooms to tour"
+        />
+        {fieldErrors.room ? <p className="mt-2 text-xs font-medium text-red-600">{fieldErrors.room}</p> : null}
+      </div>
     </div>
   );
 }
@@ -670,6 +746,7 @@ function Step1({
 function Step2({
   property,
   availability,
+  fieldErrors,
   calMonth, calYear, onPrevMonth, onNextMonth,
   selectedDay, onSelectDay, selectedSlotIndex, onSelectSlotIndex,
   managersAtSelectedSlot,
@@ -677,6 +754,7 @@ function Step2({
 }: {
   property: MockProperty | null;
   availability: Set<string>;
+  fieldErrors: Record<string, string>;
   calMonth: number; calYear: number;
   onPrevMonth: () => void; onNextMonth: () => void;
   selectedDay: number | null; onSelectDay: (d: number) => void;
@@ -710,6 +788,10 @@ function Step2({
         </p>
       )}
       {/* Calendar */}
+      <div
+        data-wizard-field="tourSlot"
+        className={wizardSectionErrorClass(Boolean(fieldErrors.tourSlot), "space-y-6 rounded-2xl")}
+      >
       <div>
         <div className="mb-3 flex items-center justify-between">
           <button type="button" onClick={onPrevMonth} className="rounded-full p-1.5 hover:bg-slate-100">
@@ -793,17 +875,21 @@ function Step2({
           </p>
         </div>
       )}
+      {fieldErrors.tourSlot ? <p className="text-xs font-medium text-red-600">{fieldErrors.tourSlot}</p> : null}
+      </div>
     </div>
   );
 }
 
 function Step3({
-  property, roomLabel, day, slotIndex, month, year, submitting, onSubmit,
+  property, roomLabel, day, slotIndex, month, year, submitting, onSubmit, fieldErrors, onFieldChange,
 }: {
   property: MockProperty | null; roomLabel: string; day: number | null; slotIndex: number | null;
   month: number;
   year: number;
   submitting: boolean;
+  fieldErrors: Record<string, string>;
+  onFieldChange: (key: string) => void;
   onSubmit: (payload: { name: string; email: string; phone: string; notes: string }) => void | Promise<void>;
 }) {
   const [name, setName] = useState("");
@@ -822,14 +908,34 @@ function Step3({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Name *">
-          <input id="tour-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Smith" className={inputCls} />
+        <Field label="Name *" fieldKey="name" error={fieldErrors.name}>
+          <input
+            id="tour-name"
+            type="text"
+            value={name}
+            onChange={(e) => {
+              onFieldChange("name");
+              setName(e.target.value);
+            }}
+            placeholder="Jane Smith"
+            className={wizardFieldErrorClass(Boolean(fieldErrors.name), inputCls)}
+          />
         </Field>
-        <Field label="Email *">
-          <input id="tour-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@email.com" className={inputCls} />
+        <Field label="Email *" fieldKey="email" error={fieldErrors.email}>
+          <input
+            id="tour-email"
+            type="email"
+            value={email}
+            onChange={(e) => {
+              onFieldChange("email");
+              setEmail(e.target.value);
+            }}
+            placeholder="jane@email.com"
+            className={wizardFieldErrorClass(Boolean(fieldErrors.email), inputCls)}
+          />
         </Field>
       </div>
-      <Field label="Phone">
+      <Field label="Phone" fieldKey="phone">
         <input id="tour-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(206) 555-0100" className={inputCls} />
       </Field>
       <Field label="Notes (optional)">
@@ -1041,11 +1147,22 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
 }
 
 /* ── Shared UI primitives ── */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  fieldKey,
+  error,
+}: {
+  label: string;
+  children: React.ReactNode;
+  fieldKey?: string;
+  error?: string;
+}) {
   return (
-    <div>
+    <div data-wizard-field={fieldKey}>
       <p className="mb-1.5 text-xs font-semibold text-slate-500">{label}</p>
       {children}
+      {error ? <p className="mt-1 text-xs font-medium text-red-600">{error}</p> : null}
     </div>
   );
 }

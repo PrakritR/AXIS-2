@@ -6,6 +6,12 @@ import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/p
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import {
+  CO_MANAGER_PERMISSION_OPTIONS,
+  EMPTY_CO_MANAGER_PERMISSIONS,
+  normalizeCoManagerPermissions,
+  type CoManagerPermissions,
+} from "@/lib/co-manager-permissions";
+import {
   PROPERTY_PIPELINE_EVENT,
   readPendingManagerPropertiesForUser,
   readExtraListingsForUser,
@@ -42,6 +48,41 @@ function resolvePropertyLabel(id: string, fallback: string): string {
   const found = all.find((p) => p.id === id);
   if (!found) return fallback || id;
   return [found.buildingName, found.unitLabel || found.address].filter(Boolean).join(" · ").trim() || id;
+}
+
+function CoManagerPermissionsEditor({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: CoManagerPermissions;
+  onChange: (next: CoManagerPermissions) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {CO_MANAGER_PERMISSION_OPTIONS.map(({ id, label }) => (
+        <label
+          key={id}
+          className={`flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm ${disabled ? "opacity-60" : "cursor-pointer"}`}
+        >
+          <input
+            type="checkbox"
+            disabled={disabled}
+            checked={value[id] === true}
+            onChange={(e) => {
+              const next = { ...value };
+              if (e.target.checked) next[id] = true;
+              else delete next[id];
+              onChange(next);
+            }}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+          />
+          <span className="font-medium text-slate-800">{label}</span>
+        </label>
+      ))}
+    </div>
+  );
 }
 
 export function ProAccountLinksPanel({
@@ -130,7 +171,7 @@ export function ProAccountLinksPanel({
 
   const [selectedProps, setSelectedProps] = useState<Record<string, boolean>>({});
   const [payoutDraft, setPayoutDraft] = useState(15);
-  const [canEditListingDraft, setCanEditListingDraft] = useState(false);
+  const [permissionsDraft, setPermissionsDraft] = useState<CoManagerPermissions>(EMPTY_CO_MANAGER_PERMISSIONS);
   const [skuTier, setSkuTier] = useState<string | null>(null);
 
   useEffect(() => {
@@ -245,6 +286,7 @@ export function ProAccountLinksPanel({
             tabKind: "manager",
             assignedPropertyIds: ids,
             payoutPercentForManager: payout,
+            coManagerPermissions: permissionsDraft,
           }),
         });
         const data = (await res.json()) as { error?: string; migrationRequired?: boolean };
@@ -260,7 +302,7 @@ export function ProAccountLinksPanel({
         setDraftUserId(null);
         setSelectedProps({});
         setPayoutDraft(15);
-        setCanEditListingDraft(false);
+        setPermissionsDraft(EMPTY_CO_MANAGER_PERMISSIONS);
         showToast("Invite sent — waiting for their approval.");
         return;
       } catch {
@@ -282,7 +324,7 @@ export function ProAccountLinksPanel({
       perspective: "manager_tab",
       payoutPercentForManager: payout,
       assignedPropertyIds: ids,
-      canEditListing: canEditListingDraft || undefined,
+      coManagerPermissions: Object.keys(permissionsDraft).length > 0 ? permissionsDraft : undefined,
       createdAt: new Date().toISOString(),
     };
     writeProRelationships(userId, [...all, row]);
@@ -292,7 +334,7 @@ export function ProAccountLinksPanel({
     setDraftUserId(null);
     setSelectedProps({});
     setPayoutDraft(15);
-    setCanEditListingDraft(false);
+    setPermissionsDraft(EMPTY_CO_MANAGER_PERMISSIONS);
     refreshLocal();
     showToast("Link saved locally (invite sync requires database migration).");
   };
@@ -362,9 +404,22 @@ export function ProAccountLinksPanel({
     refreshLocal();
   };
 
-  const toggleCanEditListing = (relId: string) => {
+  const updateCoManagerPermissions = async (relId: string, permissions: CoManagerPermissions) => {
+    const normalized = normalizeCoManagerPermissions(permissions);
+    if (useRemote && remoteLoaded) {
+      await patchInvite(relId, { coManagerPermissions: normalized }, "Permissions updated.");
+      return;
+    }
     const all = readProRelationships(userId);
-    const next = all.map((r) => (r.id === relId ? { ...r, canEditListing: !r.canEditListing || undefined } : r));
+    const next = all.map((r) =>
+      r.id === relId
+        ? {
+            ...r,
+            coManagerPermissions: normalized,
+            canEditListing: normalized.editListings ? true : undefined,
+          }
+        : r,
+    );
     writeProRelationships(userId, next);
     refreshLocal();
   };
@@ -406,9 +461,11 @@ export function ProAccountLinksPanel({
         id: inv.id,
         linkedAxisId: inv.linkedAxisId,
         linkedDisplayName: inv.linkedDisplayName ?? undefined,
-        perspective: inv.tabKind === "owner" ? "owner_tab" : "manager_tab",
+        perspective: "manager_tab",
         payoutPercentForManager: inv.payoutPercentForManager,
         assignedPropertyIds: inv.assignedPropertyIds,
+        coManagerPermissions: inv.coManagerPermissions,
+        canEditListing: inv.coManagerPermissions.editListings ? true : undefined,
         createdAt: inv.createdAt,
       });
       changed = true;
@@ -428,7 +485,7 @@ export function ProAccountLinksPanel({
 
   return (
     <ManagerPortalPageShell
-      title="Linked accounts"
+      title="Co-managers"
       titleAside={
         <Button
           type="button"
@@ -450,9 +507,10 @@ export function ProAccountLinksPanel({
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
             Account links
           </p>
-          <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900">Link account</h2>
+          <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900">Link a co-manager</h2>
           <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            Enter their <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span> to link another property portal account.
+            You have full access to your property portal. Link another manager by{" "}
+            <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span> and choose which sections they can use on your assigned properties.
           </p>
           {!useRemote && remoteLoaded ? (
             <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900">
@@ -565,20 +623,15 @@ export function ProAccountLinksPanel({
                 </p>
               </div>
 
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={canEditListingDraft}
-                  onChange={(e) => setCanEditListingDraft(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
-                />
-                <div>
-                  <p className="text-sm font-medium text-slate-800">Allow listing edits</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-                    The linked account can edit the assigned listings (edits go back to admin review).
-                  </p>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Co-manager permissions</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                  Choose what this co-manager can access. You always keep full permissions on your workspace.
+                </p>
+                <div className="mt-3">
+                  <CoManagerPermissionsEditor value={permissionsDraft} onChange={setPermissionsDraft} />
                 </div>
-              </label>
+              </div>
 
               <Button type="button" className="rounded-full" onClick={() => void saveNewLink()}>
                 {useRemote ? "Send invite" : "Save link (local)"}
@@ -729,22 +782,25 @@ export function ProAccountLinksPanel({
 
                 {r.direction !== "incoming" ? (
                   <div className="mt-4">
-                    <label className="flex cursor-pointer items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(localRows.find((lr) => lr.id === r.id)?.canEditListing)}
-                        onChange={() => toggleCanEditListing(r.id)}
-                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+                    <p className="text-xs font-semibold text-slate-500">Co-manager permissions</p>
+                    <p className="mt-1 text-xs text-slate-500">Only you can change these — the co-manager sees what you grant here.</p>
+                    <div className="mt-2">
+                      <CoManagerPermissionsEditor
+                        value={normalizeCoManagerPermissions(
+                          useRemote ? (r as AccountLinkInviteDto).coManagerPermissions : localRows.find((lr) => lr.id === r.id)?.coManagerPermissions,
+                        )}
+                        onChange={(next) => void updateCoManagerPermissions(r.id, next)}
                       />
-                      <div>
-                        <p className="text-xs font-semibold text-slate-700">Allow listing edits</p>
-                        <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-                          Linked account can edit these listings (edits go to admin review).
-                        </p>
-                      </div>
-                    </label>
+                    </div>
                   </div>
-                ) : null}
+                ) : (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                    <p className="text-xs font-semibold text-slate-700">Permissions they granted you</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {CO_MANAGER_PERMISSION_OPTIONS.filter(({ id }) => (r as AccountLinkInviteDto).coManagerPermissions?.[id]).map(({ label }) => label).join(" · ") || "No section access granted yet."}
+                    </p>
+                  </div>
+                )}
               </div>
             ))
           ) : (
@@ -812,20 +868,13 @@ export function ProAccountLinksPanel({
                 </div>
 
                 <div className="mt-4">
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(r.canEditListing)}
-                      onChange={() => toggleCanEditListing(r.id)}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+                  <p className="text-xs font-semibold text-slate-500">Co-manager permissions</p>
+                  <div className="mt-2">
+                    <CoManagerPermissionsEditor
+                      value={normalizeCoManagerPermissions(r.coManagerPermissions)}
+                      onChange={(next) => void updateCoManagerPermissions(r.id, next)}
                     />
-                    <div>
-                      <p className="text-xs font-semibold text-slate-700">Allow listing edits</p>
-                      <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-                        Linked account can edit these listings (edits go to admin review).
-                      </p>
-                    </div>
-                  </label>
+                  </div>
                 </div>
               </div>
             ))

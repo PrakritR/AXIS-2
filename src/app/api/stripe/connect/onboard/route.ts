@@ -2,6 +2,12 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
+import {
+  connectAccountReadyForAchPayouts,
+  connectAccountTransfersActive,
+  createAxisConnectAccount,
+  ensureConnectAccountTransfersRequested,
+} from "@/lib/stripe-connect";
 
 export const runtime = "nodejs";
 
@@ -43,23 +49,9 @@ export async function POST() {
       let accountId = profile?.stripe_connect_account_id?.trim() ?? null;
 
       if (!accountId) {
-        const account = await stripe.accounts.create({
-          country: "US",
+        const account = await createAxisConnectAccount(stripe, {
           email: user.email ?? undefined,
-          capabilities: {
-            card_payments: { requested: true },
-            transfers: { requested: true },
-          },
-          controller: {
-            fees: { payer: "application" },
-            losses: { payments: "application" },
-            requirement_collection: "stripe",
-            stripe_dashboard: { type: "express" },
-          },
-          metadata: {
-            axis_user_id: user.id,
-            axis_portal: "portal",
-          },
+          axisUserId: user.id,
         });
         accountId = account.id;
         await supabase
@@ -71,9 +63,9 @@ export async function POST() {
           .eq("id", user.id);
       }
 
-      const acct = await stripe.accounts.retrieve(accountId);
+      const acct = await ensureConnectAccountTransfersRequested(stripe, accountId);
 
-      const readyForPayouts = Boolean(acct.charges_enabled && acct.payouts_enabled);
+      const readyForPayouts = connectAccountReadyForAchPayouts(acct);
 
       if (readyForPayouts) {
         const loginLink = await stripe.accounts.createLoginLink(accountId);

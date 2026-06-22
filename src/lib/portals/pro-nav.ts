@@ -4,7 +4,6 @@ import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
 import { FREE_SUBSCRIPTION_SECTIONS, getManagerPurchaseSku, normalizeManagerSkuTier, paidWorkspacePortalTitle } from "@/lib/manager-access";
-import type { PreviewPortal } from "@/lib/auth/preview-types";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { proPortal } from "./pro";
@@ -17,8 +16,6 @@ export const getProPortalRenderContext = cache(async () => {
   const preview = await getAdminPreviewFromCookies();
   if (hasAdminRole(ctx) && preview?.portal === "manager") {
     /* admin preview as manager — allowed */
-  } else if (hasAdminRole(ctx) && preview?.portal === "owner") {
-    /* admin preview as owner — allowed */
   } else if (hasAdminRole(ctx) && !hasRole(ctx, "manager") && !hasRole(ctx, "owner")) {
     redirect("/admin/dashboard");
   } else if (!hasRole(ctx, "manager") && !hasRole(ctx, "owner")) {
@@ -29,13 +26,7 @@ export const getProPortalRenderContext = cache(async () => {
     redirect(portalDashboardPath(ctx.effectiveRole));
   }
 
-  const previewPortal: PreviewPortal =
-    hasAdminRole(ctx) && (preview?.portal === "manager" || preview?.portal === "owner")
-      ? preview.portal
-      : ctx.effectiveRole === "owner"
-        ? "owner"
-        : "manager";
-  const effectiveUserId = await getEffectiveUserIdForPortal(previewPortal);
+  const effectiveUserId = await getEffectiveUserIdForPortal("manager");
   if (!effectiveUserId) redirect("/admin/dashboard");
 
   const purchase = await getManagerPurchaseSku(effectiveUserId);

@@ -26,13 +26,16 @@ export async function POST(req: Request) {
     }
 
     const ctx = await getPortalAccessContext();
-    if (!hasRole(ctx, role)) {
+    const hasAccess = hasRole(ctx, role) || (role === "manager" && hasRole(ctx, "owner"));
+    if (!hasAccess) {
       return NextResponse.json({ error: "You do not have access to this portal." }, { status: 403 });
     }
 
+    const cookieRole: AuthRole = role === "manager" && hasRole(ctx, "owner") && !hasRole(ctx, "manager") ? "owner" : role;
+
     const res = NextResponse.json({ ok: true });
     const secure = process.env.NODE_ENV === "production";
-    res.cookies.set(ACTIVE_PORTAL_COOKIE, role, {
+    res.cookies.set(ACTIVE_PORTAL_COOKIE, cookieRole, {
       httpOnly: true,
       sameSite: "lax",
       path: "/",

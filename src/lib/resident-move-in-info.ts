@@ -1,6 +1,6 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { MockProperty } from "@/data/types";
-import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { normalizeManagerListingSubmissionV1, isEntireHomeListing } from "@/lib/manager-listing-submission";
 import { parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -170,7 +170,12 @@ export function resolveResidentMoveInFromApplications(
   }
 
   let roomLevelInstructions: string | null = null;
+  let listingMoveInDate: string | null = null;
   if (sub) {
+    if (isEntireHomeListing(sub)) {
+      listingMoveInDate = sub.houseMoveInAvailableDate?.trim() || null;
+      roomLevelInstructions = sub.houseMoveInInstructions?.trim() || null;
+    }
     const parsed = roomChoice ? parseRoomChoiceValue(roomChoice) : null;
     const listingRoomId = parsed?.listingRoomId ?? null;
     const manualRoomName = !isPropertyFallbackLabel(manualRoomNumber) ? manualRoomNumber.toLowerCase() : "";
@@ -181,13 +186,18 @@ export function resolveResidentMoveInFromApplications(
     if (room) {
       const rn = room.name.trim();
       if (rn && !isPropertyFallbackLabel(rn)) roomLabel = rn;
-      roomLevelInstructions = room.moveInInstructions?.trim() || null;
+      if (!isEntireHomeListing(sub)) {
+        listingMoveInDate = room.moveInAvailableDate?.trim() || null;
+        roomLevelInstructions = room.moveInInstructions?.trim() || null;
+      } else if (!roomLevelInstructions) {
+        roomLevelInstructions = room.moveInInstructions?.trim() || null;
+      }
     }
   }
 
   const earliestMoveInDateLabel =
     formatMoveInDateLabel(
-      firstNonEmpty(row.manualResidentDetails?.moveInDate, row.application?.leaseStart) ?? "",
+      firstNonEmpty(row.manualResidentDetails?.moveInDate, row.application?.leaseStart, listingMoveInDate) ?? "",
     ) || null;
   const instructions = firstNonEmpty(roomLevelInstructions, row.moveInInstructions);
   const generalHouseInfo = sub?.generalHouseInfo?.trim() || null;

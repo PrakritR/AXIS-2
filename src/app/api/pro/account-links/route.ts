@@ -6,6 +6,7 @@ import {
   type AccountLinkTabKind,
   type AccountLinksPayload,
 } from "@/lib/account-links";
+import { normalizeCoManagerPermissions, type CoManagerPermissions } from "@/lib/co-manager-permissions";
 import { getManagerPurchaseSku, maxAccountLinksForTier } from "@/lib/manager-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -23,6 +24,7 @@ export type InviteRow = {
   invitee_display_name: string | null;
   assigned_property_ids: unknown;
   payout_percent_for_manager: number;
+  co_manager_permissions?: unknown;
   status: string;
   created_at: string;
   responded_at: string | null;
@@ -39,7 +41,7 @@ export function serializeInvite(row: InviteRow, viewerId: string): AccountLinkIn
   const linkedDisplayName = out ? row.invitee_display_name : row.inviter_display_name;
   return {
     id: row.id,
-    tabKind: row.tab_kind === "manager" ? "manager" : "owner",
+    tabKind: "manager",
     status:
       row.status === "accepted" ||
       row.status === "rejected" ||
@@ -56,9 +58,16 @@ export function serializeInvite(row: InviteRow, viewerId: string): AccountLinkIn
     linkedDisplayName,
     assignedPropertyIds: asStringArray(row.assigned_property_ids),
     payoutPercentForManager: Number(row.payout_percent_for_manager),
+    coManagerPermissions: normalizeCoManagerPermissions(row.co_manager_permissions),
     createdAt: row.created_at,
     respondedAt: row.responded_at,
   };
+}
+
+async function userIsPropertyPortalManager(supabase: SupabaseClient, userId: string): Promise<boolean> {
+  const asManager = await userHasPortalRole(supabase, userId, "manager");
+  if (asManager) return true;
+  return userHasPortalRole(supabase, userId, "owner");
 }
 
 async function userHasPortalRole(
@@ -115,6 +124,7 @@ export async function GET(): Promise<NextResponse<AccountLinksPayload | { error:
           "invitee_display_name",
           "assigned_property_ids",
           "payout_percent_for_manager",
+          "co_manager_permissions",
           "status",
           "created_at",
           "responded_at",
@@ -154,34 +164,31 @@ export async function POST(req: Request) {
       tabKind?: string;
       assignedPropertyIds?: unknown;
       payoutPercentForManager?: number;
+      coManagerPermissions?: unknown;
     } | null;
 
     const inviteeAxisId = body?.inviteeAxisId?.trim() ?? "";
-    const tabKind = (body?.tabKind ?? "").toLowerCase() as AccountLinkTabKind;
+    const tabKind = "manager" satisfies AccountLinkTabKind;
+    void body?.tabKind;
     const assignedPropertyIds = asStringArray(body?.assignedPropertyIds);
     const payoutPercentForManager = Math.min(
       100,
       Math.max(0, Math.round(Number(body?.payoutPercentForManager ?? 15) * 10) / 10),
     );
+    const coManagerPermissions: CoManagerPermissions = normalizeCoManagerPermissions(body?.coManagerPermissions);
 
     if (!inviteeAxisId) {
       return NextResponse.json({ error: "inviteeAxisId is required." }, { status: 400 });
-    }
-    if (tabKind !== "owner" && tabKind !== "manager") {
-      return NextResponse.json({ error: "tabKind must be owner or manager." }, { status: 400 });
     }
     if (assignedPropertyIds.length === 0) {
       return NextResponse.json({ error: "Select at least one property for this invite." }, { status: 400 });
     }
 
-    const inviterRole: "owner" | "manager" = tabKind === "owner" ? "owner" : "manager";
-    const inviteeRole: "owner" | "manager" = tabKind === "owner" ? "owner" : "manager";
-
-    const inviterOk = await userHasPortalRole(supabase, user.id, inviterRole);
+    const inviterOk = await userIsPropertyPortalManager(supabase, user.id);
     if (!inviterOk) {
       return NextResponse.json(
         {
-          error: "Your account doesn't support creating this type of link.",
+          error: "Your account doesn't support linking co-managers.",
         },
         { status: 403 },
       );
@@ -225,10 +232,11 @@ export async function POST(req: Request) {
     }
 
     const ir = String((inviteeProfile as { role?: string }).role ?? "").toLowerCase();
-    if (ir !== inviteeRole) {
+    const inviteeOk = ir === "manager" || ir === "owner";
+    if (!inviteeOk) {
       return NextResponse.json(
         {
-          error: "Choose the matching link role for that Axis ID.",
+          error: "That account must be a property portal manager to link as a co-manager.",
         },
         { status: 400 },
       );
@@ -344,6 +352,7 @@ export async function POST(req: Request) {
           null,
         assigned_property_ids: assignedPropertyIds,
         payout_percent_for_manager: payoutPercentForManager,
+        co_manager_permissions: coManagerPermissions,
         status: "pending",
       })
       .select(
@@ -358,6 +367,7 @@ export async function POST(req: Request) {
           "invitee_display_name",
           "assigned_property_ids",
           "payout_percent_for_manager",
+          "co_manager_permissions",
           "status",
           "created_at",
           "responded_at",

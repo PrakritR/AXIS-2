@@ -4,7 +4,7 @@ import type { MockProperty } from "@/data/types";
 import { LISTING_ROOM_FLOOR_LEVEL_OPTIONS } from "@/data/manager-listing-presets";
 import { buildMockPropertyFromDraft, readAllExtraListings, readAllPendingManagerProperties, readExtraListings } from "@/lib/demo-property-pipeline";
 import { effectiveApplicationForRow, readManagerApplicationRows } from "@/lib/manager-applications-storage";
-import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { normalizeManagerListingSubmissionV1, resolveAllowedLeaseTerms } from "@/lib/manager-listing-submission";
 
 function normFloorLabel(raw: string): string {
   if (!raw.trim()) return "";
@@ -16,6 +16,14 @@ export const LEASE_TERM_OPTIONS = ["3-Month", "9-Month", "12-Month", "Month-to-M
 export const SHORT_TERM_LEASE_TERM = "Short-Term Stay";
 
 export type LeaseTermOption = (typeof LEASE_TERM_OPTIONS)[number];
+
+export function listingAllowedLeaseTerms(propertyId: string): string[] {
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+  if (!sub) return [...LEASE_TERM_OPTIONS];
+  const terms = resolveAllowedLeaseTerms(sub);
+  return terms.length > 0 ? terms : [...LEASE_TERM_OPTIONS];
+}
 
 /** Separates listing property id from submission room id in `roomChoice*` values. */
 export const LISTING_ROOM_CHOICE_SEP = "::";

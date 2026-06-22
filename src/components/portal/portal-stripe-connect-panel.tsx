@@ -12,6 +12,9 @@ type ConnectStatus = {
   accountId: string | null;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
+  transfersEnabled?: boolean;
+  paymentReady?: boolean;
+  transfersStatus?: string | null;
   detailsSubmitted: boolean;
   demo?: boolean;
   message?: string;
@@ -179,7 +182,7 @@ export function PortalStripeConnectPanel({
           },
         },
       });
-      const componentName = status.chargesEnabled && status.payoutsEnabled ? "payouts" : "account-onboarding";
+      const componentName = status.paymentReady ? "payouts" : "account-onboarding";
       const component = instance.create(componentName);
       component.setOnExit?.(() => {
         showToast("Payout status updated.");
@@ -204,8 +207,7 @@ export function PortalStripeConnectPanel({
   const ready =
     status &&
     status.connected &&
-    status.chargesEnabled &&
-    status.payoutsEnabled &&
+    Boolean(status.paymentReady ?? (status.transfersEnabled && status.payoutsEnabled)) &&
     !status.demo;
 
   const needsOnboarding = status && !status.demo && !ready;
@@ -226,8 +228,8 @@ export function PortalStripeConnectPanel({
       <div className="space-y-2">
         <p className="font-medium text-slate-900">Link your personal payout account before creating a listing.</p>
         <p className="text-sm text-slate-600">
-          This step is only for connecting the bank account or debit card where your Stripe payouts should land.
-          Revenue split amounts are configured separately inside account linking after you choose the manager or owner.
+          This step connects the bank account where your Stripe payouts should land. You must complete this before
+          residents can pay you by bank transfer (ACH).
         </p>
       </div>
 
@@ -251,7 +253,7 @@ export function PortalStripeConnectPanel({
               ready ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-700"
             }`}
           >
-            {ready ? "Payouts ready" : status.connected ? "Setup in progress" : "Not connected"}
+            {ready ? "Payouts ready" : status.transfersEnabled ? "Finish payout setup" : status.connected ? "Setup in progress" : "Not connected"}
           </span>
         </div>
       ) : null}

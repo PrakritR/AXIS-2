@@ -8,12 +8,20 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
-const LABELS: Record<AuthRole, string> = {
+const LABELS: Record<Exclude<AuthRole, "owner">, string> = {
   admin: "Admin portal",
   manager: "Property portal",
   resident: "Resident portal",
-  owner: "Axis Property Portal (ownership)",
 };
+
+function displayRoles(roles: AuthRole[]): Exclude<AuthRole, "owner">[] {
+  const out = new Set<Exclude<AuthRole, "owner">>();
+  for (const role of roles) {
+    if (role === "owner") out.add("manager");
+    else out.add(role);
+  }
+  return [...out];
+}
 
 function ChoosePortalForm() {
   const router = useRouter();
@@ -21,7 +29,7 @@ function ChoosePortalForm() {
   const nextRaw = searchParams.get("next") ?? "";
   const safeNext = nextRaw.startsWith("/") ? nextRaw : "";
 
-  const [roles, setRoles] = useState<AuthRole[] | null>(null);
+  const [roles, setRoles] = useState<Exclude<AuthRole, "owner">[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +43,7 @@ function ChoosePortalForm() {
           if (!cancelled) setError(body.error ?? "Could not load your account.");
           return;
         }
-        if (!cancelled) setRoles(body.roles ?? []);
+        if (!cancelled) setRoles(displayRoles(body.roles ?? []));
       } catch {
         if (!cancelled) setError("Could not load your account.");
       }
@@ -45,7 +53,7 @@ function ChoosePortalForm() {
     };
   }, []);
 
-  const choose = async (role: AuthRole) => {
+  const choose = async (role: Exclude<AuthRole, "owner">) => {
     setBusy(role);
     setError(null);
     try {

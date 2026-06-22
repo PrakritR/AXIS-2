@@ -2,12 +2,9 @@
 
 import { useEffect } from "react";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
-import { readProRelationships, writeProRelationships, type ProRelationshipPerspective } from "@/lib/pro-relationships";
+import { normalizeCoManagerPermissions } from "@/lib/co-manager-permissions";
+import { readProRelationships, writeProRelationships } from "@/lib/pro-relationships";
 import { usePortalSession } from "@/hooks/use-portal-session";
-
-function perspectiveForInvite(inv: AccountLinkInviteDto): ProRelationshipPerspective {
-  return inv.tabKind === "owner" ? "owner_tab" : "manager_tab";
-}
 
 export function AccountLinksSync() {
   const session = usePortalSession();
@@ -34,15 +31,16 @@ export function AccountLinksSync() {
         const next = [...existing];
 
         for (const inv of active) {
-          const perspective = perspectiveForInvite(inv);
           const prev = existingById.get(inv.id);
+          const perms = normalizeCoManagerPermissions(inv.coManagerPermissions);
           if (
             prev &&
             prev.linkedAxisId === inv.linkedAxisId &&
             prev.linkedDisplayName === (inv.linkedDisplayName ?? undefined) &&
-            prev.perspective === perspective &&
+            prev.perspective === "manager_tab" &&
             prev.payoutPercentForManager === inv.payoutPercentForManager &&
-            prev.assignedPropertyIds.join("|") === inv.assignedPropertyIds.join("|")
+            prev.assignedPropertyIds.join("|") === inv.assignedPropertyIds.join("|") &&
+            JSON.stringify(prev.coManagerPermissions ?? {}) === JSON.stringify(perms)
           ) {
             continue;
           }
@@ -51,9 +49,11 @@ export function AccountLinksSync() {
             id: inv.id,
             linkedAxisId: inv.linkedAxisId,
             linkedDisplayName: inv.linkedDisplayName ?? undefined,
-            perspective,
+            perspective: "manager_tab" as const,
             payoutPercentForManager: inv.payoutPercentForManager,
             assignedPropertyIds: inv.assignedPropertyIds,
+            coManagerPermissions: perms,
+            canEditListing: perms.editListings ? true : undefined,
             createdAt: inv.createdAt,
           };
 

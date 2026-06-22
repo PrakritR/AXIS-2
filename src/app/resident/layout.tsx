@@ -1,4 +1,3 @@
-import { PublicNavbar } from "@/components/layout/public-navbar";
 import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PORTAL_MAIN_CONTENT_CLASS } from "@/lib/portal-layout-classes";
@@ -24,7 +23,6 @@ export default async function ResidentLayout({ children }: { children: React.Rea
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <PublicNavbar />
       {showPreviewBanner ? <AdminPreviewBanner label={previewLabel} /> : null}
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSidebar definition={residentPortal} />

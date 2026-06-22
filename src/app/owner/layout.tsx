@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { PublicNavbar } from "@/components/layout/public-navbar";
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PORTAL_MAIN_CONTENT_CLASS } from "@/lib/portal-layout-classes";
@@ -30,7 +29,6 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <AccountLinksSync />
-      <PublicNavbar />
       <div className="shrink-0">
         <PortalTopBanners
           planHref="/portal/plan"

@@ -105,7 +105,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         const email = rel.linkedAxisId.trim();
         if (!email || seen.has(email.toLowerCase())) continue;
         seen.add(email.toLowerCase());
-        out.push({ id: `rel-${rel.id}`, name: rel.linkedDisplayName || rel.linkedAxisId, email: rel.linkedAxisId, role: "owner" });
+        out.push({ id: `rel-${rel.id}`, name: rel.linkedDisplayName || rel.linkedAxisId, email: rel.linkedAxisId, role: "manager" });
       }
     }
     return out;

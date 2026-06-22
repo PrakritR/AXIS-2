@@ -40,4 +40,23 @@ describe("manager-listing-submission", () => {
     expect(updated.rooms[0]?.monthlyRent).toBe(4500);
     expect(updated.rooms[1]?.monthlyRent).toBe(0);
   });
+
+  it("normalizes shared space kind from name when missing", () => {
+    const sub = normalizeManagerListingSubmissionV1({
+      ...createDefaultListingSubmission(),
+      sharedSpaces: [
+        {
+          id: "ss-1",
+          name: "Laundry room",
+          location: "",
+          detail: "",
+          amenitiesText: "",
+          photoDataUrls: [],
+          videoDataUrl: null,
+          roomAccessIds: [],
+        },
+      ],
+    });
+    expect(sub.sharedSpaces[0]?.spaceKind).toBe("laundry");
+  });
 });

@@ -12,7 +12,7 @@ export function PortalTierPaywall({ basePath }: { basePath: "/portal" }) {
         <p className="text-sm leading-relaxed text-slate-600">
           This area requires <span className="font-semibold text-slate-900">Pro</span> or{" "}
           <span className="font-semibold text-slate-900">Business</span>. Upgrade to unlock the Residents tab — lease
-          generation, work orders, inbox, and account links. The Free plan includes property listings, applications, and
+          generation, work orders, inbox, and co-managers. The Free plan includes property listings, applications, and
           the touring calendar.
         </p>
         <Link href={`${basePath}/plan`} className={primaryCta}>

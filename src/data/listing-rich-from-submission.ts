@@ -6,7 +6,7 @@ import type {
   ManagerListingSubmissionV1,
   ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
-import { normalizeManagerListingSubmissionV1, formatListingBasicsSummary, isEntireHomeListing, entireHomeMonthlyRentAmount } from "@/lib/manager-listing-submission";
+import { normalizeManagerListingSubmissionV1, formatListingBasicsSummary, isEntireHomeListing, entireHomeMonthlyRentAmount, resolveAllowedLeaseTerms } from "@/lib/manager-listing-submission";
 import {
   LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS,
   LISTING_TOTAL_BATH_OPTIONS,
@@ -31,7 +31,7 @@ function filterLeaseBasicsRows(
   return rows.filter((row) => {
     switch (row.id) {
       case "lease-terms":
-        return Boolean(sub.leaseTermsBody.trim());
+        return resolveAllowedLeaseTerms(sub).length > 0 || Boolean(sub.leaseTermsBody.trim());
       case "lease-application":
         return feeMeaningfulForListing(sub.applicationFee);
       case "lease-deposit":
@@ -658,7 +658,11 @@ export function listingRichFromManagerSubmission(
       detail: "As submitted",
       price: "—",
       status: "See details",
-      body: sub.leaseTermsBody.trim() || "Lease terms will be confirmed with applicants.",
+      body: (() => {
+        const terms = resolveAllowedLeaseTerms(sub);
+        if (terms.length > 0) return `Available lease lengths: ${terms.join(", ")}.`;
+        return sub.leaseTermsBody.trim() || "Lease terms will be confirmed with applicants.";
+      })(),
     },
     ...(sub.shortTermRentalsAllowed
       ? [

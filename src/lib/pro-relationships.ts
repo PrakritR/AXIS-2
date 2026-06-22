@@ -3,10 +3,13 @@
  * Primary flow: `/api/pro/account-links` + `account_link_invites` table.
  */
 
+import type { CoManagerPermissions } from "@/lib/co-manager-permissions";
+import { coManagerPermissionsFromLegacy } from "@/lib/co-manager-permissions";
+
 export const AXIS_ID_LABEL = "Axis ID";
 
-/** Owner tab ↔ owner workspaces; Manager tab ↔ manager workspaces. */
-export type ProRelationshipPerspective = "owner_tab" | "manager_tab";
+/** @deprecated Owner tab removed — all links are co-manager (manager) links. */
+export type ProRelationshipPerspective = "manager_tab";
 
 export type ProRelationshipRecord = {
   id: string;
@@ -16,7 +19,9 @@ export type ProRelationshipRecord = {
   /** Amount of managed revenue this manager receives on the linked properties (0–100). */
   payoutPercentForManager: number;
   assignedPropertyIds: string[];
-  /** Whether the linked account is allowed to edit the assigned listings. */
+  /** Permissions granted by the primary manager to this co-manager. */
+  coManagerPermissions?: CoManagerPermissions;
+  /** @deprecated Use coManagerPermissions.editListings */
   canEditListing?: boolean;
   createdAt: string;
 };
@@ -24,11 +29,7 @@ export type ProRelationshipRecord = {
 const memoryByUser = new Map<string, ProRelationshipRecord[]>();
 
 function migrateLegacyPerspective(p: string): ProRelationshipPerspective {
-  if (p === "manager_tab" || p === "owner_tab") return p;
-  /** @deprecated inverted names from earlier build */
-  if (p === "owner_linked_manager") return "owner_tab";
-  if (p === "manager_linked_owner") return "manager_tab";
-  return "owner_tab";
+  return "manager_tab";
 }
 
 function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
@@ -48,6 +49,10 @@ function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
     perspective,
     payoutPercentForManager: Number.isFinite(payout) ? payout : 15,
     assignedPropertyIds: assigned as string[],
+    coManagerPermissions: coManagerPermissionsFromLegacy({
+      canEditListing: r.canEditListing === true,
+      coManagerPermissions: r.coManagerPermissions,
+    }),
     canEditListing: r.canEditListing === true ? true : undefined,
     createdAt: typeof r.createdAt === "string" ? r.createdAt : new Date().toISOString(),
   };

@@ -9,6 +9,13 @@ import {
   isCalendarDayBeforeToday,
   localDateAtSlotStart,
 } from "@/lib/demo-admin-scheduling";
+import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import {
+  PARTNER_MEETING_STEP_FIELD_ORDER,
+  scrollToFirstWizardFieldError,
+  wizardFieldErrorClass,
+  wizardSectionErrorClass,
+} from "@/lib/wizard-field-errors";
 
 type Step = 1 | 2;
 type AdminAvailabilityHost = { adminUserId: string; adminLabel: string };
@@ -55,6 +62,7 @@ function ChevronRightIcon() {
 
 export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) => void }) {
   const [step, setStep] = useState<Step>(1);
+  const [maxStepReached, setMaxStepReached] = useState<Step>(1);
   const [tick, setTick] = useState(0);
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
@@ -67,6 +75,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const bump = useCallback(() => setTick((t) => t + 1), []);
 
@@ -143,8 +152,13 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   const submit = () => {
     const n = name.trim();
     const em = email.trim();
-    if (!n || !em) {
-      showToast("Please enter your name and email.");
+    const errs: Record<string, string> = {};
+    if (!n) errs.name = "Name is required.";
+    if (!em) errs.email = "Email is required.";
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      showToast("Please fix the highlighted fields before continuing.");
+      queueMicrotask(() => scrollToFirstWizardFieldError(PARTNER_MEETING_STEP_FIELD_ORDER[2] ?? [], errs));
       return;
     }
     if (selectedWindows.length === 0) {
@@ -176,10 +190,12 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
     });
     showToast("Request sent. Your proposed windows are now in the Axis calendar.");
     setStep(1);
+    setMaxStepReached(1);
     setName("");
     setEmail("");
     setPhone("");
     setNotes("");
+    setFieldErrors({});
     resetPickers();
     bump();
   };
@@ -187,6 +203,12 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   const toggleSlot = (dateStr: string, slotIndex: number) => {
     const key = `${dateStr}:${slotIndex}`;
     const hosts = slotHosts[key] ?? [];
+    setFieldErrors((prev) => {
+      if (!prev.tourSlots) return prev;
+      const next = { ...prev };
+      delete next.tourSlots;
+      return next;
+    });
     setSelectedSlotKeys((current) => {
       if (current.includes(key)) {
         setSelectedHostBySlot((prev) => {
@@ -211,16 +233,18 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   return (
     <div className="mt-4 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-7">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        {steps.map((s, i) => (
+        {steps.map((s, i) => {
+          const reachable = canNavigateToWizardStep(s.n, maxStepReached);
+          return (
           <div key={s.n} className="flex items-center gap-2">
             {i > 0 ? <div className="h-px w-4 bg-slate-200 sm:w-6" /> : null}
             <button
               type="button"
+              disabled={!reachable}
               onClick={() => {
-                if (s.n === 1) setStep(1);
-                if (s.n === 2 && canContinue) setStep(2);
+                if (reachable) setStep(s.n);
               }}
-              className="flex items-center gap-2"
+              className={`flex items-center gap-2 ${reachable ? "" : "cursor-not-allowed opacity-45"}`}
             >
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
@@ -234,7 +258,8 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
               </span>
             </button>
           </div>
-        ))}
+        );
+        })}
       </div>
 
       <div className="mt-6">
@@ -259,6 +284,10 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
               </p>
             )}
 
+            <div
+              data-wizard-field="tourSlots"
+              className={wizardSectionErrorClass(Boolean(fieldErrors.tourSlots), "space-y-6")}
+            >
             <div>
               <div className="mb-3 flex items-center justify-between">
                 <button
@@ -422,6 +451,10 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                 ) : null}
               </div>
             ) : null}
+            {fieldErrors.tourSlots ? (
+              <p className="text-xs font-medium text-red-600">{fieldErrors.tourSlots}</p>
+            ) : null}
+            </div>
           </div>
         ) : (
           <div className="space-y-5">
@@ -448,26 +481,42 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             ) : null}
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Name *">
+              <Field label="Name *" fieldKey="name" error={fieldErrors.name}>
                 <input
                   type="text"
                   placeholder="Jane Smith"
-                  className={inputCls}
+                  className={wizardFieldErrorClass(Boolean(fieldErrors.name), inputCls)}
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setFieldErrors((prev) => {
+                      if (!prev.name) return prev;
+                      const next = { ...prev };
+                      delete next.name;
+                      return next;
+                    });
+                    setName(e.target.value);
+                  }}
                 />
               </Field>
-              <Field label="Email *">
+              <Field label="Email *" fieldKey="email" error={fieldErrors.email}>
                 <input
                   type="email"
                   placeholder="jane@email.com"
-                  className={inputCls}
+                  className={wizardFieldErrorClass(Boolean(fieldErrors.email), inputCls)}
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setFieldErrors((prev) => {
+                      if (!prev.email) return prev;
+                      const next = { ...prev };
+                      delete next.email;
+                      return next;
+                    });
+                    setEmail(e.target.value);
+                  }}
                 />
               </Field>
             </div>
-            <Field label="Phone">
+            <Field label="Phone" fieldKey="phone">
               <input type="tel" placeholder="(206) 555-0100" className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} />
             </Field>
             <Field label="Notes (optional)">
@@ -504,9 +553,24 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
         {step < 2 ? (
           <button
             type="button"
-            disabled={!canContinue}
-            onClick={() => setStep(2)}
-            className="rounded-full bg-primary px-7 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            onClick={() => {
+              const errs: Record<string, string> = {};
+              if (selectedWindows.length === 0) {
+                errs.tourSlots = "Select at least one meeting time.";
+              } else if (!canContinue) {
+                errs.tourSlots = "Pick an admin for each selected time with multiple admins available.";
+              }
+              if (Object.keys(errs).length > 0) {
+                setFieldErrors(errs);
+                showToast("Please fix the highlighted fields before continuing.");
+                queueMicrotask(() => scrollToFirstWizardFieldError(PARTNER_MEETING_STEP_FIELD_ORDER[1] ?? [], errs));
+                return;
+              }
+              setFieldErrors({});
+              setStep(2);
+              setMaxStepReached((m) => nextWizardMaxReached(m, 2) as Step);
+            }}
+            className="rounded-full bg-primary px-7 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-105"
           >
             Continue
           </button>
@@ -516,11 +580,22 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  fieldKey,
+  error,
+}: {
+  label: string;
+  children: React.ReactNode;
+  fieldKey?: string;
+  error?: string;
+}) {
   return (
-    <div>
+    <div data-wizard-field={fieldKey}>
       <p className="mb-1.5 text-xs font-semibold text-slate-500">{label}</p>
       {children}
+      {error ? <p className="mt-1 text-xs font-medium text-red-600">{error}</p> : null}
     </div>
   );
 }

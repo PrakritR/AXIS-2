@@ -6,6 +6,8 @@ import type { MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { AdminPortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
+import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
+import { usePortalSession } from "@/hooks/use-portal-session";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 function hrefForSection(def: PortalDefinition, section: string) {
@@ -17,15 +19,17 @@ function hrefForSection(def: PortalDefinition, section: string) {
 
 export function PortalSidebar({ definition }: { definition: PortalDefinition }) {
   const pathname = usePathname();
+  const session = usePortalSession();
+  const visibleSections = useCoManagerNavSections(definition, session.userId);
   const [accountOpen, setAccountOpen] = useState(false);
   const navItems = useMemo(
     () =>
-      definition.sections.map((section) => ({
+      visibleSections.map((section) => ({
         section: section.section,
         label: section.label,
         href: hrefForSection(definition, section.section),
       })),
-    [definition],
+    [definition, visibleSections],
   );
 
   const activeSection = useMemo(() => {
@@ -126,7 +130,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
     <>
       {desktopAside}
 
-      {/* Mobile: persistent portal nav (marketing navbar stays above via layout). */}
+      {/* Mobile: persistent portal nav */}
       <div className="shrink-0 lg:hidden">
         <div className="border-b border-slate-200/55 bg-[#fafbfd] lg:hidden">
           <div className="flex items-center gap-2.5 px-3 pt-2 sm:px-4">

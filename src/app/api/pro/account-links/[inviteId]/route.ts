@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { asStringArray, serializeInvite, type InviteRow } from "@/app/api/pro/account-links/route";
 import { looksLikeAccountLinksMissingTable } from "@/lib/account-links";
+import { normalizeCoManagerPermissions } from "@/lib/co-manager-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -18,6 +19,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
       action?: string;
       assignedPropertyIds?: unknown;
       payoutPercentForManager?: number;
+      coManagerPermissions?: unknown;
     } | null;
 
     const supabase = await createSupabaseServerClient();
@@ -54,8 +56,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
     const actionNorm = body?.action != null ? String(body.action).toLowerCase().trim() : "";
     const patchProps = body?.assignedPropertyIds !== undefined;
     const patchPay = body?.payoutPercentForManager !== undefined;
+    const patchPerms = body?.coManagerPermissions !== undefined;
 
-    if (!actionNorm && !patchProps && !patchPay) {
+    if (!actionNorm && !patchProps && !patchPay && !patchPerms) {
       return NextResponse.json({ error: "Provide action or fields to update." }, { status: 400 });
     }
 
@@ -80,13 +83,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
       return NextResponse.json({ ok: true, invite: serializeInvite(updated as InviteRow, user.id) });
     }
 
-    /** After accept: both workspaces can edit split and property scope. */
-    if (!actionNorm && (patchProps || patchPay)) {
+    /** After accept: both workspaces can edit split and property scope; only inviter updates co-manager permissions. */
+    if (!actionNorm && (patchProps || patchPay || patchPerms)) {
       if (invite.status !== "accepted") {
         return NextResponse.json({ error: "Only accepted links can be updated this way." }, { status: 409 });
       }
       if (invite.inviter_user_id !== user.id && invite.invitee_user_id !== user.id) {
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
+      if (patchPerms && invite.inviter_user_id !== user.id) {
+        return NextResponse.json({ error: "Only the primary manager can change co-manager permissions." }, { status: 403 });
       }
 
       const nextAssigned = patchProps ? asStringArray(body?.assignedPropertyIds) : asStringArray(invite.assigned_property_ids);
@@ -98,11 +104,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
         ? Math.min(100, Math.max(0, Math.round(Number(body?.payoutPercentForManager) * 10) / 10))
         : Number(invite.payout_percent_for_manager);
 
+      const nextPerms = patchPerms
+        ? normalizeCoManagerPermissions(body?.coManagerPermissions)
+        : normalizeCoManagerPermissions((invite as { co_manager_permissions?: unknown }).co_manager_permissions);
+
       const { data: updated, error: upErr } = await svc
         .from("account_link_invites")
         .update({
           assigned_property_ids: nextAssigned,
           payout_percent_for_manager: nextPayout,
+          co_manager_permissions: nextPerms,
         })
         .eq("id", id)
         .eq("status", "accepted")

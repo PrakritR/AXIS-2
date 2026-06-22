@@ -5,7 +5,12 @@ import {
   LISTING_PROPERTY_TYPE_OPTIONS,
   LISTING_STORIES_OPTIONS,
   LISTING_TOTAL_BATH_OPTIONS,
+  type SharedSpaceKind,
+  inferSharedSpaceKind,
+  normalizeSharedSpaceKind,
 } from "@/data/manager-listing-presets";
+import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
+import { parseMoneyAmount } from "@/lib/parse-money";
 
 export type PaymentAtSigningOptionId =
   | "security_deposit"
@@ -113,6 +118,8 @@ export type ManagerSharedSpaceSubmission = {
   id: string;
   /** Short label on the listing (e.g. Kitchen, Laundry room). */
   name: string;
+  /** Drives which amenity presets appear for this row (kitchen vs laundry vs outdoor, etc.). */
+  spaceKind?: SharedSpaceKind;
   /** Where this shared space is in the home. */
   location: string;
   /** Longer description / rules / hours. */
@@ -140,6 +147,11 @@ export type ManagerListingSubmissionV1 = {
   listingPlaceCategoryId?: string;
   /** When listingPlaceCategoryId is entire_home — one monthly lease for the full unit (USD). */
   entireHomeMonthlyRent?: number;
+  /** Entire-home monthly utilities estimate (synced to first bedroom for signing math). */
+  entireHomeUtilitiesEstimate?: string;
+  entireHomeProrateMethod?: "auto" | "daily_rate";
+  entireHomeDailyRentRate?: number;
+  entireHomeDailyUtilitiesRate?: number;
   listingStoriesId?: string;
   listingTotalBathroomsId?: string;
   /** Rentable bedroom slots — synced to `rooms.length` when leaving the home step. */
@@ -154,10 +166,17 @@ export type ManagerListingSubmissionV1 = {
   houseDescription?: string;
   /** Resident-only general house info (Wi-Fi password, codes, tips) — shown in resident portal move-in only. */
   generalHouseInfo?: string;
+  /** Earliest move-in for entire-home listings (YYYY-MM-DD). */
+  houseMoveInAvailableDate?: string;
+  /** Move-in instructions for entire-home listings (keys, parking, access). */
+  houseMoveInInstructions?: string;
   /** General house photos (common areas, exterior, kitchen) shown at the top of the public listing. */
   housePhotoDataUrls: string[];
   /** Optional full-house walkthrough video shown on the public listing. */
   houseVideoDataUrl?: string | null;
+  /** Lease lengths offered on this listing (checkbox selections on Pricing step). */
+  allowedLeaseTerms?: string[];
+  /** Display copy derived from `allowedLeaseTerms`; kept for older listings and generated lease text. */
   leaseTermsBody: string;
   shortTermRentalsAllowed?: boolean;
   shortTermRequirements?: string;
@@ -202,6 +221,10 @@ export type ManagerListingSubmissionV1 = {
    * Default true when Venmo is on; ignored when Venmo is off.
    */
   applicationFeeVenmoEnabled?: boolean;
+  /** When true, offer a custom application-fee payment path using `applicationFeeOtherInstructions`. */
+  applicationFeeOtherEnabled?: boolean;
+  /** Instructions shown when applicant pays application fee via "Other". */
+  applicationFeeOtherInstructions?: string;
   /** When monthly rent and utilities are due each cycle. Default first of month. */
   rentDueDayMode?: "first_of_month" | "last_of_month";
   /** Automatically assess a late fee after grace period on overdue rent/utilities. Default on. */
@@ -221,6 +244,37 @@ export type ManagerListingSubmissionV1 = {
   /** Resident-facing service request options for this property. */
   serviceRequestOptions?: ManagerListingServiceOption[];
 };
+
+const LEASE_TERM_OPTION_SET = new Set<string>(LEASE_TERM_OPTIONS);
+
+/** Fee fields must be filled with a dollar amount; use 0 when there is no charge. */
+export function isListingFeeAmountFilled(raw: string): boolean {
+  const t = String(raw ?? "")
+    .replace(/^\$/, "")
+    .trim();
+  if (!t) return false;
+  if (/^waived$/i.test(t)) return false;
+  if (!/[\d]/.test(t)) return false;
+  const n = parseMoneyAmount(t);
+  return Number.isFinite(n) && n >= 0;
+}
+
+export function formatLeaseTermsBodyFromAllowed(terms: string[]): string {
+  const clean = terms.filter((t) => LEASE_TERM_OPTION_SET.has(t));
+  if (clean.length === 0) return "";
+  return `Available lease lengths: ${clean.join(", ")}.`;
+}
+
+export function resolveAllowedLeaseTerms(
+  sub: Pick<ManagerListingSubmissionV1, "allowedLeaseTerms" | "leaseTermsBody"> | null | undefined,
+): string[] {
+  const fromArray = (sub?.allowedLeaseTerms ?? []).filter((t) => LEASE_TERM_OPTION_SET.has(t));
+  if (fromArray.length > 0) return fromArray;
+  const body = sub?.leaseTermsBody?.trim() ?? "";
+  if (!body) return [];
+  const found = LEASE_TERM_OPTIONS.filter((opt) => body.toLowerCase().includes(opt.toLowerCase()));
+  return [...found];
+}
 
 export type ManagerListingServiceOption = {
   id: string;
@@ -277,23 +331,105 @@ export function entireHomeMonthlyRentAmount(sub: Pick<ManagerListingSubmissionV1
   return sub.rooms.reduce((max, room) => Math.max(max, room.monthlyRent > 0 ? room.monthlyRent : 0), 0);
 }
 
-/** Store one lease rent on the first named room; clear per-room rents elsewhere. */
-export function syncEntireHomeRoomRents(
+export type EntireHomePricingPatch = Partial<
+  Pick<
+    ManagerListingSubmissionV1,
+    | "entireHomeMonthlyRent"
+    | "entireHomeUtilitiesEstimate"
+    | "entireHomeProrateMethod"
+    | "entireHomeDailyRentRate"
+    | "entireHomeDailyUtilitiesRate"
+  >
+>;
+
+/** Store entire-home lease pricing on the first named room; clear per-room amounts elsewhere. */
+export function syncEntireHomeRoomPricing(
   rooms: ManagerRoomSubmission[],
-  rent: number,
+  pricing: {
+    rent: number;
+    utilitiesEstimate?: string;
+    prorateMethod?: "auto" | "daily_rate";
+    dailyRentRate?: number;
+    dailyUtilitiesRate?: number;
+  },
 ): ManagerRoomSubmission[] {
-  const amount = Math.max(0, Math.round(rent));
-  if (amount <= 0) {
-    return rooms.map((room) => ({ ...room, monthlyRent: 0 }));
-  }
+  const amount = Math.max(0, Math.round(pricing.rent));
+  const utils = pricing.utilitiesEstimate ?? "";
+  const prorate = pricing.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
   let assigned = false;
   return rooms.map((room) => {
     if (!assigned && room.name.trim()) {
       assigned = true;
-      return { ...room, monthlyRent: amount };
+      return {
+        ...room,
+        monthlyRent: amount,
+        utilitiesEstimate: utils,
+        prorateMethod: prorate,
+        dailyRentRate: prorate === "daily_rate" ? pricing.dailyRentRate : undefined,
+        dailyUtilitiesRate: prorate === "daily_rate" ? pricing.dailyUtilitiesRate : undefined,
+      };
     }
-    return { ...room, monthlyRent: 0 };
+    return {
+      ...room,
+      monthlyRent: 0,
+      utilitiesEstimate: "",
+      prorateMethod: "auto" as const,
+      dailyRentRate: undefined,
+      dailyUtilitiesRate: undefined,
+    };
   });
+}
+
+/** @deprecated Use syncEntireHomeRoomPricing */
+export function syncEntireHomeRoomRents(rooms: ManagerRoomSubmission[], rent: number): ManagerRoomSubmission[] {
+  return syncEntireHomeRoomPricing(rooms, { rent });
+}
+
+function primaryEntireHomeRoom(rooms: ManagerRoomSubmission[]): ManagerRoomSubmission | undefined {
+  return rooms.find((r) => r.name.trim());
+}
+
+/** Apply entire-home rent + utilities + proration (fields + first-room sync). */
+export function applyEntireHomeListingPricing(
+  sub: ManagerListingSubmissionV1,
+  patch: EntireHomePricingPatch = {},
+): ManagerListingSubmissionV1 {
+  const primary = primaryEntireHomeRoom(sub.rooms);
+  const merged: ManagerListingSubmissionV1 = {
+    ...sub,
+    ...patch,
+    listingPlaceCategoryId: "entire_home",
+    entireHomeMonthlyRent:
+      patch.entireHomeMonthlyRent !== undefined
+        ? Math.max(0, Math.round(Number(patch.entireHomeMonthlyRent) || 0))
+        : sub.entireHomeMonthlyRent,
+    entireHomeUtilitiesEstimate:
+      patch.entireHomeUtilitiesEstimate !== undefined
+        ? patch.entireHomeUtilitiesEstimate
+        : (sub.entireHomeUtilitiesEstimate ?? primary?.utilitiesEstimate ?? ""),
+    entireHomeProrateMethod:
+      patch.entireHomeProrateMethod !== undefined
+        ? patch.entireHomeProrateMethod
+        : (sub.entireHomeProrateMethod ?? primary?.prorateMethod ?? "auto"),
+    entireHomeDailyRentRate:
+      patch.entireHomeDailyRentRate !== undefined ? patch.entireHomeDailyRentRate : sub.entireHomeDailyRentRate,
+    entireHomeDailyUtilitiesRate:
+      patch.entireHomeDailyUtilitiesRate !== undefined
+        ? patch.entireHomeDailyUtilitiesRate
+        : sub.entireHomeDailyUtilitiesRate,
+  };
+  const rent = entireHomeMonthlyRentAmount(merged);
+  return {
+    ...merged,
+    entireHomeMonthlyRent: rent,
+    rooms: syncEntireHomeRoomPricing(merged.rooms, {
+      rent,
+      utilitiesEstimate: merged.entireHomeUtilitiesEstimate ?? "",
+      prorateMethod: merged.entireHomeProrateMethod ?? "auto",
+      dailyRentRate: merged.entireHomeDailyRentRate,
+      dailyUtilitiesRate: merged.entireHomeDailyUtilitiesRate,
+    }),
+  };
 }
 
 /** Apply entire-home rent to submission state (field + room sync). */
@@ -301,13 +437,7 @@ export function applyEntireHomeMonthlyRent(
   sub: ManagerListingSubmissionV1,
   rent: number,
 ): ManagerListingSubmissionV1 {
-  const amount = Math.max(0, Math.round(Number(rent) || 0));
-  return {
-    ...sub,
-    listingPlaceCategoryId: "entire_home",
-    entireHomeMonthlyRent: amount,
-    rooms: syncEntireHomeRoomRents(sub.rooms, amount),
-  };
+  return applyEntireHomeListingPricing(sub, { entireHomeMonthlyRent: Math.max(0, Math.round(Number(rent) || 0)) });
 }
 
 /** Coerces older saved submissions into the current v1 shape (preserves listing data where possible). */
@@ -567,17 +697,28 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
           ? ((ss as ManagerSharedSpaceSubmission & { videoDataUrl?: string }).videoDataUrl || null)
           : null,
       roomAccessIds: Array.isArray(ss.roomAccessIds) ? [...ss.roomAccessIds] : [],
+      spaceKind: normalizeSharedSpaceKind(
+        (ss as ManagerSharedSpaceSubmission & { spaceKind?: unknown }).spaceKind,
+        typeof ss.name === "string" ? ss.name : "",
+      ),
     }));
   }
 
   const zelleEnabled = Boolean(sub.zellePaymentsEnabled && sub.zelleContact?.trim());
   const venmoEnabled = Boolean(sub.venmoPaymentsEnabled && sub.venmoContact?.trim());
+  const otherChannelActive = Boolean(
+    sub.applicationFeeOtherEnabled &&
+      typeof sub.applicationFeeOtherInstructions === "string" &&
+      sub.applicationFeeOtherInstructions.trim(),
+  );
   let applicationFeeStripeEnabled =
     typeof sub.applicationFeeStripeEnabled === "boolean" ? sub.applicationFeeStripeEnabled : true;
   let applicationFeeZelleEnabled =
     typeof sub.applicationFeeZelleEnabled === "boolean" ? sub.applicationFeeZelleEnabled : zelleEnabled;
   let applicationFeeVenmoEnabled =
     typeof sub.applicationFeeVenmoEnabled === "boolean" ? sub.applicationFeeVenmoEnabled : venmoEnabled;
+  let applicationFeeOtherEnabled =
+    typeof sub.applicationFeeOtherEnabled === "boolean" ? sub.applicationFeeOtherEnabled : false;
   if (!sub.zellePaymentsEnabled) {
     applicationFeeZelleEnabled = false;
   }
@@ -585,15 +726,25 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     applicationFeeVenmoEnabled = false;
   }
   if (
-    (zelleEnabled || venmoEnabled) &&
+    (zelleEnabled || venmoEnabled || otherChannelActive) &&
     !applicationFeeStripeEnabled &&
     !applicationFeeZelleEnabled &&
-    !applicationFeeVenmoEnabled
+    !applicationFeeVenmoEnabled &&
+    !applicationFeeOtherEnabled
   ) {
     applicationFeeStripeEnabled = true;
     applicationFeeZelleEnabled = zelleEnabled;
     applicationFeeVenmoEnabled = venmoEnabled;
+    applicationFeeOtherEnabled = otherChannelActive;
   }
+
+  const allowedLeaseTerms = resolveAllowedLeaseTerms(sub);
+  const leaseTermsBody =
+    allowedLeaseTerms.length > 0
+      ? formatLeaseTermsBodyFromAllowed(allowedLeaseTerms)
+      : typeof sub.leaseTermsBody === "string"
+        ? sub.leaseTermsBody
+        : "";
 
   const housePhotoDataUrls = Array.isArray(sub.housePhotoDataUrls)
     ? sub.housePhotoDataUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0).slice(0, 12)
@@ -614,12 +765,26 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       ? Math.round(sub.entireHomeMonthlyRent)
       : 0;
 
+  const primaryRoom = rooms.find((r) => r.name.trim());
+  let entireHomeUtilitiesEstimate =
+    typeof sub.entireHomeUtilitiesEstimate === "string" ? sub.entireHomeUtilitiesEstimate : (primaryRoom?.utilitiesEstimate ?? "");
+  let entireHomeProrateMethod: "auto" | "daily_rate" =
+    sub.entireHomeProrateMethod === "daily_rate" ? "daily_rate" : (primaryRoom?.prorateMethod === "daily_rate" ? "daily_rate" : "auto");
+  let entireHomeDailyRentRate = sub.entireHomeDailyRentRate ?? primaryRoom?.dailyRentRate;
+  let entireHomeDailyUtilitiesRate = sub.entireHomeDailyUtilitiesRate ?? primaryRoom?.dailyUtilitiesRate;
+
   let normalizedRooms = rooms;
   if (isEntireHomeListing({ listingPlaceCategoryId })) {
     if (entireHomeMonthlyRent <= 0) {
       entireHomeMonthlyRent = rooms.reduce((max, r) => Math.max(max, r.monthlyRent > 0 ? r.monthlyRent : 0), 0);
     }
-    normalizedRooms = syncEntireHomeRoomRents(rooms, entireHomeMonthlyRent);
+    normalizedRooms = syncEntireHomeRoomPricing(rooms, {
+      rent: entireHomeMonthlyRent,
+      utilitiesEstimate: entireHomeUtilitiesEstimate,
+      prorateMethod: entireHomeProrateMethod,
+      dailyRentRate: entireHomeDailyRentRate,
+      dailyUtilitiesRate: entireHomeDailyUtilitiesRate,
+    });
   }
 
   const next = {
@@ -627,6 +792,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     listingPropertyTypeId: typeof sub.listingPropertyTypeId === "string" ? sub.listingPropertyTypeId : "",
     listingPlaceCategoryId,
     entireHomeMonthlyRent: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeMonthlyRent : undefined,
+    entireHomeUtilitiesEstimate: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeUtilitiesEstimate : undefined,
+    entireHomeProrateMethod: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeProrateMethod : undefined,
+    entireHomeDailyRentRate: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeDailyRentRate : undefined,
+    entireHomeDailyUtilitiesRate: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeDailyUtilitiesRate : undefined,
     listingStoriesId: typeof sub.listingStoriesId === "string" ? sub.listingStoriesId : "",
     listingTotalBathroomsId: typeof sub.listingTotalBathroomsId === "string" ? sub.listingTotalBathroomsId : "",
     listingBedroomSlots,
@@ -634,12 +803,18 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     houseRulesText: typeof sub.houseRulesText === "string" ? sub.houseRulesText : "",
     houseDescription: typeof sub.houseDescription === "string" ? sub.houseDescription : undefined,
     generalHouseInfo: typeof sub.generalHouseInfo === "string" ? sub.generalHouseInfo : "",
+    houseMoveInAvailableDate:
+      typeof sub.houseMoveInAvailableDate === "string" ? sub.houseMoveInAvailableDate.trim() : "",
+    houseMoveInInstructions:
+      typeof sub.houseMoveInInstructions === "string" ? sub.houseMoveInInstructions.trim() : "",
     shortTermRentalsAllowed: Boolean(sub.shortTermRentalsAllowed),
     shortTermRequirements: typeof sub.shortTermRequirements === "string" ? sub.shortTermRequirements : "",
     shortTermDailyCost: typeof sub.shortTermDailyCost === "string" ? sub.shortTermDailyCost : "",
     shortTermDeposit: typeof sub.shortTermDeposit === "string" ? sub.shortTermDeposit : "",
     shortTermMoveInFee: typeof sub.shortTermMoveInFee === "string" ? sub.shortTermMoveInFee : "",
     monthToMonthSurcharge: typeof sub.monthToMonthSurcharge === "string" ? sub.monthToMonthSurcharge : "",
+    allowedLeaseTerms,
+    leaseTermsBody,
     paymentAtSigningIncludes,
     rooms: normalizedRooms,
     bathrooms,
@@ -650,6 +825,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,
     applicationFeeVenmoEnabled,
+    applicationFeeOtherEnabled,
+    applicationFeeOtherInstructions:
+      typeof sub.applicationFeeOtherInstructions === "string" ? sub.applicationFeeOtherInstructions : "",
     rentDueDayMode: sub.rentDueDayMode === "last_of_month" ? "last_of_month" : "first_of_month",
     lateFeeEnabled: sub.lateFeeEnabled !== false,
     lateFeeGraceDays: (() => {
@@ -745,9 +923,11 @@ export function emptyBathroom(index: number): ManagerBathroomSubmission {
 }
 
 export function emptySharedSpace(index: number): ManagerSharedSpaceSubmission {
+  const name = index === 0 ? "Kitchen & dining" : `Shared space ${index + 1}`;
   return {
     id: rid("sspace"),
-    name: index === 0 ? "Kitchen & dining" : `Shared space ${index + 1}`,
+    name,
+    spaceKind: index === 0 ? "kitchen" : inferSharedSpaceKind(name) ?? "other",
     location: "",
     detail: "",
     amenitiesText: "",
@@ -832,6 +1012,25 @@ export function applyListingBedroomSlots(
   return { ok: true, sub: { ...sub, listingBedroomSlots: clamped } };
 }
 
+export function createDefaultListingServiceOptions(): ManagerListingServiceOption[] {
+  const now = new Date().toISOString();
+  const defaults = [
+    { name: "Weekly cleaning", description: "Regular cleaning of your room or shared areas." },
+    { name: "Linen refresh", description: "Fresh sheets and towels on request." },
+    { name: "Parking pass", description: "On-site or street parking access." },
+    { name: "Storage locker", description: "Personal storage space on the property." },
+  ];
+  return defaults.map((d, i) => ({
+    id: `offer-default-${i}`,
+    name: d.name,
+    description: d.description,
+    price: "",
+    deposit: "",
+    available: true,
+    createdAt: now,
+  }));
+}
+
 export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
   return {
     v: 1,
@@ -852,6 +1051,7 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     houseVideoDataUrl: null,
     houseRulesText: "",
     leaseTermsBody: "",
+    allowedLeaseTerms: [],
     shortTermRentalsAllowed: false,
     shortTermRequirements: "",
     shortTermDailyCost: "",
@@ -873,6 +1073,10 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     applicationFeeStripeEnabled: true,
     applicationFeeZelleEnabled: false,
     applicationFeeVenmoEnabled: false,
+    applicationFeeOtherEnabled: false,
+    applicationFeeOtherInstructions: "",
+    houseMoveInAvailableDate: "",
+    houseMoveInInstructions: "",
     rentDueDayMode: "first_of_month",
     lateFeeEnabled: true,
     lateFeeGraceDays: 5,
