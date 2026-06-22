@@ -10,7 +10,7 @@ export function PropertyDetailActions({ propertyId }: { propertyId: string }) {
           Browse all rooms
         </Button>
       </Link>
-      <Link href="/rent/tours-contact">
+      <Link href={`/rent/tours-contact?propertyId=${encodeURIComponent(propertyId)}`}>
         <Button type="button" variant="outline" className="w-full sm:w-auto">
           Schedule tour
         </Button>

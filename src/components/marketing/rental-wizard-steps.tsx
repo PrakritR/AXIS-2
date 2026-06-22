@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { PropertySearchPicker } from "@/components/marketing/property-search-picker";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
 import { axisAchFeeDisplayLabel } from "@/lib/payment-policy";
 import {
@@ -302,6 +303,16 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const shortTermAllowed = propertyAllowsShortTermRental(form.propertyId);
     const rooms = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true }).filter((o) => o.value !== "");
     const roomsWithNone = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true });
+    const propertySearchOptions = propertyOptions.map((o) => {
+      const prop = getPropertyById(o.value);
+      return {
+        id: o.value,
+        title: o.label,
+        subtitle: prop?.address,
+        tags: prop ? [prop.neighborhood, prop.rentLabel].filter(Boolean) : undefined,
+        searchText: prop ? `${prop.title} ${prop.address} ${prop.neighborhood} ${prop.buildingName} ${prop.zip}` : o.label,
+      };
+    });
     const room1ApprovedConflict = form.roomChoice1
       ? isRoomApprovedConflict(form.roomChoice1, form.leaseStart, form.leaseEnd)
       : false;
@@ -322,22 +333,18 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <Label htmlFor="propertyId" required>
             Property name
           </Label>
-          <Select
-            id="propertyId"
-            value={form.propertyId}
-            onChange={(e) => {
-              const pid = e.target.value;
+          <PropertySearchPicker
+            options={propertySearchOptions}
+            value={form.propertyId || null}
+            onChange={(id) => {
+              const pid = id ?? "";
               patch({ propertyId: pid, roomChoice1: "", roomChoice2: "", roomChoice3: "", rentalType: "standard" });
             }}
-            className={errors.propertyId ? "border-red-400 ring-2 ring-red-100" : ""}
-          >
-            <option value="">Select a property</option>
-            {propertyOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
+            placeholder="Search by address, neighborhood, or property name…"
+            emptyMessage="No properties match your search."
+            listEmptyMessage="No properties available to apply for."
+            ariaLabel="Search properties to apply for"
+          />
           <FieldError msg={errors.propertyId} />
         </div>
 

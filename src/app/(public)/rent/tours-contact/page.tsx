@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { mockProperties } from "@/data/mock-properties";
 import type { MockProperty } from "@/data/types";
@@ -17,6 +18,11 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import Link from "next/link";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
+import {
+  PropertySearchPicker,
+  buildingGroupsToSearchOptions,
+  type PropertySearchOption,
+} from "@/components/marketing/property-search-picker";
 
 type Tab = "tour" | "message";
 type TourStep = 1 | 2 | 3;
@@ -117,8 +123,10 @@ function openSlotIndicesForDateStr(availability: Set<string>, dateStr: string): 
 
 export default function ToursContactPage() {
   const { showToast } = useAppUi();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("tour");
   const [extras, setExtras] = useState<MockProperty[]>([]);
+  const initialPropertyId = searchParams.get("propertyId")?.trim() || null;
 
   useEffect(() => {
     const sync = () => {
@@ -152,7 +160,11 @@ export default function ToursContactPage() {
 
         <div key={tab} className="animate-fade-in">
           {tab === "tour" ? (
-            <TourFlow properties={publicProperties} onSuccess={() => showToast("Tour booked.")} />
+            <TourFlow
+              properties={publicProperties}
+              initialPropertyId={initialPropertyId}
+              onSuccess={() => showToast("Tour booked.")}
+            />
           ) : (
             <MessageFlow properties={publicProperties} onSuccess={() => showToast("Message sent.")} />
           )}
@@ -165,7 +177,15 @@ export default function ToursContactPage() {
 /* ────────────────────────────────────────────────────────────
    TOUR FLOW
 ──────────────────────────────────────────────────────────── */
-function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuccess: () => void }) {
+function TourFlow({
+  properties,
+  initialPropertyId,
+  onSuccess,
+}: {
+  properties: MockProperty[];
+  initialPropertyId?: string | null;
+  onSuccess: () => void;
+}) {
   const { showToast } = useAppUi();
   const [step, setStep] = useState<TourStep>(1);
   const [submitted, setSubmitted] = useState(false);
@@ -188,6 +208,15 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [bookingTour, setBookingTour] = useState(false);
   const buildings = useMemo(() => groupByBuilding(properties), [properties]);
+
+  useEffect(() => {
+    const pid = initialPropertyId?.trim();
+    if (!pid) return;
+    const property = properties.find((p) => p.id === pid);
+    if (!property) return;
+    setSelectedBuildingId(property.buildingId);
+    setStep1Phase("room");
+  }, [initialPropertyId, properties]);
 
   useEffect(() => {
     const sync = () => setTick((n) => n + 1);
@@ -371,6 +400,14 @@ function TourFlow({ properties, onSuccess }: { properties: MockProperty[]; onSuc
               setStep1Phase("property");
             }}
             onSelectRoom={(p, roomKey) => {
+              if (!p || !roomKey) {
+                setSelectedProperty(null);
+                setSelectedRoomKey(null);
+                setSlotHosts({});
+                setSelectedDay(null);
+                setSelectedSlotIndex(null);
+                return;
+              }
               setSelectedProperty(p);
               setSelectedBuildingId(p.buildingId);
               setSelectedRoomKey(roomKey);
@@ -551,45 +588,26 @@ function Step1({
   selectedBuildingId: string | null;
   onSelectBuilding: (buildingId: string) => void;
   onBackToProperties: () => void;
-  onSelectRoom: (p: MockProperty, roomKey: string) => void;
+  onSelectRoom: (p: MockProperty | null, roomKey: string | null) => void;
   selectedRoomKey: string | null;
 }) {
+  const buildingOptions = useMemo(() => buildingGroupsToSearchOptions(buildings), [buildings]);
+
   if (phase === "property") {
     return (
       <div className="space-y-3">
         <p className="text-sm text-slate-500">Choose a property to tour. You&apos;ll pick a specific room next.</p>
-        {buildings.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-            No listed housing is available for tours right now.
-          </div>
-        ) : null}
-        {buildings.map((b) => {
-          const count = b.units.length;
-          return (
-            <button
-              key={b.buildingId}
-              type="button"
-              onClick={() => onSelectBuilding(b.buildingId)}
-              className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all duration-150 hover:border-slate-300 hover:bg-slate-50"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{b.buildingName}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{b.address}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Chip>{b.neighborhood}</Chip>
-                    <Chip>
-                      {count} {count === 1 ? "room" : "rooms"} available
-                    </Chip>
-                  </div>
-                </div>
-                <span className="mt-0.5 shrink-0 text-slate-400" aria-hidden>
-                  <ChevronRightIcon />
-                </span>
-              </div>
-            </button>
-          );
-        })}
+        <PropertySearchPicker
+          options={buildingOptions}
+          value={selectedBuildingId}
+          onChange={(id) => {
+            if (id) onSelectBuilding(id);
+          }}
+          placeholder="Search by address, neighborhood, or property name…"
+          listEmptyMessage="No listed housing is available for tours right now."
+          emptyMessage="No properties match your search. Try an address or neighborhood."
+          ariaLabel="Search properties to tour"
+        />
       </div>
     );
   }
@@ -598,6 +616,16 @@ function Step1({
   if (!building) {
     return <p className="text-sm text-slate-500">Select a property to see available rooms.</p>;
   }
+
+  const roomOptions: PropertySearchOption[] = building.units.flatMap((p) =>
+    roomOptionsForProperty(p).map((option) => ({
+      id: option.key,
+      title: option.label,
+      subtitle: option.subtitle,
+      tags: [p.address, p.neighborhood, `Available ${p.available}`],
+      searchText: `${option.label} ${option.subtitle} ${p.address} ${p.neighborhood} ${p.rentLabel}`,
+    })),
+  );
 
   return (
     <div className="space-y-3">
@@ -613,47 +641,24 @@ function Step1({
           ← All properties
         </button>
       </div>
-      {building.units.flatMap((p) => roomOptionsForProperty(p)).map((option) => {
-        const p = option.property;
-        const isSelected = selectedRoomKey === option.key;
-        return (
-          <button
-            key={option.key}
-            type="button"
-            onClick={() => onSelectRoom(p, option.key)}
-            className={`w-full rounded-2xl border p-4 text-left transition-all duration-150 ${
-              isSelected
-                ? "border-primary bg-primary/[0.08] ring-2 ring-primary/20"
-                : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  {option.label}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">{option.subtitle}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Chip>{p.address}</Chip>
-                  <Chip>{p.neighborhood}</Chip>
-                  <Chip>Available {p.available}</Chip>
-                </div>
-              </div>
-              <div
-                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                  isSelected ? "border-primary bg-primary" : "border-slate-300 bg-white"
-                }`}
-              >
-                {isSelected && (
-                  <span className="text-white">
-                    <CheckSmIcon />
-                  </span>
-                )}
-              </div>
-            </div>
-          </button>
-        );
-      })}
+      <PropertySearchPicker
+        options={roomOptions}
+        value={selectedRoomKey}
+        onChange={(roomKey) => {
+          if (!roomKey) {
+            onSelectRoom(null, null);
+            return;
+          }
+          const hit = building.units
+            .flatMap((p) => roomOptionsForProperty(p).map((o) => ({ ...o, property: p })))
+            .find((o) => o.key === roomKey);
+          if (hit) onSelectRoom(hit.property, roomKey);
+        }}
+        placeholder="Search rooms by name, floor, or rent…"
+        emptyMessage="No rooms match your search."
+        listEmptyMessage="No rooms listed for this property."
+        ariaLabel="Search rooms to tour"
+      />
     </div>
   );
 }
@@ -919,38 +924,31 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
       {/* Property context */}
       <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <h2 className="text-base font-bold text-slate-900">Property context</h2>
+        <p className="mt-1 text-sm text-slate-500">Optional — helps us answer about a specific listing.</p>
 
         {msgPhase === "building" ? (
-          <div className="mt-4 space-y-2">
-            {buildings.map((b) => {
-              const count = b.units.length;
-              return (
-                <button
-                  key={b.buildingId}
-                  type="button"
-                  onClick={() => {
-                    setMsgBuildingId(b.buildingId);
-                    setSelectedProperty(null);
-                    setMsgPhase("room");
-                  }}
-                  className="flex w-full items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-left text-sm text-slate-700 transition-all hover:border-slate-200 hover:bg-white"
-                >
-                  <span>
-                    <span className="font-semibold text-slate-900">{b.buildingName}</span>
-                    <span className="mt-0.5 block text-xs text-slate-500">{b.address}</span>
-                    <span className="mt-1.5 inline-block text-[11px] font-medium text-slate-500">
-                      {b.neighborhood} · {count} {count === 1 ? "room" : "rooms"}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-slate-400" aria-hidden>
-                    <ChevronRightIcon />
-                  </span>
-                </button>
-              );
-            })}
+          <div className="mt-4">
+            <PropertySearchPicker
+              options={buildingGroupsToSearchOptions(buildings)}
+              value={msgBuildingId}
+              onChange={(id) => {
+                if (!id) {
+                  setMsgBuildingId(null);
+                  setSelectedProperty(null);
+                  return;
+                }
+                setMsgBuildingId(id);
+                setSelectedProperty(null);
+                setMsgPhase("room");
+              }}
+              placeholder="Search by address, neighborhood, or property name…"
+              emptyMessage="No properties match your search."
+              listEmptyMessage="No properties available."
+              ariaLabel="Search properties for message context"
+            />
           </div>
         ) : (
-          <div className="mt-4 rounded-2xl border border-[#e0e4ec] bg-[#f8fafc] p-4 shadow-sm">
+          <div className="mt-4 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-semibold text-slate-800">
                 {msgBuilding ? `Rooms at ${msgBuilding.buildingName}` : "Choose a room"}
@@ -968,33 +966,31 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
               </button>
             </div>
             {msgBuilding ? (
-              <div className="mt-3 space-y-2">
-                {msgBuilding.units.map((p) => {
-                  const isSelected = selectedProperty?.id === p.id;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedProperty(isSelected ? null : p);
-                        setMsgBuildingId(p.buildingId);
-                      }}
-                      className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                        isSelected
-                          ? "border-primary bg-white text-primary ring-2 ring-primary/15"
-                          : "border-slate-200/80 bg-white text-slate-700 hover:border-slate-300"
-                      }`}
-                    >
-                      <span className="font-semibold">
-                        {p.buildingName} · {p.unitLabel}
-                      </span>
-                      <span className="ml-2 text-xs opacity-80">
-                        {p.neighborhood} · {p.rentLabel}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <PropertySearchPicker
+                options={msgBuilding.units.map((p) => ({
+                  id: p.id,
+                  title: `${p.buildingName} · ${p.unitLabel}`,
+                  subtitle: p.address,
+                  tags: [p.neighborhood, p.rentLabel],
+                  searchText: `${p.title} ${p.address} ${p.neighborhood} ${p.rentLabel}`,
+                }))}
+                value={selectedProperty?.id ?? null}
+                onChange={(propertyId) => {
+                  if (!propertyId) {
+                    setSelectedProperty(null);
+                    return;
+                  }
+                  const hit = msgBuilding.units.find((p) => p.id === propertyId);
+                  if (hit) {
+                    setSelectedProperty(hit);
+                    setMsgBuildingId(hit.buildingId);
+                  }
+                }}
+                placeholder="Search rooms by name, neighborhood, or rent…"
+                emptyMessage="No rooms match your search."
+                listEmptyMessage="No rooms listed for this property."
+                ariaLabel="Search rooms for message context"
+              />
             ) : null}
           </div>
         )}
@@ -1050,13 +1046,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Chip({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
-      {children}
-    </span>
-  );
-}
 
 const inputCls =
   "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all duration-150 placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15 hover:border-slate-300";
