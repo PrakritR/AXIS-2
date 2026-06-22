@@ -3,16 +3,34 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-const markTileClass =
-  "flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] border border-[var(--glass-border)] bg-[var(--glass-fill)] shadow-[var(--shadow-card)] backdrop-blur-xl [background-image:linear-gradient(145deg,rgba(255,255,255,0.92)_0%,rgba(188,212,255,0.35)_100%)]";
+const markTileBase =
+  "flex shrink-0 items-center justify-center border border-[var(--glass-border)] bg-[var(--glass-fill)] shadow-[var(--shadow-card)] backdrop-blur-xl [background-image:linear-gradient(145deg,rgba(255,255,255,0.92)_0%,rgba(188,212,255,0.35)_100%)]";
+
+const markTileSizes = {
+  default: "h-14 w-14 rounded-[18px]",
+  compact: "h-10 w-10 rounded-[14px]",
+} as const;
+
+const glyphSizes = {
+  default: "h-[28px] w-[46px]",
+  compact: "h-[20px] w-[33px]",
+} as const;
+
+export type AxisLogoSize = keyof typeof markTileSizes;
 
 export type AxisLogoVariant = "default" | "portalHeader" | "adminHeader";
 
 /** Inline "AX": quieter architectural mark with a balanced A and a brighter brand X. */
-function AxisLogoGlyph({ className = "" }: { className?: string }) {
+function AxisLogoGlyph({
+  className = "",
+  size = "default",
+}: {
+  className?: string;
+  size?: AxisLogoSize;
+}) {
   return (
     <svg
-      className={`block h-[28px] w-[46px] shrink-0 ${className}`}
+      className={`block shrink-0 ${glyphSizes[size]} ${className}`}
       viewBox="0 0 46 26"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
@@ -47,14 +65,16 @@ function AxisLogoGlyph({ className = "" }: { className?: string }) {
 export function AxisLogoMark({
   className = "",
   variant,
+  size = "default",
 }: {
   className?: string;
   variant?: AxisLogoVariant;
+  size?: AxisLogoSize;
 }) {
   void variant;
   return (
-    <div className={`${markTileClass} ${className}`} aria-hidden>
-      <AxisLogoGlyph />
+    <div className={`${markTileBase} ${markTileSizes[size]} ${className}`} aria-hidden>
+      <AxisLogoGlyph size={size} />
     </div>
   );
 }
@@ -65,7 +85,7 @@ export function AxisLogoMark({
  */
 export function AxisHeaderMarkTile({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`${markTileClass} text-foreground ${className}`} aria-hidden>
+    <div className={`${markTileBase} ${markTileSizes.default} text-foreground ${className}`} aria-hidden>
       {children}
     </div>
   );
@@ -83,11 +103,19 @@ export function AxisLogoMarkSoft({ className = "" }: { className?: string }) {
   );
 }
 
-export function AxisLogoWordmark() {
+export function AxisLogoWordmark({ size = "default" }: { size?: AxisLogoSize }) {
   return (
     <span className="leading-none">
-      <span className="block text-[17px] font-semibold tracking-[-0.035em] text-foreground">Axis</span>
-      <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.22em] text-muted">Housing</span>
+      <span
+        className={`block font-semibold tracking-[-0.035em] text-foreground ${size === "compact" ? "text-[15px]" : "text-[17px]"}`}
+      >
+        Axis
+      </span>
+      <span
+        className={`mt-0.5 block font-semibold uppercase tracking-[0.22em] text-muted ${size === "compact" ? "text-[9px]" : "text-[10px]"}`}
+      >
+        Housing
+      </span>
     </span>
   );
 }
@@ -95,14 +123,16 @@ export function AxisLogoWordmark() {
 export function AxisLogoLink({
   href = "/",
   variant = "default",
+  size = "default",
 }: {
   href?: string;
   variant?: AxisLogoVariant;
+  size?: AxisLogoSize;
 }) {
   return (
-    <Link href={href} className="flex items-center gap-3">
-      <AxisLogoMark variant={variant} />
-      <AxisLogoWordmark />
+    <Link href={href} className={`flex items-center ${size === "compact" ? "gap-2" : "gap-3"}`}>
+      <AxisLogoMark variant={variant} size={size} />
+      <AxisLogoWordmark size={size} />
     </Link>
   );
 }

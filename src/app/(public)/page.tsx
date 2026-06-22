@@ -5,8 +5,6 @@ import {
   LandingFinalCta,
   LandingHowItWorks,
 } from "@/components/marketing/landing-sections";
-import { ProductPreviewShell } from "@/components/marketing/product-preview-shell";
-import { RevealOnView } from "@/components/motion/reveal-on-view";
 
 export default function HomePage() {
   return (
@@ -15,10 +13,6 @@ export default function HomePage() {
         <ChromeSubstrate variant="full" />
         <LandingHero />
       </div>
-
-      <RevealOnView className="relative -mt-4 pb-16 pt-8 sm:-mt-6 sm:pb-20 sm:pt-10">
-        <ProductPreviewShell mode="static" scene="manager" />
-      </RevealOnView>
 
       <LandingAudienceBento />
       <LandingHowItWorks />

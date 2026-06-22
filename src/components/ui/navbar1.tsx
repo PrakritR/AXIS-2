@@ -83,7 +83,11 @@ export function Navbar1({
           <Button asChild variant="outline" size="sm">
             <Link href={auth.login.url}>{auth.login.text}</Link>
           </Button>
-          <Button asChild size="sm">
+          <Button
+            asChild
+            size="sm"
+            className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
+          >
             <Link href={auth.signup.url}>{auth.signup.text}</Link>
           </Button>
         </div>
@@ -115,7 +119,10 @@ export function Navbar1({
                 <Button asChild variant="outline">
                   <Link href={auth.login.url}>{auth.login.text}</Link>
                 </Button>
-                <Button asChild>
+                <Button
+                  asChild
+                  className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
+                >
                   <Link href={auth.signup.url}>{auth.signup.text}</Link>
                 </Button>
               </div>

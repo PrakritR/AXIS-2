@@ -10,10 +10,11 @@ export function ChromeSubstrate({ variant = "quiet" }: { variant?: "full" | "qui
 
   return (
     <div className="chrome-substrate-full pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden>
-      <div className="chrome-substrate-full__flow chrome-flow absolute inset-[-30%]" />
-      <div className="chrome-substrate-full__overlay chrome-shift absolute inset-[-20%]" />
+      <div className="chrome-substrate-full__flow chrome-flow absolute inset-[-55%]" />
+      <div className="chrome-substrate-full__overlay chrome-shift absolute inset-[-55%]" />
       <div className="chrome-substrate-full__gloss absolute inset-x-0 top-0" />
       <div className="chrome-substrate-full__wash absolute inset-0" />
+      <div className="chrome-substrate-full__line absolute inset-x-0 top-0" />
     </div>
   );
 }
