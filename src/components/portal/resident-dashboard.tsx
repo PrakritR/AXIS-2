@@ -122,8 +122,7 @@ export function ResidentDashboard({
   const initialEmail = residentEmail.trim().toLowerCase();
   const session = usePortalSession({ userId: residentUserId, email: initialEmail || null });
   const email = session.email?.trim().toLowerCase() || initialEmail;
-  const managerIsFree = managerSubscriptionTier === "free";
-  const canUseFullPortal = applicationApproved && !managerIsFree;
+  const canUseFullPortal = applicationApproved;
 
   const [appStatus, setAppStatus] = useState<AppStatus>(applicationApproved ? "approved" : "pending");
   const [appStage, setAppStage] = useState(applicationApproved ? "Approved" : "Submitted");
@@ -251,10 +250,10 @@ export function ResidentDashboard({
   } else if (appStatus === "approved") {
     statusTone = "border-emerald-200/70 bg-emerald-50/80 text-emerald-950";
     statusCopy = appProperty && appRoom
-      ? `Approved for ${appProperty} - ${appRoom}.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`
+      ? `Approved for ${appProperty} - ${appRoom}.`
       : appProperty
-      ? `Approved for ${appProperty}.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`
-      : `Approved and active.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`;
+      ? `Approved for ${appProperty}.`
+      : "Approved and active.";
   } else if (appStatus === "rejected") {
     statusTone = "border-rose-200/70 bg-rose-50/80 text-rose-950";
     statusCopy = "Your most recent application is marked rejected. Contact your manager if you need help or want to reapply.";

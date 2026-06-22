@@ -32,6 +32,9 @@ describe("manager-access", () => {
 
   it("gates free-tier sections", () => {
     expect(managerSectionAllowedForTier("properties", "free")).toBe(true);
+    expect(managerSectionAllowedForTier("residents", "free")).toBe(false);
+    expect(managerSectionAllowedForTier("leases", "free")).toBe(false);
+    expect(managerSectionAllowedForTier("services", "free")).toBe(false);
     expect(managerSectionAllowedForTier("inbox", "free")).toBe(false);
     expect(managerSectionAllowedForTier("inbox", "paid")).toBe(true);
   });

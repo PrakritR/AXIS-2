@@ -33,8 +33,8 @@ export const MANAGER_PLAN_TIERS: ManagerPlanTierDefinition[] = [
     features: [
       { text: "1 active property listing", included: true },
       { text: "Applications & touring (calendar)", included: true },
-      { text: "No Axis platform fees", included: true },
-      { text: "Resident tab (leases, work orders)", included: false },
+      { text: "Residents tab (leases & services)", included: false },
+      { text: "Payment collection", included: true },
       { text: "Inbox & co-managers", included: false },
     ],
   },
@@ -53,9 +53,9 @@ export const MANAGER_PLAN_TIERS: ManagerPlanTierDefinition[] = [
     },
     features: [
       { text: "Up to 2 properties · 2 co-managers", included: true },
-      { text: "Resident tab: lease generation & work orders", included: true },
+      { text: "Residents tab: lease generation & services", included: true },
       { text: "Inbox & co-managers", included: true },
-      { text: "No Axis platform fees", included: true },
+      { text: "Payment collection", included: true },
     ],
   },
   {
@@ -74,7 +74,7 @@ export const MANAGER_PLAN_TIERS: ManagerPlanTierDefinition[] = [
     features: [
       { text: "Up to 20 properties · 20 co-managers", included: true },
       { text: "All Pro features — full portal", included: true },
-      { text: "No Axis platform fees", included: true },
+      { text: "Payment collection", included: true },
       { text: "Priority admin support", included: true },
     ],
   },

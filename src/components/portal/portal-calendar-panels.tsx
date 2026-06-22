@@ -6,7 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
+import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDate, formatPacificDateTime } from "@/lib/pacific-time";
+import { getPropertyById } from "@/lib/rental-application/data";
+import {
+  TOUR_CONFIRMED_TENANT_SUBJECT,
+  buildTourConfirmedTenantBody,
+  buildTourNotificationContext,
+} from "@/lib/tour-notifications";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
   SLOTS_PER_DAY,
@@ -117,6 +124,7 @@ type DemoMeeting = {
   phone?: string;
   notes?: string;
   propertyTitle?: string;
+  propertyId?: string;
   roomLabel?: string;
   instructions?: string;
   kind?: "partner" | "tour";
@@ -185,6 +193,7 @@ export function PortalCalendarPanels({
   scheduleOwnerLabel?: string | null;
   availabilityHeading?: string;
 }) {
+  const { showToast } = useAppUi();
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [anchorDate, setAnchorDate] = useState(() => new Date());
@@ -203,6 +212,12 @@ export function PortalCalendarPanels({
   const [updateToHousesOpen, setUpdateToHousesOpen] = useState(false);
   const [selectedHouseIds, setSelectedHouseIds] = useState<Set<string>>(new Set());
   const [selectedBlock, setSelectedBlock] = useState<CalendarBlockSelection | null>(null);
+  const [tourConfirmPreview, setTourConfirmPreview] = useState<{
+    meeting: DemoMeeting;
+    subject: string;
+    body: string;
+  } | null>(null);
+  const [tourConfirmBusy, setTourConfirmBusy] = useState(false);
   const [meetingRefresh, setMeetingRefresh] = useState(0);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
@@ -271,6 +286,7 @@ export function PortalCalendarPanels({
         phone: event.attendeePhone,
         notes: event.notes,
         propertyTitle: event.propertyTitle,
+        propertyId: event.propertyId,
         roomLabel: event.roomLabel,
         instructions: event.instructions,
         kind: event.kind,
@@ -313,6 +329,7 @@ export function PortalCalendarPanels({
             phone: row.phone,
             notes: row.notes,
             propertyTitle: row.propertyTitle,
+            propertyId: row.propertyId,
             roomLabel: row.roomLabel,
             kind: row.kind,
           } satisfies DemoMeeting;
@@ -400,17 +417,78 @@ export function PortalCalendarPanels({
 
   const approveSelectedInquiry = useCallback(async () => {
     if (selectedBlock?.kind !== "meeting" || selectedBlock.meeting.source !== "inquiry") return;
-    if (
-      await acceptPartnerInquiryFromServer(selectedBlock.meeting.sourceId, {
-        start: selectedBlock.meeting.startIso,
-        end: selectedBlock.meeting.endIso,
-      })
-    ) {
+    const result = await acceptPartnerInquiryFromServer(selectedBlock.meeting.sourceId, {
+      start: selectedBlock.meeting.startIso,
+      end: selectedBlock.meeting.endIso,
+    });
+    if (!result.ok) {
+      showToast(result.error ?? "Could not approve request.");
+      return;
+    }
+    setSelectedBlock(null);
+    setMeetingRefresh((n) => n + 1);
+    reloadAvailability();
+    showToast("Request approved.");
+  }, [reloadAvailability, selectedBlock, showToast]);
+
+  const openTourConfirmPreview = useCallback(() => {
+    if (selectedBlock?.kind !== "meeting" || selectedBlock.meeting.source !== "inquiry") return;
+    const meeting = selectedBlock.meeting;
+    if (meeting.kind !== "tour" || !meeting.email?.trim()) {
+      showToast("Guest email is required before confirming this tour.");
+      return;
+    }
+    const property = meeting.propertyId ? getPropertyById(meeting.propertyId) : undefined;
+    const ctx = buildTourNotificationContext({
+      origin: typeof window !== "undefined" ? window.location.origin : "",
+      guestName: meeting.name || "Guest",
+      guestEmail: meeting.email,
+      guestPhone: meeting.phone || null,
+      propertyId: meeting.propertyId || null,
+      propertyTitle: meeting.propertyTitle || property?.title || "Property",
+      propertyAddress: property?.address || null,
+      roomLabel: meeting.roomLabel || null,
+      tourStartIso: meeting.startIso,
+      tourEndIso: meeting.endIso,
+      notes: meeting.notes || null,
+      managerLabel: scheduleOwnerLabel || null,
+    });
+    setTourConfirmPreview({
+      meeting,
+      subject: TOUR_CONFIRMED_TENANT_SUBJECT,
+      body: buildTourConfirmedTenantBody(ctx),
+    });
+  }, [scheduleOwnerLabel, selectedBlock, showToast]);
+
+  const confirmTourWithNotification = useCallback(async () => {
+    if (!tourConfirmPreview || tourConfirmBusy) return;
+    const { meeting } = tourConfirmPreview;
+    setTourConfirmBusy(true);
+    try {
+      const result = await acceptPartnerInquiryFromServer(meeting.sourceId, {
+        start: meeting.startIso,
+        end: meeting.endIso,
+        notifyTenant: true,
+      });
+      if (!result.ok) {
+        showToast(result.error ?? "Could not confirm tour.");
+        return;
+      }
+      setTourConfirmPreview(null);
       setSelectedBlock(null);
       setMeetingRefresh((n) => n + 1);
       reloadAvailability();
+      if (result.notificationSkipped) {
+        showToast("Tour confirmed. Confirmation sent to Axis inbox (email skipped for demo address or missing provider).");
+      } else if (result.error) {
+        showToast("Tour confirmed, but the confirmation email could not be sent.");
+      } else {
+        showToast("Tour confirmed and confirmation sent via inbox and email.");
+      }
+    } finally {
+      setTourConfirmBusy(false);
     }
-  }, [reloadAvailability, selectedBlock]);
+  }, [reloadAvailability, showToast, tourConfirmBusy, tourConfirmPreview]);
 
   const deleteSelectedMeeting = useCallback(async () => {
     if (selectedBlock?.kind !== "meeting") return;
@@ -777,9 +855,15 @@ export function PortalCalendarPanels({
               {selectedBlock.meeting.source === "planned" ? "Delete event" : "Delete request"}
             </Button>
             {selectedBlock.meeting.source === "inquiry" ? (
-              <Button type="button" variant="primary" className="rounded-full" onClick={approveSelectedInquiry}>
-                Approve
-              </Button>
+              selectedBlock.meeting.kind === "tour" ? (
+                <Button type="button" variant="primary" className="rounded-full" onClick={openTourConfirmPreview}>
+                  Review & confirm tour
+                </Button>
+              ) : (
+                <Button type="button" variant="primary" className="rounded-full" onClick={() => void approveSelectedInquiry()}>
+                  Approve
+                </Button>
+              )
             ) : null}
           </div>
         </div>
@@ -813,6 +897,51 @@ export function PortalCalendarPanels({
       </div>
     </div>
     ) : null
+  );
+
+  const tourConfirmPreviewModal = (
+    <Modal
+      open={tourConfirmPreview !== null}
+      title="Confirm tour — guest notification preview"
+      onClose={() => setTourConfirmPreview(null)}
+      panelClassName="relative z-[90] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:my-4 sm:p-6"
+    >
+      {tourConfirmPreview ? (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">
+            Confirming this tour will schedule it on your calendar and send the message below to the guest via Axis inbox and email.
+          </p>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
+            <p className="text-sm text-slate-900">{tourConfirmPreview.meeting.email}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
+            <p className="text-sm text-slate-900">{tourConfirmPreview.subject}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
+            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+              {tourConfirmPreview.body}
+            </pre>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setTourConfirmPreview(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              disabled={tourConfirmBusy}
+              onClick={() => void confirmTourWithNotification()}
+            >
+              {tourConfirmBusy ? "Confirming…" : "Confirm tour & send notification"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
   );
 
   if (!storageKey) {
@@ -1157,6 +1286,7 @@ export function PortalCalendarPanels({
           </Modal>
         ) : null}
         {selectedBlockModal}
+        {tourConfirmPreviewModal}
       </>
     );
   }
@@ -1539,6 +1669,7 @@ export function PortalCalendarPanels({
         </div>
       </Modal>
       {selectedBlockModal}
+      {tourConfirmPreviewModal}
     </>
   );
 }

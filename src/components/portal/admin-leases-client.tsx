@@ -211,11 +211,14 @@ function LeasePipelineAdminDetail({
               type="button"
               className="rounded-full"
               onClick={() => {
-                appendLeaseThreadMessage(row.id, "admin", "Returned to manager for updates.");
-                if (sendLeaseBackToManager(row.id)) {
-                  showToast("Sent back to manager.");
-                  onSaved();
+                const result = sendLeaseBackToManager(row.id);
+                if (!result.ok) {
+                  showToast(result.error);
+                  return;
                 }
+                appendLeaseThreadMessage(row.id, "admin", "Returned to manager for updates.");
+                showToast("Sent back to manager.");
+                onSaved();
               }}
             >
               Send to manager

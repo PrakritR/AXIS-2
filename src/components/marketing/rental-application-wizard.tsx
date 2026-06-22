@@ -32,6 +32,11 @@ import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/l
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
+import {
+  computeLeaseEndDate,
+  normalizeIsoDateInput,
+  shouldAutoComputeLeaseEnd,
+} from "@/lib/rental-application/lease-dates";
 import { RENTAL_WIZARD_STEP_COUNT } from "@/lib/rental-application/types";
 import { maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
@@ -192,7 +197,22 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   }, [draftReady, listingPrefillKey, searchParams]);
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
-    setForm((f) => ({ ...f, ...p }));
+    setForm((f) => {
+      const merged: RentalWizardFormState = { ...f, ...p };
+      if ("leaseStart" in p) merged.leaseStart = normalizeIsoDateInput(p.leaseStart);
+      if ("leaseEnd" in p) merged.leaseEnd = p.leaseEnd ? normalizeIsoDateInput(p.leaseEnd) : "";
+      if ("leaseTerm" in p && p.leaseTerm === "Month-to-Month") merged.leaseEnd = "";
+      const endExplicit = "leaseEnd" in p;
+      if (
+        !endExplicit &&
+        ("leaseTerm" in p || "leaseStart" in p) &&
+        shouldAutoComputeLeaseEnd(merged.leaseTerm, merged.rentalType)
+      ) {
+        const computed = computeLeaseEndDate(merged.leaseStart, merged.leaseTerm);
+        if (computed) merged.leaseEnd = computed;
+      }
+      return merged;
+    });
     if (Object.keys(p).some((k) => ["propertyId", "roomChoice1", "roomChoice2", "roomChoice3", "rentalType", "leaseTerm", "leaseStart", "leaseEnd"].includes(k))) {
       setShowAvailabilityWarnings(false);
     }

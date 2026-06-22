@@ -103,10 +103,61 @@ export async function syncPersistedInboxFromServer(key: string, opts?: { force?:
 export function loadPersistedInbox(key: string, fallback: PersistedInboxThread[]): PersistedInboxThread[] {
   if (!canUse()) return fallback;
   hydrateInboxFromSession(key);
-  const rows = memoryByKey.get(key);
-  if (rows) return rows.length ? rows : fallback;
+  if (memoryByKey.has(key)) {
+    return memoryByKey.get(key) ?? [];
+  }
   void syncPersistedInboxFromServer(key).catch(() => undefined);
   return fallback;
+}
+
+/** Permanently delete inbox thread rows from the server. */
+export async function deleteInboxThreadIds(ids: string[]): Promise<boolean> {
+  const clean = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  if (!canUse() || clean.length === 0) return true;
+  try {
+    const res = await fetch("/api/portal-inbox-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "deleteIds", ids: clean }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+    return res.ok && data.ok !== false;
+  } catch {
+    return false;
+  }
+}
+
+/** Clear cached inbox rows so the next sync always refetches from the server. */
+export function invalidatePersistedInboxCache(key: string): void {
+  if (!canUse()) return;
+  inboxLastSyncedAtByKey.set(key, 0);
+}
+
+export async function persistInboxAwait(key: string, threads: PersistedInboxThread[]): Promise<boolean> {
+  if (!canUse()) return false;
+  const existing = memoryByKey.get(key) ?? [];
+  const newIds = new Set(threads.map((t) => t.id));
+  const removedIds = existing.map((t) => t.id).filter((id) => !newIds.has(id));
+  if (removedIds.length > 0) {
+    const deleted = await deleteInboxThreadIds(removedIds);
+    if (!deleted) return false;
+  }
+  memoryByKey.set(key, threads);
+  persistInboxToSession(key, threads);
+  inboxLastSyncedAtByKey.set(key, Date.now());
+  window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
+  try {
+    const res = await fetch("/api/portal-inbox-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "replace", rows: threads.map((thread) => ({ ...thread, scope: key })) }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 export function persistInbox(key: string, threads: PersistedInboxThread[]): void {
@@ -119,20 +170,18 @@ export function persistInbox(key: string, threads: PersistedInboxThread[]): void
   persistInboxToSession(key, threads);
   inboxLastSyncedAtByKey.set(key, Date.now());
   window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
-  void fetch("/api/portal-inbox-threads", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ action: "replace", rows: threads.map((thread) => ({ ...thread, scope: key })) }),
-  }).catch(() => undefined);
-  if (removedIds.length > 0) {
-    void fetch("/api/portal-inbox-threads", {
+  void (async () => {
+    if (removedIds.length > 0) {
+      const deleted = await deleteInboxThreadIds(removedIds);
+      if (!deleted) return;
+    }
+    await fetch("/api/portal-inbox-threads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ action: "deleteIds", ids: removedIds }),
+      body: JSON.stringify({ action: "replace", rows: threads.map((thread) => ({ ...thread, scope: key })) }),
     }).catch(() => undefined);
-  }
+  })();
 }
 
 /** Append one thread and emit inbox-changed event for live UI refresh. */

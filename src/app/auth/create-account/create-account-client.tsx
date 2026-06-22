@@ -1,7 +1,6 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { parseAuthRole, type AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -16,13 +15,6 @@ function Req() {
   return <span className="text-danger"> *</span>;
 }
 
-function makeBrowserAxisId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `AXIS-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-  }
-  return `AXIS-${Date.now().toString(36).toUpperCase()}`;
-}
-
 type ManagerCheckoutPreview = {
   managerId: string;
   email: string;
@@ -35,30 +27,32 @@ type ExistingEmailStatus = {
   roles: string[];
 };
 
+type CreateAccountRole = "resident" | "manager";
+
+function parseCreateAccountRole(value: string | null): CreateAccountRole {
+  return value === "manager" ? "manager" : "resident";
+}
+
 export default function CreateAccountClient() {
   const { showToast } = useAppUi();
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionIdFromUrl = useMemo(() => searchParams.get("session_id")?.trim() ?? "", [searchParams]);
-  const roleFromUrl = useMemo(() => parseAuthRole(searchParams.get("role")), [searchParams]);
+  const roleFromUrl = useMemo(() => parseCreateAccountRole(searchParams.get("role")), [searchParams]);
   const axisIdFromUrl = useMemo(
     () => searchParams.get("axis_id")?.trim() || "",
     [searchParams],
   );
-  const slotFromUrl = useMemo(() => searchParams.get("slot") ?? "", [searchParams]);
-  const urlDerivedRole: AuthRole = axisIdFromUrl
+  const urlDerivedRole: CreateAccountRole = axisIdFromUrl
     ? "resident"
     : sessionIdFromUrl
       ? "manager"
       : roleFromUrl;
 
-  const [role, setRole] = useState<AuthRole>(urlDerivedRole);
-  const [ownerInviteRef, setOwnerInviteRef] = useState(slotFromUrl);
-  const [adminKey, setAdminKey] = useState("");
+  const [role, setRole] = useState<CreateAccountRole>(urlDerivedRole);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [axisId, setAxisId] = useState(axisIdFromUrl);
   const [busy, setBusy] = useState(false);
   const [checkoutPreview, setCheckoutPreview] = useState<ManagerCheckoutPreview | null>(null);
@@ -68,18 +62,12 @@ export default function CreateAccountClient() {
   const [emailStatus, setEmailStatus] = useState<ExistingEmailStatus | null>(null);
   const [emailStatusLoading, setEmailStatusLoading] = useState(false);
   const [prevRoleFromUrl, setPrevRoleFromUrl] = useState(roleFromUrl);
-  const [prevSlotFromUrl, setPrevSlotFromUrl] = useState(slotFromUrl);
 
   if (sessionIdFromUrl || axisIdFromUrl) {
     if (role !== urlDerivedRole) setRole(urlDerivedRole);
   } else if (roleFromUrl !== prevRoleFromUrl) {
     setPrevRoleFromUrl(roleFromUrl);
     if (role !== roleFromUrl) setRole(roleFromUrl);
-  }
-
-  if (slotFromUrl !== prevSlotFromUrl) {
-    setPrevSlotFromUrl(slotFromUrl);
-    if (ownerInviteRef !== slotFromUrl) setOwnerInviteRef(slotFromUrl);
   }
 
   if (axisIdFromUrl && axisId !== axisIdFromUrl) {
@@ -185,10 +173,7 @@ export default function CreateAccountClient() {
     return displayedEmailStatus.roles.filter((r) => r !== role);
   }, [displayedEmailStatus, role]);
   const reusingExistingAccount = Boolean(displayedEmailStatus?.exists);
-  const passwordLabel =
-    reusingExistingAccount && (role === "resident" || role === "owner" || role === "admin" || role === "manager")
-      ? "Password"
-      : "Create password";
+  const passwordLabel = reusingExistingAccount ? "Password" : "Create password";
   const existingAccountHint =
     role === "resident" && reusingExistingAccount
       ? "This email already has an Axis login. Your Axis ID and email match your application — you can use a new password below to sign in as a resident."
@@ -271,133 +256,52 @@ export default function CreateAccountClient() {
       return;
     }
 
-    if (role === "admin") {
-      if (!adminKey.trim()) {
-        showToast("Admin registration key is required.");
-        return;
-      }
-      setBusy(true);
-      try {
-        const res = await fetch("/api/auth/register-admin", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: email.trim(),
-            password,
-            adminKey,
-            fullName: fullName.trim() || undefined,
-          }),
-        });
-        const body = (await res.json()) as { error?: string };
-        if (!res.ok) {
-          showToast(body.error ?? "Could not create admin.");
-          return;
-        }
-        showToast("Admin created. Sign in with your email.");
-        router.push("/auth/sign-in");
-      } finally {
-        setBusy(false);
-      }
+    if (role !== "resident") {
+      showToast("Manager signup starts from Partner pricing.");
       return;
     }
 
-    if (role === "resident" && !axisId.trim()) {
+    if (!axisId.trim()) {
       showToast("Axis ID is required.");
-      return;
-    }
-
-    if (role === "owner" && !ownerInviteRef.trim()) {
-      showToast("Invite reference is required to create an owner account.");
       return;
     }
 
     setBusy(true);
     try {
-      if (role === "resident") {
-        const res = await fetch("/api/auth/register-resident", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: email.trim(),
-            password,
-            axisId: axisId.trim(),
-          }),
-        });
-        const body = (await res.json()) as { error?: string; reusedExistingAuthUser?: boolean; axisId?: string };
-        if (!res.ok) {
-          showToast(body.error ?? "Could not create resident account.");
-          return;
-        }
-        const supabase = createSupabaseBrowserClient();
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+      const res = await fetch("/api/auth/register-resident", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           email: email.trim(),
           password,
-        });
-        if (signInError) {
-          showToast(
-            body.reusedExistingAuthUser
-              ? "Resident access updated. Sign in with the email and password you just set."
-              : "Resident account created. Sign in with your email.",
-          );
-          router.push("/auth/sign-in");
-          return;
-        }
-        showToast(
-          body.reusedExistingAuthUser
-            ? "Resident access updated. You are signed in."
-            : "Resident account created. You are signed in.",
-        );
-        router.push("/resident/dashboard");
+          axisId: axisId.trim(),
+        }),
+      });
+      const body = (await res.json()) as { error?: string; reusedExistingAuthUser?: boolean; axisId?: string };
+      if (!res.ok) {
+        showToast(body.error ?? "Could not create resident account.");
         return;
       }
-
       const supabase = createSupabaseBrowserClient();
-      const generatedAxisId = makeBrowserAxisId();
-      const { data, error } = await supabase.auth.signUp({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
-        options: {
-          data: {
-            axis_id: generatedAxisId,
-            invite_ref: ownerInviteRef.trim(),
-          },
-        },
       });
-      if (error) {
-        showToast(error.message);
-        return;
-      }
-      const uid = data.user?.id;
-      if (!uid) {
-        showToast("Check your email to confirm your account, then sign in.");
+      if (signInError) {
+        showToast(
+          body.reusedExistingAuthUser
+            ? "Resident access updated. Sign in with the email and password you just set."
+            : "Resident account created. Sign in with your email.",
+        );
         router.push("/auth/sign-in");
         return;
       }
-
-      const { error: insErr } = await supabase.from("profiles").insert({
-        id: uid,
-        email: email.trim().toLowerCase(),
-        role,
-        manager_id: generatedAxisId,
-        full_name: fullName.trim() || null,
-        application_approved: role === "owner",
-      });
-      if (insErr) {
-        showToast(insErr.message);
-        return;
-      }
-
-      const { error: roleErr } = await supabase.from("profile_roles").upsert(
-        { user_id: uid, role },
-        { onConflict: "user_id,role" },
+      showToast(
+        body.reusedExistingAuthUser
+          ? "Resident access updated. You are signed in."
+          : "Resident account created. You are signed in.",
       );
-      if (roleErr) {
-        showToast(roleErr.message);
-        return;
-      }
-
-      showToast("Account created. You can sign in once email confirmation completes (if enabled).");
-      router.push("/auth/sign-in");
+      router.push("/resident/dashboard");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign up failed";
       showToast(msg);
@@ -421,12 +325,10 @@ export default function CreateAccountClient() {
           className="mt-1.5"
           value={role}
           disabled={!!sessionIdFromUrl}
-          onChange={(e) => setRole(parseAuthRole(e.target.value))}
+          onChange={(e) => setRole(parseCreateAccountRole(e.target.value))}
         >
           <option value="resident">Resident</option>
           <option value="manager">Manager</option>
-          <option value="owner">Owner</option>
-          <option value="admin">Admin</option>
         </Select>
       </div>
 
@@ -452,7 +354,7 @@ export default function CreateAccountClient() {
             portal access. After signup, your resident portal stays limited until an Axis manager marks your
             application fee paid and approves your application.
           </>
-        ) : role === "manager" ? (
+        ) : (
           <>
             Start from{" "}
             <Link className="font-semibold text-primary hover:opacity-90" href="/partner/pricing">
@@ -461,13 +363,6 @@ export default function CreateAccountClient() {
             : choose <span className="font-semibold text-slate-800">Free</span> (no payment) or a paid plan (checkout). You
             will return here with your Axis ID to set your password.
           </>
-        ) : role === "owner" ? (
-          <>
-            Owner signup is invite-only. Use the invite reference from your manager link together with the email they
-            expect for your properties.
-          </>
-        ) : (
-          <>Admin accounts require a registration key from your organization.</>
         )}
       </div>
 
@@ -614,22 +509,6 @@ export default function CreateAccountClient() {
           </>
         ) : (
           <>
-            {role === "admin" ? (
-              <div>
-                <label className="text-xs font-semibold text-[#334155]" htmlFor="admin-key">
-                  Admin registration key
-                  <Req />
-                </label>
-                <PasswordInput
-                  id="admin-key"
-                  className="mt-1.5"
-                  autoComplete="off"
-                  placeholder="Key from your organization"
-                  value={adminKey}
-                  onChange={(e) => setAdminKey(e.target.value)}
-                />
-              </div>
-            ) : null}
             {role === "resident" ? (
               <div>
                 <label className="text-xs font-semibold text-[#334155]" htmlFor="app">
@@ -642,35 +521,6 @@ export default function CreateAccountClient() {
                   placeholder="AXIS-XXXXXXXX"
                   value={axisId}
                   onChange={(e) => setAxisId(e.target.value)}
-                />
-              </div>
-            ) : null}
-            {role === "manager" || role === "owner" ? (
-              <div>
-                <label className="text-xs font-semibold text-[#334155]" htmlFor="name">
-                  Full name
-                </label>
-                <Input
-                  id="name"
-                  className="mt-1.5"
-                  placeholder="Your full name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                />
-              </div>
-            ) : null}
-            {role === "owner" ? (
-              <div>
-                <label className="text-xs font-semibold text-[#334155]" htmlFor="invite">
-                  Invite reference
-                  <Req />
-                </label>
-                <Input
-                  id="invite"
-                  className="mt-1.5"
-                  placeholder="From your manager link, e.g. slot id"
-                  value={ownerInviteRef}
-                  onChange={(e) => setOwnerInviteRef(e.target.value)}
                 />
               </div>
             ) : null}

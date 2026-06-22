@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
@@ -15,7 +15,10 @@ import {
   appendPersistedInboxThread,
   PORTAL_INBOX_CHANGED_EVENT,
   type PersistedInboxThread,
+  deleteInboxThreadIds,
+  invalidatePersistedInboxCache,
   persistInbox,
+  persistInboxAwait,
   loadPersistedInbox,
   RESIDENT_INBOX_STORAGE_KEY,
   syncPersistedInboxFromServer,
@@ -69,12 +72,18 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const [local, setLocal] = useState<InboxThread[]>(
     () => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[],
   );
-  const [persistReady] = useState(true);
+  const [persistReady, setPersistReady] = useState(false);
+  const persistInboxRef = useRef(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
 
   useEffect(() => {
-    void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY).then((rows) => setLocal(rows as InboxThread[]));
+    persistInboxRef.current = false;
+    void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+      setLocal(rows as InboxThread[]);
+      setPersistReady(true);
+      persistInboxRef.current = true;
+    });
   }, []);
 
   useEffect(() => {
@@ -92,7 +101,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   }, []);
 
   useEffect(() => {
-    if (!persistReady) return;
+    if (!persistReady || !persistInboxRef.current) return;
     persistInbox(RESIDENT_INBOX_STORAGE_KEY, local);
   }, [local, persistReady]);
 
@@ -150,22 +159,56 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const deleteForever = useCallback(
     (id: string) => {
-      setLocal((prev) => prev.filter((t) => t.id !== id));
-      setExpandedId(null);
-      showToast("Deleted permanently.");
+      void (async () => {
+        invalidatePersistedInboxCache(RESIDENT_INBOX_STORAGE_KEY);
+        const ok = await deleteInboxThreadIds([id]);
+        if (!ok) {
+          showToast("Could not delete message.");
+          return;
+        }
+        const next = local.filter((t) => t.id !== id);
+        persistInboxRef.current = false;
+        setLocal(next);
+        setExpandedId(null);
+        await persistInboxAwait(RESIDENT_INBOX_STORAGE_KEY, next);
+        const synced = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
+        setLocal(synced as InboxThread[]);
+        persistInboxRef.current = true;
+        showToast("Deleted permanently.");
+      })();
     },
-    [showToast],
+    [local, showToast],
   );
 
   const emptyTrash = useCallback(() => {
-    setLocal((prev) => prev.filter((t) => t.folder !== "trash"));
-    setExpandedId(null);
-    showToast("Trash emptied.");
-  }, [showToast]);
+    const trashItems = local.filter((t) => t.folder === "trash");
+    if (trashItems.length === 0) {
+      showToast("Trash is already empty.");
+      return;
+    }
+    if (!window.confirm(`Delete all ${trashItems.length} trash message${trashItems.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    void (async () => {
+      invalidatePersistedInboxCache(RESIDENT_INBOX_STORAGE_KEY);
+      const ids = trashItems.map((t) => t.id).filter(Boolean);
+      const ok = await deleteInboxThreadIds(ids);
+      if (!ok) {
+        showToast("Could not empty trash.");
+        return;
+      }
+      const next = local.filter((t) => t.folder !== "trash");
+      persistInboxRef.current = false;
+      setLocal(next);
+      setExpandedId(null);
+      await persistInboxAwait(RESIDENT_INBOX_STORAGE_KEY, next);
+      const synced = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
+      setLocal(synced as InboxThread[]);
+      persistInboxRef.current = true;
+      showToast("Trash emptied.");
+    })().catch(() => showToast("Could not empty trash."));
+  }, [local, showToast]);
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
-      const when = formatPacificDateTime(new Date());
       if (p.includesAxisAdmin) {
         appendPortalMessageToAdminInbox({
           role: "resident",
@@ -175,45 +218,46 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           body: p.body.trim(),
         });
       }
-      const id = `sent_${Date.now()}`;
-      const row: InboxThread = {
-        id,
-        folder: "sent",
-        from: "You",
-        email: p.toEmailLine,
-        subject: p.subject.trim(),
-        preview: previewLine(p.body),
-        body: p.body.trim(),
-        time: when,
-        unread: false,
-      };
-      if (p.includesDirectoryRecipients) {
-        void fetch("/api/portal/send-inbox-message", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            fromName: p.senderName,
-            fromEmail: p.senderEmail,
-            toEmails: p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
-            toBroadcast: p.broadcastCategories,
-            subject: p.subject.trim(),
-            text: p.body.trim(),
-            deliverViaEmail: p.deliverViaEmail,
-            deliverViaSms: p.deliverViaSms,
-          }),
-        }).catch(() => undefined);
-      }
-      // Persist synchronously before navigation so the sent message survives the route change
-      appendPersistedInboxThread(RESIDENT_INBOX_STORAGE_KEY, row, RESIDENT_INBOX_THREAD_FALLBACK);
-      setLocal(loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[]);
       setComposeOpen(false);
-      showToast(
-        p.includesAxisAdmin && !p.includesDirectoryRecipients
-          ? "Message sent to Axis admin."
-          : "Message sent.",
-      );
-      router.push("/resident/inbox/sent");
+
+      void (async () => {
+        try {
+          if (p.includesDirectoryRecipients) {
+            const res = await fetch("/api/portal/send-inbox-message", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                fromName: p.senderName,
+                fromEmail: p.senderEmail,
+                toEmails: p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
+                toBroadcast: p.broadcastCategories,
+                subject: p.subject.trim(),
+                text: p.body.trim(),
+                deliverToPortalInbox: true,
+                deliverViaEmail: p.deliverViaEmail !== false,
+                deliverViaSms: p.deliverViaSms,
+              }),
+            });
+            const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+            if (!res.ok || !data.ok) {
+              showToast("Message could not be sent.");
+              return;
+            }
+          }
+          invalidatePersistedInboxCache(RESIDENT_INBOX_STORAGE_KEY);
+          const rows = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
+          setLocal(rows as InboxThread[]);
+          showToast(
+            p.includesAxisAdmin && !p.includesDirectoryRecipients
+              ? "Message sent to Axis admin."
+              : "Message sent via inbox and email.",
+          );
+          router.push("/resident/inbox/sent");
+        } catch {
+          showToast("Message could not be sent.");
+        }
+      })();
     },
     [router, showToast],
   );

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
+import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { digitsOnly } from "@/lib/rental-application/masks";
@@ -79,8 +80,10 @@ export function ManagerApplicationReadonlyReview({
         <Row k="2nd choice room" v={displayOrDash(roomLabel(form.roomChoice2))} />
         <Row k="3rd choice room" v={displayOrDash(roomLabel(form.roomChoice3))} />
         <Row k="Lease term" v={displayOrDash(form.leaseTerm)} />
-        <Row k="Lease start" v={displayOrDash(form.leaseStart)} />
-        {form.leaseTerm !== "Month-to-Month" ? <Row k="Lease end" v={displayOrDash(form.leaseEnd)} /> : null}
+        <Row k="Lease start" v={displayOrDash(formatLeaseDateLabel(form.leaseStart) || form.leaseStart)} />
+        {form.leaseTerm !== "Month-to-Month" ? (
+          <Row k="Lease end" v={displayOrDash(formatLeaseDateLabel(form.leaseEnd) || form.leaseEnd)} />
+        ) : null}
       </ReviewSection>
       {prop?.listingSubmission?.v === 1 ? (
         <ReviewSection title="Housing charges (listing)">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -12,8 +12,11 @@ import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
+  deleteInboxThreadIds,
+  invalidatePersistedInboxCache,
   loadPersistedInbox,
   persistInbox,
+  persistInboxAwait,
   syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
@@ -68,13 +71,19 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   const portalBase = usePaidPortalBasePath();
   const { userId } = useManagerUserId();
   const [local, setLocal] = useState<InboxThread[]>(() => loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
-  const [persistReady] = useState(true);
+  const [inboxSynced, setInboxSynced] = useState(false);
+  const persistInboxRef = useRef(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [contactTick, setContactTick] = useState(0);
 
   useEffect(() => {
-    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY).then((rows) => setLocal(rows as InboxThread[]));
+    persistInboxRef.current = false;
+    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+      setLocal(rows as InboxThread[]);
+      setInboxSynced(true);
+      persistInboxRef.current = true;
+    });
   }, []);
 
   useEffect(() => {
@@ -126,9 +135,9 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   }, []);
 
   useEffect(() => {
-    if (!persistReady) return;
+    if (!inboxSynced || !persistInboxRef.current) return;
     persistInbox(MANAGER_INBOX_STORAGE_KEY, local);
-  }, [local, persistReady]);
+  }, [local, inboxSynced]);
 
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "sender" | "subject">("newest");
 
@@ -203,15 +212,23 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   };
 
   const deleteForever = (id: string) => {
-    setLocal((prev) => prev.filter((t) => t.id !== id));
-    setExpandedId((e) => (e === id ? null : e));
-    showToast("Message deleted.");
-    void fetch("/api/portal-inbox-threads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ action: "delete", id }),
-    }).catch(() => undefined);
+    void (async () => {
+      invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
+      const ok = await deleteInboxThreadIds([id]);
+      if (!ok) {
+        showToast("Could not delete message.");
+        return;
+      }
+      const next = local.filter((t) => t.id !== id);
+      persistInboxRef.current = false;
+      setLocal(next);
+      setExpandedId((e) => (e === id ? null : e));
+      await persistInboxAwait(MANAGER_INBOX_STORAGE_KEY, next);
+      const synced = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
+      setLocal(synced as InboxThread[]);
+      persistInboxRef.current = true;
+      showToast("Message deleted.");
+    })();
   };
 
   const deleteAllTrash = () => {
@@ -222,20 +239,23 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     }
     if (!window.confirm(`Delete all ${trashItems.length} trash message${trashItems.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
     void (async () => {
+      invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
       const ids = trashItems.map((item) => item.id).filter(Boolean);
       if (ids.length === 0) return;
-      await fetch("/api/portal-inbox-threads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ action: "deleteIds", ids }),
-      });
-      setLocal((prev) => prev.filter((t) => t.folder !== "trash"));
+      const ok = await deleteInboxThreadIds(ids);
+      if (!ok) {
+        showToast("Could not clear trash.");
+        return;
+      }
+      const next = local.filter((t) => t.folder !== "trash");
+      persistInboxRef.current = false;
+      setLocal(next);
       setExpandedId(null);
+      await persistInboxAwait(MANAGER_INBOX_STORAGE_KEY, next);
+      const synced = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
+      setLocal(synced as InboxThread[]);
+      persistInboxRef.current = true;
       showToast("Trash cleared.");
-      await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
-        setLocal(rows as InboxThread[]);
-      });
     })().catch(() => showToast("Could not clear trash."));
   };
 
@@ -245,7 +265,6 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
-      const when = formatPacificDateTime(new Date());
       if (p.includesAxisAdmin) {
         appendPortalMessageToAdminInbox({
           role: "manager",
@@ -255,44 +274,44 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           body: p.body.trim(),
         });
       }
-      const id = `sent_${Date.now()}`;
-      const row: InboxThread = {
-        id,
-        folder: "sent",
-        from: "You",
-        email: p.toEmailLine,
-        subject: p.subject.trim(),
-        preview: previewLine(p.body),
-        body: p.body.trim(),
-        time: when,
-        unread: false,
-      };
-      setLocal((prev) => [row, ...prev]);
       setComposeOpen(false);
 
-      // Fire-and-forget real email/SMS delivery
-      void fetch("/api/portal/send-inbox-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          fromName: p.senderName,
-          fromEmail: p.senderEmail,
-          toEmails: p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
-          toBroadcast: p.broadcastCategories,
-          subject: p.subject.trim(),
-          text: p.body.trim(),
-          deliverViaEmail: p.deliverViaEmail,
-          deliverViaSms: p.deliverViaSms,
-        }),
-      }).catch(() => undefined);
-
-      showToast(
-        p.includesAxisAdmin && !p.includesDirectoryRecipients
-          ? "Message sent to Axis admin."
-          : "Message sent.",
-      );
-      router.push(`${portalBase}/inbox/sent`);
+      void (async () => {
+        try {
+          const res = await fetch("/api/portal/send-inbox-message", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              fromName: p.senderName,
+              fromEmail: p.senderEmail,
+              toEmails: p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
+              toBroadcast: p.broadcastCategories,
+              subject: p.subject.trim(),
+              text: p.body.trim(),
+              deliverToPortalInbox: true,
+              deliverViaEmail: p.deliverViaEmail !== false,
+              deliverViaSms: p.deliverViaSms,
+            }),
+          });
+          const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+          if (!res.ok || !data.ok) {
+            showToast("Message could not be sent.");
+            return;
+          }
+          invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
+          const rows = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
+          setLocal(rows as InboxThread[]);
+          showToast(
+            p.includesAxisAdmin && !p.includesDirectoryRecipients
+              ? "Message sent to Axis admin."
+              : "Message sent via inbox and email.",
+          );
+          router.push(`${portalBase}/inbox/sent`);
+        } catch {
+          showToast("Message could not be sent.");
+        }
+      })();
     },
     [router, showToast, portalBase],
   );

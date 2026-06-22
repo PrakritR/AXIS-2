@@ -14,11 +14,13 @@ import {
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import {
+  chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
   isHouseholdChargeOverdue,
   readChargesForManager,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
+import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import {
   LEASE_PIPELINE_EVENT,
   readLeasePipeline,
@@ -157,10 +159,21 @@ export function ManagerDashboard() {
     const activeResidents = allApps.filter((a) => a.bucket === "approved");
 
     const leases = readLeasePipeline(userId);
-    const needsManagerSig = leases.filter((l) => l.status === "Manager Signature Pending").length;
+    const pendingLeaseRows = leases
+      .filter((l) => l.status === "Manager Signature Pending" || l.status === "Resident Signature Pending")
+      .sort((a, b) => new Date(b.updatedAtIso).getTime() - new Date(a.updatedAtIso).getTime());
+    const needsManagerSig = pendingLeaseRows.filter((l) => l.status === "Manager Signature Pending").length;
 
     const charges = readChargesForManager(userId);
-    const overdueCharges = charges.filter((c) => isHouseholdChargeOverdue(c));
+    const pendingCharges = charges
+      .filter((c) => c.status === "pending")
+      .sort((a, b) => {
+        const aOverdue = isHouseholdChargeOverdue(a);
+        const bOverdue = isHouseholdChargeOverdue(b);
+        if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    const overdueCharges = pendingCharges.filter((c) => isHouseholdChargeOverdue(c));
     const overdueTotal = overdueCharges.reduce((s, c) => {
       const n = Number(c.balanceLabel.replace(/[^\d.]/g, ""));
       return s + (Number.isFinite(n) ? Math.round(n * 100) : 0);
@@ -207,6 +220,8 @@ export function ManagerDashboard() {
     return {
       pendingApps,
       activeResidents,
+      pendingLeaseRows,
+      pendingCharges,
       overdueCharges,
       overdueTotal,
       inbox: inboxCount,
@@ -223,6 +238,8 @@ export function ManagerDashboard() {
   const {
     pendingApps,
     activeResidents,
+    pendingLeaseRows,
+    pendingCharges,
     overdueCharges,
     overdueTotal,
     inbox,
@@ -323,7 +340,7 @@ export function ManagerDashboard() {
         )}
 
         {/* ── KPI tiles ── */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Tile
             label="Properties"
             value={totalProperties}
@@ -337,6 +354,20 @@ export function ManagerDashboard() {
             sub={pendingApps.length > 0 ? `${pendingApps.length} pending review` : undefined}
             href={`${BASE}/residents`}
             urgent={pendingApps.length > 0}
+          />
+          <Tile
+            label="Leases"
+            value={pendingLeaseRows.length}
+            sub={needsManagerSig > 0 ? `${needsManagerSig} need your signature` : pendingLeaseRows.length > 0 ? "Awaiting signature" : undefined}
+            href={`${BASE}/leases`}
+            urgent={needsManagerSig > 0}
+          />
+          <Tile
+            label="Payments"
+            value={pendingCharges.length}
+            sub={overdueCharges.length > 0 ? `${overdueCharges.length} overdue` : pendingCharges.length > 0 ? "Pending collection" : undefined}
+            href={`${BASE}/payments`}
+            urgent={overdueCharges.length > 0}
           />
         </div>
 
@@ -421,6 +452,76 @@ export function ManagerDashboard() {
             )}
           </div>
 
+        </div>
+
+        {/* ── Leases & payments ── */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+            <SectionHeader
+              title="Leases pending signature"
+              href={`${BASE}/leases`}
+              linkLabel="Leases →"
+            />
+            {pendingLeaseRows.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-400">No leases waiting for a signature.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {pendingLeaseRows.slice(0, 5).map((lease: LeasePipelineRow) => (
+                  <li key={lease.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{lease.residentName || lease.residentEmail}</p>
+                      <p className="truncate text-xs text-slate-500">
+                        {lease.unit || "—"}{lease.signedRentLabel ? ` · ${lease.signedRentLabel}` : ""}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                        lease.status === "Manager Signature Pending"
+                          ? "bg-violet-100 text-violet-800"
+                          : "bg-amber-100 text-amber-800"
+                      }`}
+                    >
+                      {lease.status === "Manager Signature Pending" ? "Your signature" : "Resident signing"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+            <SectionHeader
+              title="Payments"
+              href={`${BASE}/payments`}
+              linkLabel="Payments →"
+            />
+            {pendingCharges.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-400">No pending payments right now.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {pendingCharges.slice(0, 5).map((charge) => {
+                  const overdue = isHouseholdChargeOverdue(charge);
+                  return (
+                    <li key={charge.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">{charge.residentName || charge.residentEmail}</p>
+                        <p className="truncate text-xs text-slate-500">
+                          {charge.title || "Charge"} · {charge.balanceLabel} · {chargeDueLabel(charge)}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                          overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {overdue ? "Overdue" : "Pending"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </ManagerPortalPageShell>

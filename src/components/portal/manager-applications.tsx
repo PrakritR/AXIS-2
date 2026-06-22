@@ -3,6 +3,7 @@
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -50,6 +51,12 @@ import {
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
 import {
+  computeLeaseEndDate,
+  formatLeaseDateLabel,
+  resolvePlacementLeaseDates,
+  shouldAutoComputeLeaseEnd,
+} from "@/lib/rental-application/lease-dates";
+import {
   recordApprovedApplicationCharges,
   recordSubmittedApplicationFeeCharge,
   removeAllApplicationCharges,
@@ -65,6 +72,11 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import { deleteServiceRequestsForResident } from "@/lib/service-requests-storage";
 import { loadPersistedInbox, MANAGER_INBOX_STORAGE_KEY, persistInbox } from "@/lib/portal-inbox-storage";
+import {
+  RESIDENT_WELCOME_EMAIL_SUBJECT,
+  buildResidentWelcomeEmailBody,
+  residentAccountCreationUrl,
+} from "@/lib/resident-welcome-email";
 import {
   APPLICATION_BACKGROUND_CHECK_STATUSES,
   applicationShowsBackgroundCheck,
@@ -252,22 +264,39 @@ function ManagerApplicationPlacementEditor({
     otherCostAmount: string,
   ) => void;
 }) {
+  const initialDates = resolvePlacementLeaseDates({
+    leaseTerm: row.application?.leaseTerm,
+    leaseStart: row.application?.leaseStart,
+    leaseEnd: row.application?.leaseEnd,
+    rentalType: row.application?.rentalType,
+  });
   const initialPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const initialRoomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const initialSignedRent = row.signedMonthlyRent && row.signedMonthlyRent > 0 ? String(row.signedMonthlyRent) : "";
-  const initialLeaseTerm = row.application?.rentalType === "short_term" ? SHORT_TERM_LEASE_TERM : row.application?.leaseTerm?.trim() || "";
   const [propertyId, setPropertyId] = useState(initialPropertyId);
   const [roomChoice, setRoomChoice] = useState(initialRoomChoice);
   const [signedRent, setSignedRent] = useState(initialSignedRent);
-  const [leaseTerm, setLeaseTerm] = useState(initialLeaseTerm);
-  const [leaseStart, setLeaseStart] = useState(row.application?.leaseStart?.trim() || "");
-  const [leaseEnd, setLeaseEnd] = useState(row.application?.leaseEnd?.trim() || "");
+  const [leaseTerm, setLeaseTerm] = useState(initialDates.leaseTerm);
+  const [leaseStart, setLeaseStart] = useState(initialDates.leaseStart);
+  const [leaseEnd, setLeaseEnd] = useState(initialDates.leaseEnd);
   const [utilitiesOverride, setUtilitiesOverride] = useState(row.application?.managerUtilitiesOverride?.trim() || "");
   const [securityDepositOverride, setSecurityDepositOverride] = useState(row.application?.managerSecurityDepositOverride?.trim() || "");
   const [moveInFeeOverride, setMoveInFeeOverride] = useState(row.application?.managerMoveInFeeOverride?.trim() || "");
   const [otherCostLabel, setOtherCostLabel] = useState(row.application?.managerOtherCostLabel?.trim() || "");
   const [otherCostAmount, setOtherCostAmount] = useState(row.application?.managerOtherCostAmount?.trim() || "");
   const userEditedRentRef = useRef(false);
+  const userEditedLeaseEndRef = useRef(false);
+
+  useEffect(() => {
+    if (userEditedLeaseEndRef.current) return;
+    if (leaseTerm === "Month-to-Month") {
+      setLeaseEnd("");
+      return;
+    }
+    if (!shouldAutoComputeLeaseEnd(leaseTerm, row.application?.rentalType) || !leaseStart) return;
+    const computed = computeLeaseEndDate(leaseStart, leaseTerm);
+    if (computed) setLeaseEnd(computed);
+  }, [leaseStart, leaseTerm, row.application?.rentalType]);
 
   const roomOptions = useMemo(
     () =>
@@ -407,6 +436,7 @@ function ManagerApplicationPlacementEditor({
               value={leaseTerm}
               onChange={(e) => {
                 const nextLeaseTerm = e.target.value;
+                userEditedLeaseEndRef.current = false;
                 setLeaseTerm(nextLeaseTerm);
                 if (nextLeaseTerm === "Month-to-Month") {
                   setLeaseEnd("");
@@ -427,7 +457,10 @@ function ManagerApplicationPlacementEditor({
             <input
               type="date"
               value={leaseStart}
-              onChange={(e) => setLeaseStart(e.target.value)}
+              onChange={(e) => {
+                userEditedLeaseEndRef.current = false;
+                setLeaseStart(e.target.value);
+              }}
               className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
           </label>
@@ -438,7 +471,10 @@ function ManagerApplicationPlacementEditor({
             <input
               type="date"
               value={leaseEnd}
-              onChange={(e) => setLeaseEnd(e.target.value)}
+              onChange={(e) => {
+                userEditedLeaseEndRef.current = true;
+                setLeaseEnd(e.target.value);
+              }}
               disabled={leaseTerm === "Month-to-Month"}
               className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-400 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
@@ -521,8 +557,10 @@ function ManagerApplicationPlacementEditor({
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Submitted lease timing</p>
           <p className="mt-1.5 text-slate-800">
-            {row.application?.leaseStart?.trim()
-              ? `${row.application.leaseStart}${row.application?.leaseEnd?.trim() ? ` to ${row.application.leaseEnd}` : ""}`
+            {initialDates.leaseStart
+              ? `${formatLeaseDateLabel(initialDates.leaseStart)}${
+                  initialDates.leaseEnd ? ` to ${formatLeaseDateLabel(initialDates.leaseEnd)}` : ""
+                }`
               : "No lease dates submitted."}
           </p>
         </div>
@@ -581,6 +619,8 @@ function ManagerApplicationsContent() {
   const [rows, setRows] = useState<DemoApplicantRow[]>([]);
   const [portfolioTick, setPortfolioTick] = useState(0);
   const [roomSortDir, setRoomSortDir] = useState<"asc" | "desc">("asc");
+  const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
+  const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
     sync();
@@ -862,6 +902,7 @@ function ManagerApplicationsContent() {
   };
 
   return (
+    <>
     <ManagerPortalPageShell
       title="Applications"
       titleAside={
@@ -950,7 +991,7 @@ function ManagerApplicationsContent() {
                           <PortalTableDetailActions placement="top">
                             {row.bucket === "pending" ? (
                               <>
-                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setRowBucket(row.id, "approved")}>
+                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
                                   Approve
                                 </Button>
                                 <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
@@ -1055,5 +1096,53 @@ function ManagerApplicationsContent() {
         </div>
       </div>
     </ManagerPortalPageShell>
+      <Modal open={approvePreviewRow !== null} title="Approve application — account setup email" onClose={() => setApprovePreviewRow(null)}>
+        {approvePreviewRow ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Approving <span className="font-semibold text-slate-900">{approvePreviewRow.name || approvePreviewRow.email}</span> will send
+              their Axis resident account setup email and inbox notification.
+            </p>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
+              <p className="text-sm text-slate-900">{approvePreviewRow.email}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
+              <p className="text-sm text-slate-900">{RESIDENT_WELCOME_EMAIL_SUBJECT}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
+              <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+                {buildResidentWelcomeEmailBody({
+                  residentName: approvePreviewRow.name || undefined,
+                  axisId: approvePreviewRow.id,
+                  signupUrl: residentAccountCreationUrl("", approvePreviewRow.id),
+                })}
+              </pre>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" className="rounded-full" onClick={() => setApprovePreviewRow(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                className="rounded-full"
+                disabled={approveBusyId === approvePreviewRow.id}
+                onClick={() => {
+                  const row = approvePreviewRow;
+                  setApprovePreviewRow(null);
+                  setApproveBusyId(row.id);
+                  void setRowBucket(row.id, "approved").finally(() => setApproveBusyId(null));
+                }}
+              >
+                {approveBusyId === approvePreviewRow.id ? "Approving…" : "Approve & send setup email"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+    </>
   );
 }

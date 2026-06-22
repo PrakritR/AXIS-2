@@ -206,7 +206,13 @@ export function permanentlyDeleteInboxMessage(id: string): boolean {
   const rows = readAll();
   const next = rows.filter((r) => r.id !== id);
   if (next.length === rows.length) return false;
-  writeAll(next);
+  writeAllLocal(next);
+  void fetch("/api/portal-inbox-threads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "deleteIds", ids: [id] }),
+  }).catch(() => undefined);
   return true;
 }
 

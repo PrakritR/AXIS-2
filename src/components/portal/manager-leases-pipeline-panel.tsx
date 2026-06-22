@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/modal";
 import { Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -91,12 +92,46 @@ export function ManagerLeasesPipelinePanel({
   const [signingRow, setSigningRow] = useState<LeasePipelineRow | null>(null);
   const [emailBusyForRow, setEmailBusyForRow] = useState<string | null>(null);
   const [reminderBusyForRow, setReminderBusyForRow] = useState<string | null>(null);
+  const [sendingToResidentRowId, setSendingToResidentRowId] = useState<string | null>(null);
+  const [leaseSentPreview, setLeaseSentPreview] = useState<{
+    row: LeasePipelineRow;
+    recipient: string;
+    subject: string;
+    body: string;
+  } | null>(null);
   const [leaseReminderPreview, setLeaseReminderPreview] = useState<{
     row: LeasePipelineRow;
     recipient: string;
     subject: string;
     body: string;
   } | null>(null);
+
+  function leaseSentToResidentBody(row: LeasePipelineRow): string {
+    const unit = row.unit.trim() || "your unit";
+    const lines = [
+      `Hi ${row.residentName || "there"},`,
+      "",
+      `Your lease for ${unit} is ready to review and sign in your Axis resident portal.`,
+      "",
+      "Sign in to Axis, open Leases in the sidebar, and complete your signature when you're ready.",
+      "",
+      "If you have any questions before signing, reply in your Axis inbox and we will help.",
+      "",
+      "Axis",
+    ];
+    return lines.join("\n");
+  }
+
+  async function notifyResidentLeaseReady(row: LeasePipelineRow): Promise<{ ok: boolean; skipped?: boolean }> {
+    const unit = row.unit.trim() || "your unit";
+    const result = await deliverPortalInboxMessage({
+      fromName: "Property Manager",
+      toEmails: [row.residentEmail.trim()],
+      subject: `Your lease for ${unit} is ready to sign`,
+      text: leaseSentToResidentBody(row),
+    });
+    return { ok: result.ok, skipped: result.skipped };
+  }
 
   function leaseReminderBody(row: LeasePipelineRow): string {
     const unit = row.unit.trim() || "your unit";
@@ -153,32 +188,20 @@ export function ManagerLeasesPipelinePanel({
   async function sendLeaseSigningReminder(row: LeasePipelineRow, recipient: string, subject: string, text: string) {
     setReminderBusyForRow(row.id);
     try {
-      const res = await fetch("/api/portal/send-inbox-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          fromName: "Property Manager",
-          toEmails: [recipient],
-          subject,
-          text,
-          deliverToPortalInbox: true,
-        }),
+      const res = await deliverPortalInboxMessage({
+        fromName: "Property Manager",
+        toEmails: [recipient],
+        subject,
+        text,
       });
 
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        skipped?: boolean;
-        error?: string;
-      };
-
-      if (!res.ok || !data.ok) {
-        showToast(data.error ?? "Could not send lease signing reminder.");
+      if (!res.ok) {
+        showToast(res.error ?? "Could not send lease signing reminder.");
         return;
       }
 
       appendLeaseThreadMessage(row.id, "manager", "Sent lease-signing reminder to resident.", managerUserId);
-      if (data.skipped) {
+      if (res.skipped) {
         showToast("Reminder sent to Axis inbox (demo email, no external email sent).");
       } else {
         showToast("Lease-signing reminder sent via email and Axis inbox.");
@@ -236,17 +259,55 @@ export function ManagerLeasesPipelinePanel({
     showToast("Generate a lease or upload a PDF first.");
   };
 
-  const onSendToResident = (row: LeasePipelineRow) => {
+  const openSendLeasePreview = (row: LeasePipelineRow) => {
     const residentEmail = row.residentEmail.trim().toLowerCase();
     if (!residentEmail || !residentAccountEmails.has(residentEmail)) {
       showToast("Resident must create their Axis resident account before you can send the lease.");
       return;
     }
-    appendLeaseThreadMessage(row.id, "manager", "Sent lease to resident for review and signature.", managerUserId);
-    if (sendLeaseToResident(row.id, managerUserId)) {
-      showToast("Lease moved to Resident Signature Pending.");
+    if (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl) {
+      showToast("Generate or upload a lease document first.");
+      return;
+    }
+    const unit = row.unit.trim() || "your unit";
+    setLeaseSentPreview({
+      row,
+      recipient: row.residentEmail.trim(),
+      subject: `Your lease for ${unit} is ready to sign`,
+      body: leaseSentToResidentBody(row),
+    });
+  };
+
+  const confirmSendLeaseToResident = async () => {
+    if (!leaseSentPreview || sendingToResidentRowId) return;
+    const { row } = leaseSentPreview;
+    setLeaseSentPreview(null);
+    setSendingToResidentRowId(row.id);
+    try {
+      const result = await sendLeaseToResident(row.id, managerUserId);
+      if (!result.ok) {
+        showToast(result.error);
+        return;
+      }
+      appendLeaseThreadMessage(row.id, "manager", "Sent lease to resident for review and signature.", managerUserId);
+      const notice = await notifyResidentLeaseReady(row);
+      if (notice.ok) {
+        showToast(
+          notice.skipped
+            ? "Lease sent to resident portal (demo inbox only)."
+            : "Lease sent to resident portal with inbox and email notification.",
+        );
+      } else {
+        showToast("Lease sent to resident portal. Notification could not be delivered.");
+      }
       setExpandedId(null);
-    } else showToast("Could not update.");
+    } finally {
+      setSendingToResidentRowId(null);
+    }
+  };
+
+  const onSendToResident = (row: LeasePipelineRow) => {
+    openSendLeasePreview(row);
   };
 
   const onDeleteLease = (row: LeasePipelineRow) => {
@@ -263,20 +324,26 @@ export function ManagerLeasesPipelinePanel({
       showToast("Add a message for the admin team.");
       return;
     }
+    const result = sendLeaseToAdminReview(row.id, managerUserId);
+    if (!result.ok) {
+      showToast(result.error);
+      return;
+    }
     appendLeaseThreadMessage(row.id, "manager", text, managerUserId);
-    if (sendLeaseToAdminReview(row.id, managerUserId)) {
-      setAdminNoteById((s) => ({ ...s, [row.id]: "" }));
-      showToast("Sent to Admin Review.");
-      setExpandedId(null);
-    } else showToast("Could not update.");
+    setAdminNoteById((s) => ({ ...s, [row.id]: "" }));
+    showToast("Sent to Admin Review.");
+    setExpandedId(null);
   };
 
   const onMoveToManagerReview = (row: LeasePipelineRow) => {
+    const result = sendLeaseBackToManager(row.id, managerUserId);
+    if (!result.ok) {
+      showToast(result.error);
+      return;
+    }
     appendLeaseThreadMessage(row.id, "manager", "Moved lease back to manager review.", managerUserId);
-    if (sendLeaseBackToManager(row.id, managerUserId)) {
-      showToast("Lease moved to Manager Review.");
-      setExpandedId(null);
-    } else showToast("Could not update.");
+    showToast("Lease moved to Manager Review.");
+    setExpandedId(null);
   };
 
   const onManagerSign = (row: LeasePipelineRow) => {
@@ -345,6 +412,43 @@ export function ManagerLeasesPipelinePanel({
           onClose={() => setSigningRow(null)}
         />
       ) : null}
+      <Modal
+        open={leaseSentPreview !== null}
+        title="Send lease to resident — preview"
+        onClose={() => setLeaseSentPreview(null)}
+      >
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
+            <p className="text-sm text-slate-900">{leaseSentPreview?.recipient}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
+            <p className="text-sm text-slate-900">{leaseSentPreview?.subject}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
+            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+              {leaseSentPreview?.body}
+            </pre>
+          </div>
+          <p className="text-xs text-slate-500">The lease will be released to the resident portal after you confirm. This message is delivered to Axis inbox and email.</p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setLeaseSentPreview(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              disabled={Boolean(leaseSentPreview?.row && sendingToResidentRowId === leaseSentPreview.row.id)}
+              onClick={() => void confirmSendLeaseToResident()}
+            >
+              {leaseSentPreview?.row && sendingToResidentRowId === leaseSentPreview.row.id ? "Sending…" : "Send lease & notification"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
       <Modal
         open={leaseReminderPreview !== null}
         title="Lease signing reminder - preview"
@@ -598,10 +702,14 @@ export function ManagerLeasesPipelinePanel({
                                   type="button"
                                   variant="outline"
                                   className={PORTAL_DETAIL_BTN}
-                                  onClick={() => onSendToResident(row)}
-                                  disabled={!residentAccountEmails.has(row.residentEmail.trim().toLowerCase())}
+                                  onClick={() => openSendLeasePreview(row)}
+                                  disabled={
+                                    sendingToResidentRowId === row.id ||
+                                    !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
+                                    (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl)
+                                  }
                                 >
-                                  Send to resident
+                                  {sendingToResidentRowId === row.id ? "Sending…" : "Send to resident"}
                                 </Button>
                                 <Button
                                   type="button"

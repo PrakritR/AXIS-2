@@ -1,6 +1,12 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import {
+  computeLeaseEndDate,
+  normalizeIsoDateInput,
+  resolvePlacementLeaseDates,
+  shouldAutoComputeLeaseEnd,
+} from "@/lib/rental-application/lease-dates";
+import {
   defaultBackgroundCheckStatusForRow,
   normalizeBackgroundCheckStatus,
   resolveBackgroundCheckStatus,
@@ -48,10 +54,30 @@ export function resolveResidentPortalAxisId(input: {
   return "";
 }
 
+function normalizeApplicationLeaseFields(row: DemoApplicantRow): DemoApplicantRow {
+  if (!row.application) return row;
+  const app = row.application;
+  const leaseTerm = app.leaseTerm?.trim() || "";
+  const leaseStart = normalizeIsoDateInput(app.leaseStart);
+  let leaseEnd = leaseTerm === "Month-to-Month" ? "" : normalizeIsoDateInput(app.leaseEnd);
+  if (!leaseEnd && shouldAutoComputeLeaseEnd(leaseTerm, app.rentalType) && leaseStart) {
+    leaseEnd = computeLeaseEndDate(leaseStart, leaseTerm);
+  }
+  if (leaseStart === (app.leaseStart?.trim() || "") && leaseEnd === (app.leaseEnd?.trim() || "")) return row;
+  return {
+    ...row,
+    application: {
+      ...app,
+      leaseStart,
+      leaseEnd,
+    },
+  };
+}
+
 function normalizeApplicationRow(row: DemoApplicantRow): DemoApplicantRow {
   const nextId = normalizeApplicationAxisId(row.id);
   const next = nextId === row.id ? row : { ...row, id: nextId };
-  const withRent = syncSignedRentFields(next);
+  const withRent = syncSignedRentFields(normalizeApplicationLeaseFields(next));
   const backgroundCheckStatus =
     normalizeBackgroundCheckStatus(withRent.backgroundCheckStatus) ??
     defaultBackgroundCheckStatusForRow(withRent);
@@ -359,7 +385,18 @@ export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "applicat
   | Partial<RentalWizardFormState>
   | undefined {
   if (!row.application) return undefined;
-  const next: Partial<RentalWizardFormState> = { ...row.application };
+  const dates = resolvePlacementLeaseDates({
+    leaseTerm: row.application.leaseTerm,
+    leaseStart: row.application.leaseStart,
+    leaseEnd: row.application.leaseEnd,
+    rentalType: row.application.rentalType,
+  });
+  const next: Partial<RentalWizardFormState> = {
+    ...row.application,
+    leaseTerm: dates.leaseTerm || row.application.leaseTerm,
+    leaseStart: dates.leaseStart,
+    leaseEnd: dates.leaseEnd,
+  };
   const propertyId = row.assignedPropertyId?.trim();
   const roomChoice = row.assignedRoomChoice?.trim();
   if (propertyId) next.propertyId = propertyId;
