@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -46,7 +47,7 @@ function ListingHeroPhotoGrid({
     <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
       <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm">
         {mainUrl ? (
-          <img src={mainUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <Image src={mainUrl} alt="" fill className="object-cover" unoptimized sizes="(max-width: 1024px) 100vw, 60vw" />
         ) : null}
         {n > 0 ? (
           <div className="absolute right-3 top-3 rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm sm:right-4 sm:top-4 sm:px-3 sm:text-xs">
@@ -89,13 +90,13 @@ function ListingHeroPhotoGrid({
       <div className="grid grid-rows-2 gap-4">
         <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-sm">
           {side1 ? (
-            <img src={side1} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <Image src={side1} alt="" fill className="object-cover" unoptimized sizes="(max-width: 1024px) 40vw" />
           ) : null}
           <div className="aspect-[16/10] h-full min-h-[120px] w-full lg:aspect-auto lg:min-h-0" />
         </div>
         <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-sm">
           {side2 ? (
-            <img src={side2} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <Image src={side2} alt="" fill className="object-cover" unoptimized sizes="(max-width: 1024px) 40vw" />
           ) : null}
           <div className="aspect-[16/10] h-full min-h-[120px] w-full lg:aspect-auto lg:min-h-0" />
         </div>

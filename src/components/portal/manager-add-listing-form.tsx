@@ -3,6 +3,7 @@
 import type { DragEvent, ReactNode } from "react";
 import { Children, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
@@ -2534,7 +2535,7 @@ export function ManagerAddListingForm({
                             <div className="mt-3 flex flex-wrap gap-2">
                               {room.photoDataUrls.map((url, pi) => (
                                 <div key={`${room.id}-p-${pi}`} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                                  <img src={url} alt="" className="h-full w-full object-cover" />
+                                  <Image src={url} alt="" width={80} height={80} className="h-full w-full object-cover" unoptimized />
                                   <button
                                     type="button"
                                     className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70"
@@ -3188,7 +3189,7 @@ export function ManagerAddListingForm({
                   <div className="mt-3 flex flex-wrap gap-2">
                     {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
                       <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                        <img src={url} alt="" className="h-full w-full object-cover" />
+                        <Image src={url} alt="" width={96} height={96} className="h-full w-full object-cover" unoptimized />
                         <button
                           type="button"
                           className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70"

@@ -7,7 +7,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check": "npm run lint && npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
+    "test:seed": "node --env-file=.env.test tests/helpers/seed-test-db.mjs",
+    "test:cleanup": "node --env-file=.env.test tests/helpers/cleanup-test-db.mjs",
+    "check": "npm run lint && npm run test:unit && npm run build",
     "admin:sync-account": "node scripts/ensure-admin-account.mjs",
     "admin:ensure-demo-manager": "node scripts/ensure-demo-manager-account.mjs",
     "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs"
@@ -25,14 +34,25 @@
     "twilio": "^6.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "^4.1.9",
+    "dotenv": "^17.4.2",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "jsdom": "^29.1.1",
+    "msw": "^2.14.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   }
 }

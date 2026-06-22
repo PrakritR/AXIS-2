@@ -21,7 +21,12 @@ dist/
 .env.*
 !.env.example
 
-# Debug / OS
+# Testing
+test-results/
+playwright-report/
+playwright/.cache/
+coverage/
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

@@ -190,8 +190,6 @@ function TourFlow({
   const [step, setStep] = useState<TourStep>(1);
   const [submitted, setSubmitted] = useState(false);
   const [tick, setTick] = useState(0);
-  const [step1Phase, setStep1Phase] = useState<"property" | "room">("property");
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<MockProperty | null>(null);
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
   const selectedRoomLabel = useMemo(() => {
@@ -209,14 +207,20 @@ function TourFlow({
   const [bookingTour, setBookingTour] = useState(false);
   const buildings = useMemo(() => groupByBuilding(properties), [properties]);
 
-  useEffect(() => {
+  const propertyFromInitialId = useMemo(() => {
     const pid = initialPropertyId?.trim();
-    if (!pid) return;
-    const property = properties.find((p) => p.id === pid);
-    if (!property) return;
-    setSelectedBuildingId(property.buildingId);
-    setStep1Phase("room");
+    if (!pid) return null;
+    return properties.find((p) => p.id === pid) ?? null;
   }, [initialPropertyId, properties]);
+
+  const [manualStep1Phase, setManualStep1Phase] = useState<"property" | "room" | null>(null);
+  const [manualBuildingId, setManualBuildingId] = useState<string | null>(null);
+
+  const step1Phase = manualStep1Phase ?? (propertyFromInitialId ? "room" : "property");
+  const selectedBuildingId = manualBuildingId ?? propertyFromInitialId?.buildingId ?? null;
+
+  const setStep1Phase = (phase: "property" | "room") => setManualStep1Phase(phase);
+  const setSelectedBuildingId = (id: string | null) => setManualBuildingId(id);
 
   useEffect(() => {
     const sync = () => setTick((n) => n + 1);

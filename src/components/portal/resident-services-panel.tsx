@@ -341,6 +341,8 @@ export function ResidentServicesPanel({
 
   // Memoize application lookup to avoid redundant scans
   const residentApplication = useMemo(() => {
+    void allRows;
+    void appTick;
     if (!residentEmail) return null;
     return readManagerApplicationRows().find(
       (r) => r.email?.trim().toLowerCase() === residentEmail,

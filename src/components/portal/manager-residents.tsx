@@ -599,6 +599,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   }, [residents, userId, propertyTick]);
 
   const arRoomOptions = useMemo(() => {
+    void propertyTick;
     if (!arPropertyId || !userId) return [];
     const listing = readExtraListingsForUser(userId).find((p) => p.id === arPropertyId);
     if (!listing?.listingSubmission) return [];
@@ -607,6 +608,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   }, [arPropertyId, userId, propertyTick]);
 
   const erRoomOptions = useMemo(() => {
+    void propertyTick;
     if (!erPropertyId || !userId) return [];
     const listing = readExtraListingsForUser(userId).find((p) => p.id === erPropertyId);
     if (!listing?.listingSubmission) return [];

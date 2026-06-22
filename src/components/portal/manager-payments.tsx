@@ -88,7 +88,7 @@ export function ManagerPayments() {
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
     };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     // Don't repeatedly sync applications on charge updates
@@ -219,6 +219,7 @@ export function ManagerPayments() {
   }, [mergedRows]);
 
   const residentOptions = useMemo(() => {
+    void applicationTick;
     // Use readManagerApplicationRows as source of truth (same as Residents page)
     const applications = readManagerApplicationRows();
     const seen = new Map<string, string>();

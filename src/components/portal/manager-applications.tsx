@@ -547,7 +547,7 @@ function ManagerApplicationsContent() {
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
     };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (!authReady || !userId) return;

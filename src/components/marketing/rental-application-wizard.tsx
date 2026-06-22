@@ -255,6 +255,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   }, [form, showToast]);
 
   const applicationFeeGate = useMemo(() => {
+    void chargeTick;
     const pid = form.propertyId.trim();
     const email = form.email.trim();
     const { amount, displayLabel } = listingApplicationFeeAmount(pid);
@@ -414,7 +415,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       finalizeApplicationSubmit(feeStepUserId);
       router.replace("/rent/apply");
     })();
-  }, [draftReady, searchParams, form.propertyId, form.email, feeStepUserId, router, showToast, finalizeApplicationSubmit]);
+  }, [draftReady, searchParams, form.propertyId, form.email, form.fullLegalName, feeStepUserId, router, showToast, finalizeApplicationSubmit]);
 
   const handleContinue = () => {
     if (step === 12) {

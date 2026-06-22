@@ -406,8 +406,14 @@ export function AdminPropertiesClient() {
     };
   }, []);
 
-  const kpiValues = useMemo(() => adminKpiCounts(), [tick]);
-  const rows = useMemo(() => readAdminPropertyRows(activeKpi), [tick, activeKpi]);
+  const kpiValues = useMemo(() => {
+    void tick;
+    return adminKpiCounts();
+  }, [tick]);
+  const rows = useMemo(() => {
+    void tick;
+    return readAdminPropertyRows(activeKpi);
+  }, [tick, activeKpi]);
   const status = rowStatus(activeKpi);
 
   return (

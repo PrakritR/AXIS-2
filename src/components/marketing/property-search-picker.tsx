@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 
 export type PropertySearchOption = {
   id: string;
@@ -70,14 +70,10 @@ export function PropertySearchPicker({
   const [focused, setFocused] = useState(false);
 
   const selected = useMemo(() => options.find((o) => o.id === value) ?? null, [options, value]);
-
-  useEffect(() => {
-    if (!selected) return;
-    setQuery("");
-  }, [selected?.id]);
+  const displayQuery = selected && !focused ? "" : query;
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = displayQuery.trim().toLowerCase();
     const matched = q
       ? options.filter((o) => normalizeSearchHaystack(o).includes(q))
       : options;
@@ -87,9 +83,9 @@ export function PropertySearchPicker({
       total: matched.length,
       truncated: !q && matched.length > previewLimit,
     };
-  }, [options, previewLimit, query]);
+  }, [options, previewLimit, displayQuery]);
 
-  const showList = focused || query.length > 0 || !selected;
+  const showList = focused || displayQuery.length > 0 || !selected;
 
   return (
     <div className="space-y-3">
@@ -100,16 +96,15 @@ export function PropertySearchPicker({
         <input
           ref={inputRef}
           type="search"
-          value={query}
+          value={displayQuery}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => {
             window.setTimeout(() => setFocused(false), 120);
           }}
-          placeholder={selected && !focused && !query ? selected.title : placeholder}
+          placeholder={selected && !focused && !displayQuery ? selected.title : placeholder}
           aria-label={ariaLabel}
           aria-controls={listId}
-          aria-expanded={showList}
           className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15"
         />
         {selected ? (
@@ -150,7 +145,7 @@ export function PropertySearchPicker({
           ) : (
             <>
               <p className="text-xs text-slate-500">
-                {query.trim()
+                {displayQuery.trim()
                   ? `${filtered.total} ${filtered.total === 1 ? "match" : "matches"}`
                   : filtered.truncated
                     ? `Showing ${filtered.items.length} of ${filtered.total} properties — search to find yours faster`

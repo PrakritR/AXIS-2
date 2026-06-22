@@ -90,10 +90,6 @@ function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function addDays(base: Date, days: number): Date {
-  return new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
-}
-
 function addMonths(base: Date, months: number): Date {
   return new Date(base.getFullYear(), base.getMonth() + months, 1);
 }
