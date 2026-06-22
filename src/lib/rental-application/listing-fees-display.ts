@@ -1,6 +1,6 @@
 import { LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { normalizeManagerListingSubmissionV1, PAYMENT_AT_SIGNING_OPTIONS } from "@/lib/manager-listing-submission";
+import { normalizeManagerListingSubmissionV1, PAYMENT_AT_SIGNING_OPTIONS, isEntireHomeListing, entireHomeMonthlyRentAmount } from "@/lib/manager-listing-submission";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
 export type ListingSigningComputationInput = ManagerListingSubmissionV1 | undefined;
@@ -9,6 +9,10 @@ export type ListingSigningComputationInput = ManagerListingSubmissionV1 | undefi
 export function monthlyRentListingLabel(sub: ListingSigningComputationInput): string {
   if (!sub?.v) return "—";
   const n = normalizeManagerListingSubmissionV1(sub);
+  if (isEntireHomeListing(n)) {
+    const rent = entireHomeMonthlyRentAmount(n);
+    return rent > 0 ? `$${rent.toFixed(2)}/mo` : "—";
+  }
   const rents = n.rooms.filter((r) => r.name.trim()).map((r) => r.monthlyRent).filter((x) => x > 0);
   if (!rents.length) return "—";
   const lo = Math.min(...rents);
@@ -65,7 +69,9 @@ export function paymentAtSigningPriceLabel(sub: ListingSigningComputationInput):
   if (includes.includes("security_deposit")) sum += parseMoneyAmount(n.securityDeposit);
   if (includes.includes("move_in_fee")) sum += parseMoneyAmount(n.moveInFee);
   if (includes.includes("first_month_rent")) {
-    const rents = n.rooms.map((r) => r.monthlyRent).filter((x) => x > 0);
+    const rents = isEntireHomeListing(n)
+      ? [entireHomeMonthlyRentAmount(n)].filter((x) => x > 0)
+      : n.rooms.map((r) => r.monthlyRent).filter((x) => x > 0);
     if (rents.length) sum += Math.min(...rents);
   }
   if (includes.includes("first_month_utilities")) {
@@ -92,11 +98,17 @@ export function paymentAtSigningDetailBody(sub: ListingSigningComputationInput):
     parts.push(`Move-in fee (${n.moveInFee.trim() || "—"}).`);
   }
   if (includes.includes("first_month_rent")) {
-    const rents = n.rooms.map((r) => r.monthlyRent).filter((x) => x > 0);
+    const rents = isEntireHomeListing(n)
+      ? [entireHomeMonthlyRentAmount(n)].filter((x) => x > 0)
+      : n.rooms.map((r) => r.monthlyRent).filter((x) => x > 0);
     parts.push(
       rents.length
-        ? `First month rent (from $${Math.min(...rents).toFixed(2)} / month depending on room).`
-        : "First month rent (set room rent amounts on the listing).",
+        ? isEntireHomeListing(n)
+          ? `First month rent ($${Math.min(...rents).toFixed(2)} for the entire home).`
+          : `First month rent (from $${Math.min(...rents).toFixed(2)} / month depending on room).`
+        : isEntireHomeListing(n)
+          ? "First month rent (set the entire-home rent on the listing)."
+          : "First month rent (set room rent amounts on the listing).",
     );
   }
   if (includes.includes("first_month_utilities")) {

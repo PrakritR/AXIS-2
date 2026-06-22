@@ -138,6 +138,8 @@ export type ManagerListingSubmissionV1 = {
   /** Structured basics (create-listing wizard). Fills quick facts when `homeStructureNote` is empty. */
   listingPropertyTypeId?: string;
   listingPlaceCategoryId?: string;
+  /** When listingPlaceCategoryId is entire_home — one monthly lease for the full unit (USD). */
+  entireHomeMonthlyRent?: number;
   listingStoriesId?: string;
   listingTotalBathroomsId?: string;
   /** Rentable bedroom slots — synced to `rooms.length` when leaving the home step. */
@@ -262,6 +264,52 @@ function rid(prefix: string) {
   return `${prefix}-${Date.now()}-${idCounter}`;
 }
 
+/** True when the listing is rented as one lease for the full unit. */
+export function isEntireHomeListing(sub: Pick<ManagerListingSubmissionV1, "listingPlaceCategoryId">): boolean {
+  return sub.listingPlaceCategoryId === "entire_home";
+}
+
+/** Resolved monthly rent for an entire-home listing. */
+export function entireHomeMonthlyRentAmount(sub: Pick<ManagerListingSubmissionV1, "entireHomeMonthlyRent" | "rooms">): number {
+  if (typeof sub.entireHomeMonthlyRent === "number" && sub.entireHomeMonthlyRent > 0) {
+    return Math.round(sub.entireHomeMonthlyRent);
+  }
+  return sub.rooms.reduce((max, room) => Math.max(max, room.monthlyRent > 0 ? room.monthlyRent : 0), 0);
+}
+
+/** Store one lease rent on the first named room; clear per-room rents elsewhere. */
+export function syncEntireHomeRoomRents(
+  rooms: ManagerRoomSubmission[],
+  rent: number,
+): ManagerRoomSubmission[] {
+  const amount = Math.max(0, Math.round(rent));
+  if (amount <= 0) {
+    return rooms.map((room) => ({ ...room, monthlyRent: 0 }));
+  }
+  let assigned = false;
+  return rooms.map((room) => {
+    if (!assigned && room.name.trim()) {
+      assigned = true;
+      return { ...room, monthlyRent: amount };
+    }
+    return { ...room, monthlyRent: 0 };
+  });
+}
+
+/** Apply entire-home rent to submission state (field + room sync). */
+export function applyEntireHomeMonthlyRent(
+  sub: ManagerListingSubmissionV1,
+  rent: number,
+): ManagerListingSubmissionV1 {
+  const amount = Math.max(0, Math.round(Number(rent) || 0));
+  return {
+    ...sub,
+    listingPlaceCategoryId: "entire_home",
+    entireHomeMonthlyRent: amount,
+    rooms: syncEntireHomeRoomRents(sub.rooms, amount),
+  };
+}
+
 /** Coerces older saved submissions into the current v1 shape (preserves listing data where possible). */
 export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissionV1): ManagerListingSubmissionV1 {
   const legacy = sub as ManagerListingSubmissionV1 & LegacyListingSubmissionFields;
@@ -280,7 +328,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     }
   }
 
-  const rooms = sub.rooms.map((r) => {
+  const rooms: ManagerRoomSubmission[] = sub.rooms.map((r) => {
     const legacyRoom = r as ManagerRoomSubmission & { bathroomSetup?: string; sharesBathWith?: string };
     return {
       id: legacyRoom.id,
@@ -556,13 +604,29 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       ? Math.min(8, Math.round(sub.listingBedroomSlots))
       : rooms.length;
 
+  const listingPlaceCategoryId =
+    typeof sub.listingPlaceCategoryId === "string" && sub.listingPlaceCategoryId.trim()
+      ? sub.listingPlaceCategoryId.trim()
+      : "shared_home";
+
+  let entireHomeMonthlyRent =
+    typeof sub.entireHomeMonthlyRent === "number" && sub.entireHomeMonthlyRent > 0
+      ? Math.round(sub.entireHomeMonthlyRent)
+      : 0;
+
+  let normalizedRooms = rooms;
+  if (isEntireHomeListing({ listingPlaceCategoryId })) {
+    if (entireHomeMonthlyRent <= 0) {
+      entireHomeMonthlyRent = rooms.reduce((max, r) => Math.max(max, r.monthlyRent > 0 ? r.monthlyRent : 0), 0);
+    }
+    normalizedRooms = syncEntireHomeRoomRents(rooms, entireHomeMonthlyRent);
+  }
+
   const next = {
     ...sub,
     listingPropertyTypeId: typeof sub.listingPropertyTypeId === "string" ? sub.listingPropertyTypeId : "",
-    listingPlaceCategoryId:
-      typeof sub.listingPlaceCategoryId === "string" && sub.listingPlaceCategoryId.trim()
-        ? sub.listingPlaceCategoryId.trim()
-        : "shared_home",
+    listingPlaceCategoryId,
+    entireHomeMonthlyRent: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeMonthlyRent : undefined,
     listingStoriesId: typeof sub.listingStoriesId === "string" ? sub.listingStoriesId : "",
     listingTotalBathroomsId: typeof sub.listingTotalBathroomsId === "string" ? sub.listingTotalBathroomsId : "",
     listingBedroomSlots,
@@ -577,7 +641,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     shortTermMoveInFee: typeof sub.shortTermMoveInFee === "string" ? sub.shortTermMoveInFee : "",
     monthToMonthSurcharge: typeof sub.monthToMonthSurcharge === "string" ? sub.monthToMonthSurcharge : "",
     paymentAtSigningIncludes,
-    rooms,
+    rooms: normalizedRooms,
     bathrooms,
     sharedSpaces,
     bundles,
@@ -705,7 +769,13 @@ export function formatListingBasicsSummary(sub: ManagerListingSubmissionV1): str
   const tb = LISTING_TOTAL_BATH_OPTIONS.find((o) => o.id === sub.listingTotalBathroomsId)?.label;
   if (tb) chunks.push(tb);
   const n = sub.listingBedroomSlots ?? sub.rooms.length;
-  if (n > 0) chunks.push(`${n} bedroom${n === 1 ? "" : "s"} for rent`);
+  if (n > 0) {
+    chunks.push(
+      isEntireHomeListing(sub)
+        ? `${n} bedroom${n === 1 ? "" : "s"}`
+        : `${n} bedroom${n === 1 ? "" : "s"} for rent`,
+    );
+  }
   return chunks.join(" · ");
 }
 

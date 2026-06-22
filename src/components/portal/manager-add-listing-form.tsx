@@ -3,7 +3,6 @@
 import type { DragEvent, ReactNode } from "react";
 import { Children, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { createPortal } from "react-dom";
-import Image from "next/image";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
@@ -24,7 +23,10 @@ import {
 } from "@/lib/manager-access";
 import {
   applyListingBedroomSlots,
+  applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
+  entireHomeMonthlyRentAmount,
+  isEntireHomeListing,
   normalizeManagerListingSubmissionV1,
   duplicateRoomEntry,
   emptyBathroom,
@@ -211,6 +213,58 @@ function mediaDropZoneClass(active: boolean) {
       ? "border-primary/50 bg-primary/[0.06] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.18)]"
       : "border-slate-200/90 bg-white hover:border-primary/30 hover:bg-primary/[0.03]"
   }`;
+}
+
+const MEDIA_PICK_BTN_CLASS =
+  "inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-60";
+
+/** Programmatic file picker — avoids label/htmlFor inside overflow-hidden modals blanking the UI. */
+function MediaPickTrigger({
+  accept,
+  multiple,
+  disabled,
+  className,
+  onFiles,
+  children,
+}: {
+  accept: string;
+  multiple?: boolean;
+  disabled?: boolean;
+  className?: string;
+  onFiles: (files: FileList | null) => void;
+  children: ReactNode;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        multiple={multiple}
+        disabled={disabled}
+        tabIndex={-1}
+        aria-hidden="true"
+        className="pointer-events-none fixed -left-[9999px] top-0 h-px w-px opacity-0"
+        onChange={(e) => {
+          onFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        className={className ?? MEDIA_PICK_BTN_CLASS}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          inputRef.current?.click();
+        }}
+      >
+        {children}
+      </button>
+    </>
+  );
 }
 
 const SHARED_SPACE_TEMPLATES = [
@@ -528,7 +582,8 @@ function bundleRoomsLine(roomIds: string[], rooms: ManagerRoomSubmission[]) {
   return names.length === rooms.length ? `Whole house - ${names.length} rooms` : names.join(", ");
 }
 
-function bundleRentLabel(roomIds: string[], rooms: ManagerRoomSubmission[]) {
+function bundleRentLabel(roomIds: string[], rooms: ManagerRoomSubmission[], entireHomeRent = 0) {
+  if (entireHomeRent > 0) return `$${entireHomeRent}/mo`;
   const total = roomIds
     .map((id) => rooms.find((room) => room.id === id)?.monthlyRent ?? 0)
     .filter((rent) => Number.isFinite(rent) && rent > 0)
@@ -682,6 +737,9 @@ export function ManagerAddListingForm({
     };
   }, []);
 
+  const isEntireHome = isEntireHomeListing(sub);
+  const entireHomeRent = entireHomeMonthlyRentAmount(sub);
+
   const canContinueFromStep = (i: number): boolean => {
     if (i === 0) {
       if (!sub.buildingName.trim() || !sub.address.trim() || !sub.zip.trim() || !sub.neighborhood.trim()) {
@@ -715,6 +773,10 @@ export function ManagerAddListingForm({
     if (i === 1) {
       if (!sub.rooms.some((r) => r.name.trim())) {
         showToast("Add at least one room with a name before continuing.");
+        return false;
+      }
+      if (isEntireHome && entireHomeRent <= 0) {
+        showToast("Enter the monthly rent for the entire home.");
         return false;
       }
     }
@@ -927,7 +989,7 @@ export function ManagerAddListingForm({
         ...cur,
         includedRoomIds,
         roomsLine: cur.roomsLine.trim() ? cur.roomsLine : bundleRoomsLine(includedRoomIds, s.rooms),
-        price: cur.price.trim() ? cur.price : bundleRentLabel(includedRoomIds, s.rooms),
+        price: cur.price.trim() ? cur.price : bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
       };
       return { ...s, bundles };
     });
@@ -956,7 +1018,7 @@ export function ManagerAddListingForm({
       const row: ManagerBundleRow = {
         ...emptyBundleRow(),
         label: kind === "whole_house" ? "Whole house lease" : "Multi-room lease bundle",
-        price: bundleRentLabel(includedRoomIds, s.rooms),
+        price: bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
         strikethrough: "",
         promo:
           kind === "whole_house"
@@ -987,7 +1049,7 @@ export function ManagerAddListingForm({
         ...cur,
         includedRoomIds,
         roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
-        price: bundleRentLabel(includedRoomIds, s.rooms),
+        price: bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
       };
       return { ...s, bundles };
     });
@@ -1363,13 +1425,19 @@ export function ManagerAddListingForm({
         roomAmenitiesText: sanitizeRoomAmenityText(room.roomAmenitiesText),
       })),
     };
-    const roomsOk = submission.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
+    const roomsOk = isEntireHomeListing(submission)
+      ? entireHomeMonthlyRentAmount(submission) > 0 && submission.rooms.some((r) => r.name.trim())
+      : submission.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
     if (!submission.buildingName.trim() || !submission.address.trim() || !submission.zip.trim() || !submission.neighborhood.trim()) {
       showToast("Fill in building name, address, ZIP, and neighborhood.");
       return;
     }
     if (!roomsOk) {
-      showToast("Add at least one room with a name and monthly rent.");
+      showToast(
+        isEntireHomeListing(submission)
+          ? "Add at least one bedroom and the monthly rent for the entire home."
+          : "Add at least one room with a name and monthly rent.",
+      );
       return;
     }
     if (submission.bathrooms.length > 0 && submission.bathrooms.every((b) => !b.name.trim())) {
@@ -1452,11 +1520,12 @@ export function ManagerAddListingForm({
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-slate-900/50 px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <form
         id="manager-add-listing-form"
         onSubmit={(e) => e.preventDefault()}
+        onClick={(e) => e.stopPropagation()}
         className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
       >
         {/* ── Header ── */}
@@ -1560,7 +1629,24 @@ export function ManagerAddListingForm({
                     <button
                       key={opt.id}
                       type="button"
-                      onClick={() => setSub((s) => ({ ...s, listingPlaceCategoryId: opt.id }))}
+                      onClick={() =>
+                        setSub((s) => {
+                          if (opt.id === "entire_home") {
+                            const sum = s.rooms.reduce(
+                              (acc, room) => acc + (room.monthlyRent > 0 ? room.monthlyRent : 0),
+                              0,
+                            );
+                            const rent =
+                              (s.entireHomeMonthlyRent ?? 0) > 0
+                                ? s.entireHomeMonthlyRent!
+                                : sum > 0
+                                  ? sum
+                                  : s.rooms[0]?.monthlyRent ?? 0;
+                            return applyEntireHomeMonthlyRent({ ...s, listingPlaceCategoryId: opt.id }, rent);
+                          }
+                          return { ...s, listingPlaceCategoryId: opt.id, entireHomeMonthlyRent: undefined };
+                        })
+                      }
                       className={`rounded-2xl border px-4 py-3.5 text-left transition ${
                         on
                           ? "border-primary bg-white shadow-[0_8px_28px_-18px_rgba(37,99,235,0.45)] ring-2 ring-primary/25"
@@ -1636,8 +1722,8 @@ export function ManagerAddListingForm({
                 </div>
               </GridField>
               <GridField className="sm:col-span-2">
-                <FieldLabel hint="We’ll open that many room cards on the next step. You can still add or remove rows later.">
-                  Bedrooms you’ll list for rent *
+                <FieldLabel hint={isEntireHome ? "Bedrooms included in the one-lease rental." : "We’ll open that many room cards on the next step. You can still add or remove rows later."}>
+                  {isEntireHome ? "Bedrooms in the home *" : "Bedrooms you’ll list for rent *"}
                 </FieldLabel>
                 <div className="relative max-w-md">
                   <Select
@@ -1785,8 +1871,13 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 title="Lease bundles"
-                description="Optional packages on the public listing — whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
+                description={
+                  isEntireHome
+                    ? "Optional — the public listing already shows one rent for the entire home. Add a bundle only if you want promo pricing or extra copy."
+                    : "Optional packages on the public listing — whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
+                }
               >
+                {!isEntireHome ? (
                 <div className="rounded-2xl border border-sky-200/80 bg-sky-50/60 p-4 sm:p-5">
                   <p className="text-sm font-semibold text-sky-950">Build from your rooms</p>
                   <p className="mt-1 text-xs leading-5 text-sky-900/80">
@@ -1816,10 +1907,13 @@ export function ManagerAddListingForm({
                     </Button>
                   </div>
                 </div>
+                ) : null}
 
                 {(sub.bundles ?? []).length === 0 ? (
                   <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm text-slate-600">
-                    No bundles yet — renters will still see per-room pricing from the Rooms step. Add a bundle when you want to advertise a combined lease.
+                    {isEntireHome
+                      ? "No extra bundles — the listing uses your entire-home rent from the Rooms step."
+                      : "No bundles yet — renters will still see per-room pricing from the Rooms step. Add a bundle when you want to advertise a combined lease."}
                   </p>
                 ) : (
                   <div className="mt-4 space-y-4">
@@ -2193,10 +2287,40 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-rooms"
             title="Rooms"
-            description="Define each bedroom renters can apply for. Add bathrooms in the next step, then common areas — that order matches how the public page is organized."
+            description={
+              isEntireHome
+                ? "List bedrooms for layout and photos. Rent is one monthly amount for the full home — set it below."
+                : "Define each bedroom renters can apply for. Add bathrooms in the next step, then common areas — that order matches how the public page is organized."
+            }
           >
+            {isEntireHome ? (
+              <div className="mb-6 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 sm:p-5">
+                <FieldLabel hint="One lease for the entire home — this is what applicants and residents will pay monthly.">
+                  Monthly rent for entire home *
+                </FieldLabel>
+                <div className="relative mt-2 max-w-xs">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                  <Input
+                    inputMode="decimal"
+                    className="pl-8"
+                    value={entireHomeRent || ""}
+                    onChange={(e) =>
+                      setSub((s) => applyEntireHomeMonthlyRent(s, Number(e.target.value) || 0))
+                    }
+                    placeholder="4500"
+                  />
+                </div>
+                {entireHomeRent > 0 ? (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Entire-home lease: <span className="font-semibold text-slate-700">${entireHomeRent}/mo</span>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-              <p className="text-sm text-slate-500">Photos and one optional video per room.</p>
+              <p className="text-sm text-slate-500">
+                {isEntireHome ? "Bedroom details, photos, and optional video." : "Photos and one optional video per room."}
+              </p>
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addRoom}>
                 + Add room
               </Button>
@@ -2267,6 +2391,7 @@ export function ManagerAddListingForm({
                           ) : null}
                         </div>
                       </GridField>
+                      {!isEntireHome ? (
                       <GridField>
                         <FieldLabel>Monthly rent *</FieldLabel>
                         <div className="relative">
@@ -2280,6 +2405,7 @@ export function ManagerAddListingForm({
                           />
                         </div>
                       </GridField>
+                      ) : null}
                       <GridField>
                         <FieldLabel hint="Monthly estimate used in signing totals.">Utilities estimate</FieldLabel>
                         <div className="relative">
@@ -2512,30 +2638,20 @@ export function ManagerAddListingForm({
                           onDragLeave={(e) => handleDragLeave(e, `room-photos-${room.id}`)}
                           onDrop={(e) => onDropRoomPhotos(i, room.id, e)}
                         >
-                          <input
-                            key={`room-photos-in-${room.id}`}
-                            id={`room-photos-${room.id}`}
-                            type="file"
+                          <MediaPickTrigger
                             accept="image/*"
                             multiple
-                            className="sr-only"
-                            onChange={(e) => {
-                              void onPickRoomPhotos(i, e.target.files);
-                              e.target.value = "";
-                            }}
-                          />
-                          <label
-                            htmlFor={`room-photos-${room.id}`}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                            onFiles={(files) => { void onPickRoomPhotos(i, files); }}
                           >
                             Add photos
-                          </label>
+                          </MediaPickTrigger>
                           <p className="mt-3 text-sm text-slate-600">Drag and drop room photos here, or use the button above.</p>
                           {room.photoDataUrls.length > 0 ? (
                             <div className="mt-3 flex flex-wrap gap-2">
                               {room.photoDataUrls.map((url, pi) => (
                                 <div key={`${room.id}-p-${pi}`} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                                  <Image src={url} alt="" width={80} height={80} className="h-full w-full object-cover" unoptimized />
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={url} alt="" className="h-full w-full object-cover" />
                                   <button
                                     type="button"
                                     className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70"
@@ -2562,23 +2678,13 @@ export function ManagerAddListingForm({
                           onDragLeave={(e) => handleDragLeave(e, `room-video-${room.id}`)}
                           onDrop={(e) => onDropRoomVideo(i, room.id, e)}
                         >
-                          <input
-                            key={`room-video-in-${room.id}`}
-                            id={`room-video-${room.id}`}
-                            type="file"
+                          <MediaPickTrigger
                             accept="video/*"
-                            className="sr-only"
-                            onChange={(e) => {
-                              void onPickRoomVideo(i, e.target.files?.[0] ?? null);
-                              e.target.value = "";
-                            }}
-                          />
-                          <label
-                            htmlFor={`room-video-${room.id}`}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                            disabled={videoUploadingKeys.has(`room-${room.id}`)}
+                            onFiles={(files) => { void onPickRoomVideo(i, files?.[0] ?? null); }}
                           >
                             {videoUploadingKeys.has(`room-${room.id}`) ? "Uploading…" : room.videoDataUrl ? "Replace video" : "Add video"}
-                          </label>
+                          </MediaPickTrigger>
                           {videoUploadingKeys.has(`room-${room.id}`) ? (
                             <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                           ) : (
@@ -2806,24 +2912,13 @@ export function ManagerAddListingForm({
                           onDragLeave={(e) => handleDragLeave(e, `bath-photos-${b.id}`)}
                           onDrop={(e) => onDropBathroomPhotos(i, b.id, e)}
                         >
-                          <input
-                            key={`bath-photos-in-${b.id}`}
-                            id={`bath-photos-${b.id}`}
-                            type="file"
+                          <MediaPickTrigger
                             accept="image/*"
                             multiple
-                            className="sr-only"
-                            onChange={(e) => {
-                              void onPickBathroomPhotos(i, e.target.files);
-                              e.target.value = "";
-                            }}
-                          />
-                          <label
-                            htmlFor={`bath-photos-${b.id}`}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                            onFiles={(files) => { void onPickBathroomPhotos(i, files); }}
                           >
                             Add photos
-                          </label>
+                          </MediaPickTrigger>
                           <p className="mt-3 text-sm text-slate-600">Drag and drop bathroom photos here, or use the button above.</p>
                           {(b.photoDataUrls?.length ?? 0) > 0 ? (
                             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -2855,23 +2950,13 @@ export function ManagerAddListingForm({
                           onDragLeave={(e) => handleDragLeave(e, `bath-video-${b.id}`)}
                           onDrop={(e) => onDropBathroomVideo(i, b.id, e)}
                         >
-                          <input
-                            key={`bath-video-in-${b.id}`}
-                            id={`bath-video-${b.id}`}
-                            type="file"
+                          <MediaPickTrigger
                             accept="video/*"
-                            className="sr-only"
-                            onChange={(e) => {
-                              void onPickBathroomVideo(i, e.target.files?.[0] ?? null);
-                              e.target.value = "";
-                            }}
-                          />
-                          <label
-                            htmlFor={`bath-video-${b.id}`}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                            disabled={videoUploadingKeys.has(`bath-${b.id}`)}
+                            onFiles={(files) => { void onPickBathroomVideo(i, files?.[0] ?? null); }}
                           >
                             {videoUploadingKeys.has(`bath-${b.id}`) ? "Uploading…" : b.videoDataUrl ? "Replace video" : "Add video"}
-                          </label>
+                          </MediaPickTrigger>
                           {videoUploadingKeys.has(`bath-${b.id}`) ? (
                             <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                           ) : (
@@ -3041,24 +3126,13 @@ export function ManagerAddListingForm({
                             onDragLeave={(e) => handleDragLeave(e, `shared-photos-${sp.id}`)}
                             onDrop={(e) => onDropSharedSpacePhotos(i, sp.id, e)}
                           >
-                            <input
-                              key={`shared-photos-in-${sp.id}`}
-                              id={`shared-photos-${sp.id}`}
-                              type="file"
+                            <MediaPickTrigger
                               accept="image/*"
                               multiple
-                              className="sr-only"
-                              onChange={(e) => {
-                                void onPickSharedSpacePhotos(i, e.target.files);
-                                e.target.value = "";
-                              }}
-                            />
-                            <label
-                              htmlFor={`shared-photos-${sp.id}`}
-                              className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                              onFiles={(files) => { void onPickSharedSpacePhotos(i, files); }}
                             >
                               Add photos
-                            </label>
+                            </MediaPickTrigger>
                             {(sp.photoDataUrls?.length ?? 0) > 0 ? (
                               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                                 {sp.photoDataUrls.map((src, pi) => (
@@ -3087,23 +3161,13 @@ export function ManagerAddListingForm({
                             onDragLeave={(e) => handleDragLeave(e, `shared-video-${sp.id}`)}
                             onDrop={(e) => onDropSharedSpaceVideo(i, sp.id, e)}
                           >
-                            <input
-                              key={`shared-video-in-${sp.id}`}
-                              id={`shared-video-${sp.id}`}
-                              type="file"
+                            <MediaPickTrigger
                               accept="video/*"
-                              className="sr-only"
-                              onChange={(e) => {
-                                void onPickSharedSpaceVideo(i, e.target.files?.[0] ?? null);
-                                e.target.value = "";
-                              }}
-                            />
-                            <label
-                              htmlFor={`shared-video-${sp.id}`}
-                              className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                              disabled={videoUploadingKeys.has(`space-${sp.id}`)}
+                              onFiles={(files) => { void onPickSharedSpaceVideo(i, files?.[0] ?? null); }}
                             >
                               {videoUploadingKeys.has(`space-${sp.id}`) ? "Uploading…" : sp.videoDataUrl ? "Replace video" : "Add video"}
-                            </label>
+                            </MediaPickTrigger>
                             {videoUploadingKeys.has(`space-${sp.id}`) ? (
                               <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                             ) : null}
@@ -3167,29 +3231,20 @@ export function ManagerAddListingForm({
                 onDragLeave={(e) => handleDragLeave(e, "house-photos")}
                 onDrop={onDropHousePhotos}
               >
-                <input
-                  id="house-photos-input"
-                  type="file"
+                <MediaPickTrigger
                   accept="image/*"
                   multiple
-                  className="sr-only"
-                  onChange={(e) => {
-                    void onPickHousePhotos(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
-                <label
-                  htmlFor="house-photos-input"
-                  className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                  onFiles={(files) => { void onPickHousePhotos(files); }}
                 >
                   Add house photos
-                </label>
+                </MediaPickTrigger>
                 <p className="mt-3 text-sm text-slate-600">Drag and drop photos here, or use the button above.</p>
                 {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
                       <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                        <Image src={url} alt="" width={96} height={96} className="h-full w-full object-cover" unoptimized />
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" className="h-full w-full object-cover" />
                         <button
                           type="button"
                           className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70"
@@ -3218,23 +3273,13 @@ export function ManagerAddListingForm({
                 onDragLeave={(e) => handleDragLeave(e, "house-video")}
                 onDrop={onDropHouseVideo}
               >
-                <input
-                  key={`house-video-in`}
-                  id="house-video-input"
-                  type="file"
+                <MediaPickTrigger
                   accept="video/*"
-                  className="sr-only"
-                  onChange={(e) => {
-                    void onPickHouseVideo(e.target.files?.[0] ?? null);
-                    e.target.value = "";
-                  }}
-                />
-                <label
-                  htmlFor="house-video-input"
-                  className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                  disabled={videoUploadingKeys.has("house")}
+                  onFiles={(files) => { void onPickHouseVideo(files?.[0] ?? null); }}
                 >
                   {videoUploadingKeys.has("house") ? "Uploading…" : sub.houseVideoDataUrl ? "Replace video" : "Add house video"}
-                </label>
+                </MediaPickTrigger>
                 {videoUploadingKeys.has("house") ? (
                   <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                 ) : (
