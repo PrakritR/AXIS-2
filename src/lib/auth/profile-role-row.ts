@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export async function ensureProfileRoleRow(
   supabase: SupabaseClient,
   userId: string,
-  role: "resident" | "manager" | "owner" | "admin",
+  role: "resident" | "manager" | "admin",
 ) {
   const { error } = await supabase.from("profile_roles").upsert(
     { user_id: userId, role },

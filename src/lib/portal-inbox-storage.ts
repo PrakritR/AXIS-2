@@ -13,7 +13,6 @@ export type PersistedInboxThread = {
 };
 
 export const MANAGER_INBOX_STORAGE_KEY = "axis_portal_inbox_manager_v1";
-export const OWNER_INBOX_STORAGE_KEY = "axis_portal_inbox_owner_v1";
 export const RESIDENT_INBOX_STORAGE_KEY = "axis_portal_inbox_resident_v1";
 
 /** Fired after `persistInbox` writes (same tab). `detail.key` is the storage key. */

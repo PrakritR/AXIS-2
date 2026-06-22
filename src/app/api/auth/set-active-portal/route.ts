@@ -7,7 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 function isAuthRole(value: string): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "owner" || value === "admin";
+  return value === "resident" || value === "manager" || value === "admin";
 }
 
 export async function POST(req: Request) {
@@ -26,23 +26,19 @@ export async function POST(req: Request) {
     }
 
     const ctx = await getPortalAccessContext();
-    const hasAccess = hasRole(ctx, role) || (role === "manager" && hasRole(ctx, "owner"));
-    if (!hasAccess) {
+    if (!hasRole(ctx, role)) {
       return NextResponse.json({ error: "You do not have access to this portal." }, { status: 403 });
     }
 
-    const cookieRole: AuthRole = role === "manager" && hasRole(ctx, "owner") && !hasRole(ctx, "manager") ? "owner" : role;
-
     const res = NextResponse.json({ ok: true });
     const secure = process.env.NODE_ENV === "production";
-    res.cookies.set(ACTIVE_PORTAL_COOKIE, cookieRole, {
+    res.cookies.set(ACTIVE_PORTAL_COOKIE, role, {
       httpOnly: true,
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 365,
       secure,
     });
-    /** Drop admin preview so choosing Property portal / Resident / Owner is not hijacked by a prior Launch preview session. */
     res.cookies.set(PREVIEW_UID_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0, secure });
     res.cookies.set(PREVIEW_PORTAL_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0, secure });
     return res;

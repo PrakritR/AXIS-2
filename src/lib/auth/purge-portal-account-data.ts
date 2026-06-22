@@ -29,6 +29,11 @@ export async function purgeResidentPortalData(
       db.from("portal_resident_lease_upload_records").delete().eq("resident_email", email),
       db.from("manager_application_records").delete().eq("resident_email", email),
       db.from("portal_bug_feedback_records").delete().eq("reporter_email", email),
+      db.from("portal_household_charge_records").delete().filter("row_data->>residentEmail", "eq", email),
+      db.from("portal_recurring_rent_profile_records").delete().filter("row_data->>residentEmail", "eq", email),
+      db.from("portal_lease_pipeline_records").delete().filter("row_data->>residentEmail", "eq", email),
+      db.from("portal_work_order_records").delete().filter("row_data->>residentEmail", "eq", email),
+      db.from("portal_resident_lease_upload_records").delete().filter("row_data->>residentEmail", "eq", email),
     );
   }
 

@@ -9,7 +9,6 @@ import { sendSms } from "@/lib/twilio";
 export const runtime = "nodejs";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
-const OWNER_INBOX_SCOPE = "axis_portal_inbox_owner_v1";
 const RESIDENT_INBOX_SCOPE = "axis_portal_inbox_resident_v1";
 
 function normalizeEmails(value: unknown): string[] {
@@ -26,12 +25,11 @@ function normalizeUserIds(value: unknown): string[] {
 
 function scopeForRole(role: string | null | undefined): string {
   const normalized = String(role ?? "").trim().toLowerCase();
-  if (normalized === "owner") return OWNER_INBOX_SCOPE;
   if (normalized === "manager" || normalized === "pro" || normalized === "admin") return MANAGER_INBOX_SCOPE;
   return RESIDENT_INBOX_SCOPE;
 }
 
-type BroadcastRecipient = { email: string; userId: string | null; role: "resident" | "manager" | "owner" };
+type BroadcastRecipient = { email: string; userId: string | null; role: "resident" | "manager" };
 
 /** Resolve "All management" / "All residents" compose chips to real recipients for the sender's own portfolio. */
 async function resolveBroadcastRecipients(
@@ -58,7 +56,7 @@ async function resolveBroadcastRecipients(
     }
   }
 
-  async function linkedOwnersForManagers(managerIds: string[]) {
+  async function linkedCoManagersForManagers(managerIds: string[]) {
     if (managerIds.length === 0) return;
     const { data } = await db
       .from("portal_pro_relationship_records")
@@ -66,34 +64,17 @@ async function resolveBroadcastRecipients(
       .in("manager_user_id", managerIds);
     for (const row of data ?? []) {
       const email = String(row.related_email ?? "").trim().toLowerCase();
-      if (email) out.push({ email, userId: (row.related_user_id as string | null) ?? null, role: "owner" });
+      if (email) out.push({ email, userId: (row.related_user_id as string | null) ?? null, role: "manager" });
     }
   }
 
   if (normalizedRole === "manager" || normalizedRole === "pro" || normalizedRole === "admin") {
     if (categories.includes("resident")) await approvedResidentsForManagers([senderId]);
-    if (categories.includes("management")) await linkedOwnersForManagers([senderId]);
+    if (categories.includes("management")) await linkedCoManagersForManagers([senderId]);
     return out;
   }
 
-  if (normalizedRole === "owner") {
-    const { data: rels } = await db
-      .from("portal_pro_relationship_records")
-      .select("manager_user_id")
-      .or(`related_user_id.eq.${senderId},related_email.eq.${senderEmail}`);
-    const managerIds = [...new Set((rels ?? []).map((r) => r.manager_user_id as string | null).filter((id): id is string => Boolean(id)))];
-    if (categories.includes("management") && managerIds.length > 0) {
-      const { data: mgrProfiles } = await db.from("profiles").select("id, email").in("id", managerIds);
-      for (const p of mgrProfiles ?? []) {
-        const email = String(p.email ?? "").trim().toLowerCase();
-        if (email) out.push({ email, userId: p.id, role: "manager" });
-      }
-    }
-    if (categories.includes("resident")) await approvedResidentsForManagers(managerIds);
-    return out;
-  }
-
-  // Resident sender — "management" resolves to their own manager + any owners linked to that manager.
+  // Resident sender — "management" resolves to their property manager plus linked co-managers.
   if (categories.includes("management")) {
     const { data } = await db
       .from("manager_application_records")
@@ -107,7 +88,7 @@ async function resolveBroadcastRecipients(
       const { data: mgrProfile } = await db.from("profiles").select("id, email").eq("id", managerUserId).maybeSingle();
       const mgrEmail = String(mgrProfile?.email ?? "").trim().toLowerCase();
       if (mgrEmail) out.push({ email: mgrEmail, userId: managerUserId, role: "manager" });
-      await linkedOwnersForManagers([managerUserId]);
+      await linkedCoManagersForManagers([managerUserId]);
     }
   }
   return out;
@@ -210,7 +191,7 @@ export async function POST(req: Request) {
     // sender's own relationships, so this only meaningfully restricts toEmails/toUserIds.
     const senderIsAdmin = senderRole === "admin" || (await isAdminUser(user.id));
     const senderIsStaff =
-      senderIsAdmin || senderRole === "manager" || senderRole === "owner" || senderRole === "pro";
+      senderIsAdmin || senderRole === "manager" || senderRole === "pro";
 
     let recipients = [...recipientsByEmail.values()];
     if (!senderIsStaff) {
@@ -228,7 +209,7 @@ export async function POST(req: Request) {
       recipients = recipients.filter((_, index) => allowed[index]);
       if (recipients.length === 0) {
         return NextResponse.json(
-          { ok: false, error: "You can only message a manager or owner who manages your account." },
+          { ok: false, error: "You can only message a manager who manages your account." },
           { status: 403 },
         );
       }

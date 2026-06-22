@@ -49,7 +49,7 @@ function subscriptionGated(
   section: string,
   tier: "free" | "paid" | null,
 ): ReactNode {
-  if (kind !== "manager" && kind !== "owner" && kind !== "pro") return node;
+  if (kind !== "manager" && kind !== "pro") return node;
   if (managerSectionAllowedForTier(section, tier)) return node;
   return <PortalTierPaywall basePath="/portal" />;
 }
@@ -87,7 +87,7 @@ export async function renderPortalSection(
     redirect(`${def.basePath}/plan`);
   }
 
-  if (kind === "manager" || kind === "owner" || kind === "pro") {
+  if (kind === "manager" || kind === "pro") {
     if (section === "stripe") redirect(`${def.basePath}/payments`);
   }
   const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
@@ -115,7 +115,7 @@ export async function renderPortalSection(
       : false;
   // Legacy path support: work-orders moved under Services tabs.
   if (
-    (kind === "manager" || kind === "pro" || kind === "owner") &&
+    (kind === "manager" || kind === "pro") &&
     section === "work-orders"
   ) {
     redirect(`${def.basePath}/services/work-orders`);
@@ -129,11 +129,6 @@ export async function renderPortalSection(
   if (kind === "manager") {
     const uid = await getEffectiveUserIdForPortal("manager");
     if (!uid) redirect("/admin/dashboard");
-    effectiveWorkspaceUserId = uid;
-    managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
-  } else if (kind === "owner") {
-    const uid = await getEffectiveUserIdForPortal("owner");
-    if (!uid) redirect("/auth/sign-in");
     effectiveWorkspaceUserId = uid;
     managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
   } else if (kind === "pro") {
@@ -420,11 +415,6 @@ export async function renderPortalSection(
     if (section === "profile") {
       return subscriptionGated(<ManagerProfile />, kind, "profile", managerOwnerSubscriptionTier);
     }
-  }
-
-  if (kind === "owner") {
-    const portalPath = `/portal/${section}${tabParts?.length ? `/${tabParts.join("/")}` : ""}`;
-    redirect(portalPath);
   }
 
   if (kind === "resident" && section === "dashboard") {

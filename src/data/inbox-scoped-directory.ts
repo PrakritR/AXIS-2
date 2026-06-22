@@ -2,7 +2,7 @@
  * Portal compose address books. Expand when messaging is backed by real relationships.
  */
 
-export type InboxContactRole = "manager" | "resident" | "owner";
+export type InboxContactRole = "manager" | "resident";
 
 export type InboxScopedContact = {
   id: string;
@@ -21,41 +21,31 @@ export type InboxRecipientCategory = "admin" | "management" | "resident";
 
 /** Which address-book roles appear under Management / Resident for each portal. */
 export function rolesForRecipientCategory(
-  portal: "resident" | "manager" | "owner",
+  portal: "resident" | "manager",
   category: InboxRecipientCategory,
 ): InboxContactRole[] {
   if (category === "admin") return [];
   if (portal === "manager") {
-    if (category === "management") return ["owner"];
+    if (category === "management") return ["manager"];
     return ["resident"];
   }
-  if (portal === "resident") {
-    /* Tenants: staff + landlords under Management; household peers under Resident. */
-    if (category === "management") return ["manager", "owner"];
-    return ["resident"];
-  }
-  /* owner portal */
   if (category === "management") return ["manager"];
   return ["resident"];
 }
 
 export function categoryForContactRole(
-  portal: "resident" | "manager" | "owner",
+  portal: "resident" | "manager",
   role: InboxContactRole,
 ): InboxRecipientCategory {
   if (portal === "resident") {
     if (role === "resident") return "resident";
     return "management";
   }
-  if (portal === "manager") {
-    if (role === "owner") return "management";
-    return "resident";
-  }
   if (role === "manager") return "management";
   return "resident";
 }
 
-function contactsVisibleInPortal(portal: "resident" | "manager" | "owner", list: InboxScopedContact[]) {
+function contactsVisibleInPortal(portal: "resident" | "manager", list: InboxScopedContact[]) {
   const roles = new Set<InboxContactRole>([
     ...rolesForRecipientCategory(portal, "management"),
     ...rolesForRecipientCategory(portal, "resident"),
@@ -64,7 +54,7 @@ function contactsVisibleInPortal(portal: "resident" | "manager" | "owner", list:
 }
 
 export function contactsForPortal(
-  portal: "resident" | "manager" | "owner",
+  portal: "resident" | "manager",
   liveContacts: InboxScopedContact[] = [],
 ): InboxScopedContact[] {
   return contactsVisibleInPortal(portal, liveContacts);

@@ -27,11 +27,10 @@ type SimpleRow = {
   joinedAt: string | null;
 };
 
-type AccountKind = "manager" | "owner" | "resident";
+type AccountKind = "manager" | "resident";
 
 type UnifiedRow =
   | ({ kind: "manager" } & ManagerRow)
-  | ({ kind: "owner" } & SimpleRow)
   | ({ kind: "resident" } & SimpleRow);
 
 type CategoryFilter = "management" | "resident";
@@ -69,12 +68,10 @@ function StatusPill({ active }: { active: boolean }) {
 function RolePill({ kind }: { kind: AccountKind }) {
   const styles: Record<AccountKind, string> = {
     manager: "border-sky-200/90 bg-sky-50 text-sky-900",
-    owner: "border-sky-200/90 bg-sky-50 text-sky-900",
     resident: "border-violet-200/90 bg-violet-50 text-violet-900",
   };
   const labels: Record<AccountKind, string> = {
     manager: "Management",
-    owner: "Management",
     resident: "Resident",
   };
   return (
@@ -218,8 +215,8 @@ function SimpleAccountDetailRow({
   onRefresh,
   showToast,
 }: {
-  row: { kind: "owner" } & SimpleRow | { kind: "resident" } & SimpleRow;
-  apiPath: "/api/admin/owners" | "/api/admin/residents";
+  row: { kind: "resident" } & SimpleRow;
+  apiPath: "/api/admin/residents";
   accountLabel: string;
   onRefresh: () => void;
   showToast: (m: string) => void;
@@ -347,16 +344,12 @@ function ExpandedRow({
   if (row.kind === "manager") {
     return <ManagerDetailRow row={row} onRefresh={onRefresh} showToast={showToast} />;
   }
-  if (row.kind === "owner") {
-    return <SimpleAccountDetailRow row={row} apiPath="/api/admin/owners" accountLabel="Owner" onRefresh={onRefresh} showToast={showToast} />;
-  }
   return <SimpleAccountDetailRow row={row} apiPath="/api/admin/residents" accountLabel="Resident" onRefresh={onRefresh} showToast={showToast} />;
 }
 
 export function AdminAxisUsersClient() {
   const { showToast } = useAppUi();
   const [managers, setManagers] = useState<ManagerRow[]>([]);
-  const [owners, setOwners] = useState<SimpleRow[]>([]);
   const [residents, setResidents] = useState<SimpleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -369,20 +362,11 @@ export function AdminAxisUsersClient() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [mRes, oRes, rRes] = await Promise.all([
-        fetch("/api/admin/managers"),
-        fetch("/api/admin/owners"),
-        fetch("/api/admin/residents"),
-      ]);
+      const [mRes, rRes] = await Promise.all([fetch("/api/admin/managers"), fetch("/api/admin/residents")]);
       const mJson = (await mRes.json()) as { managers?: ManagerRow[]; error?: string };
-      const oJson = (await oRes.json()) as { owners?: SimpleRow[]; error?: string };
       const rJson = (await rRes.json()) as { residents?: SimpleRow[]; error?: string };
       if (!mRes.ok) {
         setLoadError(mJson.error ?? "Could not load manager accounts.");
-        return;
-      }
-      if (!oRes.ok) {
-        setLoadError(oJson.error ?? "Could not load owner accounts.");
         return;
       }
       if (!rRes.ok) {
@@ -390,7 +374,6 @@ export function AdminAxisUsersClient() {
         return;
       }
       setManagers(mJson.managers ?? []);
-      setOwners(oJson.owners ?? []);
       setResidents(rJson.residents ?? []);
     } catch {
       setLoadError("Could not reach the server. Check that Supabase env vars are configured.");
@@ -406,14 +389,13 @@ export function AdminAxisUsersClient() {
 
   const unified = useMemo((): UnifiedRow[] => {
     const m: UnifiedRow[] = managers.map((r) => ({ kind: "manager" as const, ...r }));
-    const o: UnifiedRow[] = owners.map((r) => ({ kind: "owner" as const, ...r }));
     const res: UnifiedRow[] = residents.map((r) => ({ kind: "resident" as const, ...r }));
-    return [...m, ...o, ...res].sort((a, b) => {
+    return [...m, ...res].sort((a, b) => {
       const an = (a.email || a.kind).toLowerCase();
       const bn = (b.email || b.kind).toLowerCase();
       return an.localeCompare(bn);
     });
-  }, [managers, owners, residents]);
+  }, [managers, residents]);
 
   const categoryCounts = useMemo(() => {
     const c = { management: 0, resident: 0 };
@@ -431,7 +413,6 @@ export function AdminAxisUsersClient() {
       if (category === "resident" && row.kind !== "resident") continue;
       if (category === "management" && row.kind === "resident") continue;
       if (row.kind === "manager" && tierFilter !== "all" && row.tier.toLowerCase() !== tierFilter) continue;
-      if (row.kind === "owner" && tierFilter !== "all") continue;
       if (row.active) a += 1;
       else d += 1;
     }
@@ -445,7 +426,6 @@ export function AdminAxisUsersClient() {
       if (category === "resident" && row.kind !== "resident") return false;
       if (category === "management" && row.kind === "resident") return false;
       if (row.kind === "manager" && tierFilter !== "all" && row.tier.toLowerCase() !== tierFilter) return false;
-      if (row.kind === "owner" && tierFilter !== "all") return false;
       return true;
     });
   }, [unified, statusTab, category, tierFilter]);

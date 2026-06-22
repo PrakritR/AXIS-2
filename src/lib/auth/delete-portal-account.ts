@@ -5,7 +5,7 @@ import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
 
-const PROTECTED_ROLES = new Set(["admin", "manager", "owner", "pro"]);
+const PROTECTED_ROLES = new Set(["admin", "manager", "pro"]);
 
 function normalizeEmail(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";

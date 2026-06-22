@@ -2,7 +2,7 @@ import { emitAdminUi } from "@/lib/demo-admin-ui";
 
 let inboxMessages: InboxMessage[] = [];
 
-export type InboxSenderRole = "partner" | "manager" | "resident" | "owner" | "admin";
+export type InboxSenderRole = "partner" | "manager" | "resident" | "admin";
 
 export type InboxThreadReply = {
   id: string;
@@ -29,11 +29,9 @@ export type InboxMessage = {
   composeAudience?:
     | "manager"
     | "resident"
-    | "owner"
     | "all"
     | "all_managers"
     | "all_residents"
-    | "all_owners"
     | "multi";
   composeRecipientLabel?: string;
 };
@@ -136,7 +134,7 @@ export function appendPartnerInboxMessage(payload: { name: string; email: string
 
 /** Property or resident portal → admin inbox */
 export function appendPortalMessageToAdminInbox(payload: {
-  role: "manager" | "resident" | "owner";
+  role: "manager" | "resident";
   name: string;
   email: string;
   topic: string;
@@ -216,10 +214,8 @@ export type AdminComposeSendMode =
   | "all_portal"
   | "all_managers"
   | "all_residents"
-  | "all_owners"
   | "pick_managers"
-  | "pick_residents"
-  | "pick_owners";
+  | "pick_residents";
 
 /** @deprecated use readInboxMessages */
 export function readPartnerInboxMessages(): InboxMessage[] {
@@ -232,13 +228,7 @@ export function markPartnerInboxMessageRead(id: string): boolean {
 }
 
 export function roleAllowsThread(role: InboxSenderRole): boolean {
-  return (
-    role === "manager" ||
-    role === "resident" ||
-    role === "owner" ||
-    role === "partner" ||
-    role === "admin"
-  );
+  return role === "manager" || role === "resident" || role === "partner" || role === "admin";
 }
 
 export type PartnerInboxMessage = InboxMessage;

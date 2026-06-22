@@ -15,7 +15,7 @@ export type PortalAccessContext = {
 };
 
 function isAuthRole(value: string): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "owner" || value === "admin";
+  return value === "resident" || value === "manager" || value === "admin";
 }
 
 function normalizeRoles(rows: { role: string }[] | null | undefined, fallback: AuthRole | null): AuthRole[] {

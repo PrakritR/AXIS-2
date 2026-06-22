@@ -1,1 +1,1 @@
-export type PreviewPortal = "manager" | "resident" | "owner";
+export type PreviewPortal = "manager" | "resident";

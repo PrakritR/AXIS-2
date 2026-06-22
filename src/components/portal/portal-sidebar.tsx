@@ -6,6 +6,7 @@ import type { MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
+import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import type { PortalDefinition } from "@/lib/portal-types";
@@ -44,7 +45,6 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
   const hasSignOut =
     definition.kind === "resident" ||
     definition.kind === "manager" ||
-    definition.kind === "owner" ||
     definition.kind === "admin" ||
     definition.kind === "pro";
 
@@ -66,8 +66,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
     definition.kind === "admin" ||
     definition.kind === "pro" ||
     definition.kind === "resident" ||
-    definition.kind === "manager" ||
-    definition.kind === "owner";
+    definition.kind === "manager";
   const brandOnlyHeader = portalTitleIsBrand(definition.title);
 
   const leavePaymentsSection = (event: MouseEvent<HTMLAnchorElement>, targetSection: string, href: string) => {
@@ -130,12 +129,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         {hasSignOut ? (
           <div className="mt-auto border-t border-slate-100 pt-3 space-y-0.5">
             <PortalRoleSwitcher currentKind={definition.kind} />
-            <Link
-              href="/auth/sign-in"
-              className="block rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-white hover:text-slate-900"
-            >
-              Sign out
-            </Link>
+            <PortalSignOutButton className="block w-full rounded-2xl px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition hover:bg-white hover:text-slate-900 disabled:opacity-60" />
           </div>
         ) : null}
       </nav>
@@ -211,13 +205,10 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Account</p>
               <div className="mt-3 space-y-1 border-t border-slate-100 pt-3">
                 <PortalRoleSwitcher currentKind={definition.kind} />
-                <Link
-                  href="/auth/sign-in"
-                  className="block rounded-2xl px-3 py-3 text-center text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 transition hover:bg-white"
-                  onClick={() => setAccountOpen(false)}
-                >
-                  Sign out
-                </Link>
+                <PortalSignOutButton
+                  className="block w-full rounded-2xl px-3 py-3 text-center text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 transition hover:bg-white disabled:opacity-60"
+                  onSignedOut={() => setAccountOpen(false)}
+                />
               </div>
             </div>
           </>

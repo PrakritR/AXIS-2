@@ -16,13 +16,13 @@ export const getProPortalRenderContext = cache(async () => {
   const preview = await getAdminPreviewFromCookies();
   if (hasAdminRole(ctx) && preview?.portal === "manager") {
     /* admin preview as manager — allowed */
-  } else if (hasAdminRole(ctx) && !hasRole(ctx, "manager") && !hasRole(ctx, "owner")) {
+  } else if (hasAdminRole(ctx) && !hasRole(ctx, "manager")) {
     redirect("/admin/dashboard");
-  } else if (!hasRole(ctx, "manager") && !hasRole(ctx, "owner")) {
+  } else if (!hasRole(ctx, "manager")) {
     redirect("/auth/sign-in");
   } else if (ctx.roles.length > 1 && ctx.effectiveRole === null) {
     redirect(`/auth/choose-portal?next=${encodeURIComponent("/portal/dashboard")}`);
-  } else if (ctx.effectiveRole !== null && ctx.effectiveRole !== "manager" && ctx.effectiveRole !== "owner") {
+  } else if (ctx.effectiveRole !== null && ctx.effectiveRole !== "manager") {
     redirect(portalDashboardPath(ctx.effectiveRole));
   }
 

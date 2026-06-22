@@ -473,7 +473,9 @@ export function PortalCalendarPanels({
     };
   }, [meetings, today]);
 
-  const meetingSummaryKind = meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting";
+  const isPropertyTourCalendar = Boolean(scheduledTourFilter?.managerUserId);
+  const eventSummaryKind =
+    isPropertyTourCalendar || meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting";
 
   const timeWindowControl = (
     <div className="flex flex-wrap items-center gap-2">
@@ -878,7 +880,7 @@ export function PortalCalendarPanels({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-bold text-sky-950">
-                    {upcomingMeetingSummary.total} upcoming {meetingSummaryKind}
+                    {upcomingMeetingSummary.total} upcoming {eventSummaryKind}
                     {upcomingMeetingSummary.total === 1 ? "" : "s"} on this calendar
                   </p>
                   <p className="mt-1 text-xs font-medium text-sky-800">

@@ -2,7 +2,7 @@ import { emitAdminUi } from "@/lib/demo-admin-ui";
 import { normalizeBugFeedbackRow } from "@/lib/portal-bug-feedback-utils";
 
 export type BugFeedbackType = "bug" | "feedback";
-export type BugFeedbackReporterRole = "manager" | "resident" | "owner" | "admin" | "pro";
+export type BugFeedbackReporterRole = "manager" | "resident" | "admin" | "pro";
 export type BugFeedbackStatus = "open" | "reviewing" | "resolved" | "closed";
 export type BugSeverity = "low" | "medium" | "high" | "critical";
 
