@@ -42,7 +42,7 @@ export function PortalNotificationPreviewModal({
   const [skipMessage, setSkipMessage] = useState(false);
 
   useEffect(() => {
-    if (open) setSkipMessage(false);
+    if (open) queueMicrotask(() => setSkipMessage(false));
   }, [open, recipient, subject, body]);
 
   const effectiveConfirmLabel = skipMessage
