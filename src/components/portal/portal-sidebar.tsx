@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
@@ -203,7 +204,10 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         {hasSignOut ? (
           <div className="mt-auto space-y-0.5 border-t border-border pt-3">
             <PortalRoleSwitcher currentKind={definition.kind} />
-            <PortalSignOutButton className="block w-full rounded-[14px] px-3 py-2.5 text-left text-sm font-medium text-muted transition hover:bg-accent/70 hover:text-foreground disabled:opacity-60" />
+            <div className="flex items-center gap-2">
+              <PortalSignOutButton className="min-w-0 flex-1 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium text-muted transition hover:bg-accent/70 hover:text-foreground disabled:opacity-60" />
+              <ThemeToggle className="shrink-0" />
+            </div>
           </div>
         ) : null}
       </nav>
@@ -274,10 +278,13 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               <p className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Account</p>
               <div className="mt-3 space-y-1 border-t border-border pt-3">
                 <PortalRoleSwitcher currentKind={definition.kind} />
-                <PortalSignOutButton
-                  className="block w-full rounded-[14px] px-3 py-3 text-center text-sm font-semibold text-foreground ring-1 ring-border transition hover:bg-accent/70 disabled:opacity-60"
-                  onSignedOut={() => setAccountOpen(false)}
-                />
+                <div className="flex items-center gap-2">
+                  <PortalSignOutButton
+                    className="min-w-0 flex-1 rounded-[14px] px-3 py-3 text-center text-sm font-semibold text-foreground ring-1 ring-border transition hover:bg-accent/70 disabled:opacity-60"
+                    onSignedOut={() => setAccountOpen(false)}
+                  />
+                  <ThemeToggle className="shrink-0" />
+                </div>
               </div>
             </div>
           </>
