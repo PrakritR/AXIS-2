@@ -8,7 +8,6 @@ import {
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
@@ -40,8 +39,6 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "paid", label: "Paid" },
 ];
 
-type HouseSort = "house-asc" | "house-desc";
-
 const PAYMENT_ACCOUNT_EXCLUSIONS = ["sharad ramachandran", "sharad"] as const;
 
 function shouldExcludePaymentAccount(residentName: string, residentEmail?: string): boolean {
@@ -68,7 +65,6 @@ export function ManagerPayments() {
   const [addOpen, setAddOpen] = useState(false);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
-  const [houseSort, setHouseSort] = useState<HouseSort>("house-asc");
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
@@ -271,20 +267,8 @@ export function ManagerPayments() {
       return true;
     });
 
-    return [...filtered].sort((a, b) => {
-      if (propertyFilter) {
-        const byResident = a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
-        const residentOrder = houseSort === "house-asc" ? byResident : -byResident;
-        if (residentOrder !== 0) return residentOrder;
-      }
-      const byHouse = a.propertyName.localeCompare(b.propertyName, undefined, { sensitivity: "base" });
-      const houseOrder = houseSort === "house-asc" ? byHouse : -byHouse;
-      if (houseOrder !== 0) return houseOrder;
-      const byResident = a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
-      if (byResident !== 0) return byResident;
-      return a.chargeTitle.localeCompare(b.chargeTitle, undefined, { sensitivity: "base" });
-    });
-  }, [mergedRows, bucket, propertyFilter, activeResidentFilter, houseSort]);
+    return filtered;
+  }, [mergedRows, bucket, propertyFilter, activeResidentFilter]);
 
   const filterRow = (
     <ManagerPortalFilterRow>
@@ -308,15 +292,6 @@ export function ManagerPayments() {
             residentOptions={residentOptions}
             residentValue={activeResidentFilter}
             onResidentChange={setResidentFilter}
-          />
-          <PortalToolbarSortSelect
-            label={propertyFilter ? "Sort resident" : "Sort house"}
-            value={houseSort}
-            onChange={setHouseSort}
-            options={[
-              { value: "house-asc", label: "A-Z" },
-              { value: "house-desc", label: "Z-A" },
-            ]}
           />
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddOpen(true)}>
             Add payment

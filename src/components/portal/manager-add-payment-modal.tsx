@@ -9,6 +9,7 @@ import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { createManagerCharge } from "@/lib/household-charges";
 import { MANAGER_PAYMENT_PRESETS, type ManagerPaymentPresetId } from "@/lib/payment-policy";
 import { buildNewChargeNoticeBody, deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
+import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 
 function dueLabelFromIso(iso: string): string {
   const d = new Date(`${iso}T12:00:00`);
@@ -115,7 +116,7 @@ export function ManagerAddPaymentModal({
     setNoticePreview(preview);
   };
 
-  const confirmPayment = async () => {
+  const confirmPayment = async (skipMessage: boolean) => {
     if (!noticePreview || noticeBusy) return;
     setNoticeBusy(true);
     try {
@@ -135,6 +136,13 @@ export function ManagerAddPaymentModal({
         return;
       }
 
+      reset();
+      onSubmitted();
+      if (skipMessage) {
+        showToast("Payment added (no notification sent).");
+        return;
+      }
+
       const amountLabel = `$${noticePreview.amount.toFixed(2)}`;
       const subject = `New charge: ${noticePreview.chargeTitle}`;
       const body = buildNewChargeNoticeBody({
@@ -150,8 +158,6 @@ export function ManagerAddPaymentModal({
         text: body,
       });
 
-      reset();
-      onSubmitted();
       if (notice.ok) {
         showToast(
           notice.skipped
@@ -163,6 +169,7 @@ export function ManagerAddPaymentModal({
       }
     } finally {
       setNoticeBusy(false);
+      setNoticePreview(null);
     }
   };
 
@@ -256,39 +263,21 @@ export function ManagerAddPaymentModal({
         </div>
       </Modal>
 
-      <Modal
+      <PortalNotificationPreviewModal
         open={noticePreview !== null}
         title="New payment — notification preview"
         onClose={() => setNoticePreview(null)}
+        recipient={noticePreview?.residentEmail ?? ""}
+        subject={noticePreview ? `New charge: ${noticePreview.chargeTitle}` : ""}
+        body={previewBody ?? ""}
+        confirmLabel="Add payment & send notice"
+        confirmLabelWithoutMessage="Add payment only"
+        confirmBusy={noticeBusy}
+        confirmBusyLabel="Adding…"
+        cancelLabel="Back"
         panelClassName="relative z-[72] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:my-4 sm:p-6"
-      >
-        {noticePreview ? (
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-              <p className="text-sm text-slate-900">{noticePreview.residentEmail}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-              <p className="text-sm text-slate-900">New charge: {noticePreview.chargeTitle}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-              <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-                {previewBody}
-              </pre>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" className="rounded-full" onClick={() => setNoticePreview(null)}>
-                Back
-              </Button>
-              <Button type="button" variant="primary" className="rounded-full" disabled={noticeBusy} onClick={() => void confirmPayment()}>
-                {noticeBusy ? "Adding…" : "Add payment & send notice"}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
+        onConfirm={(skipMessage) => void confirmPayment(skipMessage)}
+      />
     </>
   );
 }

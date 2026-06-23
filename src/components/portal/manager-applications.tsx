@@ -3,7 +3,7 @@
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -721,7 +721,7 @@ function ManagerApplicationsContent() {
     showToast("Refreshed.");
   }, [showToast]);
 
-  const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket) => {
+  const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
     const row = rows.find((r) => r.id === id);
     if (!row) return;
     const next = rows.map((r) =>
@@ -757,7 +757,7 @@ function ManagerApplicationsContent() {
     }
 
     let welcomeSent = false;
-    if (nextBucket === "approved" && updatedRow.email?.trim()) {
+    if (nextBucket === "approved" && updatedRow.email?.trim() && !opts?.skipWelcomeEmail) {
       const welcome = await requestResidentWelcomeEmail(updatedRow);
       welcomeSent = welcome.status === "sent";
     }
@@ -766,9 +766,11 @@ function ManagerApplicationsContent() {
     setBucket(nextBucket);
     const msg =
       nextBucket === "approved"
-        ? welcomeSent
-          ? "Application approved. A welcome email with portal setup was sent to the applicant."
-          : "Application approved."
+        ? opts?.skipWelcomeEmail
+          ? "Application approved (no setup email sent)."
+          : welcomeSent
+            ? "Application approved. A welcome email with portal setup was sent to the applicant."
+            : "Application approved."
         : nextBucket === "rejected"
           ? "Application rejected."
           : "Moved to Pending.";
@@ -1096,53 +1098,38 @@ function ManagerApplicationsContent() {
         </div>
       </div>
     </ManagerPortalPageShell>
-      <Modal open={approvePreviewRow !== null} title="Approve application — account setup email" onClose={() => setApprovePreviewRow(null)}>
-        {approvePreviewRow ? (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">
-              Approving <span className="font-semibold text-slate-900">{approvePreviewRow.name || approvePreviewRow.email}</span> will send
-              their Axis resident account setup email and inbox notification.
-            </p>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-              <p className="text-sm text-slate-900">{approvePreviewRow.email}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-              <p className="text-sm text-slate-900">{RESIDENT_WELCOME_EMAIL_SUBJECT}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-              <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-                {buildResidentWelcomeEmailBody({
-                  residentName: approvePreviewRow.name || undefined,
-                  axisId: approvePreviewRow.id,
-                  signupUrl: residentAccountCreationUrl("", approvePreviewRow.id),
-                })}
-              </pre>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" className="rounded-full" onClick={() => setApprovePreviewRow(null)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                className="rounded-full"
-                disabled={approveBusyId === approvePreviewRow.id}
-                onClick={() => {
-                  const row = approvePreviewRow;
-                  setApprovePreviewRow(null);
-                  setApproveBusyId(row.id);
-                  void setRowBucket(row.id, "approved").finally(() => setApproveBusyId(null));
-                }}
-              >
-                {approveBusyId === approvePreviewRow.id ? "Approving…" : "Approve & send setup email"}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
+      <PortalNotificationPreviewModal
+        open={approvePreviewRow !== null}
+        title="Approve application — account setup email"
+        onClose={() => setApprovePreviewRow(null)}
+        recipient={approvePreviewRow?.email ?? ""}
+        subject={RESIDENT_WELCOME_EMAIL_SUBJECT}
+        body={
+          approvePreviewRow
+            ? buildResidentWelcomeEmailBody({
+                residentName: approvePreviewRow.name || undefined,
+                axisId: approvePreviewRow.id,
+                signupUrl: residentAccountCreationUrl("", approvePreviewRow.id),
+              })
+            : ""
+        }
+        intro={
+          approvePreviewRow
+            ? `Approving ${approvePreviewRow.name || approvePreviewRow.email} will update their application status and can send their Axis resident account setup email.`
+            : undefined
+        }
+        confirmLabel="Approve & send setup email"
+        confirmLabelWithoutMessage="Approve only"
+        confirmBusy={approvePreviewRow !== null && approveBusyId === approvePreviewRow.id}
+        confirmBusyLabel="Approving…"
+        onConfirm={(skipMessage) => {
+          if (!approvePreviewRow) return;
+          const row = approvePreviewRow;
+          setApprovePreviewRow(null);
+          setApproveBusyId(row.id);
+          void setRowBucket(row.id, "approved", { skipWelcomeEmail: skipMessage }).finally(() => setApproveBusyId(null));
+        }}
+      />
     </>
   );
 }
