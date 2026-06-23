@@ -48,7 +48,7 @@ function priorityClass(p: string) {
   const x = p.toLowerCase();
   if (x === "high") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
   if (x === "medium") return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
-  return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
+  return "bg-accent/30 text-muted ring-1 ring-border";
 }
 
 export function ResidentWorkOrdersPanel() {
@@ -268,8 +268,8 @@ export function ResidentWorkOrdersPanel() {
                 {rows.map((row: DemoManagerWorkOrderRow) => (
                   <Fragment key={row.id}>
                     <tr className={PORTAL_TABLE_TR}>
-                      <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-slate-600`}>{row.id}</td>
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
+                      <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-muted`}>{row.id}</td>
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
                       <td className={PORTAL_TABLE_TD}>{row.description.split(":")[0] || "General"}</td>
                       <td className={PORTAL_TABLE_TD}>
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
@@ -291,16 +291,16 @@ export function ResidentWorkOrdersPanel() {
                     </tr>
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={7} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Preferred arrival</p>
-                          <p className="mt-1 font-medium text-slate-800">{row.preferredArrival ?? "Anytime"}</p>
-                          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Estimated cost</p>
+                        <td colSpan={7} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted">Preferred arrival</p>
+                          <p className="mt-1 font-medium text-foreground">{row.preferredArrival ?? "Anytime"}</p>
+                          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Estimated cost</p>
                           <p className="mt-1">{row.cost !== "—" && row.cost.trim() ? row.cost : "Not set yet"}</p>
-                          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Description</p>
+                          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Description</p>
                           <p className="mt-1.5 leading-relaxed">{row.description}</p>
                           {row.photoDataUrls?.length ? (
                             <>
-                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Photos</p>
+                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Photos</p>
                               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                                 {row.photoDataUrls.map((src, index) => (
                                   <a
@@ -308,7 +308,7 @@ export function ResidentWorkOrdersPanel() {
                                     href={src}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+                                    className="block overflow-hidden rounded-xl border border-border bg-accent/30"
                                   >
                                     <Image
                                       src={src}
@@ -351,17 +351,17 @@ export function ResidentWorkOrdersPanel() {
         )}
       </div>
 
-      <Modal open={createOpen} title="Create work order" onClose={() => setCreateOpen(false)} panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
-        <p className="text-xs text-slate-500">New requests appear in Open; open Details on a row for notes and updates.</p>
+      <Modal open={createOpen} title="Create work order" onClose={() => setCreateOpen(false)} panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-6">
+        <p className="text-xs text-muted">New requests appear in Open; open Details on a row for notes and updates.</p>
         <div className="mt-4 grid gap-3">
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Title</p>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short summary of the issue" className="bg-white" />
+            <p className="mb-1 text-[11px] font-medium text-muted">Title</p>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short summary of the issue" className="bg-card" />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <p className="mb-1 text-[11px] font-medium text-slate-600">Category</p>
-              <Select value={category} onChange={(e) => setCategory(e.target.value)} className="bg-white">
+              <p className="mb-1 text-[11px] font-medium text-muted">Category</p>
+              <Select value={category} onChange={(e) => setCategory(e.target.value)} className="bg-card">
                 <option>Plumbing</option>
                 <option>Electrical</option>
                 <option>HVAC</option>
@@ -370,8 +370,8 @@ export function ResidentWorkOrdersPanel() {
               </Select>
             </div>
             <div>
-              <p className="mb-1 text-[11px] font-medium text-slate-600">Priority</p>
-              <Select value={priority} onChange={(e) => setPriority(e.target.value)} className="bg-white">
+              <p className="mb-1 text-[11px] font-medium text-muted">Priority</p>
+              <Select value={priority} onChange={(e) => setPriority(e.target.value)} className="bg-card">
                 <option>Low</option>
                 <option>Medium</option>
                 <option>High</option>
@@ -379,22 +379,22 @@ export function ResidentWorkOrdersPanel() {
             </div>
           </div>
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Preferred arrival time</p>
+            <p className="mb-1 text-[11px] font-medium text-muted">Preferred arrival time</p>
             <Input
               value={preferredArrival}
               onChange={(e) => setPreferredArrival(e.target.value)}
               placeholder='e.g. Weekdays after 5pm — or write "anytime"'
-              className="bg-white"
+              className="bg-card"
             />
           </div>
-          <p className="text-xs text-slate-500">Attach up to 6 photos to help maintenance understand the issue.</p>
+          <p className="text-xs text-muted">Attach up to 6 photos to help maintenance understand the issue.</p>
           <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => photoInputRef.current?.click()}>
             Add photos
           </Button>
           {photoDataUrls.length ? (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {photoDataUrls.map((src, index) => (
-                <div key={`new-photo-${index}`} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                <div key={`new-photo-${index}`} className="overflow-hidden rounded-xl border border-border bg-accent/30">
                   <Image
                     src={src}
                     alt={`Selected work order photo ${index + 1}`}
@@ -418,7 +418,7 @@ export function ResidentWorkOrdersPanel() {
             </div>
           ) : null}
         </div>
-        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setCreateOpen(false)}>
             Cancel
           </Button>

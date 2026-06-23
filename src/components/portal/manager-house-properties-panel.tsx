@@ -153,7 +153,7 @@ function StatusPill({
   const styles = {
     green: "border-emerald-200/90 bg-emerald-50 text-emerald-900",
     amber: "border-amber-200/90 bg-amber-50 text-amber-950",
-    slate: "border-slate-200/90 bg-slate-50 text-slate-700",
+    slate: "border-border bg-accent/30 text-muted",
     rose: "border-rose-200/90 bg-rose-50 text-rose-900",
   } as const;
   const dot = {
@@ -257,17 +257,17 @@ function ManagerPropertyInlineDetails({
   const footer = (
     <div className="flex flex-col gap-2">
       {bucket === 1 && row.editRequestNote?.trim() ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Requested changes</p>
-          <p className="mt-1.5 whitespace-pre-wrap text-slate-700">{row.editRequestNote.trim()}</p>
+        <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Requested changes</p>
+          <p className="mt-1.5 whitespace-pre-wrap text-muted">{row.editRequestNote.trim()}</p>
         </div>
       ) : null}
 
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Actions</p>
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Actions</p>
 
       {bucket === 0 ? (
         <>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             {row.adminRefId.startsWith("mgr-")
               ? "This listing was edited and is pending admin re-approval. Edit sections below."
               : "Listing approval is handled by prakritramachandran@gmail.com. Edit sections below while your submission is reviewed."}
@@ -297,7 +297,7 @@ function ManagerPropertyInlineDetails({
 
       {bucket === 1 ? (
         <>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             Return this to your pending queue to edit and resubmit — it will appear under Pending again.
           </p>
           <Button
@@ -343,7 +343,7 @@ function ManagerPropertyInlineDetails({
               href={publicHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+              className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent/30"
             >
               View listing
             </Link>
@@ -425,29 +425,29 @@ function ManagerPropertyInlineDetails({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Rent with Axis preview</p>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Rent with Axis preview</p>
         {publicHref ? (
           <Link
             href={publicHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs font-semibold text-slate-700 underline-offset-2 hover:underline"
+            className="text-xs font-semibold text-muted underline-offset-2 hover:underline"
           >
             Open public page
           </Link>
         ) : (
-          <span className="text-xs text-slate-500">Exact layout renters see once approved</span>
+          <span className="text-xs text-muted">Exact layout renters see once approved</span>
         )}
       </div>
       {mock && rich ? (
         <div
           data-listing-preview-scroll
-          className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/90 bg-white"
+          className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card"
         >
           <ListingDetailSections property={mock} rich={rich} previewModal />
         </div>
       ) : null}
-      <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-4 sm:px-5">{footer}</div>
+      <div className="rounded-2xl border border-border bg-accent/30 px-4 py-4 sm:px-5">{footer}</div>
 
       {editorOpen && portalSub ? (
         <ManagerAddListingForm
@@ -532,15 +532,15 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
   }, [activeStage, stageCounts, setActiveStage]);
 
   if (!authReady) {
-    return <p className="text-sm text-slate-500">Loading your properties…</p>;
+    return <p className="text-sm text-muted">Loading your properties…</p>;
   }
   if (!managerUserId) {
-    return <p className="text-sm text-slate-600">Sign in to view and manage your properties.</p>;
+    return <p className="text-sm text-muted">Sign in to view and manage your properties.</p>;
   }
 
   return (
     <>
-      <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+      <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
         {MANAGER_STAGES.map((stage) => (
           <button
             key={stage.key}
@@ -550,13 +550,13 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
               setExpandedRowKey(null);
             }}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
-              activeStage === stage.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              activeStage === stage.key ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
             }`}
           >
             {stage.label}
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                activeStage === stage.key ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+                activeStage === stage.key ? "bg-accent/30 text-muted" : "bg-accent/40 text-muted"
               }`}
             >
               {stageCounts[stage.key]}
@@ -565,15 +565,15 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
         ))}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">{BANNER_COPY[activeStage]}</div>
+      <div className="mt-4 rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">{BANNER_COPY[activeStage]}</div>
 
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>
         {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center bg-slate-50/20 px-4 py-14 text-center sm:py-16">
+          <div className="flex flex-col items-center justify-center bg-accent/30/20 px-4 py-14 text-center sm:py-16">
             <AxisHeaderMarkTile>
               <HouseIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
-            <p className="mt-4 max-w-sm text-sm font-medium text-slate-500">{EMPTY_COPY[activeStage]}</p>
+            <p className="mt-4 max-w-sm text-sm font-medium text-muted">{EMPTY_COPY[activeStage]}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -596,20 +596,20 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                     <Fragment key={rowKey}>
                       <tr className={PORTAL_TABLE_TR}>
                         <td className={PORTAL_TABLE_TD}>
-                          <p className="font-medium text-slate-900">
+                          <p className="font-medium text-foreground">
                             {row.buildingName}
                           </p>
-                          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                          <p className="mt-0.5 text-xs leading-relaxed text-muted">
                             {row.address}
                             {row.zip ? `, ${row.zip}` : ""}
                           </p>
                         </td>
                         <td className={PORTAL_TABLE_TD}>
-                          <p className="text-xs text-slate-600">
-                            <span className="font-medium text-slate-800">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths}{" "}
+                          <p className="text-xs text-muted">
+                            <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths}{" "}
                             ba · {row.neighborhood}
                           </p>
-                          {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-slate-500">{row.tagline}</p> : null}
+                          {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p> : null}
                         </td>
                         <td className={PORTAL_TABLE_TD}>
                           <StatusPill label={status.label} variant={status.variant} />
@@ -627,8 +627,8 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                         </td>
                       </tr>
                       {expanded ? (
-                        <tr key={`${rowKey}-details`} className="border-b border-slate-100">
-                          <td colSpan={4} className="bg-slate-50/40 px-4 py-4">
+                        <tr key={`${rowKey}-details`} className="border-b border-border">
+                          <td colSpan={4} className="bg-accent/30/40 px-4 py-4">
                             <ManagerPropertyInlineDetails
                               key={rowKey}
                               bucket={sourceBucket}

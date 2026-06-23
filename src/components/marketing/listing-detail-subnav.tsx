@@ -192,8 +192,8 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
       ref={rootRef}
       className={`sticky z-40 -mx-4 border-b px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:-mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 ${
         pageScrolled
-          ? "border-slate-200/80 bg-white/90 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_40px_-20px_rgba(15,23,42,0.1)] supports-[backdrop-filter]:bg-white/80"
-          : "border-slate-200/90 bg-[#f4f7fb]/95"
+          ? "border-border bg-card shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_40px_-20px_rgba(15,23,42,0.1)] supports-[backdrop-filter]:bg-card"
+          : "border-border bg-[#f4f7fb]/95"
       }`}
       style={{ top: mode === "modal" ? 0 : `${stickyTopPx}px` }}
       aria-label="Listing sections"
@@ -212,7 +212,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
                 className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-full border-0 px-3.5 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
                   active
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-transparent text-slate-500 hover:bg-white/90 hover:text-slate-800"
+                    : "bg-transparent text-muted hover:bg-card hover:text-foreground"
                 }`}
                 onClick={() => {
                   setActiveId(item.id);

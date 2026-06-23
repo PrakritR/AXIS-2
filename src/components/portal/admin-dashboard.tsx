@@ -41,10 +41,10 @@ function NotifBanner({
   children: React.ReactNode;
 }) {
   const cls = {
-    amber: "border-amber-200/80 bg-amber-50/80 text-amber-950",
-    blue: "border-blue-200/80 bg-blue-50/80 text-blue-950",
-    violet: "border-violet-200/80 bg-violet-50/80 text-violet-950",
-    rose: "border-rose-200/80 bg-rose-50/80 text-rose-950",
+    amber: "portal-banner-pending",
+    blue: "portal-banner-info",
+    violet: "portal-banner-notice",
+    rose: "portal-banner-danger",
   }[tone];
   return (
     <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
@@ -69,13 +69,13 @@ function Tile({
   return (
     <Link
       href={href}
-      className={`group flex flex-col gap-1 rounded-2xl border bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition hover:shadow-md ${
-        urgent ? "border-amber-300/80 ring-1 ring-amber-200/60" : "border-slate-200/80 hover:border-slate-300"
+      className={`surface-panel group flex flex-col gap-1 rounded-2xl border p-5 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-card)] ${
+        urgent ? "border-[var(--status-pending-bg)] ring-1 ring-[var(--status-pending-bg)]" : "border-border hover:border-primary/25"
       }`}
     >
-      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-slate-900">{value}</p>
-      <p className="text-sm font-medium text-slate-600">{label}</p>
-      {sub ? <p className="text-xs text-slate-400">{sub}</p> : null}
+      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-foreground">{value}</p>
+      <p className="text-sm font-medium text-muted">{label}</p>
+      {sub ? <p className="text-xs text-muted">{sub}</p> : null}
     </Link>
   );
 }
@@ -83,7 +83,7 @@ function Tile({
 function SectionHeader({ title, href, linkLabel }: { title: string; href?: string; linkLabel?: string }) {
   return (
     <div className="flex items-center justify-between">
-      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">{title}</h2>
+      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
       {href && linkLabel ? (
         <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
           {linkLabel}
@@ -235,7 +235,7 @@ export function AdminDashboard() {
 
   return (
     <div className={`${PORTAL_SECTION_SURFACE} space-y-5`}>
-      <h1 className="text-[1.75rem] font-bold tracking-[-0.02em] text-slate-900">Dashboard</h1>
+      <h1 className="text-[1.75rem] font-bold tracking-[-0.02em] text-foreground">Dashboard</h1>
 
       {hasBanners && (
         <div className="space-y-2">
@@ -316,21 +316,21 @@ export function AdminDashboard() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+        <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
           <SectionHeader title="Properties pending review" href="/admin/properties" linkLabel="Properties →" />
           {pendingPropertyRows.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-400">No properties waiting for admin review.</p>
+            <p className="mt-4 text-sm text-muted">No properties waiting for admin review.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {pendingPropertyRows.map((row) => (
-                <li key={row.adminRefId} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                <li key={row.adminRefId} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">
+                    <p className="truncate text-sm font-semibold text-foreground">
                       {row.buildingName || row.unitLabel || "Listing"}
                     </p>
-                    <p className="truncate text-xs text-slate-500">{row.address || row.neighborhood || "Pending submission"}</p>
+                    <p className="truncate text-xs text-muted">{row.address || row.neighborhood || "Pending submission"}</p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                  <span className="portal-badge-pending shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
                     Review
                   </span>
                 </li>
@@ -339,21 +339,21 @@ export function AdminDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+        <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
           <SectionHeader title="Leases in admin review" href="/admin/leases" linkLabel="Leases →" />
           {adminReviewLeases.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-400">No leases waiting for admin review.</p>
+            <p className="mt-4 text-sm text-muted">No leases waiting for admin review.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {adminReviewLeases.map((row) => (
-                <li key={row.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                <li key={row.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{row.residentName || row.residentEmail}</p>
-                    <p className="truncate text-xs text-slate-500">
+                    <p className="truncate text-sm font-semibold text-foreground">{row.residentName || row.residentEmail}</p>
+                    <p className="truncate text-xs text-muted">
                       {row.unit || row.stageLabel || "Unit pending"} · {row.signedRentLabel || "Rent pending"}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-violet-100 px-2.5 py-0.5 text-[10px] font-semibold text-violet-800">
+                  <span className="portal-badge-notice shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
                     Admin review
                   </span>
                 </li>
@@ -362,19 +362,19 @@ export function AdminDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+        <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
           <SectionHeader title="Inbox" href="/admin/inbox/unopened" linkLabel="Inbox →" />
           {inboxUnread === 0 ? (
-            <p className="mt-4 text-sm text-slate-400">No unread messages — inbox is clear.</p>
+            <p className="mt-4 text-sm text-muted">No unread messages — inbox is clear.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {inboxPreview.map((message) => (
-                <li key={message.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                <li key={message.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{message.name || message.email}</p>
-                    <p className="truncate text-xs text-slate-500">{message.topic || message.body.slice(0, 80)}</p>
+                    <p className="truncate text-sm font-semibold text-foreground">{message.name || message.email}</p>
+                    <p className="truncate text-xs text-muted">{message.topic || message.body.slice(0, 80)}</p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">
+                  <span className="portal-badge-info shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
                     Unread
                   </span>
                 </li>
@@ -383,23 +383,23 @@ export function AdminDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+        <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
           <SectionHeader title="Feedback" href="/admin/bugs-feedback/bugs" linkLabel="Feedback →" />
           {openFeedback.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-400">
+            <p className="mt-4 text-sm text-muted">
               No open bugs or feedback — {feedbackCounts.bugs} bug{feedbackCounts.bugs === 1 ? "" : "s"} and {feedbackCounts.feedback} feedback item{feedbackCounts.feedback === 1 ? "" : "s"} on file.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
               {openFeedback.map((row) => (
-                <li key={row.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                <li key={row.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{row.title || "Untitled report"}</p>
-                    <p className="truncate text-xs text-slate-500">
+                    <p className="truncate text-sm font-semibold text-foreground">{row.title || "Untitled report"}</p>
+                    <p className="truncate text-xs text-muted">
                       {row.reporterName || row.reporterEmail} · {row.type === "bug" ? "Bug" : "Feedback"}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">
+                  <span className="portal-badge-danger shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
                     {row.status === "reviewing" ? "Reviewing" : "Open"}
                   </span>
                 </li>
@@ -410,18 +410,18 @@ export function AdminDashboard() {
       </div>
 
       {upcomingMeetings.length > 0 && (
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+        <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
           <SectionHeader title="Upcoming meetings" href="/admin/events" linkLabel="Meetings →" />
           <ul className="mt-3 space-y-2">
             {upcomingMeetings.slice(0, 6).map((m) => (
-              <li key={m.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+              <li key={m.id} className="flex items-center justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">{m.label}</p>
-                  <p className="text-xs text-slate-500">{fmt(m.start)}</p>
+                  <p className="truncate text-sm font-semibold text-foreground">{m.label}</p>
+                  <p className="text-xs text-muted">{fmt(m.start)}</p>
                 </div>
                 <span
                   className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
-                    m.kind === "pending" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+                    m.kind === "pending" ? "portal-badge-pending" : "portal-badge-success"
                   }`}
                 >
                   {m.kind === "pending" ? "Pending" : "Confirmed"}

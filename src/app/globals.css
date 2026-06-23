@@ -67,6 +67,7 @@
   --announce: #ffffff;
   --glass-fill: rgba(255, 255, 255, 0.12);
   --glass-border: rgba(255, 255, 255, 0.32);
+  --btn-metallic: linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(188, 212, 255, 0.28) 100%);
   --shadow-card: 0 24px 60px -30px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   --shadow-card-hover: 0 28px 56px -36px rgba(47, 107, 255, 0.25), 0 8px 24px -12px rgba(0, 0, 0, 0.3);
   --status-pending-fg: #ffd28a;
@@ -109,6 +110,14 @@
 
 [data-theme="dark"] .text-muted {
   color: rgba(255, 255, 255, 0.62);
+}
+
+[data-theme="light"] .bg-card {
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+[data-theme="dark"] .bg-card {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 [data-theme="light"] .bg-background {
@@ -400,6 +409,148 @@ html {
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
+/* ── Modal / wizard overlays ── */
+.modal-overlay {
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+[data-theme="dark"] .modal-overlay {
+  background: rgba(2, 6, 23, 0.78);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.modal-panel {
+  background: #ffffff;
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .modal-panel {
+  background: #111827;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.surface-panel {
+  background: #ffffff;
+}
+
+[data-theme="dark"] .surface-panel {
+  background: #111827;
+}
+
+/* ── Portal status tones (banners & badges) ── */
+[data-theme="light"] .portal-banner-pending {
+  border-color: rgb(252 211 77 / 0.8);
+  background: rgb(254 243 199 / 0.8);
+  color: rgb(120 53 15);
+}
+
+[data-theme="dark"] .portal-banner-pending {
+  border-color: rgb(255 193 94 / 0.28);
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+
+[data-theme="light"] .portal-banner-success {
+  border-color: rgb(110 231 183 / 0.7);
+  background: rgb(209 250 229 / 0.8);
+  color: rgb(6 78 59);
+}
+
+[data-theme="dark"] .portal-banner-success {
+  border-color: rgb(60 200 140 / 0.28);
+  background: var(--status-confirmed-bg);
+  color: var(--status-confirmed-fg);
+}
+
+[data-theme="light"] .portal-banner-danger {
+  border-color: rgb(253 164 175 / 0.7);
+  background: rgb(255 228 230 / 0.8);
+  color: rgb(136 19 55);
+}
+
+[data-theme="dark"] .portal-banner-danger {
+  border-color: rgb(240 128 112 / 0.28);
+  background: var(--status-overdue-bg);
+  color: var(--status-overdue-fg);
+}
+
+[data-theme="light"] .portal-banner-info {
+  border-color: rgb(147 197 253 / 0.8);
+  background: rgb(219 234 254 / 0.8);
+  color: rgb(30 58 138);
+}
+
+[data-theme="dark"] .portal-banner-info {
+  border-color: rgb(124 140 255 / 0.28);
+  background: var(--status-approved-bg);
+  color: var(--status-approved-fg);
+}
+
+[data-theme="light"] .portal-banner-notice {
+  border-color: rgb(196 181 253 / 0.8);
+  background: rgb(237 233 254 / 0.8);
+  color: rgb(76 29 149);
+}
+
+[data-theme="dark"] .portal-banner-notice {
+  border-color: rgb(167 139 250 / 0.28);
+  background: rgba(167, 139, 250, 0.16);
+  color: #ddd6fe;
+}
+
+[data-theme="light"] .portal-badge-pending {
+  background: rgb(254 243 199);
+  color: rgb(120 53 15);
+}
+
+[data-theme="dark"] .portal-badge-pending {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+
+[data-theme="light"] .portal-badge-success {
+  background: rgb(209 250 229);
+  color: rgb(6 95 70);
+}
+
+[data-theme="dark"] .portal-badge-success {
+  background: var(--status-confirmed-bg);
+  color: var(--status-confirmed-fg);
+}
+
+[data-theme="light"] .portal-badge-danger {
+  background: rgb(255 228 230);
+  color: rgb(159 18 57);
+}
+
+[data-theme="dark"] .portal-badge-danger {
+  background: var(--status-overdue-bg);
+  color: var(--status-overdue-fg);
+}
+
+[data-theme="light"] .portal-badge-info {
+  background: rgb(219 234 254);
+  color: rgb(30 64 175);
+}
+
+[data-theme="dark"] .portal-badge-info {
+  background: var(--status-approved-bg);
+  color: var(--status-approved-fg);
+}
+
+[data-theme="light"] .portal-badge-notice {
+  background: rgb(237 233 254);
+  color: rgb(91 33 182);
+}
+
+[data-theme="dark"] .portal-badge-notice {
+  background: rgba(167, 139, 250, 0.16);
+  color: #ddd6fe;
+}
+
 .hero-chrome-scene {
   color: #ffffff;
 }
@@ -526,6 +677,11 @@ html {
   background: var(--btn-metallic);
   color: #08142e;
   box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="dark"] .btn-metallic {
+  color: #ffffff;
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .btn-cobalt {

@@ -1,7 +1,7 @@
 /** Shared field-level error styling for multi-step wizards. */
 export const WIZARD_FIELD_ERROR_RING = "border-red-400 ring-2 ring-red-100";
 export const WIZARD_FIELD_ERROR_WRAP =
-  "rounded-xl border-2 border-red-300 bg-red-50/40 ring-2 ring-red-100";
+  "rounded-xl border-2 border-red-400/70 ring-2 ring-red-500/20";
 
 export function wizardFieldErrorClass(hasError: boolean, base = ""): string {
   const parts = [base, hasError ? WIZARD_FIELD_ERROR_RING : ""].filter(Boolean);

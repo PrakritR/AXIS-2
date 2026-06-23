@@ -560,9 +560,9 @@ export function PortalCalendarPanels({
 
   const timeWindowControl = (
     <div className="flex flex-wrap items-center gap-2">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Show</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Show</p>
       <select
-        className="h-9 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25"
+        className="h-9 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
         value={String(visibleStartSlot)}
         onChange={(e) => {
           const nextStart = Number.parseInt(e.target.value, 10);
@@ -579,9 +579,9 @@ export function PortalCalendarPanels({
           </option>
         ))}
       </select>
-      <span className="text-sm font-medium text-slate-500">to</span>
+      <span className="text-sm font-medium text-muted">to</span>
       <select
-        className="h-9 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25"
+        className="h-9 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
         value={String(visibleEndSlotExclusive)}
         onChange={(e) => {
           const nextEnd = Number.parseInt(e.target.value, 10);
@@ -778,25 +778,25 @@ export function PortalCalendarPanels({
         onClick={closeSelectedBlock}
       />
       <div
-        className="relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-slate-900/5 sm:p-5"
+        className="relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-border bg-card p-4 shadow-2xl ring-1 ring-slate-900/5 sm:p-5"
       >
-      <div className="mb-4 flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
-        <h3 className="min-w-0 text-base font-bold text-slate-950">
+      <div className="mb-4 flex items-start justify-between gap-3 border-b border-border pb-3">
+        <h3 className="min-w-0 text-base font-bold text-foreground">
           {selectedBlock.kind === "meeting" ? selectedBlock.meeting.title : "Availability block"}
         </h3>
         <button
           type="button"
           onClick={closeSelectedBlock}
-          className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+          className="shrink-0 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted hover:bg-accent/30"
         >
           Close
         </button>
       </div>
       {selectedBlock?.kind === "meeting" ? (
         <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            <p className="font-semibold text-slate-950">{formatRangeLabel(selectedBlock.meeting.startIso, selectedBlock.meeting.endIso)}</p>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+          <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">
+            <p className="font-semibold text-foreground">{formatRangeLabel(selectedBlock.meeting.startIso, selectedBlock.meeting.endIso)}</p>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
               {selectedBlock.meeting.statusLabel ?? (selectedBlock.meeting.source === "planned" ? "Confirmed" : "Requested")}
             </p>
           </div>
@@ -804,26 +804,26 @@ export function PortalCalendarPanels({
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             {selectedBlock.meeting.name ? (
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Name</p>
-                <p className="mt-1 font-medium text-slate-900">{selectedBlock.meeting.name}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Name</p>
+                <p className="mt-1 font-medium text-foreground">{selectedBlock.meeting.name}</p>
               </div>
             ) : null}
             {selectedBlock.meeting.email ? (
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Email</p>
-                <p className="mt-1 font-medium text-slate-900">{selectedBlock.meeting.email}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Email</p>
+                <p className="mt-1 font-medium text-foreground">{selectedBlock.meeting.email}</p>
               </div>
             ) : null}
             {selectedBlock.meeting.phone ? (
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Phone</p>
-                <p className="mt-1 font-medium text-slate-900">{selectedBlock.meeting.phone}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Phone</p>
+                <p className="mt-1 font-medium text-foreground">{selectedBlock.meeting.phone}</p>
               </div>
             ) : null}
             {selectedBlock.meeting.propertyTitle ? (
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Property</p>
-                <p className="mt-1 font-medium text-slate-900">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Property</p>
+                <p className="mt-1 font-medium text-foreground">
                   {selectedBlock.meeting.propertyTitle}
                   {selectedBlock.meeting.roomLabel ? ` · ${selectedBlock.meeting.roomLabel}` : ""}
                 </p>
@@ -832,9 +832,9 @@ export function PortalCalendarPanels({
           </div>
 
           {selectedBlock.meeting.notes ? (
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Notes</p>
-              <p className="mt-1.5 whitespace-pre-wrap text-slate-700">{selectedBlock.meeting.notes}</p>
+            <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Notes</p>
+              <p className="mt-1.5 whitespace-pre-wrap text-muted">{selectedBlock.meeting.notes}</p>
             </div>
           ) : null}
 
@@ -845,7 +845,7 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
               Close
             </Button>
@@ -881,8 +881,8 @@ export function PortalCalendarPanels({
               )}
             </p>
           </div>
-          <p className="text-sm text-slate-600">Delete this slot if you no longer want applicants to book it.</p>
-          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+          <p className="text-sm text-muted">Delete this slot if you no longer want applicants to book it.</p>
+          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
               Close
             </Button>
@@ -916,7 +916,7 @@ export function PortalCalendarPanels({
       confirmLabelWithoutMessage="Confirm tour only"
       confirmBusy={tourConfirmBusy}
       confirmBusyLabel="Confirming…"
-      panelClassName="relative z-[90] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:my-4 sm:p-6"
+      panelClassName="relative z-[90] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border bg-card p-4 shadow-2xl sm:my-4 sm:p-6"
       onConfirm={(skipMessage) => void confirmTourWithNotification(skipMessage)}
     />
   );
@@ -924,7 +924,7 @@ export function PortalCalendarPanels({
   if (!storageKey) {
     return (
       <Card className="p-5">
-        <p className="text-sm font-medium text-slate-800">{unavailableMessage}</p>
+        <p className="text-sm font-medium text-foreground">{unavailableMessage}</p>
       </Card>
     );
   }
@@ -938,9 +938,9 @@ export function PortalCalendarPanels({
               <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
                 ←
               </Button>
-              <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{availabilityHeading}</p>
-                <p className="truncate text-sm font-semibold text-slate-900">Week of {formatWeekRangeMonSun(weekMonday)}</p>
+              <div className="min-w-0 rounded-2xl border border-border bg-accent/30 px-4 py-2">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">{availabilityHeading}</p>
+                <p className="truncate text-sm font-semibold text-foreground">Week of {formatWeekRangeMonSun(weekMonday)}</p>
                 {tourScopeLabel ? <p className="truncate text-xs font-medium text-primary">{tourScopeLabel}</p> : null}
               </div>
               <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next week">
@@ -999,13 +999,13 @@ export function PortalCalendarPanels({
                   <button
                     key={meeting.id}
                     type="button"
-                    className="rounded-xl border border-sky-200 bg-white px-3 py-2 text-left text-xs shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
+                    className="rounded-xl border border-sky-200 bg-card px-3 py-2 text-left text-xs shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
                     onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(meeting.dateStr, meeting.startSlot, e.currentTarget, meeting)}
                   >
-                    <span className="block font-bold text-slate-950">{meeting.title}</span>
-                    <span className="mt-1 block text-slate-600">{formatRangeLabel(meeting.startIso, meeting.endIso)}</span>
+                    <span className="block font-bold text-foreground">{meeting.title}</span>
+                    <span className="mt-1 block text-muted">{formatRangeLabel(meeting.startIso, meeting.endIso)}</span>
                     {meeting.propertyTitle ? (
-                      <span className="mt-1 block truncate text-slate-500">{meeting.propertyTitle}</span>
+                      <span className="mt-1 block truncate text-muted">{meeting.propertyTitle}</span>
                     ) : null}
                   </button>
                 ))}
@@ -1013,20 +1013,20 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
-          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-xs font-semibold text-slate-600">Drag to define a time block, then edit it before saving. Use Create block for recurring schedules.</p>
+          <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="border-b border-border bg-accent/30 px-3 py-2">
+              <p className="text-xs font-semibold text-muted">Drag to define a time block, then edit it before saving. Use Create block for recurring schedules.</p>
             </div>
             <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
-              <div className="grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] gap-px bg-slate-200 text-xs">
-                <div className="bg-slate-50 px-2 py-2 font-bold uppercase tracking-[0.12em] text-slate-400">Time</div>
+              <div className="grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] gap-px bg-accent/40 text-xs">
+                <div className="bg-accent/30 px-2 py-2 font-bold uppercase tracking-[0.12em] text-muted">Time</div>
                 {fullWeekDates.map((d) => {
                   const ds = toLocalDateStr(d);
                   const count = visibleSlotIndices.reduce((total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0), 0);
                   return (
-                    <div key={ds} className="bg-slate-50 px-2 py-2 text-center">
-                      <p className="font-bold uppercase tracking-[0.12em] text-slate-500">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
-                      <p className="mt-0.5 font-semibold text-slate-900">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+                    <div key={ds} className="bg-accent/30 px-2 py-2 text-center">
+                      <p className="font-bold uppercase tracking-[0.12em] text-muted">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
+                      <p className="mt-0.5 font-semibold text-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
                       <p className="mt-0.5 text-[11px] font-medium text-emerald-700">{count} open</p>
                     </div>
                   );
@@ -1034,7 +1034,7 @@ export function PortalCalendarPanels({
 
                 {visibleSlotIndices.map((slotIdx) => (
                   <Fragment key={slotIdx}>
-                    <div className="flex min-h-9 items-center bg-white px-2 font-semibold text-slate-500">{formatAvailabilitySlotLabel(slotIdx)}</div>
+                    <div className="flex min-h-9 items-center bg-card px-2 font-semibold text-muted">{formatAvailabilitySlotLabel(slotIdx)}</div>
                     {fullWeekDateStrs.map((ds) => {
                       const key = dateSlotKey(ds, slotIdx);
                       const active = activeSlots.has(key);
@@ -1065,7 +1065,7 @@ export function PortalCalendarPanels({
                                 ? "bg-primary/[0.14] text-primary ring-2 ring-inset ring-primary/35"
                               : active
                                 ? "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300"
-                                : "bg-white text-transparent hover:bg-primary/[0.07] hover:text-primary"
+                                : "bg-card text-transparent hover:bg-primary/[0.07] hover:text-primary"
                           }`}
                           aria-label={`${meeting || active ? "Open details for" : "Select"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
                         >
@@ -1096,10 +1096,10 @@ export function PortalCalendarPanels({
 
         <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => { setBlockModalOpen(false); setDragSelection(null); }}>
           <div className="space-y-5">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">{blockSummary}</div>
+            <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">{blockSummary}</div>
 
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-900">Days of week</p>
+              <p className="text-sm font-semibold text-foreground">Days of week</p>
               <div className="flex flex-wrap gap-2">
                 {WEEKDAY_OPTIONS.map((option) => {
                   const active = blockWeekdays.includes(option.value);
@@ -1111,7 +1111,7 @@ export function PortalCalendarPanels({
                       className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
                         active
                           ? "border-primary bg-primary text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-primary/30 hover:text-primary"
+                          : "border-border bg-card text-muted hover:border-primary/30 hover:text-primary"
                       }`}
                     >
                       {option.label}
@@ -1123,7 +1123,7 @@ export function PortalCalendarPanels({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-900">Start time</label>
+                <label className="text-sm font-semibold text-foreground">Start time</label>
                 <Select
                   value={String(blockStartSlot)}
                   onChange={(e) => {
@@ -1143,7 +1143,7 @@ export function PortalCalendarPanels({
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-900">End time</label>
+                <label className="text-sm font-semibold text-foreground">End time</label>
                 <Select
                   value={String(blockEndSlotExclusive)}
                   onChange={(e) => {
@@ -1167,7 +1167,7 @@ export function PortalCalendarPanels({
 
             <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-900">Repeat</label>
+                <label className="text-sm font-semibold text-foreground">Repeat</label>
                 <Select value={blockCadence} onChange={(e) => setBlockCadence(e.target.value as RecurrenceCadence)}>
                   <option value="once">Once</option>
                   <option value="weekly">Weekly</option>
@@ -1176,7 +1176,7 @@ export function PortalCalendarPanels({
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-900">Occurrences</label>
+                <label className="text-sm font-semibold text-foreground">Occurrences</label>
                 <Input
                   type="number"
                   min={1}
@@ -1188,7 +1188,7 @@ export function PortalCalendarPanels({
               </div>
             </div>
 
-            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+            <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
               <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
                 Cancel
               </Button>
@@ -1212,7 +1212,7 @@ export function PortalCalendarPanels({
             onClose={() => setUpdateToHousesOpen(false)}
           >
             <div className="space-y-5">
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-muted">
                 Copy this week&apos;s availability to the selected houses. Slots are added on top of existing ones — nothing is removed.
               </p>
               <div className="space-y-2">
@@ -1222,7 +1222,7 @@ export function PortalCalendarPanels({
                     className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition ${
                       selectedHouseIds.has(p.id)
                         ? "border-primary bg-primary/[0.06] ring-1 ring-primary/30"
-                        : "border-slate-200 bg-white hover:border-slate-300"
+                        : "border-border bg-card hover:border-border"
                     }`}
                   >
                     <input
@@ -1236,13 +1236,13 @@ export function PortalCalendarPanels({
                           return next;
                         });
                       }}
-                      className="h-4 w-4 rounded border-slate-300 accent-primary"
+                      className="h-4 w-4 rounded border-border accent-primary"
                     />
-                    <span className="text-sm font-medium text-slate-900">{p.name}</span>
+                    <span className="text-sm font-medium text-foreground">{p.name}</span>
                   </label>
                 ))}
               </div>
-              <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+              <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
                 <Button type="button" variant="outline" className="rounded-full" onClick={() => setUpdateToHousesOpen(false)}>
                   Cancel
                 </Button>
@@ -1270,16 +1270,16 @@ export function PortalCalendarPanels({
 
   const scheduleCard = (
     <Card className="overflow-hidden p-0">
-      <div className="border-b border-slate-200/80 bg-white px-5 py-4">
+      <div className="border-b border-border bg-card px-5 py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">
               {viewMode === "day" ? "Day view" : viewMode === "week" ? "Week view" : "Month view"}
             </p>
-            <h2 className="mt-1 truncate text-xl font-semibold text-slate-950">{formatNavTitle(anchorDate, viewMode)}</h2>
+            <h2 className="mt-1 truncate text-xl font-semibold text-foreground">{formatNavTitle(anchorDate, viewMode)}</h2>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white p-0.5">
+            <div className="flex items-center gap-1 rounded-full border border-border bg-card p-0.5">
               <Button type="button" variant="outline" className="h-9 rounded-full px-3 text-xs" onClick={jumpToToday}>
                 Today
               </Button>
@@ -1299,7 +1299,7 @@ export function PortalCalendarPanels({
               value={viewMode}
               onChange={setViewMode}
             />
-            <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600">
+            <div className="rounded-full bg-accent/30 px-4 py-2 text-sm font-semibold text-muted">
               {viewMode === "month" ? monthBlocksCount : meetings.length} blocks
             </div>
             {viewMode !== "month" ? timeWindowControl : null}
@@ -1312,7 +1312,7 @@ export function PortalCalendarPanels({
 
       {viewMode === "month" ? (
         <div className="p-5">
-          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-wide text-muted">
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
               <div key={d} className="py-1">
                 {d}
@@ -1343,8 +1343,8 @@ export function PortalCalendarPanels({
                     }
                   }}
                   className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-sm font-semibold transition hover:border-primary/30 ${
-                    picked ? "border-primary bg-primary/[0.14] text-slate-900 ring-2 ring-primary/35" : ""
-                  } ${hasAvail ? "border-primary/25 bg-primary/[0.07] text-slate-900" : "border-slate-100 bg-white text-slate-800"}`}
+                    picked ? "border-primary bg-primary/[0.14] text-foreground ring-2 ring-primary/35" : ""
+                  } ${hasAvail ? "border-primary/25 bg-primary/[0.07] text-foreground" : "border-border bg-card text-foreground"}`}
                 >
                   {day}
                 </button>
@@ -1360,18 +1360,18 @@ export function PortalCalendarPanels({
             {fullWeekDates.map((d) => {
               const ds = toLocalDateStr(d);
               return (
-                <div key={ds} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  <div className="bg-slate-50 px-4 py-3">
-                    <p className="text-sm font-semibold text-slate-900">{d.toLocaleDateString(undefined, { weekday: "long" })}</p>
-                    <p className="text-xs text-slate-500">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+                <div key={ds} className="overflow-hidden rounded-2xl border border-border bg-card">
+                  <div className="bg-accent/30 px-4 py-3">
+                    <p className="text-sm font-semibold text-foreground">{d.toLocaleDateString(undefined, { weekday: "long" })}</p>
+                    <p className="text-xs text-muted">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
                   </div>
-                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-px bg-slate-100">
+                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-px bg-accent/30">
                     {visibleSlotIndices.map((slotIdx) => {
                       const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
                       return (
                         <Fragment key={`${ds}-${slotIdx}`}>
-                          <div className="bg-white px-3 py-2 text-[11px] font-semibold text-slate-400">{formatAvailabilitySlotLabel(slotIdx)}</div>
-                          <div className="relative min-h-[40px] bg-white p-1">
+                          <div className="bg-card px-3 py-2 text-[11px] font-semibold text-muted">{formatAvailabilitySlotLabel(slotIdx)}</div>
+                          <div className="relative min-h-[40px] bg-card p-1">
                             {meeting ? (
                               <button
                                 type="button"
@@ -1382,7 +1382,7 @@ export function PortalCalendarPanels({
                                 {meeting.title}
                               </button>
                             ) : (
-                              <div className="h-full rounded-xl border border-dashed border-slate-100" />
+                              <div className="h-full rounded-xl border border-dashed border-border" />
                             )}
                           </div>
                         </Fragment>
@@ -1398,18 +1398,18 @@ export function PortalCalendarPanels({
 
       {viewMode === "day" ? (
         <div className={PORTAL_CALENDAR_FRAME}>
-          <div className="grid grid-cols-[68px_minmax(0,1fr)] gap-px bg-slate-200">
-            <div className="col-span-2 bg-slate-50 px-3 py-3 text-center">
-              <p className="text-sm font-semibold text-slate-900">{anchorDate.toLocaleDateString(undefined, { weekday: "long" })}</p>
-              <p className="text-xs text-slate-500">{anchorDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</p>
+          <div className="grid grid-cols-[68px_minmax(0,1fr)] gap-px bg-accent/40">
+            <div className="col-span-2 bg-accent/30 px-3 py-3 text-center">
+              <p className="text-sm font-semibold text-foreground">{anchorDate.toLocaleDateString(undefined, { weekday: "long" })}</p>
+              <p className="text-xs text-muted">{anchorDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</p>
             </div>
             {visibleSlotIndices.map((slotIdx) => {
               const ds = toLocalDateStr(anchorDate);
               const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
               return (
                 <Fragment key={slotIdx}>
-                  <div className="bg-white px-2 py-2 text-[11px] font-semibold text-slate-400">{formatAvailabilitySlotLabel(slotIdx)}</div>
-                  <div className="relative min-h-[40px] bg-white p-1">
+                  <div className="bg-card px-2 py-2 text-[11px] font-semibold text-muted">{formatAvailabilitySlotLabel(slotIdx)}</div>
+                  <div className="relative min-h-[40px] bg-card p-1">
                     {meeting ? (
                       <button
                         type="button"
@@ -1421,7 +1421,7 @@ export function PortalCalendarPanels({
                         {meeting.title}
                       </button>
                     ) : (
-                      <div className="h-full rounded-xl border border-dashed border-slate-100" />
+                      <div className="h-full rounded-xl border border-dashed border-border" />
                     )}
                   </div>
                 </Fragment>
@@ -1437,8 +1437,8 @@ export function PortalCalendarPanels({
     <Card className="p-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Availability editor</p>
-          <h2 className="mt-2 text-xl font-semibold text-slate-950">Public booking windows</h2>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Availability editor</p>
+          <h2 className="mt-2 text-xl font-semibold text-foreground">Public booking windows</h2>
           {tourScopeLabel ? <p className="mt-1 text-sm font-medium text-primary">{tourScopeLabel}</p> : null}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" className="h-9 shrink-0 rounded-full px-3 text-sm" onClick={jumpToToday}>
@@ -1447,8 +1447,8 @@ export function PortalCalendarPanels({
             <Button type="button" variant="outline" className="h-9 shrink-0 rounded-full px-3 text-sm" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
               ←
             </Button>
-            <p className="min-w-0 flex-1 text-xs leading-snug text-slate-600 sm:text-sm">
-              <span className="font-semibold text-slate-800">Week of {formatWeekRangeMonSun(weekMonday)}</span>
+            <p className="min-w-0 flex-1 text-xs leading-snug text-muted sm:text-sm">
+              <span className="font-semibold text-foreground">Week of {formatWeekRangeMonSun(weekMonday)}</span>
             </p>
             <Button type="button" variant="outline" className="h-9 shrink-0 rounded-full px-3 text-sm" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next week">
               →
@@ -1476,15 +1476,15 @@ export function PortalCalendarPanels({
         </Button>
       </div>
 
-      <div className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
+      <div className="mt-4 space-y-3 rounded-2xl border border-border bg-accent/30 p-3" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
         {fullWeekDates.map((d) => {
           const ds = toLocalDateStr(d);
           const weekday = mondayBasedDayIndex(d);
           return (
-            <div key={ds} className="rounded-2xl border border-slate-200 bg-white p-3">
+            <div key={ds} className="rounded-2xl border border-border bg-card p-3">
               <div className="mb-3">
-                <p className="text-sm font-bold text-slate-900">{d.toLocaleDateString(undefined, { weekday: "long" })}</p>
-                <p className="text-xs font-semibold text-slate-500">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+                <p className="text-sm font-bold text-foreground">{d.toLocaleDateString(undefined, { weekday: "long" })}</p>
+                <p className="text-xs font-semibold text-muted">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {visibleSlotIndices.map((slotIdx) => {
@@ -1514,7 +1514,7 @@ export function PortalCalendarPanels({
                           : 
                         active
                           ? "border-emerald-300 bg-emerald-100 text-emerald-900"
-                          : "border-slate-100 bg-slate-50 text-slate-500 hover:border-primary/20 hover:bg-primary/[0.06]"
+                          : "border-border bg-accent/30 text-muted hover:border-primary/20 hover:bg-primary/[0.06]"
                       }`}
                     >
                       <span>{formatAvailabilitySlotLabel(slotIdx)}</span>
@@ -1545,10 +1545,10 @@ export function PortalCalendarPanels({
 
       <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => { setBlockModalOpen(false); setDragSelection(null); }}>
         <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">{blockSummary}</div>
+          <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">{blockSummary}</div>
 
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-900">Days of week</p>
+            <p className="text-sm font-semibold text-foreground">Days of week</p>
             <div className="flex flex-wrap gap-2">
               {WEEKDAY_OPTIONS.map((option) => {
                 const active = blockWeekdays.includes(option.value);
@@ -1560,7 +1560,7 @@ export function PortalCalendarPanels({
                     className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
                       active
                         ? "border-primary bg-primary text-white"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-primary/30 hover:text-primary"
+                        : "border-border bg-card text-muted hover:border-primary/30 hover:text-primary"
                     }`}
                   >
                     {option.label}
@@ -1572,7 +1572,7 @@ export function PortalCalendarPanels({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">Start time</label>
+              <label className="text-sm font-semibold text-foreground">Start time</label>
               <Select
                 value={String(blockStartSlot)}
                 onChange={(e) => {
@@ -1590,7 +1590,7 @@ export function PortalCalendarPanels({
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">End time</label>
+              <label className="text-sm font-semibold text-foreground">End time</label>
               <Select
                 value={String(blockEndSlotExclusive)}
                 onChange={(e) => {
@@ -1614,7 +1614,7 @@ export function PortalCalendarPanels({
 
           <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">Repeat</label>
+              <label className="text-sm font-semibold text-foreground">Repeat</label>
               <Select value={blockCadence} onChange={(e) => setBlockCadence(e.target.value as RecurrenceCadence)}>
                 <option value="once">Once</option>
                 <option value="weekly">Weekly</option>
@@ -1623,7 +1623,7 @@ export function PortalCalendarPanels({
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">Occurrences</label>
+              <label className="text-sm font-semibold text-foreground">Occurrences</label>
               <Input
                 type="number"
                 min={1}
@@ -1635,7 +1635,7 @@ export function PortalCalendarPanels({
             </div>
           </div>
 
-          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
               Cancel
             </Button>

@@ -70,7 +70,7 @@ function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
               <p className="text-sm font-semibold tracking-[-0.02em] text-white [html[data-theme=light]_&]:text-foreground">
                 Axis Housing · Admin
               </p>
-              <span className="mt-1.5 inline-block rounded-full border border-white/25 bg-white/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/85 [html[data-theme=light]_&]:border-primary/25 [html[data-theme=light]_&]:bg-primary/10 [html[data-theme=light]_&]:text-primary">
+              <span className="mt-1.5 inline-block rounded-full border border-white/25 bg-card/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/85 [html[data-theme=light]_&]:border-primary/25 [html[data-theme=light]_&]:bg-primary/10 [html[data-theme=light]_&]:text-primary">
                 ADMIN
               </span>
             </>

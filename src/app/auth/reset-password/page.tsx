@@ -69,7 +69,7 @@ export default function ResetPasswordPage() {
   if (!ready) {
     return (
       <AuthCard>
-        <p className="text-center text-sm text-slate-600">Loading…</p>
+        <p className="text-center text-sm text-muted">Loading…</p>
       </AuthCard>
     );
   }
@@ -78,7 +78,7 @@ export default function ResetPasswordPage() {
     return (
       <AuthCard>
         <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Reset link expired</h1>
-        <p className="mt-2 text-center text-sm text-slate-600">
+        <p className="mt-2 text-center text-sm text-muted">
           Request a new password reset link and open it from the same browser.
         </p>
         <Link
@@ -94,7 +94,7 @@ export default function ResetPasswordPage() {
   return (
     <AuthCard>
       <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Choose a new password</h1>
-      <p className="mt-2 text-center text-sm text-slate-600">Enter and confirm your new password below.</p>
+      <p className="mt-2 text-center text-sm text-muted">Enter and confirm your new password below.</p>
 
       <div className="mt-8 space-y-4">
         <div>

@@ -28,9 +28,9 @@ function ProfileReadonlyField({
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <p className="text-sm font-medium text-muted">{label}</p>
       <div
-        className={`rounded-xl border border-slate-200/90 bg-slate-50/90 px-4 py-3 text-[15px] text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] ${
+        className={`rounded-xl border border-border bg-accent/30 px-4 py-3 text-[15px] text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] ${
           mono ? "break-all font-mono text-sm leading-relaxed" : ""
         }`}
       >
@@ -146,14 +146,14 @@ export function PortalProfileClient({
         {editing ? (
           <>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-800" htmlFor="pf-name">
+              <label className="text-sm font-semibold text-foreground" htmlFor="pf-name">
                 Full name
               </label>
               <Input id="pf-name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="rounded-xl" autoComplete="name" />
             </div>
             <ProfileReadonlyField label="Email" value={initialEmail} />
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-800" htmlFor="pf-phone">
+              <label className="text-sm font-semibold text-foreground" htmlFor="pf-phone">
                 Phone
               </label>
               <Input
@@ -190,7 +190,7 @@ export function PortalProfileClient({
                 key={a.label}
                 type="button"
                 variant={a.variant === "primary" ? "primary" : "outline"}
-                className="shrink-0 rounded-full border-slate-200/90 px-5 py-2.5 text-sm font-semibold"
+                className="shrink-0 rounded-full border-border px-5 py-2.5 text-sm font-semibold"
                 disabled={(saving && a.label !== "Cancel") || Boolean((a as { disabled?: boolean }).disabled)}
                 onClick={a.onClick}
               >
@@ -201,7 +201,7 @@ export function PortalProfileClient({
         }
       >
         <div className="space-y-4">
-          <Card className="rounded-3xl border border-slate-200/80 p-6 sm:p-8">{inner}</Card>
+          <Card className="rounded-3xl border border-border p-6 sm:p-8">{inner}</Card>
           <PortalChangePasswordPanel
             accountEmail={dashToEmpty(initialEmail) || initialEmail}
             accountLabel="your property portal account"
@@ -221,7 +221,7 @@ export function PortalProfileClient({
               key={a.label}
               type="button"
               variant={a.variant === "primary" ? "primary" : "outline"}
-              className="shrink-0 rounded-full border-slate-200/90 px-5 py-2.5 text-sm font-semibold"
+              className="shrink-0 rounded-full border-border px-5 py-2.5 text-sm font-semibold"
               disabled={saving && a.label !== "Cancel"}
               onClick={a.onClick}
             >

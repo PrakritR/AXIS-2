@@ -29,7 +29,7 @@ function statusTone(label: string) {
   if (l.includes("paid")) return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80";
   if (l.includes("overdue") || l.includes("partial")) return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
   if (l.includes("soon")) return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
-  return "bg-slate-100 text-slate-800 ring-1 ring-slate-200/80";
+  return "bg-accent/30 text-foreground ring-1 ring-border";
 }
 
 export function ManagerPaymentsLedgerPanel({
@@ -214,13 +214,13 @@ export function ManagerPaymentsLedgerPanel({
             {rows.map((row) => (
               <Fragment key={row.id}>
                 <tr className={PORTAL_TABLE_TR}>
-                  <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.propertyName}</td>
+                  <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.propertyName}</td>
                   <td className={PORTAL_TABLE_TD}>Room {row.roomNumber}</td>
                   <td className={PORTAL_TABLE_TD}>{row.residentName}</td>
                   <td className={PORTAL_TABLE_TD}>{row.chargeTitle}</td>
-                  <td className={`${PORTAL_TABLE_TD} tabular-nums text-slate-700`}>{row.amountPaid}</td>
-                  <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-slate-900`}>{row.balanceDue}</td>
-                  <td className={`${PORTAL_TABLE_TD} text-slate-600`}>{row.dueDate}</td>
+                  <td className={`${PORTAL_TABLE_TD} tabular-nums text-muted`}>{row.amountPaid}</td>
+                  <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground`}>{row.balanceDue}</td>
+                  <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.dueDate}</td>
                   <td className={PORTAL_TABLE_TD}>
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}>
                       {row.statusLabel}
@@ -252,8 +252,8 @@ export function ManagerPaymentsLedgerPanel({
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
                     <td colSpan={9} className={PORTAL_TABLE_DETAIL_CELL}>
-                      <p className="text-sm leading-relaxed text-slate-600">
-                        <span className="font-medium text-slate-800">{row.residentName}</span> · {row.notes}
+                      <p className="text-sm leading-relaxed text-muted">
+                        <span className="font-medium text-foreground">{row.residentName}</span> · {row.notes}
                       </p>
                       <PortalTableDetailActions>
                         {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
@@ -286,7 +286,7 @@ export function ManagerPaymentsLedgerPanel({
                                         {row.householdChargeId && row.statusLabel !== "Paid" ? (
                           editingAmountId === row.id ? (
                             <span className="flex items-center gap-1.5">
-                              <span className="text-xs text-slate-500">$</span>
+                              <span className="text-xs text-muted">$</span>
                               <Input
                                 className="h-7 w-24 rounded-lg px-2 py-1 text-xs"
                                 inputMode="decimal"

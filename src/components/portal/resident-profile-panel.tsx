@@ -142,25 +142,25 @@ export function ResidentProfilePanel() {
       }
     >
       <div className="space-y-4">
-        <div className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+        <div className="grid gap-5 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Full name</label>
+            <label className="text-sm font-semibold text-foreground">Full name</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Email</label>
-            <Input value={email} readOnly className="bg-slate-50/80" />
+            <label className="text-sm font-semibold text-foreground">Email</label>
+            <Input value={email} readOnly className="bg-accent/30" />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Phone</label>
+            <label className="text-sm font-semibold text-foreground">Phone</label>
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-800">Axis ID</label>
-            <Input value={axisId} readOnly className="bg-slate-50/80 font-mono text-sm" />
+            <label className="text-sm font-semibold text-foreground">Axis ID</label>
+            <Input value={axisId} readOnly className="bg-accent/30 font-mono text-sm" />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <p className="text-sm font-semibold text-slate-800">Emergency contact</p>
+            <p className="text-sm font-semibold text-foreground">Emergency contact</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input value={emName} onChange={(e) => setEmName(e.target.value)} placeholder="Name" />
               <Input value={emPhone} onChange={(e) => setEmPhone(e.target.value)} placeholder="Phone" />

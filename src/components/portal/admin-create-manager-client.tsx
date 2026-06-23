@@ -51,26 +51,26 @@ export function AdminCreateManagerClient() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className={PORTAL_PAGE_TITLE}>Create manager account</h1>
       </div>
-      <p className="mt-2 max-w-xl text-sm text-slate-600">
+      <p className="mt-2 max-w-xl text-sm text-muted">
         Provisions a new manager login with a free-tier Axis ID and checkout record. This is separate from resident
         onboarding.
       </p>
 
       <div className="mt-8 max-w-md space-y-4">
         <div>
-          <label className="text-xs font-semibold text-slate-600" htmlFor="cm-email">
+          <label className="text-xs font-semibold text-muted" htmlFor="cm-email">
             Email
           </label>
           <Input id="cm-email" className="mt-1.5 rounded-xl" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
         </div>
         <div>
-          <label className="text-xs font-semibold text-slate-600" htmlFor="cm-name">
+          <label className="text-xs font-semibold text-muted" htmlFor="cm-name">
             Full name
           </label>
           <Input id="cm-name" className="mt-1.5 rounded-xl" value={fullName} onChange={(e) => setFullName(e.target.value)} />
         </div>
         <div>
-          <label className="text-xs font-semibold text-slate-600" htmlFor="cm-pw">
+          <label className="text-xs font-semibold text-muted" htmlFor="cm-pw">
             Temporary password
           </label>
           <PasswordInput id="cm-pw" className="mt-1.5 rounded-xl" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />

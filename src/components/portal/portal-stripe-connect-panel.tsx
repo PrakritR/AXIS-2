@@ -221,13 +221,13 @@ export function PortalStripeConnectPanel({
 
   const body = (
     <div
-      className={`space-y-4 text-sm leading-relaxed text-slate-700 ${
+      className={`space-y-4 text-sm leading-relaxed text-muted ${
         variant === "embedded" ? "max-h-[min(72vh,560px)] overflow-y-auto pr-1" : "max-w-lg"
       }`}
     >
       <div className="space-y-2">
-        <p className="font-medium text-slate-900">Link your personal payout account before creating a listing.</p>
-        <p className="text-sm text-slate-600">
+        <p className="font-medium text-foreground">Link your personal payout account before creating a listing.</p>
+        <p className="text-sm text-muted">
           This step connects the bank account where your Stripe payouts should land. You must complete this before
           residents can pay you by bank transfer (ACH).
         </p>
@@ -250,7 +250,7 @@ export function PortalStripeConnectPanel({
         <div className="flex flex-wrap gap-2">
           <span
             className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
-              ready ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-700"
+              ready ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-border bg-accent/30 text-muted"
             }`}
           >
             {ready ? "Payouts ready" : status.transfersEnabled ? "Finish payout setup" : status.connected ? "Setup in progress" : "Not connected"}
@@ -275,8 +275,8 @@ export function PortalStripeConnectPanel({
       ) : null}
 
       {!status?.demo ? (
-        <div className="min-h-[360px] overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          {connectLoading ? <div className="px-4 py-6 text-sm text-slate-500">Loading Stripe payout setup…</div> : null}
+        <div className="min-h-[360px] overflow-hidden rounded-2xl border border-border bg-card">
+          {connectLoading ? <div className="px-4 py-6 text-sm text-muted">Loading Stripe payout setup…</div> : null}
           {connectError ? <div className="px-4 py-4 text-sm text-rose-800">{connectError}</div> : null}
           <div ref={connectContainerRef} className="min-h-[320px] p-2" />
         </div>

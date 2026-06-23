@@ -39,8 +39,8 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
   const showSynthetic = Boolean(syntheticHtml);
 
   return (
-    <div className={`mt-4 overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50 ${className ?? ""}`}>
-      <p className="border-b border-slate-200/80 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+    <div className={`mt-4 overflow-hidden rounded-2xl border border-border bg-accent/30 ${className ?? ""}`}>
+      <p className="border-b border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
         Lease document
       </p>
       {showSynthetic ? (
@@ -49,23 +49,23 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
         </p>
       ) : null}
       {pdfSrc ? (
-        <iframe title="Lease PDF preview" src={pdfSrc} className="h-[min(52vh,420px)] w-full bg-white" />
+        <iframe title="Lease PDF preview" src={pdfSrc} className="h-[min(52vh,420px)] w-full bg-card" />
       ) : html ? (
         <iframe
           title="Lease document"
           srcDoc={html}
           sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-          className="h-[min(52vh,420px)] w-full bg-white"
+          className="h-[min(52vh,420px)] w-full bg-card"
         />
       ) : syntheticHtml ? (
         <iframe
           title="Lease draft preview"
           srcDoc={syntheticHtml}
           sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-          className="h-[min(52vh,420px)] w-full bg-white"
+          className="h-[min(52vh,420px)] w-full bg-card"
         />
       ) : (
-        <div className="flex h-[min(36vh,280px)] items-center justify-center px-4 text-center text-sm text-slate-500">
+        <div className="flex h-[min(36vh,280px)] items-center justify-center px-4 text-center text-sm text-muted">
           {defaultEmpty}
         </div>
       )}

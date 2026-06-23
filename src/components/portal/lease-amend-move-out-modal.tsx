@@ -148,20 +148,20 @@ export function LeaseAmendMoveOutModal({
     : "—";
 
   return (
-    <Modal open={open} title={title} onClose={onClose} panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
-      <div className="mb-5 flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm">
-        <span className="text-slate-500">Current move-out date</span>
-        <span className="ml-auto font-semibold text-slate-900">{currentEndFormatted}</span>
+    <Modal open={open} title={title} onClose={onClose} panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-6">
+      <div className="mb-5 flex items-center gap-3 rounded-xl bg-accent/30 px-4 py-3 text-sm">
+        <span className="text-muted">Current move-out date</span>
+        <span className="ml-auto font-semibold text-foreground">{currentEndFormatted}</span>
       </div>
 
       <div className="mb-4">
-        <label className="mb-1.5 block text-sm font-semibold text-slate-700">New move-out date</label>
+        <label className="mb-1.5 block text-sm font-semibold text-muted">New move-out date</label>
         <input
           type="date"
           value={selectedDate}
           min={leaseStart || undefined}
           onChange={(e) => setSelectedDate(e.target.value)}
-          className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          className="w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-100"
         />
       </div>
 
@@ -173,7 +173,7 @@ export function LeaseAmendMoveOutModal({
             </div>
           ) : null}
           {direction === "extend" && availability.status === "checking" ? (
-            <p className="text-sm text-slate-500">Checking room availability…</p>
+            <p className="text-sm text-muted">Checking room availability…</p>
           ) : null}
           {direction === "extend" && availability.status === "available" ? (
             <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
@@ -186,7 +186,7 @@ export function LeaseAmendMoveOutModal({
           {availability.status === "error" ? (
             <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{availability.message}</p>
           ) : null}
-          <p className="px-1 text-xs text-slate-500">
+          <p className="px-1 text-xs text-muted">
             Updating the move-out date resets the lease for re-signing by the resident and property manager.
           </p>
         </div>

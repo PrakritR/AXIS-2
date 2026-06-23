@@ -51,12 +51,12 @@ export function TabNav({
     <div className="max-w-full overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <div
         ref={wrapRef}
-        className="relative inline-flex min-w-max flex-nowrap gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1"
+        className="relative inline-flex min-w-max flex-nowrap gap-1 rounded-full border border-border bg-accent/30 p-1"
       >
       {pill.w > 0 ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute rounded-full border border-white/80 bg-white shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] transition-[left,top,width,height,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className="pointer-events-none absolute rounded-full border border-border bg-card shadow-[var(--shadow-sm)] transition-[left,top,width,height,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
           style={{ left: pill.left, top: pill.top, width: pill.w, height: pill.h }}
         />
       ) : null}
@@ -71,7 +71,7 @@ export function TabNav({
               else linkRefs.current.delete(t.id);
             }}
             className={`relative z-10 shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
-              active ? "text-slate-950" : "text-slate-600 hover:text-slate-900"
+              active ? "text-foreground" : "text-muted hover:text-foreground"
             }`}
           >
             {t.label}
@@ -130,12 +130,12 @@ export function PillTabs({
   return (
     <div
       ref={wrapRef}
-      className="relative flex flex-wrap gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1"
+      className="relative flex flex-wrap gap-1 rounded-full border border-border bg-accent/30 p-1"
     >
       {pill.w > 0 ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute rounded-full border border-white/80 bg-white shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] transition-[left,top,width,height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className="pointer-events-none absolute rounded-full border border-border bg-card shadow-[var(--shadow-sm)] transition-[left,top,width,height,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
           style={{ left: pill.left, top: pill.top, width: pill.w, height: pill.h }}
         />
       ) : null}
@@ -151,7 +151,7 @@ export function PillTabs({
             }}
             onClick={() => onChange(t.id)}
             className={`relative z-10 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
-              active ? "text-slate-950" : "text-slate-600 hover:text-slate-900"
+              active ? "text-foreground" : "text-muted hover:text-foreground"
             }`}
           >
             {t.label}
@@ -176,7 +176,7 @@ export function SectionTabs({
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{title}</h1>
+        <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{title}</h1>
         <div className="mt-3">
           <TabNav items={tabs} activeId={activeId} />
         </div>

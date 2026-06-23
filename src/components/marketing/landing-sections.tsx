@@ -128,7 +128,7 @@ export function LandingFinalCta() {
             </Link>
             <Link
               href="/partner"
-              className="inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full border border-white/40 bg-white/10 px-8 py-3 text-sm font-semibold text-white transition-[transform,background-color] duration-200 hover:bg-white/20 active:scale-[0.99] sm:w-auto"
+              className="inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full border border-white/40 bg-card/10 px-8 py-3 text-sm font-semibold text-white transition-[transform,background-color] duration-200 hover:bg-card/20 active:scale-[0.99] sm:w-auto"
             >
               Partner with Axis
             </Link>

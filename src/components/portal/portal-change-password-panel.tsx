@@ -96,17 +96,17 @@ export function PortalChangePasswordPanel({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+    <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
       <div>
-        <p className="text-sm font-semibold text-slate-900">Change password</p>
-        <p className="mt-1 text-xs leading-relaxed text-slate-500">
+        <p className="text-sm font-semibold text-foreground">Change password</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted">
           Update the password used for {accountLabel}. Enter your current password, or use the email reset link below.
         </p>
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
-          <label className="text-xs font-semibold text-slate-700" htmlFor="portal-old-password">
+          <label className="text-xs font-semibold text-muted" htmlFor="portal-old-password">
             Current password
           </label>
           <PasswordInput
@@ -118,7 +118,7 @@ export function PortalChangePasswordPanel({
           />
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-700" htmlFor="portal-new-password">
+          <label className="text-xs font-semibold text-muted" htmlFor="portal-new-password">
             New password
           </label>
           <PasswordInput
@@ -130,7 +130,7 @@ export function PortalChangePasswordPanel({
           />
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-700" htmlFor="portal-confirm-password">
+          <label className="text-xs font-semibold text-muted" htmlFor="portal-confirm-password">
             Confirm new password
           </label>
           <PasswordInput
@@ -155,10 +155,10 @@ export function PortalChangePasswordPanel({
         </Button>
       </div>
 
-      <div className="mt-6 border-t border-slate-100 pt-5">
-        <p className="text-xs font-semibold text-slate-700">Forgot your current password?</p>
-        <p className="mt-1 text-xs leading-relaxed text-slate-500">
-          We&apos;ll email a secure link to <span className="font-medium text-slate-700">{email || "your account email"}</span> so you
+      <div className="mt-6 border-t border-border pt-5">
+        <p className="text-xs font-semibold text-muted">Forgot your current password?</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted">
+          We&apos;ll email a secure link to <span className="font-medium text-muted">{email || "your account email"}</span> so you
           can choose a new password.
         </p>
         <div className="mt-3 flex justify-end">

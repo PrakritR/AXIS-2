@@ -35,7 +35,7 @@ function AvailabilityPill({ text, variant = "default" }: { text: string; variant
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-xs ${
-        green ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80" : "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80"
+        green ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80" : "bg-accent/30 text-muted ring-1 ring-border"
       }`}
     >
       <span className={`h-1 w-1 shrink-0 rounded-full sm:h-1.5 sm:w-1.5 ${green ? "bg-emerald-500" : "bg-slate-400"}`} />
@@ -79,7 +79,7 @@ function DetailsButton({ onClick, className = "" }: { onClick: () => void; class
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-800 transition hover:border-primary hover:text-primary sm:min-h-0 ${className}`}
+      className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary hover:text-primary sm:min-h-0 ${className}`}
     >
       Details
     </button>
@@ -156,26 +156,26 @@ function MiniAvailabilityCalendar({ windows }: { windows: RoomUnavailabilityWind
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
-          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+          className="rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted disabled:cursor-not-allowed disabled:opacity-45"
           disabled={clampedOffset <= 0}
           onClick={() => setMonthOffset((v) => Math.max(v - 1, 0))}
         >
           Previous month
         </button>
-        <p className="text-xs font-semibold text-slate-700">
+        <p className="text-xs font-semibold text-muted">
           {monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
         </p>
         <button
           type="button"
-          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+          className="rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted disabled:cursor-not-allowed disabled:opacity-45"
           disabled={clampedOffset >= monthCount - 1}
           onClick={() => setMonthOffset((v) => Math.min(v + 1, monthCount - 1))}
         >
           Next month
         </button>
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+      <div className="rounded-xl border border-border bg-card p-3">
+        <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-muted">
           <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
         </div>
         <div className="mt-1 grid grid-cols-7 gap-1">
@@ -204,9 +204,9 @@ function MiniAvailabilityCalendar({ windows }: { windows: RoomUnavailabilityWind
 
 function ModalVideoBlock({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle: string }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       <div className="flex items-center gap-2 bg-primary px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-sm">▶</span>
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-card/20 text-sm">▶</span>
         {eyebrow}
       </div>
       <div className="flex aspect-video flex-col items-center justify-center bg-gradient-to-b from-slate-800 to-slate-950 px-6 text-center text-white">
@@ -224,7 +224,7 @@ function PhotoStrip({ captions, imageUrls }: { captions?: string[]; imageUrls?: 
     return (
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {imgs.map((src, i) => (
-          <div key={`${src.slice(0, 48)}-${i}`} className="overflow-hidden rounded-xl bg-slate-100">
+          <div key={`${src.slice(0, 48)}-${i}`} className="overflow-hidden rounded-xl bg-accent/30">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={src} alt="" className="aspect-[4/3] h-full w-full object-cover" />
           </div>
@@ -240,7 +240,7 @@ function PhotoStrip({ captions, imageUrls }: { captions?: string[]; imageUrls?: 
           key={cap}
           className="flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 p-2"
         >
-          <p className="text-[11px] font-semibold text-slate-800">{cap}</p>
+          <p className="text-[11px] font-semibold text-foreground">{cap}</p>
         </div>
       ))}
     </div>
@@ -284,13 +284,13 @@ function ListingDetailModal({
     <div className="fixed inset-0 z-[240] flex items-end justify-center p-3 sm:items-center sm:p-6" role="dialog" aria-modal>
       <button type="button" className="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]" onClick={onClose} aria-label="Close dialog" />
       <div
-        className="relative z-10 max-h-[min(92vh,820px)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white shadow-2xl sm:max-w-2xl"
+        className="relative z-10 max-h-[min(92vh,820px)] w-full max-w-lg overflow-y-auto rounded-3xl bg-card shadow-2xl sm:max-w-2xl"
         onClick={stop}
       >
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-lg text-slate-600 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-slate-50"
+          className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-card text-lg text-muted shadow-sm ring-1 ring-border transition hover:bg-accent/30"
           aria-label="Close"
         >
           ×
@@ -304,58 +304,58 @@ function ListingDetailModal({
               return (
                 <>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.floorLabel.toUpperCase()}</p>
-            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.room.name}</h2>
-            <div className="mt-3 space-y-2 text-sm text-slate-600">
+            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-foreground">{state.room.name}</h2>
+            <div className="mt-3 space-y-2 text-sm text-muted">
               {state.room.modal.floorLine ? (
                 <p>
-                  <span className="font-semibold text-slate-800">Floor / level: </span>
+                  <span className="font-semibold text-foreground">Floor / level: </span>
                   {state.room.modal.floorLine}
                 </p>
               ) : null}
               {state.room.utilitiesEstimate ? (
                 <p>
-                  <span className="font-semibold text-slate-800">Utilities estimate: </span>
+                  <span className="font-semibold text-foreground">Utilities estimate: </span>
                   {state.room.utilitiesEstimate}
                 </p>
               ) : null}
               {state.room.modal.roomNotes ? (
                 <div>
-                  <p className="font-semibold text-slate-800">Room details</p>
-                  <p className="mt-1 whitespace-pre-wrap leading-relaxed text-slate-700">{state.room.modal.roomNotes}</p>
+                  <p className="font-semibold text-foreground">Room details</p>
+                  <p className="mt-1 whitespace-pre-wrap leading-relaxed text-muted">{state.room.modal.roomNotes}</p>
                 </div>
               ) : (
-                <p className="text-slate-500">No extra room notes from the listing manager.</p>
+                <p className="text-muted">No extra room notes from the listing manager.</p>
               )}
             </div>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Monthly rent</p>
-                <p className="mt-2 text-lg font-bold text-slate-900">{state.room.price}</p>
+              <div className="rounded-2xl border border-border bg-accent/30 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Monthly rent</p>
+                <p className="mt-2 text-lg font-bold text-foreground">{state.room.price}</p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Bathroom setup</p>
-                <p className="mt-2 text-sm font-medium leading-snug text-slate-800">{state.room.modal.setupLine}</p>
+              <div className="rounded-2xl border border-border bg-accent/30 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Bathroom setup</p>
+                <p className="mt-2 text-sm font-medium leading-snug text-foreground">{state.room.modal.setupLine}</p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Status</p>
+              <div className="rounded-2xl border border-border bg-accent/30 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Status</p>
                 <div className="mt-2">
                   <AvailabilityPill text={state.room.availability} variant="room" />
                 </div>
               </div>
             </div>
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Availability timeline</p>
+            <div className="mt-5 rounded-2xl border border-border bg-accent/30 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Availability timeline</p>
               {roomUnavailableWindows.length > 0 ? (
                 <>
                   <div className="mt-3 space-y-2">
                     {roomUnavailableWindows.map((w) => (
-                      <div key={w.id} className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                      <div key={w.id} className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted">
                         <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${w.source === "resident" ? "bg-rose-500" : "bg-sky-500"}`} />
                         <span>{rangeSummaryLabel(w)}</span>
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[11px] text-slate-500">Green dates are open and red dates are unavailable for this room.</p>
+                  <p className="mt-3 text-[11px] text-muted">Green dates are open and red dates are unavailable for this room.</p>
                   <div className="mt-3">
                     <MiniAvailabilityCalendar windows={roomUnavailableWindows} />
                   </div>
@@ -366,7 +366,7 @@ function ListingDetailModal({
             </div>
             {(state.room.modal.photoUrls?.length ?? 0) > 0 ? (
               <div className="mt-6">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Photos</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Photos</p>
                 <div className="mt-3">
                   <PhotoStrip imageUrls={state.room.modal.photoUrls} />
                 </div>
@@ -374,7 +374,7 @@ function ListingDetailModal({
             ) : null}
             <div className="mt-6">
               {state.room.modal.videoSrc ? (
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-black shadow-sm">
+                <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-sm">
                   <video
                     src={state.room.modal.videoSrc}
                     controls
@@ -393,10 +393,10 @@ function ListingDetailModal({
             {state.room.modal.includedTags.length > 0 ? (
               <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Highlights</p>
-                <p className="mt-1 text-sm text-slate-600">Bathroom setup and other notes not repeated below.</p>
+                <p className="mt-1 text-sm text-muted">Bathroom setup and other notes not repeated below.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {state.room.modal.includedTags.map((t) => (
-                    <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
+                    <span key={t} className="rounded-full border border-sky-200/90 bg-card px-3 py-1 text-xs font-medium text-foreground">
                       {t}
                     </span>
                   ))}
@@ -411,7 +411,7 @@ function ListingDetailModal({
               return furnishingDetail ? (
               <div className="mt-5 rounded-2xl border border-sky-100 bg-sky-50/60 p-5">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-950/90">Furnishing</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{furnishingDetail}</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{furnishingDetail}</p>
               </div>
               ) : null;
             })()}
@@ -420,7 +420,7 @@ function ListingDetailModal({
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-950/90">Room amenities</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {state.room.modal.roomAmenityLabels.map((t) => (
-                    <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
+                    <span key={t} className="rounded-full border border-sky-200/90 bg-card px-3 py-1 text-xs font-medium text-foreground">
                       {t}
                     </span>
                   ))}
@@ -443,7 +443,7 @@ function ListingDetailModal({
                 </span>
               </Link>
               <Link href="/rent/tours-contact" className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask a question
                 </span>
               </Link>
@@ -457,31 +457,31 @@ function ListingDetailModal({
         {state.kind === "bathroom" ? (
           <div className="p-6 pb-8 sm:p-8">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.row.modal.eyebrow}</p>
-            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.row.name}</h2>
-            <p className="mt-2 text-sm text-slate-600">{state.row.detail}</p>
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Setup</p>
-              <p className="mt-2 text-sm font-medium leading-snug text-slate-800">{state.row.modal.setupCard}</p>
+            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.name}</h2>
+            <p className="mt-2 text-sm text-muted">{state.row.detail}</p>
+            <div className="mt-6 rounded-2xl border border-border bg-accent/30 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Setup</p>
+              <p className="mt-2 text-sm font-medium leading-snug text-foreground">{state.row.modal.setupCard}</p>
             </div>
             <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Info</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {state.row.modal.includedTags.map((t) => (
-                  <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
+                  <span key={t} className="rounded-full border border-sky-200/90 bg-card px-3 py-1 text-xs font-medium text-foreground">
                     {t}
                   </span>
                 ))}
               </div>
             </div>
             <div className="mt-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Photos</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Photos</p>
               <div className="mt-3">
                 <PhotoStrip captions={state.row.modal.photoCaptions} imageUrls={state.row.modal.photoUrls} />
               </div>
             </div>
             <div className="mt-6">
               {state.row.modal.videoSrc ? (
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-black shadow-sm">
+                <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-sm">
                   <video
                     src={state.row.modal.videoSrc}
                     controls
@@ -504,7 +504,7 @@ function ListingDetailModal({
                 </span>
               </Link>
               <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Apply
                 </span>
               </Link>
@@ -515,12 +515,12 @@ function ListingDetailModal({
         {state.kind === "shared" ? (
           <div className="p-6 pb-8 sm:p-8">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.row.modal.eyebrow}</p>
-            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.row.name}</h2>
-            <p className="mt-2 text-sm text-slate-600">{state.row.detail}</p>
-            <p className="mt-1 text-sm text-slate-500">{state.row.useNote}</p>
+            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.name}</h2>
+            <p className="mt-2 text-sm text-muted">{state.row.detail}</p>
+            <p className="mt-1 text-sm text-muted">{state.row.useNote}</p>
             <div className="mt-6">
               {state.row.modal.videoSrc ? (
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-black shadow-sm">
+                <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-sm">
                   <video
                     src={state.row.modal.videoSrc}
                     controls
@@ -540,14 +540,14 @@ function ListingDetailModal({
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {state.row.modal.includedTags.map((t) => (
-                  <span key={t} className="rounded-full border border-sky-200/90 bg-white px-3 py-1 text-xs font-medium text-slate-800">
+                  <span key={t} className="rounded-full border border-sky-200/90 bg-card px-3 py-1 text-xs font-medium text-foreground">
                     {t}
                   </span>
                 ))}
               </div>
             </div>
             <div className="mt-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Photos</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Photos</p>
               <div className="mt-3">
                 <PhotoStrip captions={state.row.modal.photoCaptions} imageUrls={state.row.modal.photoUrls} />
               </div>
@@ -559,7 +559,7 @@ function ListingDetailModal({
                 </span>
               </Link>
               <Link href="/rent/tours-contact" className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask a question
                 </span>
               </Link>
@@ -569,31 +569,31 @@ function ListingDetailModal({
 
         {state.kind === "lease" ? (
           <div className="p-6 pb-8 sm:p-8">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Lease</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Lease</p>
             <div className="mt-2 flex items-start gap-3">
               <span className="text-3xl leading-none" aria-hidden>
                 {state.row.icon}
               </span>
               <div className="min-w-0">
-                <h2 className="pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.row.title}</h2>
-                <p className="mt-1 text-sm text-slate-600">{state.row.detail}</p>
+                <h2 className="pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.title}</h2>
+                <p className="mt-1 text-sm text-muted">{state.row.detail}</p>
               </div>
             </div>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Amount / rate</p>
-                <p className="mt-2 text-lg font-bold text-slate-900">{state.row.price}</p>
+              <div className="rounded-2xl border border-border bg-accent/30 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Amount / rate</p>
+                <p className="mt-2 text-lg font-bold text-foreground">{state.row.price}</p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Timing</p>
+              <div className="rounded-2xl border border-border bg-accent/30 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Timing</p>
                 <div className="mt-2">
                   <AvailabilityPill text={state.row.status} />
                 </div>
               </div>
             </div>
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="mt-6 rounded-2xl border border-border bg-card p-5">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Details</p>
-              <p className="mt-2 text-sm leading-relaxed text-slate-700">{state.row.body}</p>
+              <p className="mt-2 text-sm leading-relaxed text-muted">{state.row.body}</p>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
               <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
@@ -602,7 +602,7 @@ function ListingDetailModal({
                 </span>
               </Link>
               <Link href="/rent/tours-contact" className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask about lease terms
                 </span>
               </Link>
@@ -612,38 +612,38 @@ function ListingDetailModal({
 
         {state.kind === "bundle" ? (
           <div className="p-6 pb-8 sm:p-8">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Bundle</p>
-            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.row.label}</h2>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Bundle</p>
+            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.label}</h2>
             <div className="mt-4 flex flex-wrap items-baseline gap-2">
-              {state.row.strikethrough ? <span className="text-sm text-slate-400 line-through">{state.row.strikethrough}</span> : null}
-              <span className="text-2xl font-bold text-slate-900">{state.row.price}</span>
+              {state.row.strikethrough ? <span className="text-sm text-muted line-through">{state.row.strikethrough}</span> : null}
+              <span className="text-2xl font-bold text-foreground">{state.row.price}</span>
               {state.row.promo ? <AvailabilityPill text={state.row.promo} /> : null}
             </div>
             {state.row.summaryItems?.length ? (
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 {state.row.summaryItems.map((item) => (
-                  <div key={`${item.label}-${item.value}`} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{item.label}</p>
-                    <p className="mt-1.5 text-sm font-semibold leading-snug text-slate-900">{item.value}</p>
+                  <div key={`${item.label}-${item.value}`} className="rounded-2xl border border-border bg-accent/30 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted">{item.label}</p>
+                    <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">{item.value}</p>
                   </div>
                 ))}
               </div>
             ) : null}
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Included rooms</p>
+            <div className="mt-6 rounded-2xl border border-border bg-card p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Included rooms</p>
               {state.row.roomLines?.length ? (
                 <div className="mt-3 grid gap-2">
                   {state.row.roomLines.map((line) => (
-                    <div key={line} className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2 text-sm leading-relaxed text-slate-800">
+                    <div key={line} className="rounded-xl border border-border bg-accent/30 px-3 py-2 text-sm leading-relaxed text-foreground">
                       {line}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 text-sm leading-relaxed text-slate-800">{state.row.roomsLine}</p>
+                <p className="mt-2 text-sm leading-relaxed text-foreground">{state.row.roomsLine}</p>
               )}
             </div>
-            <p className="mt-4 text-xs text-slate-500">Confirm availability, utilities, and final rent with leasing before applying.</p>
+            <p className="mt-4 text-xs text-muted">Confirm availability, utilities, and final rent with leasing before applying.</p>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
               <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
@@ -651,7 +651,7 @@ function ListingDetailModal({
                 </span>
               </Link>
               <Link href="/rent/tours-contact" className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask a question
                 </span>
               </Link>
@@ -661,16 +661,16 @@ function ListingDetailModal({
 
         {state.kind === "amenity" ? (
           <div className="p-6 pb-8 sm:p-8">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Amenity</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Amenity</p>
             <div className="mt-2 flex items-start gap-3">
               <span className="text-3xl leading-none" aria-hidden>
                 {state.row.icon}
               </span>
-              <h2 className="pr-10 text-2xl font-bold tracking-tight text-slate-900">{state.row.label}</h2>
+              <h2 className="pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.label}</h2>
             </div>
             <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">About</p>
-              <p className="mt-2 text-sm leading-relaxed text-slate-700">
+              <p className="mt-2 text-sm leading-relaxed text-muted">
                 This feature is included with the listing as described. Confirm specifics with the leasing team before you apply.
               </p>
             </div>
@@ -681,7 +681,7 @@ function ListingDetailModal({
                 </span>
               </Link>
               <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
+                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Apply
                 </span>
               </Link>
@@ -700,11 +700,11 @@ export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: 
 
   return (
     <>
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3 sm:pb-4">
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3 sm:pb-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{floor.floorLabel}</p>
-            <p className="mt-0.5 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{floor.fromPrice}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">{floor.floorLabel}</p>
+            <p className="mt-0.5 text-xl font-bold tracking-tight text-foreground sm:text-2xl">{floor.fromPrice}</p>
             {floor.remainingNote ? (
               <p className="mt-1.5 flex items-center gap-2 text-xs text-sky-800 sm:text-sm">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" aria-hidden />
@@ -713,8 +713,8 @@ export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: 
             ) : null}
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Rooms</p>
-            <p className="text-xl font-bold text-slate-900 sm:text-2xl">{floor.roomCount}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rooms</p>
+            <p className="text-xl font-bold text-foreground sm:text-2xl">{floor.roomCount}</p>
           </div>
         </div>
         <div className="mt-3 md:overflow-x-auto sm:mt-4">
@@ -731,11 +731,11 @@ function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpe
     <>
       <div className="space-y-2.5 md:hidden">
         {rooms.map((r) => (
-          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
-            <p className="text-sm font-semibold text-slate-900">{r.name}</p>
-            <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
+          <div key={r.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
+            <p className="text-sm font-semibold text-foreground">{r.name}</p>
+            <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <p className="text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
+              <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
               <AvailabilityPill text={r.availability} variant="room" />
             </div>
             <DetailsButton className="mt-2.5 w-full" onClick={() => onOpen(r)} />
@@ -744,7 +744,7 @@ function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpe
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Room</span>
             <span>Price</span>
             <span>Availability</span>
@@ -753,13 +753,13 @@ function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpe
           {rooms.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div>
-                <p className="text-sm font-semibold text-slate-900">{r.name}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
+                <p className="text-sm font-semibold text-foreground">{r.name}</p>
+                <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
               </div>
-              <p className="text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
+              <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
               <AvailabilityPill text={r.availability} variant="room" />
               <DetailsButton onClick={() => onOpen(r)} />
             </div>
@@ -777,11 +777,11 @@ export function BathroomTableInteractive({ rows, listingPropertyId }: { rows: Li
     <>
       <div className="space-y-2.5 md:hidden">
         {rows.map((r) => (
-          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
-            <p className="text-sm font-semibold text-slate-900">{r.name}</p>
-            <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
-            <p className="mt-2 text-xs text-slate-800 sm:text-sm">
-              <span className="font-semibold text-slate-500">Info: </span>
+          <div key={r.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
+            <p className="text-sm font-semibold text-foreground">{r.name}</p>
+            <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
+            <p className="mt-2 text-xs text-foreground sm:text-sm">
+              <span className="font-semibold text-muted">Info: </span>
               {formatBathroomIncludes(r)}
             </p>
             <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "bathroom", row: r })} />
@@ -790,7 +790,7 @@ export function BathroomTableInteractive({ rows, listingPropertyId }: { rows: Li
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[520px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Bathroom</span>
             <span>Info</span>
             <span className="w-[80px] sm:w-[88px]" />
@@ -798,13 +798,13 @@ export function BathroomTableInteractive({ rows, listingPropertyId }: { rows: Li
           {rows.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div>
-                <p className="text-sm font-semibold text-slate-900">{r.name}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
+                <p className="text-sm font-semibold text-foreground">{r.name}</p>
+                <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
               </div>
-              <p className="text-xs font-medium text-slate-800 sm:text-sm">{formatBathroomIncludes(r)}</p>
+              <p className="text-xs font-medium text-foreground sm:text-sm">{formatBathroomIncludes(r)}</p>
               <DetailsButton onClick={() => setModal({ kind: "bathroom", row: r })} />
             </div>
           ))}
@@ -842,17 +842,17 @@ export function SharedTableInteractive({ rows, listingPropertyId }: { rows: List
     <>
       <div className="space-y-2.5 md:hidden">
         {rows.map((r) => (
-          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
-            <p className="text-sm font-semibold text-slate-900">{r.name}</p>
-            <p className="mt-0.5 text-xs text-slate-500">{sharedSpaceAccessSummary(r.detail)}</p>
-            <p className="mt-2 text-xs text-slate-600 sm:text-sm">{sharedSpaceInfoSummary(r.useNote)}</p>
+          <div key={r.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
+            <p className="text-sm font-semibold text-foreground">{r.name}</p>
+            <p className="mt-0.5 text-xs text-muted">{sharedSpaceAccessSummary(r.detail)}</p>
+            <p className="mt-2 text-xs text-muted sm:text-sm">{sharedSpaceInfoSummary(r.useNote)}</p>
             <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "shared", row: r })} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[520px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Space</span>
             <span>Info</span>
             <span className="w-[80px] sm:w-[88px]" />
@@ -860,13 +860,13 @@ export function SharedTableInteractive({ rows, listingPropertyId }: { rows: List
           {rows.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div>
-                <p className="text-sm font-semibold text-slate-900">{r.name}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{sharedSpaceAccessSummary(r.detail)}</p>
+                <p className="text-sm font-semibold text-foreground">{r.name}</p>
+                <p className="mt-0.5 text-xs text-muted">{sharedSpaceAccessSummary(r.detail)}</p>
               </div>
-              <p className="text-xs text-slate-600 sm:text-sm">{sharedSpaceInfoSummary(r.useNote)}</p>
+              <p className="text-xs text-muted sm:text-sm">{sharedSpaceInfoSummary(r.useNote)}</p>
               <DetailsButton onClick={() => setModal({ kind: "shared", row: r })} />
             </div>
           ))}
@@ -884,24 +884,24 @@ export function LeaseBasicsTableInteractive({ rows, listingPropertyId }: { rows:
     <>
       <div className="space-y-2.5 md:hidden">
         {rows.map((r) => (
-          <div key={r.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
+          <div key={r.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
             <div className="flex items-start gap-2">
               <span className="text-lg leading-none" aria-hidden>
                 {r.icon}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">{r.title}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
+                <p className="text-sm font-semibold text-foreground">{r.title}</p>
+                <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
               </div>
             </div>
-            <p className="mt-2 text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
+            <p className="mt-2 text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
             <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "lease", row: r })} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Item</span>
             <span>Price</span>
             <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
@@ -909,18 +909,18 @@ export function LeaseBasicsTableInteractive({ rows, listingPropertyId }: { rows:
           {rows.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div className="flex min-w-0 items-start gap-2">
                 <span className="shrink-0 text-base leading-none" aria-hidden>
                   {r.icon}
                 </span>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900">{r.title}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{r.detail}</p>
+                  <p className="text-sm font-semibold text-foreground">{r.title}</p>
+                  <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
                 </div>
               </div>
-              <p className="text-xs font-semibold text-slate-900 sm:text-sm">{r.price}</p>
+              <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
               <DetailsButton onClick={() => setModal({ kind: "lease", row: r })} />
             </div>
           ))}
@@ -934,7 +934,7 @@ export function LeaseBasicsTableInteractive({ rows, listingPropertyId }: { rows:
 function BundleRoomPreview({ row }: { row: BundleCard }) {
   const roomLines = row.roomLines ?? [];
   if (roomLines.length === 0) {
-    return <p className="mt-2 text-sm leading-relaxed text-slate-600">{row.roomsLine}</p>;
+    return <p className="mt-2 text-sm leading-relaxed text-muted">{row.roomsLine}</p>;
   }
   const preview = roomLines.slice(0, 4);
   const remaining = roomLines.length - preview.length;
@@ -943,13 +943,13 @@ function BundleRoomPreview({ row }: { row: BundleCard }) {
       {preview.map((line) => (
         <span
           key={line}
-          className="inline-flex max-w-full items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+          className="inline-flex max-w-full items-center rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted"
         >
           <span className="truncate">{line}</span>
         </span>
       ))}
       {remaining > 0 ? (
-        <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+        <span className="inline-flex items-center rounded-full bg-accent/30 px-3 py-1 text-xs font-semibold text-muted">
           +{remaining} more
         </span>
       ) : null}
@@ -966,23 +966,23 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
         {rows.map((c) => (
           <div
             key={c.id}
-            className="group relative overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white via-white to-slate-50/90 p-4 shadow-sm ring-1 ring-slate-900/[0.04] transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/15 sm:p-5"
+            className="group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-white via-white to-slate-50/90 p-4 shadow-sm ring-1 ring-slate-900/[0.04] transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/15 sm:p-5"
           >
             <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary to-primary/40 opacity-90" aria-hidden />
             <div className="relative pl-2">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Package</p>
-                  <p className="mt-1 text-lg font-bold tracking-tight text-slate-900">{c.label}</p>
-                  <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-600">{c.roomsLine}</p>
+                  <p className="mt-1 text-lg font-bold tracking-tight text-foreground">{c.label}</p>
+                  <p className="mt-1 line-clamp-2 text-xs leading-snug text-muted">{c.roomsLine}</p>
                 </div>
                 {c.promo ? <AvailabilityPill text={c.promo} /> : null}
               </div>
-              <div className="mt-4 rounded-xl border border-slate-100 bg-white/90 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Monthly</p>
+              <div className="mt-4 rounded-xl border border-border bg-card p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Monthly</p>
                 <div className="mt-1 flex flex-wrap items-baseline gap-2">
-                  {c.strikethrough ? <span className="text-sm text-slate-400 line-through">{c.strikethrough}</span> : null}
-                  <span className="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{c.price}</span>
+                  {c.strikethrough ? <span className="text-sm text-muted line-through">{c.strikethrough}</span> : null}
+                  <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">{c.price}</span>
                 </div>
               </div>
               {c.summaryItems && c.summaryItems.length > 0 ? (
@@ -990,10 +990,10 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
                   {c.summaryItems.slice(0, 3).map((item) => (
                     <span
                       key={`${c.id}-${item.label}`}
-                      className="inline-flex items-center rounded-full border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-700"
+                      className="inline-flex items-center rounded-full border border-border bg-accent/30 px-2.5 py-1 text-[10px] font-semibold text-muted"
                     >
-                      <span className="text-slate-500">{item.label}:</span>
-                      <span className="ml-1 text-slate-900">{item.value}</span>
+                      <span className="text-muted">{item.label}:</span>
+                      <span className="ml-1 text-foreground">{item.value}</span>
                     </span>
                   ))}
                 </div>
@@ -1016,14 +1016,14 @@ export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: A
     <>
       <div className="space-y-2.5 md:hidden">
         {rows.map((a) => (
-          <div key={a.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
+          <div key={a.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
             <div className="flex items-start gap-2">
               <span className="text-lg text-primary" aria-hidden>
                 {a.icon}
               </span>
-              <p className="text-sm font-semibold text-slate-900">{a.label}</p>
+              <p className="text-sm font-semibold text-foreground">{a.label}</p>
             </div>
-            <p className="mt-2 text-xs text-slate-600">House feature · included with this listing</p>
+            <p className="mt-2 text-xs text-muted">House feature · included with this listing</p>
             <div className="mt-2">
               <AvailabilityPill text="Included" />
             </div>
@@ -1033,7 +1033,7 @@ export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: A
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-slate-100 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Amenity</span>
             <span>Info</span>
             <span>Included</span>
@@ -1042,15 +1042,15 @@ export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: A
           {rows.map((a) => (
             <div
               key={a.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-2 border-b border-slate-100 py-3 last:border-0 sm:gap-3 sm:py-3.5"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div className="flex min-w-0 items-start gap-2">
                 <span className="shrink-0 text-base text-primary" aria-hidden>
                   {a.icon}
                 </span>
-                <p className="min-w-0 text-sm font-semibold text-slate-900">{a.label}</p>
+                <p className="min-w-0 text-sm font-semibold text-foreground">{a.label}</p>
               </div>
-              <p className="text-xs text-slate-600 sm:text-sm">With listing</p>
+              <p className="text-xs text-muted sm:text-sm">With listing</p>
               <AvailabilityPill text="Included" />
               <DetailsButton onClick={() => setModal({ kind: "amenity", row: a })} />
             </div>

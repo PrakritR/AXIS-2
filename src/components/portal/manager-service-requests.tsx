@@ -106,12 +106,12 @@ function ServiceRequestCard({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.06)]">
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-[0_1px_4px_rgba(15,23,42,0.06)]">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-semibold text-slate-900">{req.offerName}</p>
-          <p className="mt-0.5 text-xs text-slate-500">{req.residentName} · {req.residentEmail}</p>
+          <p className="font-semibold text-foreground">{req.offerName}</p>
+          <p className="mt-0.5 text-xs text-muted">{req.residentName} · {req.residentEmail}</p>
         </div>
         <StatusBadge status={req.status} />
       </div>
@@ -119,36 +119,36 @@ function ServiceRequestCard({
       {/* Badges */}
       <div className="mt-2 flex flex-wrap gap-1.5">
         {req.price ? (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">{req.price}</span>
+          <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted">{req.price}</span>
         ) : null}
         {needsReturn ? (
           <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {req.deposit}</span>
         ) : null}
         {req.returnByDate ? (
-          <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200">
+          <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border">
             Return by {formatDate(req.returnByDate)}
           </span>
         ) : null}
-        <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
+        <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border">
           Requested {formatDate(req.requestedAt)}
         </span>
       </div>
 
       {req.offerDescription ? (
-        <p className="mt-2 text-xs leading-relaxed text-slate-600">{req.offerDescription}</p>
+        <p className="mt-2 text-xs leading-relaxed text-muted">{req.offerDescription}</p>
       ) : null}
       {req.notes ? (
-        <p className="mt-1 text-xs text-slate-500 italic">&ldquo;{req.notes}&rdquo;</p>
+        <p className="mt-1 text-xs text-muted italic">&ldquo;{req.notes}&rdquo;</p>
       ) : null}
 
       {/* Charges (approved) */}
       {(req.status === "approved" || req.status === "returned") ? (
-        <div className="mt-3 rounded-xl bg-slate-50 p-3">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Charges</p>
+        <div className="mt-3 rounded-xl bg-accent/30 p-3">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Charges</p>
           <div className="space-y-2">
             {req.price ? (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-slate-700">Service fee · {req.price}</span>
+                <span className="text-xs text-muted">Service fee · {req.price}</span>
                 {req.servicePaid ? (
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Paid</span>
                 ) : (
@@ -160,7 +160,7 @@ function ServiceRequestCard({
             ) : null}
             {needsReturn ? (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-slate-700">Deposit · {req.deposit}</span>
+                <span className="text-xs text-muted">Deposit · {req.deposit}</span>
                 {req.depositPaid ? (
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Refunded</span>
                 ) : (
@@ -180,8 +180,8 @@ function ServiceRequestCard({
       {/* Return photo */}
       {req.returnPhotoDataUrl ? (
         <div className="mt-3">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Return photo</p>
-          <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-32 overflow-hidden rounded-xl border border-slate-200">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Return photo</p>
+          <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-32 overflow-hidden rounded-xl border border-border">
             <Image
               src={req.returnPhotoDataUrl}
               alt="Return photo"
@@ -192,7 +192,7 @@ function ServiceRequestCard({
             />
           </a>
           {req.returnedAt ? (
-            <p className="mt-1 text-[10px] text-slate-400">Submitted {formatDate(req.returnedAt)}</p>
+            <p className="mt-1 text-[10px] text-muted">Submitted {formatDate(req.returnedAt)}</p>
           ) : null}
         </div>
       ) : null}
@@ -204,7 +204,7 @@ function ServiceRequestCard({
 
       {/* Actions */}
       {req.status === "pending" ? (
-        <div className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+        <div className="mt-4 space-y-2 border-t border-border pt-3">
           {showDenyInput ? (
             <div>
               <input
@@ -212,7 +212,7 @@ function ServiceRequestCard({
                 value={denyNote}
                 onChange={(e) => setDenyNote(e.target.value)}
                 placeholder="Reason for denial (optional)"
-                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-rose-300 focus:ring-1 focus:ring-rose-100"
+                className="w-full rounded-lg border border-border px-3 py-1.5 text-sm outline-none focus:border-rose-300 focus:ring-1 focus:ring-rose-100"
               />
             </div>
           ) : null}
@@ -232,7 +232,7 @@ function ServiceRequestCard({
         </div>
       ) : null}
 
-      <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
+      <div className="mt-3 flex justify-end border-t border-border pt-3">
         <Button
           type="button"
           variant="outline"
@@ -306,11 +306,11 @@ export function ManagerServiceRequests() {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         {propertyOptions.length > 1 ? (
           <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold text-slate-500">Property</label>
+            <label className="text-xs font-semibold text-muted">Property</label>
             <select
               value={propertyFilter}
               onChange={(e) => setPropertyFilter(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="rounded-xl border border-border bg-card px-3 py-1.5 text-sm text-foreground outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             >
               <option value="">All properties</option>
               {propertyOptions.map((p) => (
@@ -327,8 +327,8 @@ export function ManagerServiceRequests() {
               onClick={() => setFilterTab(tab.id)}
               className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                 filterTab === tab.id
-                  ? "bg-slate-900 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-accent/30 text-muted hover:bg-accent/40"
               }`}
             >
               {tab.label}
@@ -339,9 +339,9 @@ export function ManagerServiceRequests() {
       </div>
 
       {visible.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
-          <p className="text-sm font-medium text-slate-600">No service requests</p>
-          <p className="mt-1 text-xs text-slate-400">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-accent/30 py-16 text-center">
+          <p className="text-sm font-medium text-muted">No service requests</p>
+          <p className="mt-1 text-xs text-muted">
             {filterTab === "pending"
               ? "No pending requests — residents haven't submitted any yet."
               : "No requests in this category."}

@@ -2,14 +2,14 @@ import type { ReactNode } from "react";
 
 /** Dashboard / KPI link tiles (manager, resident, admin). */
 export const PORTAL_DASHBOARD_TILE_LINK =
-  "block rounded-xl border border-slate-200/70 bg-white/97 px-5 py-4 shadow-[0_2px_14px_-6px_rgba(15,23,42,0.08)] transition-[border-color,box-shadow,transform] duration-200 hover:border-primary/30 hover:shadow-[0_14px_40px_-22px_rgba(10,132,255,0.16)] hover:-translate-y-0.5 active:translate-y-0";
+  "block rounded-xl border border-border bg-card px-5 py-4 shadow-[var(--shadow-sm)] transition-[border-color,box-shadow,transform] duration-200 hover:border-primary/30 hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-0.5 active:translate-y-0";
 
-/** Outer white “card” wrapping most portal sections (matches Properties / Managers shell). */
+/** Outer card wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
-  "rounded-2xl border border-slate-200/70 bg-white/95 p-4 shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6";
+  "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6";
 
 /** Calendar week grid outer frame (matches manager calendar chrome). */
-export const PORTAL_CALENDAR_FRAME = "overflow-hidden rounded-2xl border border-slate-200 bg-slate-200";
+export const PORTAL_CALENDAR_FRAME = "overflow-hidden rounded-2xl border border-border bg-accent/40";
 
 /** Pill toggles: Day / Week / Month (Managers filter style). */
 export function PortalSegmentedControl<T extends string>({
@@ -28,7 +28,7 @@ export function PortalSegmentedControl<T extends string>({
 }) {
   const pad = size === "sm" ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-sm";
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1" role="tablist" aria-label="View">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1" role="tablist" aria-label="View">
       {options.map((opt) => {
         const disabled = optionDisabled?.(opt.id) ?? false;
         return (
@@ -45,8 +45,8 @@ export function PortalSegmentedControl<T extends string>({
               disabled
                 ? "cursor-not-allowed opacity-45"
                 : value === opt.id
-                  ? "bg-white text-slate-900 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.28)]"
-                  : "text-slate-500 hover:text-slate-800"
+                  ? "bg-card text-foreground shadow-[var(--shadow-sm)]"
+                  : "text-muted hover:text-foreground"
             }`}
           >
             {opt.label}
@@ -58,7 +58,7 @@ export function PortalSegmentedControl<T extends string>({
 }
 
 /** Primary page title in portal workspaces (aligned with Axis dashboard). */
-export const PORTAL_PAGE_TITLE = "text-[2rem] font-semibold tracking-[-0.03em] text-slate-950";
+export const PORTAL_PAGE_TITLE = "text-[2rem] font-semibold tracking-[-0.03em] text-foreground";
 
 /** Matches admin Managers / Properties filter row (status + tier pill groups). */
 export type PortalTierFilterId = "all" | "free" | "pro" | "business";
@@ -85,20 +85,20 @@ export function PortalStatusTierFilterBar({
 }) {
   return (
     <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200/90 bg-slate-100/70 p-1 sm:rounded-full">
+      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full">
         {statusTabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onStatusChange(tab.id)}
             className={`flex min-h-9 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-              activeStatusId === tab.id ? "bg-white text-slate-900 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.28)]" : "text-slate-500 hover:text-slate-800"
+              activeStatusId === tab.id ? "bg-card text-foreground shadow-[var(--shadow-sm)]" : "text-muted hover:text-foreground"
             }`}
           >
             {tab.label}
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                activeStatusId === tab.id ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+                activeStatusId === tab.id ? "bg-accent text-foreground" : "bg-accent/50 text-muted"
               }`}
             >
               {tab.count}
@@ -107,14 +107,14 @@ export function PortalStatusTierFilterBar({
         ))}
       </div>
 
-      <div className="inline-flex flex-wrap items-center gap-1 rounded-2xl border border-slate-200/90 bg-slate-100/70 p-1 sm:rounded-full">
+      <div className="inline-flex flex-wrap items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full">
         {TIER_FILTER_OPTIONS.map((opt) => (
           <button
             key={opt.id}
             type="button"
             onClick={() => onTierChange(opt.id)}
             className={`min-h-9 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-              tierFilter === opt.id ? "bg-white text-slate-900 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.28)]" : "text-slate-500 hover:text-slate-800"
+              tierFilter === opt.id ? "bg-card text-foreground shadow-[var(--shadow-sm)]" : "text-muted hover:text-foreground"
             }`}
           >
             {opt.label}
@@ -137,10 +137,10 @@ export function PortalStatRow({ items }: { items: PortalMetricItem[] }) {
       {items.map((k) => (
         <div
           key={k.label}
-          className="min-w-[10rem] flex-1 rounded-2xl border border-slate-200/80 bg-slate-50/60 px-5 py-4 sm:min-w-[11rem] sm:flex-none"
+          className="min-w-[10rem] flex-1 rounded-2xl border border-border bg-accent/30 px-5 py-4 sm:min-w-[11rem] sm:flex-none"
         >
-          <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{k.value}</p>
-          <p className="mt-1 text-xs font-medium text-slate-500">{k.label}</p>
+          <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground">{k.value}</p>
+          <p className="mt-1 text-xs font-medium text-muted">{k.label}</p>
         </div>
       ))}
     </div>
@@ -153,8 +153,8 @@ function tabButtonClass(active: boolean, textAlign: "center" | "left"): string {
     "min-w-[7.5rem] flex-1 basis-[7.5rem] rounded-xl border px-4 py-3 transition-colors duration-150 sm:flex-none sm:basis-auto",
     align,
     active
-      ? "border-slate-300 bg-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.28)] ring-1 ring-slate-200/80"
-      : "border-slate-200/60 bg-slate-50/90 hover:border-slate-200 hover:bg-white",
+      ? "border-primary/30 bg-card shadow-[var(--shadow-sm)] ring-1 ring-border"
+      : "border-border/60 bg-accent/30 hover:border-border hover:bg-card",
   ].join(" ");
 }
 
@@ -178,8 +178,8 @@ export function PortalKpiTabStrip({
         const active = i === activeIndex;
         return (
           <button key={k.label} type="button" onClick={() => onSelect(i)} className={tabButtonClass(active, textAlign)}>
-            <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{k.value}</p>
-            <p className="mt-1 text-xs font-medium text-slate-500">{k.label}</p>
+            <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground">{k.value}</p>
+            <p className="mt-1 text-xs font-medium text-muted">{k.label}</p>
           </button>
         );
       })}
@@ -190,7 +190,7 @@ export function PortalKpiTabStrip({
 /** Inner well for tables / lists below KPI rows. */
 export function PortalContentWell({ children }: { children: ReactNode }) {
   return (
-    <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200/75 bg-white shadow-[0_2px_16px_-8px_rgba(15,23,42,0.08)]">{children}</div>
+    <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-sm)]">{children}</div>
   );
 }
 
@@ -209,7 +209,7 @@ export function ManagerPortalStatusPills({
 }) {
   const isPrimary = activeTone === "primary";
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200/90 bg-slate-100/70 p-1 sm:rounded-full">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full">
       {tabs.map((tab) => {
         const active = activeId === tab.id;
         return (
@@ -220,9 +220,9 @@ export function ManagerPortalStatusPills({
             className={`flex min-h-9 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
               active
                 ? isPrimary
-                  ? "bg-slate-950 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
-                  : "bg-white text-slate-900 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.28)]"
-                : "text-slate-500 hover:text-slate-800"
+                  ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
+                  : "bg-card text-foreground shadow-[var(--shadow-sm)]"
+                : "text-muted hover:text-foreground"
             }`}
           >
             {tab.label}
@@ -230,9 +230,9 @@ export function ManagerPortalStatusPills({
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
                 active
                   ? isPrimary
-                    ? "bg-white/20 text-white"
-                    : "bg-slate-100 text-slate-700"
-                  : "bg-slate-200/60 text-slate-500"
+                    ? "bg-primary-foreground/20 text-primary-foreground"
+                    : "bg-accent text-foreground"
+                  : "bg-accent/50 text-muted"
               }`}
             >
               {tab.count}
@@ -259,10 +259,10 @@ export function ManagerPortalPageShell({
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <h1 className="min-w-0 text-[1.35rem] font-bold tracking-[-0.02em] text-slate-950 sm:text-[1.75rem]">{title}</h1>
+        <h1 className="min-w-0 text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem]">{title}</h1>
         {titleAside ? <div className="flex flex-wrap items-center gap-2.5 sm:justify-end sm:pt-0.5">{titleAside}</div> : null}
       </div>
-      {filterRow ? <div className="mt-6 border-b border-slate-100/90 pb-6">{filterRow}</div> : null}
+      {filterRow ? <div className="mt-6 border-b border-border pb-6">{filterRow}</div> : null}
       <div className="mt-6">{children}</div>
     </div>
   );
@@ -270,26 +270,26 @@ export function ManagerPortalPageShell({
 
 /** Table header cell class (admin leases / managers / portal tabs). */
 export const MANAGER_TABLE_TH =
-  "px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:px-5";
+  "px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:px-5";
 
 /** Shared toolbar shell for filters/toggles in portal tabs. */
 export const PORTAL_TOOLBAR_GROUP =
-  "inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200/90 bg-slate-100/70 p-1";
+  "inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1";
 
 /** Shared pill toggle button in portal toolbars. */
 export const PORTAL_TOOLBAR_PILL_BUTTON =
-  "min-h-9 rounded-full px-4 py-1.5 text-sm font-semibold text-slate-600 transition hover:text-slate-800";
+  "min-h-9 rounded-full px-4 py-1.5 text-sm font-semibold text-muted transition hover:text-foreground";
 
 /** Active variant for toolbar pill buttons. */
 export const PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE =
-  "bg-white text-slate-900 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.28)]";
+  "bg-card text-foreground shadow-[var(--shadow-sm)]";
 
 /** Label used before toolbar selects (Property/Sort/etc.). */
-export const PORTAL_TOOLBAR_LABEL = "text-xs font-semibold text-slate-500";
+export const PORTAL_TOOLBAR_LABEL = "text-xs font-semibold text-muted";
 
 /** Shared dropdown style for toolbar selects. */
 export const PORTAL_TOOLBAR_SELECT =
-  "h-10 rounded-full border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
+  "h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-ring";
 
 /** Shared action button sizing for page header controls. */
 export const PORTAL_HEADER_ACTION_BTN = "h-10 rounded-full px-5 text-sm font-semibold";
@@ -309,7 +309,7 @@ export function PortalToolbarSortSelect<T extends string>({
   ariaLabel?: string;
 }) {
   return (
-    <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+    <label className="inline-flex items-center gap-2 rounded-full border border-border bg-accent/30 p-1 pr-1.5">
       <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>{label}</span>
       <select
         value={value}
@@ -334,13 +334,13 @@ export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
 
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */
 export const PORTAL_KPI_CHIP_INACTIVE =
-  "rounded-xl border border-slate-200/60 bg-slate-50/90 px-4 py-3 text-left transition-colors duration-150 hover:border-slate-200 hover:bg-white";
+  "rounded-xl border border-border/60 bg-accent/30 px-4 py-3 text-left transition-colors duration-150 hover:border-border hover:bg-card";
 
 export const PORTAL_KPI_CHIP_ACTIVE =
-  "rounded-xl border border-primary bg-white px-4 py-3 text-left shadow-[inset_0_-3px_0_0_#007aff] ring-1 ring-primary/20 transition-colors duration-150";
+  "rounded-xl border border-primary bg-card px-4 py-3 text-left shadow-[inset_0_-3px_0_0_#007aff] ring-1 ring-primary/20 transition-colors duration-150";
 
 export const PORTAL_KPI_CHIP_STATIC =
-  "rounded-xl border border-slate-200/60 bg-slate-50/90 px-4 py-3 text-left";
+  "rounded-xl border border-border/60 bg-accent/30 px-4 py-3 text-left";
 
-export const PORTAL_KPI_VALUE = "text-2xl font-bold tabular-nums tracking-tight text-slate-900";
-export const PORTAL_KPI_LABEL = "mt-1 text-xs font-medium text-slate-500";
+export const PORTAL_KPI_VALUE = "text-2xl font-bold tabular-nums tracking-tight text-foreground";
+export const PORTAL_KPI_LABEL = "mt-1 text-xs font-medium text-muted";

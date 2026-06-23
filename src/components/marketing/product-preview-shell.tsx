@@ -81,10 +81,10 @@ function PreviewSidebar({ scene }: { scene: ProductScene }) {
     <aside className="hidden w-[200px] shrink-0 border-r border-white/8 bg-gradient-to-b from-[#1a2844] to-[#0e1830] sm:block">
       <div className="border-b border-white/8 px-4 py-4">
         <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-lg bg-white/12" />
+          <div className="h-7 w-7 rounded-lg bg-card/12" />
           <div className="space-y-1">
-            <div className="h-2 w-16 rounded bg-white/20" />
-            <div className="h-1.5 w-10 rounded bg-white/10" />
+            <div className="h-2 w-16 rounded bg-card/20" />
+            <div className="h-1.5 w-10 rounded bg-card/10" />
           </div>
         </div>
       </div>
@@ -93,10 +93,10 @@ function PreviewSidebar({ scene }: { scene: ProductScene }) {
           <div
             key={item}
             className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] font-medium ${
-              i === 0 ? "bg-white/10 text-white" : "text-white/45"
+              i === 0 ? "bg-card/10 text-white" : "text-white/45"
             }`}
           >
-            <div className="h-3.5 w-3.5 rounded bg-white/15" />
+            <div className="h-3.5 w-3.5 rounded bg-card/15" />
             {item}
           </div>
         ))}
@@ -117,7 +117,7 @@ function PreviewTopbar({ scene }: { scene: ProductScene }) {
         </p>
       </div>
       <div className="flex gap-2">
-        <div className="h-7 w-7 rounded-full bg-white/10" />
+        <div className="h-7 w-7 rounded-full bg-card/10" />
         <div className="h-7 w-16 rounded-full bg-primary/30" />
       </div>
     </header>
@@ -128,13 +128,13 @@ function PreviewMain({ scene }: { scene: ProductScene }) {
   if (scene === "listings") {
     return (
       <div className="flex-1 p-4 sm:p-5">
-        <div className="mb-4 h-10 rounded-xl border border-white/10 bg-white/5" />
+        <div className="mb-4 h-10 rounded-xl border border-white/10 bg-card/5" />
         <div className="grid gap-3 sm:grid-cols-2">
           {[1, 2, 3, 4].map((n) => (
-            <div key={n} className="rounded-xl border border-white/8 bg-white/5 p-3">
-              <div className="mb-2 h-20 rounded-lg bg-white/8" />
-              <div className="h-2 w-2/3 rounded bg-white/15" />
-              <div className="mt-1.5 h-1.5 w-1/3 rounded bg-white/10" />
+            <div key={n} className="rounded-xl border border-white/8 bg-card/5 p-3">
+              <div className="mb-2 h-20 rounded-lg bg-card/8" />
+              <div className="h-2 w-2/3 rounded bg-card/15" />
+              <div className="mt-1.5 h-1.5 w-1/3 rounded bg-card/10" />
             </div>
           ))}
         </div>
@@ -150,9 +150,9 @@ function PreviewMain({ scene }: { scene: ProductScene }) {
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {["Lease", "Payments", "Move-in", "Services"].map((label) => (
-            <div key={label} className="rounded-xl border border-white/8 bg-white/5 p-3">
+            <div key={label} className="rounded-xl border border-white/8 bg-card/5 p-3">
               <p className="text-[10px] font-semibold text-white/50">{label}</p>
-              <div className="mt-2 h-2 w-1/2 rounded bg-white/15" />
+              <div className="mt-2 h-2 w-1/2 rounded bg-card/15" />
             </div>
           ))}
         </div>
@@ -164,22 +164,22 @@ function PreviewMain({ scene }: { scene: ProductScene }) {
     <div className="flex-1 p-4 sm:p-5">
       <div className="mb-4 grid grid-cols-3 gap-2">
         {["Applications", "Occupancy", "Revenue"].map((label) => (
-          <div key={label} className="rounded-xl border border-white/8 bg-white/5 p-2.5">
+          <div key={label} className="rounded-xl border border-white/8 bg-card/5 p-2.5">
             <p className="text-[9px] font-bold uppercase tracking-wider text-white/40">{label}</p>
-            <div className="mt-1.5 h-4 w-10 rounded bg-white/20" />
+            <div className="mt-1.5 h-4 w-10 rounded bg-card/20" />
           </div>
         ))}
       </div>
-      <div className="rounded-xl border border-white/8 bg-white/5">
+      <div className="rounded-xl border border-white/8 bg-card/5">
         <div className="border-b border-white/8 px-3 py-2">
-          <div className="h-2 w-24 rounded bg-white/15" />
+          <div className="h-2 w-24 rounded bg-card/15" />
         </div>
         {[1, 2, 3, 4].map((n) => (
           <div key={n} className="flex items-center gap-3 border-b border-white/5 px-3 py-2.5 last:border-0">
-            <div className="h-6 w-6 rounded-full bg-white/10" />
+            <div className="h-6 w-6 rounded-full bg-card/10" />
             <div className="flex-1 space-y-1">
-              <div className="h-2 w-3/5 rounded bg-white/15" />
-              <div className="h-1.5 w-2/5 rounded bg-white/8" />
+              <div className="h-2 w-3/5 rounded bg-card/15" />
+              <div className="h-1.5 w-2/5 rounded bg-card/8" />
             </div>
             <div className="h-5 w-14 rounded-full bg-primary/25" />
           </div>
@@ -197,7 +197,7 @@ function PreviewMetaPanel() {
         {["Status", "Priority", "Assignee"].map((label) => (
           <div key={label}>
             <p className="text-[9px] text-white/30">{label}</p>
-            <div className="mt-1 h-2 w-full rounded bg-white/10" />
+            <div className="mt-1 h-2 w-full rounded bg-card/10" />
           </div>
         ))}
       </div>

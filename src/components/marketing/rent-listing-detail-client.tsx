@@ -47,7 +47,7 @@ export function RentListingDetailClient({ id }: { id: string }) {
 
   if (extra === undefined) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-24 text-center text-slate-600">
+      <div className="mx-auto max-w-2xl px-4 py-24 text-center text-muted">
         <p>Loading listing…</p>
       </div>
     );
@@ -56,8 +56,8 @@ export function RentListingDetailClient({ id }: { id: string }) {
   if (extra === null) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-24 text-center">
-        <h1 className="text-2xl font-bold text-slate-900">Listing not found</h1>
-        <p className="mt-2 text-slate-600">This property may have been removed or the link is invalid.</p>
+        <h1 className="text-2xl font-bold text-foreground">Listing not found</h1>
+        <p className="mt-2 text-muted">This property may have been removed or the link is invalid.</p>
         <Link href="/rent/listings" className="mt-8 inline-flex text-sm font-semibold text-primary hover:opacity-90">
           Back to listings
         </Link>

@@ -224,7 +224,7 @@ export default function PartnerPricingPage() {
             Annual
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                billing === "annual" ? "bg-white/20 text-white" : "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]"
+                billing === "annual" ? "bg-card/20 text-white" : "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]"
               }`}
             >
               20% off

@@ -198,7 +198,7 @@ function SignInForm() {
             checked={rememberEmail}
             disabled={busy}
             onChange={(event) => setRememberEmail(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+            className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
           />
           <label htmlFor="remember-email" className="text-sm text-muted">
             Remember my email for next time

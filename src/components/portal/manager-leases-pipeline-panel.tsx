@@ -45,11 +45,11 @@ import {
 
 function ThreadView({ row }: { row: LeasePipelineRow }) {
   if (!row.thread.length) {
-    return <p className="text-xs text-slate-500">No messages yet.</p>;
+    return <p className="text-xs text-muted">No messages yet.</p>;
   }
   return (
-    <div className="mt-3 max-h-40 space-y-2 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Thread</p>
+    <div className="mt-3 max-h-40 space-y-2 overflow-y-auto rounded-xl border border-border bg-accent/30 px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">Thread</p>
       <ul className="space-y-2">
         {row.thread.map((m) => (
           <li
@@ -57,12 +57,12 @@ function ThreadView({ row }: { row: LeasePipelineRow }) {
             className={`rounded-lg px-2.5 py-1.5 text-xs shadow-sm ring-1 ${
               m.role === "admin"
                 ? "bg-sky-50/90 ring-sky-200/90"
-                : "bg-white ring-slate-100"
+                : "bg-card ring-slate-100"
             }`}
           >
-            <span className="font-semibold capitalize text-slate-700">{m.role}</span>
-            <span className="text-slate-400"> · {formatPacificDateTime(m.at)}</span>
-            <p className="mt-1 whitespace-pre-wrap text-slate-700">{m.body}</p>
+            <span className="font-semibold capitalize text-muted">{m.role}</span>
+            <span className="text-muted"> · {formatPacificDateTime(m.at)}</span>
+            <p className="mt-1 whitespace-pre-wrap text-muted">{m.body}</p>
           </li>
         ))}
       </ul>
@@ -487,10 +487,10 @@ export function ManagerLeasesPipelinePanel({
               <Fragment key={row.id}>
                 {/** current workflow status drives allowed actions; bucket only drives tab grouping */}
                 <tr className={PORTAL_TABLE_TR}>
-                  <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.residentName}</td>
+                  <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.residentName}</td>
                   <td className={PORTAL_TABLE_TD}>{row.unit}</td>
                   <td className={PORTAL_TABLE_TD}>{row.status ?? row.stageLabel}</td>
-                  <td className={`${PORTAL_TABLE_TD} text-slate-500`}>{row.updated}</td>
+                  <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.updated}</td>
                   <td className={`${PORTAL_TABLE_TD} text-right`}>
                     <Button
                       type="button"
@@ -505,9 +505,9 @@ export function ManagerLeasesPipelinePanel({
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
                     <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                      <p className="text-sm leading-relaxed text-slate-600">{row.notes}</p>
-                      <p className="mt-1.5 text-xs text-slate-500">Version v{row.versionNumber ?? row.pdfVersion}</p>
-                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{row.status ?? row.stageLabel}</p>
+                      <p className="text-sm leading-relaxed text-muted">{row.notes}</p>
+                      <p className="mt-1.5 text-xs text-muted">Version v{row.versionNumber ?? row.pdfVersion}</p>
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted">{row.status ?? row.stageLabel}</p>
                       {row.managerSignature || row.residentSignature ? (
                         <div className="mt-2 grid gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3 py-2.5 text-xs text-emerald-900 sm:grid-cols-2">
                           <div>
@@ -515,7 +515,7 @@ export function ManagerLeasesPipelinePanel({
                             {row.managerSignature ? (
                               <p>
                                 <span
-                                  className="text-sm text-slate-800"
+                                  className="text-sm text-foreground"
                                   style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
                                 >
                                   {row.managerSignature.name}
@@ -531,7 +531,7 @@ export function ManagerLeasesPipelinePanel({
                             {row.residentSignature ? (
                               <p>
                                 <span
-                                  className="text-sm text-slate-800"
+                                  className="text-sm text-foreground"
                                   style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
                                 >
                                   {row.residentSignature.name}
@@ -557,7 +557,7 @@ export function ManagerLeasesPipelinePanel({
                                 [row.id]: e.target.value,
                               }))
                             }
-                            className="max-w-xl rounded-xl border border-slate-200 bg-white text-sm"
+                            className="max-w-xl rounded-xl border border-border bg-card text-sm"
                           />
                         </div>
                       ) : null}
@@ -754,12 +754,12 @@ export function ManagerLeasesPipelinePanel({
                             emptyHint="No lease document yet — regenerate from application data or upload a corrected lease."
                           />
                           <div className="mt-4">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
                               Internal comments (read-only)
                             </p>
                             <ThreadView row={row} />
                           </div>
-                          <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">
+                          <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted">
                             Admin review is paused for resident actions. Correct the single lease document here, then send it back to the manager.
                           </p>
                         </>

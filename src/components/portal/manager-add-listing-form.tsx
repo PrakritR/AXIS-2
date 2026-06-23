@@ -107,7 +107,7 @@ import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
 import { Modal } from "@/components/ui/modal";
 
 const selectInputCls =
-  "min-h-[44px] w-full rounded-xl border border-black/[0.08] bg-black/[0.04] px-3.5 py-2.5 text-[14px] text-[#1d1d1f] outline-none transition focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/20";
+  "min-h-[44px] w-full rounded-xl border border-border bg-auth-input-bg px-3.5 py-2.5 text-[14px] text-foreground outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20";
 
 function dedupeByLabel<T extends { label: string }>(items: readonly T[]): T[] {
   const seen = new Set<string>();
@@ -216,16 +216,25 @@ const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
   furnishing: ROOM_FURNISHING_OPTIONS,
 };
 
-function FormSection({ id, title, description, children, accent }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode; accent?: string }) {
+function FormSection({ id, title, description, children }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode }) {
   return (
-    <section id={id} className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_6px_rgba(15,23,42,0.06)]">
-      <div className={`border-b border-slate-100 px-5 py-4 sm:px-6 ${accent ?? "bg-sky-50/60"}`}>
-        <h3 className="text-[15px] font-bold tracking-tight text-slate-900">{title}</h3>
-        {description ? <div className="mt-1 max-w-3xl text-[13px] leading-relaxed text-slate-500">{description}</div> : null}
-      </div>
-      <div className="p-5 sm:p-6">{children}</div>
+    <section id={id} className="space-y-5">
+      <header>
+        <h3 className="text-base font-bold tracking-tight text-foreground sm:text-[17px]">{title}</h3>
+        {description ? <p className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-muted">{description}</p> : null}
+      </header>
+      <div className="space-y-5">{children}</div>
     </section>
   );
+}
+
+const LISTING_CHOICE_CARD =
+  "rounded-2xl border px-3 py-3 text-left transition sm:px-4 sm:py-3.5";
+
+function listingChoiceCardClass(selected: boolean) {
+  return selected
+    ? `${LISTING_CHOICE_CARD} border-primary ring-2 ring-primary/25`
+    : `${LISTING_CHOICE_CARD} border-border hover:border-primary/30`;
 }
 
 function togglePaymentAtSigning(
@@ -259,12 +268,12 @@ function mediaDropZoneClass(active: boolean) {
   return `rounded-xl border border-dashed p-4 transition ${
     active
       ? "border-primary/50 bg-primary/[0.06] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.18)]"
-      : "border-slate-200/90 bg-white hover:border-primary/30 hover:bg-primary/[0.03]"
+      : "border-border bg-card hover:border-primary/30 hover:bg-primary/[0.03]"
   }`;
 }
 
 const MEDIA_PICK_BTN_CLASS =
-  "inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex cursor-pointer items-center justify-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-60";
 
 /** Programmatic file picker — avoids label/htmlFor inside overflow-hidden modals blanking the UI. */
 function MediaPickTrigger({
@@ -329,10 +338,10 @@ function PlaceCategoryPicker({
   return (
     <div
       data-wizard-field="listingPlaceCategoryId"
-      className={wizardSectionErrorClass(Boolean(hasError), "rounded-2xl border border-sky-100/90 bg-sky-50/50 px-4 py-4 sm:px-5")}
+      className={wizardSectionErrorClass(Boolean(hasError))}
     >
-      <p className="text-sm font-semibold text-slate-900">How is this property rented?</p>
-      <p className="mt-1 text-xs leading-relaxed text-slate-600">
+      <p className="text-sm font-semibold text-foreground">How is this property rented?</p>
+      <p className="mt-1 text-xs leading-relaxed text-muted">
         Choose one model — we’ll tailor rent, utilities, and proration fields below.
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -343,14 +352,10 @@ function PlaceCategoryPicker({
               key={opt.id}
               type="button"
               onClick={() => onSelect(opt.id)}
-              className={`rounded-2xl border px-4 py-3.5 text-left transition ${
-                on
-                  ? "border-primary bg-white shadow-[0_8px_28px_-18px_rgba(37,99,235,0.45)] ring-2 ring-primary/25"
-                  : "border-slate-200/90 bg-white hover:border-slate-300"
-              }`}
+              className={listingChoiceCardClass(on)}
             >
-              <span className="text-sm font-semibold text-slate-900">{opt.label}</span>
-              <span className="mt-0.5 block text-xs text-slate-500">{opt.hint}</span>
+              <span className="text-sm font-semibold text-foreground">{opt.label}</span>
+              <span className="mt-0.5 block text-xs text-muted">{opt.hint}</span>
             </button>
           );
         })}
@@ -392,12 +397,12 @@ function ProrationMethodFields({
               key={method}
               type="button"
               onClick={() => onMethod(method)}
-              className={`flex-1 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${active ? "border-primary bg-primary/5 font-medium text-primary" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}
+              className={`flex-1 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${active ? "border-primary bg-primary/5 font-medium text-primary" : "border-border bg-card text-muted hover:border-border hover:bg-accent/30"}`}
             >
               <span className="block font-semibold">
                 {method === "auto" ? "Auto (÷ days in month)" : "Manual daily rate"}
               </span>
-              <span className="mt-0.5 block text-xs text-slate-500">
+              <span className="mt-0.5 block text-xs text-muted">
                 {method === "auto"
                   ? "Remaining days ÷ days in month × monthly rate"
                   : "Remaining days × your set daily rate"}
@@ -407,9 +412,9 @@ function ProrationMethodFields({
         })}
       </div>
       {prorateMethod === "auto" && monthlyRent > 0 ? (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted">
           Example: move-in May 14 → 18/31 × ${monthlyRent} ={" "}
-          <span className="font-semibold text-slate-700">${((18 / 31) * monthlyRent).toFixed(2)}</span> prorated rent
+          <span className="font-semibold text-muted">${((18 / 31) * monthlyRent).toFixed(2)}</span> prorated rent
         </p>
       ) : null}
       {prorateMethod === "daily_rate" ? (
@@ -417,7 +422,7 @@ function ProrationMethodFields({
           <GridField>
             <FieldLabel>Daily rent rate</FieldLabel>
             <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
               <Input
                 inputMode="decimal"
                 className="pl-8"
@@ -430,7 +435,7 @@ function ProrationMethodFields({
           <GridField>
             <FieldLabel>{utilitiesLabel ?? "Daily utilities rate"}</FieldLabel>
             <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
               <Input
                 inputMode="decimal"
                 className="pl-8"
@@ -711,11 +716,11 @@ async function uploadVideoFile(file: File): Promise<string> {
 function FieldLabel({ children, hint, required }: { children: React.ReactNode; hint?: string; required?: boolean }) {
   return (
     <div className="mb-1.5">
-      <p className="text-xs font-semibold text-slate-800">
+      <p className="text-xs font-semibold text-foreground">
         {children}
         {required ? <span className="text-red-600"> *</span> : null}
       </p>
-      {hint ? <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-[11px] text-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -751,12 +756,12 @@ function ListingSubsection({
   children: React.ReactNode;
 }) {
   return (
-    <div id={id} className="rounded-xl border border-slate-200/90 bg-slate-50/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] sm:p-5">
-      <div className="border-b border-slate-200/70 pb-3">
-        <h4 className="text-sm font-bold text-slate-900">{title}</h4>
-        {description ? <div className="mt-1 text-xs leading-relaxed text-slate-600">{description}</div> : null}
+    <div id={id} className="space-y-4 border-t border-border pt-5">
+      <div>
+        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+        {description ? <p className="mt-1 text-xs leading-relaxed text-muted">{description}</p> : null}
       </div>
-      <div className="mt-4 space-y-4">{children}</div>
+      <div className="space-y-4">{children}</div>
     </div>
   );
 }
@@ -1779,30 +1784,30 @@ export function ManagerAddListingForm({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-slate-900/50 px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
+      className="modal-overlay fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <form
         id="manager-add-listing-form"
         onSubmit={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
+        className="modal-panel relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
       >
         {/* ── Header ── */}
-        <div className="shrink-0 border-b border-slate-100 bg-white px-5 pt-5 pb-6 sm:px-6">
+        <div className="modal-panel shrink-0 border-b border-border px-5 pt-5 pb-6 sm:px-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
                 Step {stepIndex + 1} of {LISTING_STEP_COUNT}
               </p>
-              <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
+              <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
                 {isEditMode ? "Edit listing" : "New listing"} · {LISTING_FORM_STEPS[stepIndex]?.label}
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/30 text-muted hover:bg-accent/40"
               aria-label="Close"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
@@ -1825,14 +1830,14 @@ export function ManagerAddListingForm({
                     i === stepIndex
                       ? "bg-primary/10 text-primary"
                       : completed
-                        ? "text-slate-600 hover:bg-slate-50"
+                        ? "text-muted hover:bg-accent/30"
                         : reachable
-                          ? "text-slate-600 hover:bg-slate-50"
+                          ? "text-muted hover:bg-accent/30"
                           : "cursor-not-allowed text-slate-300"
                   }`}
                 >
                   <span className={`inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
-                    completed ? "bg-emerald-100 text-emerald-700" : i === stepIndex ? "bg-primary/10 text-primary" : reachable ? "bg-slate-100 text-slate-400" : "bg-slate-50 text-slate-300"
+                    completed ? "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]" : i === stepIndex ? "bg-primary/10 text-primary" : reachable ? "bg-accent/30 text-muted" : "bg-accent/30 text-muted"
                   }`}>
                     {completed ? "✓" : i + 1}
                   </span>
@@ -1844,7 +1849,7 @@ export function ManagerAddListingForm({
           </div>
 
           {/* Progress bar */}
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-accent/30">
             <div
               className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
               style={{ width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%` }}
@@ -1852,7 +1857,7 @@ export function ManagerAddListingForm({
           </div>
 
           {/* Step blurb */}
-          <p className="mt-3 text-[12px] leading-relaxed text-slate-500">
+          <p className="mt-3 text-[12px] leading-relaxed text-muted">
             {LISTING_STEP_BLURBS[LISTING_FORM_STEPS[stepIndex]!.id]}
           </p>
         </div>
@@ -1867,10 +1872,10 @@ export function ManagerAddListingForm({
           >
             <div
               data-wizard-field="listingPropertyTypeId"
-              className={`mb-6 rounded-2xl border px-4 py-4 sm:px-5 ${wizardSectionErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId), "border-sky-100/90 bg-sky-50/50")}`}
+              className={`space-y-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId))}`}
             >
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Step 1 · Basics</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">What kind of place is this?</p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Step 1 · Basics</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">What kind of place is this?</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {LISTING_PROPERTY_TYPE_OPTIONS.map((opt) => {
                   const on = sub.listingPropertyTypeId === opt.id;
@@ -1882,14 +1887,10 @@ export function ManagerAddListingForm({
                         clearListingFieldError("listingPropertyTypeId");
                         setSub((s) => ({ ...s, listingPropertyTypeId: opt.id }));
                       }}
-                      className={`rounded-2xl border px-3 py-3 text-left transition ${
-                        on
-                          ? "border-primary bg-white shadow-[0_8px_28px_-18px_rgba(37,99,235,0.45)] ring-2 ring-primary/25"
-                          : "border-slate-200/90 bg-white hover:border-slate-300"
-                      }`}
+                      className={listingChoiceCardClass(on)}
                     >
-                      <span className="text-sm font-semibold text-slate-900">{opt.label}</span>
-                      <span className="mt-0.5 block text-xs leading-snug text-slate-500">{opt.hint}</span>
+                      <span className="text-sm font-semibold text-foreground">{opt.label}</span>
+                      <span className="mt-0.5 block text-xs leading-snug text-muted">{opt.hint}</span>
                     </button>
                   );
                 })}
@@ -1982,7 +1983,7 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
                     <ChevronDownTiny />
                   </span>
                 </div>
@@ -2011,7 +2012,7 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
                     <ChevronDownTiny />
                   </span>
                 </div>
@@ -2041,7 +2042,7 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
                     <ChevronDownTiny />
                   </span>
                 </div>
@@ -2074,14 +2075,14 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 transition hover:border-slate-300">
+                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-accent/30 p-4 transition hover:border-border">
                   <input
                     type="checkbox"
                     checked={sub.petFriendly}
                     onChange={(e) => setSub((s) => ({ ...s, petFriendly: e.target.checked }))}
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300"
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
                   />
-                  <span className="text-sm font-medium text-slate-800">Pet-friendly listing (subject to approval)</span>
+                  <span className="text-sm font-medium text-foreground">Pet-friendly listing (subject to approval)</span>
                 </label>
               </div>
             </div>
@@ -2101,11 +2102,11 @@ export function ManagerAddListingForm({
                 <MediaPickTrigger accept="image/*" multiple onFiles={(files) => { void onPickHousePhotos(files); }}>
                   Add house photos
                 </MediaPickTrigger>
-                <p className="mt-3 text-sm text-slate-600">Drag and drop photos here, or use the button above.</p>
+                <p className="mt-3 text-sm text-muted">Drag and drop photos here, or use the button above.</p>
                 {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
-                      <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                      <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-accent/30">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={url} alt="" className="h-full w-full object-cover" />
                         <button type="button" className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70" onClick={() => removeHousePhoto(pi)} aria-label="Remove photo">×</button>
@@ -2113,7 +2114,7 @@ export function ManagerAddListingForm({
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-2 text-[11px] text-slate-500">Optional for draft — recommended before you go live.</p>
+                  <p className="mt-2 text-[11px] text-muted">Optional for draft — recommended before you go live.</p>
                 )}
               </div>
               <div
@@ -2129,7 +2130,7 @@ export function ManagerAddListingForm({
                 </MediaPickTrigger>
                 {sub.houseVideoDataUrl ? (
                   <div className="mt-3 space-y-2">
-                    <video src={videoPreviewUrls.house ?? sub.houseVideoDataUrl} controls className="max-h-48 w-full rounded-xl border border-slate-200 bg-black object-contain" />
+                    <video src={videoPreviewUrls.house ?? sub.houseVideoDataUrl} controls className="max-h-48 w-full rounded-xl border border-border bg-black object-contain" />
                     <button type="button" onClick={clearHouseVideo} className="text-xs font-medium text-rose-600 hover:text-rose-800">Remove video</button>
                   </div>
                 ) : null}
@@ -2142,14 +2143,14 @@ export function ManagerAddListingForm({
             >
               <div>
                 <FieldLabel hint="Tap all that apply.">Common amenities</FieldLabel>
-                <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
                   {dedupedPresets.houseWide.map((p) => {
                     const on = splitLineList(sub.amenitiesText).includes(p.label);
                     return (
                       <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300"
+                          className="h-4 w-4 rounded border-border"
                           checked={on}
                           onChange={(e) =>
                             setSub((s) => ({
@@ -2158,7 +2159,7 @@ export function ManagerAddListingForm({
                             }))
                           }
                         />
-                        <span className="font-medium text-slate-800">{p.label}</span>
+                        <span className="font-medium text-foreground">{p.label}</span>
                       </label>
                     );
                   })}
@@ -2192,9 +2193,9 @@ export function ManagerAddListingForm({
               <div>
                 <div className="mb-0.5 flex items-center gap-2">
                   <FieldLabel>House rules</FieldLabel>
-                  <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700">Residents only</span>
+                  <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
                 </div>
-                <p className="mb-1.5 text-[11px] text-slate-500">Shown to residents in their Move-in portal after approval.</p>
+                <p className="mb-1.5 text-[11px] text-muted">Shown to residents in their Move-in portal after approval.</p>
                 <Textarea
                   rows={3}
                   value={sub.houseRulesText}
@@ -2205,9 +2206,9 @@ export function ManagerAddListingForm({
               <div>
                 <div className="mb-0.5 flex items-center gap-2">
                   <FieldLabel>General house info</FieldLabel>
-                  <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700">Residents only</span>
+                  <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
                 </div>
-                <p className="mb-1.5 text-[11px] text-slate-500">Shown to residents in their Move-in portal after approval.</p>
+                <p className="mb-1.5 text-[11px] text-muted">Shown to residents in their Move-in portal after approval.</p>
                 <Textarea
                   rows={4}
                   value={sub.generalHouseInfo ?? ""}
@@ -2264,7 +2265,7 @@ export function ManagerAddListingForm({
                       </div>
                       <div>
                         <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                           <Input
                             inputMode="decimal"
                             className={wizardFieldErrorClass(Boolean(stepFieldErrors.monthlyRent), "pl-8")}
@@ -2282,7 +2283,7 @@ export function ManagerAddListingForm({
                     <GridField>
                       <FieldLabel hint="Monthly estimate used in signing totals.">Utilities estimate (whole home)</FieldLabel>
                       <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                         <Input
                           inputMode="decimal"
                           className="pl-8"
@@ -2318,14 +2319,14 @@ export function ManagerAddListingForm({
                       return (
                       <div
                         key={room.id}
-                        className={`rounded-xl border bg-white p-4 ${wizardSectionErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "border-slate-200")}`}
+                        className={`rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "border-border")}`}
                       >
-                        <p className="text-sm font-semibold text-slate-900">{room.name.trim() || `Room ${i + 1}`}</p>
+                        <p className="text-sm font-semibold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <GridField>
                             <FieldLabel>Monthly rent *</FieldLabel>
                             <div className="relative" data-wizard-field={roomRentKey}>
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                               <Input
                                 inputMode="decimal"
                                 className={wizardFieldErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "pl-8")}
@@ -2343,7 +2344,7 @@ export function ManagerAddListingForm({
                           <GridField>
                             <FieldLabel>Utilities estimate</FieldLabel>
                             <div className="relative">
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                               <Input inputMode="decimal" className="pl-8" value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()} onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })} placeholder="175" />
                             </div>
                           </GridField>
@@ -2375,11 +2376,11 @@ export function ManagerAddListingForm({
                       return (
                         <label
                           key={term}
-                          className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm"
+                          className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-sm shadow-sm"
                         >
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-slate-300"
+                            className="h-4 w-4 rounded border-border"
                             checked={selected}
                             onChange={(e) => {
                               clearListingFieldError("allowedLeaseTerms");
@@ -2397,7 +2398,7 @@ export function ManagerAddListingForm({
                               });
                             }}
                           />
-                          <span className="font-medium text-slate-800">{term}</span>
+                          <span className="font-medium text-foreground">{term}</span>
                         </label>
                       );
                     })}
@@ -2410,21 +2411,21 @@ export function ManagerAddListingForm({
                 title="Short-term stays"
                 description="Enable this only if this property may host temporary lodger / guest stays."
               >
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-4">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300"
+                    className="h-4 w-4 rounded border-border"
                     checked={Boolean(sub.shortTermRentalsAllowed)}
                     onChange={(e) => setSub((s) => ({ ...s, shortTermRentalsAllowed: e.target.checked }))}
                   />
-                  <span className="text-sm font-medium text-slate-800">This property allows short-term room stays</span>
+                  <span className="text-sm font-medium text-foreground">This property allows short-term room stays</span>
                 </label>
                 {sub.shortTermRentalsAllowed ? (
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <GridField>
                       <FieldLabel>Daily cost</FieldLabel>
                       <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                         <Input
                           className="pl-8"
                           inputMode="decimal"
@@ -2437,7 +2438,7 @@ export function ManagerAddListingForm({
                     <GridField>
                       <FieldLabel>Short-term deposit</FieldLabel>
                       <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                         <Input
                           className="pl-8"
                           inputMode="decimal"
@@ -2450,7 +2451,7 @@ export function ManagerAddListingForm({
                     <GridField>
                       <FieldLabel hint="Move-in fee for short-term stays — used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
                       <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                         <Input
                           className="pl-8"
                           inputMode="decimal"
@@ -2484,16 +2485,16 @@ export function ManagerAddListingForm({
                 }
               >
                 {!isEntireHome ? (
-                <div className="rounded-2xl border border-sky-200/80 bg-sky-50/60 p-4 sm:p-5">
-                  <p className="text-sm font-semibold text-sky-950">Build from your rooms</p>
-                  <p className="mt-1 text-xs leading-5 text-sky-900/80">
+                <div className="rounded-xl border border-border p-4 sm:p-5">
+                  <p className="text-sm font-semibold text-foreground">Build from your rooms</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">
                     Bundle rent defaults to the sum of selected room rents — edit the price when you offer a discount. Use strikethrough + promo for limited-time offers.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"
-                      className="rounded-full border-sky-200 bg-white text-xs"
+                      className="rounded-full text-xs"
                       onClick={() => addGeneratedBundle("whole_house")}
                       disabled={sub.rooms.length === 0}
                     >
@@ -2502,7 +2503,7 @@ export function ManagerAddListingForm({
                     <Button
                       type="button"
                       variant="outline"
-                      className="rounded-full border-sky-200 bg-white text-xs"
+                      className="rounded-full text-xs"
                       onClick={() => addGeneratedBundle("multi_room")}
                       disabled={sub.rooms.filter((room) => room.name.trim()).length < 2}
                     >
@@ -2516,7 +2517,7 @@ export function ManagerAddListingForm({
                 ) : null}
 
                 {(sub.bundles ?? []).length === 0 ? (
-                  <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm text-slate-600">
+                  <p className="mt-3 rounded-xl border border-dashed border-border bg-accent/30 px-4 py-5 text-sm text-muted">
                     {isEntireHome
                       ? "No extra bundles — the listing uses your entire-home rent from Lease & pricing."
                       : "No bundles yet — renters will still see per-room pricing from Lease & pricing. Add a bundle when you want to advertise a combined lease."}
@@ -2533,21 +2534,21 @@ export function ManagerAddListingForm({
                       return (
                         <div
                           key={bundle.id}
-                          className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_12px_40px_-28px_rgba(15,23,42,0.35)]"
+                          className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_12px_40px_-28px_rgba(15,23,42,0.35)]"
                         >
-                          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 sm:px-5">
+                          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-accent/30 px-4 py-3 sm:px-5">
                             <div>
                               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Package {i + 1}</p>
-                              <p className="mt-1 text-xs text-slate-600">
+                              <p className="mt-1 text-xs text-muted">
                                 {selectedRooms.length} room{selectedRooms.length === 1 ? "" : "s"} selected
                                 {rentSum > 0 ? (
                                   <>
                                     {" "}
-                                    · Base rent sum <span className="font-semibold text-slate-800">${rentSum}/mo</span>
+                                    · Base rent sum <span className="font-semibold text-foreground">${rentSum}/mo</span>
                                   </>
                                 ) : null}
                                 {hasManualPrice ? (
-                                  <span className="ml-1 font-medium text-sky-800">· Custom bundle price</span>
+                                  <span className="ml-1 font-medium text-primary">· Custom bundle price</span>
                                 ) : null}
                               </p>
                             </div>
@@ -2591,7 +2592,7 @@ export function ManagerAddListingForm({
                             <GridField>
                               <FieldLabel hint="Defaults to sum of room rents; edit for discounts.">Bundle rent / mo</FieldLabel>
                               <div className="relative">
-                                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                                 <Input
                                   inputMode="decimal"
                                   className="pl-8"
@@ -2604,7 +2605,7 @@ export function ManagerAddListingForm({
                             <GridField>
                               <FieldLabel hint="Optional — shows crossed out on the listing.">Original price</FieldLabel>
                               <div className="relative">
-                                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                                 <Input
                                   inputMode="decimal"
                                   className="pl-8"
@@ -2624,19 +2625,19 @@ export function ManagerAddListingForm({
                             </GridField>
                             <div className="sm:col-span-2">
                               <FieldLabel>Rooms in this bundle</FieldLabel>
-                              <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                              <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
                                 {sub.rooms.map((room) => (
-                                  <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-sm shadow-sm">
+                                  <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm">
                                     <input
                                       type="checkbox"
-                                      className="h-4 w-4 rounded border-slate-300"
+                                      className="h-4 w-4 rounded border-border"
                                       checked={selectedIds.has(room.id)}
                                       onChange={(e) => toggleBundleRoom(i, room.id, e.target.checked)}
                                     />
-                                    <span className="min-w-0 font-medium text-slate-800">
+                                    <span className="min-w-0 font-medium text-foreground">
                                       <span className="truncate">{roomLabelForBundle(room)}</span>
                                       {room.monthlyRent > 0 ? (
-                                        <span className="ml-1 tabular-nums text-xs font-normal text-slate-500">· ${room.monthlyRent}</span>
+                                        <span className="ml-1 tabular-nums text-xs font-normal text-muted">· ${room.monthlyRent}</span>
                                       ) : null}
                                     </span>
                                   </label>
@@ -2670,7 +2671,7 @@ export function ManagerAddListingForm({
                       </div>
                       <div>
                         <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                           <Input
                             className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
                             inputMode="decimal"
@@ -2697,12 +2698,12 @@ export function ManagerAddListingForm({
                 title="Payment at signing"
                 description="Select every charge collected when the lease is signed."
               >
-                <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
+                <div className="grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2">
                   {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
                     <label key={opt.id} className="flex cursor-pointer items-center gap-2">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300"
+                        className="h-4 w-4 rounded border-border"
                         checked={sub.paymentAtSigningIncludes.includes(opt.id)}
                         onChange={(e) =>
                           setSub((s) => ({
@@ -2711,7 +2712,7 @@ export function ManagerAddListingForm({
                           }))
                         }
                       />
-                      <span className="text-sm font-medium text-slate-800">{opt.label}</span>
+                      <span className="text-sm font-medium text-foreground">{opt.label}</span>
                     </label>
                   ))}
                 </div>
@@ -2722,11 +2723,11 @@ export function ManagerAddListingForm({
                 title="Resident payment methods"
                 description="How residents pay rent, utilities, and ongoing charges."
               >
-                <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+                <div className="space-y-4 rounded-xl border border-border bg-card p-4">
                   <label className="flex cursor-pointer items-center gap-3">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 rounded border-slate-300"
+                      className="h-4 w-4 rounded border-border"
                       checked={sub.axisPaymentsEnabled !== false}
                       onChange={(e) =>
                         setSub((s) => ({
@@ -2736,15 +2737,15 @@ export function ManagerAddListingForm({
                         }))
                       }
                     />
-                    <span className="text-sm font-medium text-slate-800">
+                    <span className="text-sm font-medium text-foreground">
                       Axis payments (ACH) — low {0.8}% processing fee
                     </span>
                   </label>
-                  <div className="border-t border-slate-100 pt-3">
+                  <div className="border-t border-border pt-3">
                     <label className="flex cursor-pointer items-center gap-3">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300"
+                        className="h-4 w-4 rounded border-border"
                         checked={Boolean(sub.zellePaymentsEnabled)}
                         onChange={(e) => {
                           const on = e.target.checked;
@@ -2755,7 +2756,7 @@ export function ManagerAddListingForm({
                           }));
                         }}
                       />
-                      <span className="text-sm font-medium text-slate-800">Zelle</span>
+                      <span className="text-sm font-medium text-foreground">Zelle</span>
                     </label>
                     {sub.zellePaymentsEnabled ? (
                       <div className="mt-2 pl-7" data-wizard-field="zelleContact">
@@ -2773,11 +2774,11 @@ export function ManagerAddListingForm({
                       </div>
                     ) : null}
                   </div>
-                  <div className="border-t border-slate-100 pt-3">
+                  <div className="border-t border-border pt-3">
                     <label className="flex cursor-pointer items-center gap-3">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300"
+                        className="h-4 w-4 rounded border-border"
                         checked={Boolean(sub.venmoPaymentsEnabled)}
                         onChange={(e) => {
                           const on = e.target.checked;
@@ -2788,7 +2789,7 @@ export function ManagerAddListingForm({
                           }));
                         }}
                       />
-                      <span className="text-sm font-medium text-slate-800">Venmo</span>
+                      <span className="text-sm font-medium text-foreground">Venmo</span>
                     </label>
                     {sub.venmoPaymentsEnabled ? (
                       <div className="mt-2 pl-7" data-wizard-field="venmoContact">
@@ -2847,7 +2848,7 @@ export function ManagerAddListingForm({
                   <GridField>
                     <FieldLabel hint="Flat fee added once per overdue charge after the grace period.">Late fee amount</FieldLabel>
                     <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                       <Input
                         className="pl-8"
                         inputMode="decimal"
@@ -2859,14 +2860,14 @@ export function ManagerAddListingForm({
                   </GridField>
                   <GridField>
                     <FieldLabel>Automatic late fees</FieldLabel>
-                    <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                    <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300"
+                        className="h-4 w-4 rounded border-border"
                         checked={sub.lateFeeEnabled !== false}
                         onChange={(e) => setSub((s) => ({ ...s, lateFeeEnabled: e.target.checked }))}
                       />
-                      <span className="text-sm text-slate-800">Create late fee charges & send messages</span>
+                      <span className="text-sm text-foreground">Create late fee charges & send messages</span>
                     </label>
                   </GridField>
                 </div>
@@ -2878,13 +2879,13 @@ export function ManagerAddListingForm({
               >
                 <div
                   data-wizard-field="applicationFeeMethods"
-                  className={`space-y-4 rounded-xl border bg-white p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.applicationFeeMethods), "border-slate-200")}`}
+                  className={`space-y-4 rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.applicationFeeMethods), "border-border")}`}
                 >
                   <StepFieldError msg={stepFieldErrors.applicationFeeMethods} />
                   <label className="flex cursor-pointer items-center gap-3">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 rounded border-slate-300"
+                      className="h-4 w-4 rounded border-border"
                       checked={sub.applicationFeeStripeEnabled !== false}
                       disabled={sub.axisPaymentsEnabled === false}
                       onChange={(e) =>
@@ -2894,43 +2895,43 @@ export function ManagerAddListingForm({
                         }))
                       }
                     />
-                    <span className="text-sm font-medium text-slate-800">Axis payments (ACH)</span>
+                    <span className="text-sm font-medium text-foreground">Axis payments (ACH)</span>
                   </label>
                   {sub.zellePaymentsEnabled ? (
-                    <div className="border-t border-slate-100 pt-3">
+                    <div className="border-t border-border pt-3">
                       <label className="flex cursor-pointer items-center gap-3">
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300"
+                          className="h-4 w-4 rounded border-border"
                           checked={sub.applicationFeeZelleEnabled !== false}
                           onChange={(e) => setSub((s) => ({ ...s, applicationFeeZelleEnabled: e.target.checked }))}
                         />
-                        <span className="text-sm font-medium text-slate-800">Zelle</span>
+                        <span className="text-sm font-medium text-foreground">Zelle</span>
                       </label>
                     </div>
                   ) : null}
                   {sub.venmoPaymentsEnabled ? (
-                    <div className="border-t border-slate-100 pt-3">
+                    <div className="border-t border-border pt-3">
                       <label className="flex cursor-pointer items-center gap-3">
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300"
+                          className="h-4 w-4 rounded border-border"
                           checked={sub.applicationFeeVenmoEnabled !== false}
                           onChange={(e) => setSub((s) => ({ ...s, applicationFeeVenmoEnabled: e.target.checked }))}
                         />
-                        <span className="text-sm font-medium text-slate-800">Venmo</span>
+                        <span className="text-sm font-medium text-foreground">Venmo</span>
                       </label>
                     </div>
                   ) : null}
-                  <div className="border-t border-slate-100 pt-3">
+                  <div className="border-t border-border pt-3">
                     <label className="flex cursor-pointer items-center gap-3">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300"
+                        className="h-4 w-4 rounded border-border"
                         checked={Boolean(sub.applicationFeeOtherEnabled)}
                         onChange={(e) => setSub((s) => ({ ...s, applicationFeeOtherEnabled: e.target.checked }))}
                       />
-                      <span className="text-sm font-medium text-slate-800">Other</span>
+                      <span className="text-sm font-medium text-foreground">Other</span>
                     </label>
                     {sub.applicationFeeOtherEnabled ? (
                       <div className="mt-2 pl-7" data-wizard-field="applicationFeeOtherInstructions">
@@ -2967,8 +2968,8 @@ export function ManagerAddListingForm({
             }
           >
             {isEntireHome ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
-                <p className="text-sm font-bold text-slate-900">Entire home</p>
+              <div className="rounded-2xl border border-border bg-accent/30 p-4 sm:p-5">
+                <p className="text-sm font-bold text-foreground">Entire home</p>
                 <div className="mt-3">
                   <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
                   <Textarea
@@ -2982,8 +2983,8 @@ export function ManagerAddListingForm({
             ) : (
               <div className="space-y-4">
                 {sub.rooms.map((room, i) => (
-                  <div key={room.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
-                    <p className="text-sm font-bold text-slate-900">{room.name.trim() || `Room ${i + 1}`}</p>
+                  <div key={room.id} className="rounded-2xl border border-border bg-accent/30 p-4 sm:p-5">
+                    <p className="text-sm font-bold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
                     <div className="mt-3">
                       <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
                       <Textarea
@@ -3012,7 +3013,7 @@ export function ManagerAddListingForm({
             }
           >
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted">
                 Layout details only — add optional photos per room if helpful.
               </p>
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addRoom}>
@@ -3037,10 +3038,10 @@ export function ManagerAddListingForm({
                 return (
                   <div
                     key={room.id}
-                    className={`rounded-2xl border p-4 sm:p-5 ${wizardSectionErrorClass(roomHasErr, "border-slate-200 bg-slate-50/50")}`}
+                    className={`rounded-2xl border p-4 sm:p-5 ${wizardSectionErrorClass(roomHasErr, "border-border bg-accent/30")}`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-bold text-slate-900">Room {i + 1}</p>
+                      <p className="text-sm font-bold text-foreground">Room {i + 1}</p>
                       <div className="flex flex-wrap items-center gap-2">
                         <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => duplicateRoom(i)} disabled={sub.rooms.length >= 20}>
                           Duplicate
@@ -3097,7 +3098,7 @@ export function ManagerAddListingForm({
                               ))}
                               <option value={ROOM_FLOOR_LEVEL_CUSTOM}>Custom…</option>
                             </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
                               <ChevronDownTiny />
                             </span>
                           </div>
@@ -3113,29 +3114,29 @@ export function ManagerAddListingForm({
                       </GridField>
                       <div className="sm:col-span-2">
                         <FieldLabel hint="Toggle items included, or add custom lines below.">Furnishing &amp; furniture</FieldLabel>
-                        <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
-                          <label className="mb-2 flex cursor-pointer items-center gap-2 border-b border-slate-100 pb-2 text-sm">
+                        <div className="mt-2 rounded-xl border border-border bg-card p-3">
+                          <label className="mb-2 flex cursor-pointer items-center gap-2 border-b border-border pb-2 text-sm">
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300"
+                              className="h-4 w-4 rounded border-border"
                               checked={isUnfurnished}
                               onChange={(e) => setRoom(i, { furnishing: e.target.checked ? "Unfurnished" : "" })}
                             />
-                            <span className="font-semibold text-slate-700">Unfurnished</span>
+                            <span className="font-semibold text-muted">Unfurnished</span>
                           </label>
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                             {dedupedPresets.furniture.map((p) => {
                               const on = checkedFurniture.has(p.label);
                               return (
-                                <label key={p.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${on ? "border-primary/30 bg-primary/[0.05]" : "border-slate-200 bg-white"} ${isUnfurnished ? "pointer-events-none opacity-40" : ""}`}>
+                                <label key={p.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${on ? "border-primary/30 bg-primary/[0.05]" : "border-border bg-card"} ${isUnfurnished ? "pointer-events-none opacity-40" : ""}`}>
                                   <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-slate-300"
+                                    className="h-4 w-4 rounded border-border"
                                     checked={on}
                                     disabled={isUnfurnished}
                                     onChange={(e) => setRoom(i, { furnishing: mergeFurnitureToggle(room.furnishing, p.label, e.target.checked) })}
                                   />
-                                  <span className="font-medium text-slate-800">{p.label}</span>
+                                  <span className="font-medium text-foreground">{p.label}</span>
                                 </label>
                               );
                             })}
@@ -3145,14 +3146,14 @@ export function ManagerAddListingForm({
                       </div>
                       <div className="sm:col-span-2">
                         <FieldLabel>Room amenities</FieldLabel>
-                        <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
+                        <div className="mt-2 grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2">
                           {dedupedPresets.room.map((p) => {
                             const on = splitLineList(room.roomAmenitiesText).includes(p.label);
                             return (
                               <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
                                 <input
                                   type="checkbox"
-                                  className="h-4 w-4 rounded border-slate-300"
+                                  className="h-4 w-4 rounded border-border"
                                   checked={on}
                                   onChange={(e) =>
                                     setRoom(i, {
@@ -3160,7 +3161,7 @@ export function ManagerAddListingForm({
                                     })
                                   }
                                 />
-                                <span className="font-medium text-slate-800">{p.label}</span>
+                                <span className="font-medium text-foreground">{p.label}</span>
                               </label>
                             );
                           })}
@@ -3192,11 +3193,11 @@ export function ManagerAddListingForm({
                           >
                             Add photos
                           </MediaPickTrigger>
-                          <p className="mt-3 text-sm text-slate-600">Drag and drop room photos here, or use the button above.</p>
+                          <p className="mt-3 text-sm text-muted">Drag and drop room photos here, or use the button above.</p>
                           {room.photoDataUrls.length > 0 ? (
                             <div className="mt-3 flex flex-wrap gap-2">
                               {room.photoDataUrls.map((url, pi) => (
-                                <div key={`${room.id}-p-${pi}`} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                <div key={`${room.id}-p-${pi}`} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-accent/30">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={url} alt="" className="h-full w-full object-cover" />
                                   <button
@@ -3211,7 +3212,7 @@ export function ManagerAddListingForm({
                               ))}
                             </div>
                           ) : (
-                            <p className="mt-3 text-[11px] text-slate-500">No photos yet — up to 8 images. Images are auto-compressed.</p>
+                            <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
                           )}
                         </div>
                       </div>
@@ -3235,7 +3236,7 @@ export function ManagerAddListingForm({
                           {videoUploadingKeys.has(`room-${room.id}`) ? (
                             <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                           ) : (
-                          <p className="mt-3 text-sm text-slate-600">Drag and drop one room video here, or use the button above.</p>
+                          <p className="mt-3 text-sm text-muted">Drag and drop one room video here, or use the button above.</p>
                           )}
                           {room.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
@@ -3243,7 +3244,7 @@ export function ManagerAddListingForm({
                                 src={videoPreviewUrls[`room-${room.id}`] ?? room.videoDataUrl}
                                 controls
                                 playsInline
-                                className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
+                                className="max-h-52 w-full rounded-lg border border-border bg-black object-contain"
                               />
                               <button
                                 type="button"
@@ -3254,7 +3255,7 @@ export function ManagerAddListingForm({
                               </button>
                             </div>
                           ) : (
-                            <p className="mt-3 text-[11px] text-slate-500">Optional — MP4, MOV, or WebM. Preview appears after you choose a file.</p>
+                            <p className="mt-3 text-[11px] text-muted">Optional — MP4, MOV, or WebM. Preview appears after you choose a file.</p>
                           )}
                         </div>
                       </div>
@@ -3274,7 +3275,7 @@ export function ManagerAddListingForm({
             title="Bathrooms"
             description="Name, location, and amenities for each bathroom on the public listing."
           >
-              <p className="mb-4 text-sm text-slate-500">Shown in the Bathrooms section on the public listing.</p>
+              <p className="mb-4 text-sm text-muted">Shown in the Bathrooms section on the public listing.</p>
               <div
                 className={`space-y-6 ${wizardSectionErrorClass(Boolean(stepFieldErrors.bathrooms))}`}
                 data-wizard-field="bathrooms"
@@ -3288,10 +3289,10 @@ export function ManagerAddListingForm({
                   return (
                   <div
                     key={b.id}
-                    className={`rounded-2xl border bg-white p-4 ${wizardSectionErrorClass(Boolean(bathNameErr), "border-slate-200")}`}
+                    className={`rounded-2xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(bathNameErr), "border-border")}`}
                   >
                     <div className="flex justify-between gap-2">
-                      <p className="text-sm font-semibold text-slate-900">Bathroom {i + 1}</p>
+                      <p className="text-sm font-semibold text-foreground">Bathroom {i + 1}</p>
                       {sub.bathrooms.length > 1 ? (
                         <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBathroom(i)}>
                           Remove
@@ -3342,7 +3343,7 @@ export function ManagerAddListingForm({
                               ))}
                               <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
                             </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
                               <ChevronDownTiny />
                             </span>
                           </div>
@@ -3369,10 +3370,10 @@ export function ManagerAddListingForm({
                         Bathtub
                       </label>
                       <div className="sm:col-span-2">
-                        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3">
                           <input
                             type="checkbox"
-                            className="mt-1 h-4 w-4 rounded border-slate-300"
+                            className="mt-1 h-4 w-4 rounded border-border"
                             checked={Boolean(b.allResidents)}
                             onChange={(e) => {
                               const on = e.target.checked;
@@ -3383,7 +3384,7 @@ export function ManagerAddListingForm({
                               });
                             }}
                           />
-                          <span className="text-sm font-medium text-slate-800">
+                          <span className="text-sm font-medium text-foreground">
                             Whole-house / hall bathroom — all listed bedrooms use it (no per-room checkboxes)
                           </span>
                         </label>
@@ -3393,27 +3394,27 @@ export function ManagerAddListingForm({
                           Used by these rooms
                         </FieldLabel>
                         {b.allResidents ? (
-                          <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
+                          <p className="mt-2 rounded-lg border border-border bg-accent/30 px-3 py-2 text-xs text-muted">
                             This bathroom applies to every named room on the listing. Add another bathroom row for suite or shared setups between specific rooms.
                           </p>
                         ) : (
-                          <div className="mt-2 space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                          <div className="mt-2 space-y-3 rounded-xl border border-border bg-accent/30 p-3">
                             {sub.rooms.map((room) => {
                               const checked = (b.assignedRoomIds ?? []).includes(room.id);
                               return (
-                                <div key={`${b.id}-${room.id}`} className="rounded-lg border border-slate-200/80 bg-white p-2.5">
+                                <div key={`${b.id}-${room.id}`} className="rounded-lg border border-border bg-card p-2.5">
                                   <label className="flex cursor-pointer items-center gap-2 text-sm">
                                     <input
                                       type="checkbox"
-                                      className="h-4 w-4 shrink-0 rounded border-slate-300"
+                                      className="h-4 w-4 shrink-0 rounded border-border"
                                       checked={checked}
                                       onChange={(e) => toggleBathroomRoom(i, room.id, e.target.checked)}
                                     />
-                                    <span className="font-medium text-slate-800">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
+                                    <span className="font-medium text-foreground">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
                                   </label>
                                   {checked ? (
                                     <div className="mt-2 pl-6">
-                                      <label className="block text-[11px] font-semibold text-slate-600">Bathroom situation for this room</label>
+                                      <label className="block text-[11px] font-semibold text-muted">Bathroom situation for this room</label>
                                       <select
                                         className={`${selectInputCls} mt-1 text-xs`}
                                         value={b.accessKindByRoomId?.[room.id] ?? ""}
@@ -3438,14 +3439,14 @@ export function ManagerAddListingForm({
                         <FieldLabel hint="Finishes and fixtures for this bathroom only (beyond shower / toilet / tub above).">
                           Bathroom amenities
                         </FieldLabel>
-                        <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2">
+                        <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2">
                           {dedupedPresets.bathroom.map((p) => {
                             const on = splitLineList(b.amenitiesText ?? "").includes(p.label);
                             return (
                               <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
                                 <input
                                   type="checkbox"
-                                  className="h-4 w-4 rounded border-slate-300"
+                                  className="h-4 w-4 rounded border-border"
                                   checked={on}
                                   onChange={(e) =>
                                     setBath(i, {
@@ -3453,7 +3454,7 @@ export function ManagerAddListingForm({
                                     })
                                   }
                                 />
-                                <span className="font-medium text-slate-800">{p.label}</span>
+                                <span className="font-medium text-foreground">{p.label}</span>
                               </label>
                             );
                           })}
@@ -3481,16 +3482,16 @@ export function ManagerAddListingForm({
                           >
                             Add photos
                           </MediaPickTrigger>
-                          <p className="mt-3 text-sm text-slate-600">Drag and drop bathroom photos here, or use the button above.</p>
+                          <p className="mt-3 text-sm text-muted">Drag and drop bathroom photos here, or use the button above.</p>
                           {(b.photoDataUrls?.length ?? 0) > 0 ? (
                             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                               {b.photoDataUrls.map((src, pi) => (
-                                <div key={`${b.id}-p-${pi}`} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                <div key={`${b.id}-p-${pi}`} className="group relative overflow-hidden rounded-lg border border-border bg-accent/30">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={src} alt="Bathroom" className="h-28 w-full object-cover" />
                                   <button
                                     type="button"
-                                    className="absolute right-1 top-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-rose-600 shadow-sm opacity-0 transition group-hover:opacity-100"
+                                    className="absolute right-1 top-1 rounded-full bg-card px-2 py-0.5 text-[11px] font-semibold text-rose-600 shadow-sm opacity-0 transition group-hover:opacity-100"
                                     onClick={() => removeBathroomPhoto(b.id, pi)}
                                   >
                                     Remove
@@ -3499,7 +3500,7 @@ export function ManagerAddListingForm({
                               ))}
                             </div>
                           ) : (
-                            <p className="mt-3 text-[11px] text-slate-500">No photos yet — up to 8 images. Images are auto-compressed.</p>
+                            <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
                           )}
                         </div>
                       </div>
@@ -3522,7 +3523,7 @@ export function ManagerAddListingForm({
                           {videoUploadingKeys.has(`bath-${b.id}`) ? (
                             <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                           ) : (
-                          <p className="mt-3 text-sm text-slate-600">Drag and drop one bathroom video here, or use the button above.</p>
+                          <p className="mt-3 text-sm text-muted">Drag and drop one bathroom video here, or use the button above.</p>
                           )}
                           {b.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
@@ -3530,7 +3531,7 @@ export function ManagerAddListingForm({
                                 src={videoPreviewUrls[`bath-${b.id}`] ?? b.videoDataUrl}
                                 controls
                                 playsInline
-                                className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
+                                className="max-h-52 w-full rounded-lg border border-border bg-black object-contain"
                               />
                               <button
                                 type="button"
@@ -3541,7 +3542,7 @@ export function ManagerAddListingForm({
                               </button>
                             </div>
                           ) : (
-                            <p className="mt-2 text-[11px] text-slate-500">Optional — MP4, MOV, or WebM.</p>
+                            <p className="mt-2 text-[11px] text-muted">Optional — MP4, MOV, or WebM.</p>
                           )}
                         </div>
                       </div>
@@ -3577,7 +3578,7 @@ export function ManagerAddListingForm({
                       key={template.label}
                       type="button"
                       variant="outline"
-                      className="rounded-full bg-white text-xs"
+                      className="rounded-full bg-card text-xs"
                       onClick={() => addSharedSpaceFromTemplate(template)}
                       disabled={sub.sharedSpaces.length >= 24}
                     >
@@ -3591,8 +3592,8 @@ export function ManagerAddListingForm({
               </div>
 
               {sub.sharedSpaces.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-8 text-center">
-                  <p className="text-sm font-semibold text-slate-800">No shared spaces added yet.</p>
+                <div className="rounded-2xl border border-dashed border-border bg-accent/30 px-4 py-8 text-center">
+                  <p className="text-sm font-semibold text-foreground">No shared spaces added yet.</p>
                 </div>
               ) : (
                 <div
@@ -3617,12 +3618,12 @@ export function ManagerAddListingForm({
                     return (
                     <div
                       key={sp.id}
-                      className={`overflow-hidden rounded-3xl border bg-white shadow-sm ${wizardSectionErrorClass(Boolean(spaceNameErr), "border-slate-200")}`}
+                      className={`overflow-hidden rounded-3xl border bg-card shadow-sm ${wizardSectionErrorClass(Boolean(spaceNameErr), "border-border")}`}
                     >
-                      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                      <div className="flex flex-col gap-3 border-b border-border bg-accent/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                         <div>
-                          <p className="text-sm font-bold text-slate-950">Shared space {i + 1}</p>
-                          <p className="mt-1 text-xs text-slate-500">{roomAccessSummary(sp, sub.rooms)}</p>
+                          <p className="text-sm font-bold text-foreground">Shared space {i + 1}</p>
+                          <p className="mt-1 text-xs text-muted">{roomAccessSummary(sp, sub.rooms)}</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setSharedSpaceRoomAccess(i, "all")}>
@@ -3672,7 +3673,7 @@ export function ManagerAddListingForm({
                                 </option>
                               ))}
                             </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
                               <ChevronDownTiny />
                             </span>
                           </div>
@@ -3706,7 +3707,7 @@ export function ManagerAddListingForm({
                                 ))}
                                 <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
                               </Select>
-                              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
                                 <ChevronDownTiny />
                               </span>
                             </div>
@@ -3724,14 +3725,14 @@ export function ManagerAddListingForm({
                           <FieldLabel hint={`Common amenities for ${spaceKindLabel.toLowerCase()} — check all that apply.`}>
                             Amenities
                           </FieldLabel>
-                          <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
                             {kindPresets.map((p) => {
                               const on = splitLineList(sp.amenitiesText ?? "").includes(p.label);
                               return (
                                 <label key={p.id} className="flex cursor-pointer items-center gap-2.5 text-sm">
                                   <input
                                     type="checkbox"
-                                    className="h-4 w-4 shrink-0 rounded border-slate-300 text-primary focus:ring-primary/30"
+                                    className="h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary/30"
                                     checked={on}
                                     onChange={(e) =>
                                       setSharedSpace(i, {
@@ -3739,7 +3740,7 @@ export function ManagerAddListingForm({
                                       })
                                     }
                                   />
-                                  <span className="font-medium text-slate-800">{p.label}</span>
+                                  <span className="font-medium text-foreground">{p.label}</span>
                                 </label>
                               );
                             })}
@@ -3774,16 +3775,16 @@ export function ManagerAddListingForm({
                             >
                               Add photos
                             </MediaPickTrigger>
-                            <p className="mt-3 text-sm text-slate-600">Drag and drop photos here, or use the button above.</p>
+                            <p className="mt-3 text-sm text-muted">Drag and drop photos here, or use the button above.</p>
                             {(sp.photoDataUrls?.length ?? 0) > 0 ? (
                               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                                 {sp.photoDataUrls.map((src, pi) => (
-                                  <div key={`${sp.id}-p-${pi}`} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                  <div key={`${sp.id}-p-${pi}`} className="group relative overflow-hidden rounded-lg border border-border bg-accent/30">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img src={src} alt="Shared space" className="h-28 w-full object-cover" />
                                     <button
                                       type="button"
-                                      className="absolute right-1 top-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-rose-600 shadow-sm opacity-0 transition group-hover:opacity-100"
+                                      className="absolute right-1 top-1 rounded-full bg-card px-2 py-0.5 text-[11px] font-semibold text-rose-600 shadow-sm opacity-0 transition group-hover:opacity-100"
                                       onClick={() => removeSharedSpacePhoto(sp.id, pi)}
                                     >
                                       Remove
@@ -3792,7 +3793,7 @@ export function ManagerAddListingForm({
                                 ))}
                               </div>
                             ) : (
-                              <p className="mt-3 text-[11px] text-slate-500">No photos yet — up to 8 images. Images are auto-compressed.</p>
+                              <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
                             )}
                           </div>
                         </div>
@@ -3815,7 +3816,7 @@ export function ManagerAddListingForm({
                             {videoUploadingKeys.has(`space-${sp.id}`) ? (
                               <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                             ) : (
-                              <p className="mt-3 text-sm text-slate-600">Drag and drop one video here, or use the button above.</p>
+                              <p className="mt-3 text-sm text-muted">Drag and drop one video here, or use the button above.</p>
                             )}
                             {sp.videoDataUrl ? (
                               <div className="mt-4 space-y-2">
@@ -3823,7 +3824,7 @@ export function ManagerAddListingForm({
                                   src={videoPreviewUrls[`space-${sp.id}`] ?? sp.videoDataUrl}
                                   controls
                                   playsInline
-                                  className="max-h-52 w-full rounded-lg border border-slate-200 bg-black object-contain"
+                                  className="max-h-52 w-full rounded-lg border border-border bg-black object-contain"
                                 />
                                 <button
                                   type="button"
@@ -3838,16 +3839,16 @@ export function ManagerAddListingForm({
                         </div>
                         <div className="sm:col-span-2">
                           <FieldLabel>Room access</FieldLabel>
-                          <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
                             {sub.rooms.map((room) => (
-                              <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-sm">
+                              <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
                                 <input
                                   type="checkbox"
-                                  className="h-4 w-4 rounded border-slate-300"
+                                  className="h-4 w-4 rounded border-border"
                                   checked={(sp.roomAccessIds ?? []).includes(room.id)}
                                   onChange={(e) => toggleSharedSpaceRoom(i, room.id, e.target.checked)}
                                 />
-                                <span className="font-medium text-slate-800">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
+                                <span className="font-medium text-foreground">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
                               </label>
                             ))}
                           </div>
@@ -3874,36 +3875,36 @@ export function ManagerAddListingForm({
                   {serviceOffers.map((offer) => (
                     <div
                       key={offer.id}
-                      className={`flex flex-col rounded-2xl border bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.05)] transition ${offer.available ? "border-slate-200" : "border-slate-200 opacity-60"}`}
+                      className={`flex flex-col rounded-2xl border bg-card p-4 shadow-[0_1px_4px_rgba(15,23,42,0.05)] transition ${offer.available ? "border-border" : "border-border opacity-60"}`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className="font-semibold text-slate-900">{offer.name}</p>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${offer.available ? "bg-emerald-50 text-emerald-700 ring-emerald-200/80" : "bg-slate-100 text-slate-500 ring-slate-200/80"}`}>
+                        <p className="font-semibold text-foreground">{offer.name}</p>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${offer.available ? "portal-badge-success ring-[var(--status-confirmed-bg)]" : "bg-accent/30 text-muted ring-border"}`}>
                           {offer.available ? "Active" : "Paused"}
                         </span>
                       </div>
-                      {offer.price ? <span className="mt-1 text-xs font-medium text-slate-500">{offer.price}</span> : null}
-                      {offer.description ? <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{offer.description}</p> : null}
-                      <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
-                        <button type="button" onClick={() => { setEditingOffer(offer); setServiceForm({ name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "" }); setServiceModalOpen(true); }} className="rounded-full border border-slate-200 bg-white px-3 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">Edit</button>
+                      {offer.price ? <span className="mt-1 text-xs font-medium text-muted">{offer.price}</span> : null}
+                      {offer.description ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{offer.description}</p> : null}
+                      <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border pt-3">
+                        <button type="button" onClick={() => { setEditingOffer(offer); setServiceForm({ name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "" }); setServiceModalOpen(true); }} className="rounded-full border border-border bg-card px-3 py-0.5 text-[11px] font-semibold text-muted hover:bg-accent/30">Edit</button>
                         <button type="button" onClick={() => {
                           setServiceOffers((prev) => prev.map((o) => o.id === offer.id ? { ...o, available: !o.available } : o));
-                        }} className="rounded-full border border-slate-200 bg-white px-3 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">{offer.available ? "Pause" : "Resume"}</button>
+                        }} className="rounded-full border border-border bg-card px-3 py-0.5 text-[11px] font-semibold text-muted hover:bg-accent/30">{offer.available ? "Pause" : "Resume"}</button>
                         <button type="button" onClick={() => {
                           setServiceOffers((prev) => prev.filter((o) => o.id !== offer.id));
-                        }} className="rounded-full border border-rose-200 bg-white px-3 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">Remove</button>
+                        }} className="rounded-full border border-rose-200 bg-card px-3 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">Remove</button>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-10 text-center">
-                  <p className="text-sm font-medium text-slate-600">No services yet</p>
-                  <p className="mt-1 text-xs text-slate-500">Add a preset below or create a custom service.</p>
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-accent/30 py-10 text-center">
+                  <p className="text-sm font-medium text-muted">No services yet</p>
+                  <p className="mt-1 text-xs text-muted">Add a preset below or create a custom service.</p>
                 </div>
               )}
               <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick add</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Quick add</p>
                 <div className="flex flex-wrap gap-2">
                   {LISTING_SERVICE_QUICK_ADDS.map((preset) => {
                     const added = serviceOffers.some(
@@ -3945,7 +3946,7 @@ export function ManagerAddListingForm({
               >
                 <div className="space-y-4">
                   {(sub.quickFacts ?? []).map((qf, i) => (
-                    <div key={qf.id} className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                    <div key={qf.id} className="grid gap-3 rounded-xl border border-border bg-card p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
                       <div>
                         <FieldLabel>Label</FieldLabel>
                         <Input value={qf.label} onChange={(e) => setQuickFact(i, { label: sanitizePlaceNameInput(e.target.value) })} placeholder="e.g. Neighborhood" />
@@ -3965,9 +3966,9 @@ export function ManagerAddListingForm({
                 </div>
               </ListingSubsection>
 
-              <div className="rounded-2xl border border-sky-200/80 bg-sky-50/60 p-4 sm:p-6">
-                <p className="text-sm font-bold text-slate-950">{isEditMode ? "Ready to submit changes?" : "Ready to submit this listing?"}</p>
-                <p className="mt-1 text-sm leading-6 text-slate-600">
+              <div className="border-t border-border pt-5">
+                <p className="text-sm font-bold text-foreground">{isEditMode ? "Ready to submit changes?" : "Ready to submit this listing?"}</p>
+                <p className="mt-1 text-sm leading-6 text-muted">
                   {isEditMode
                     ? "Review each step, then submit your changes when the listing is ready for review."
                     : "This form does not auto-save or auto-submit. Click Submit listing below when the listing is complete and ready for admin approval."}
@@ -3978,7 +3979,7 @@ export function ManagerAddListingForm({
           ) : null}
         </div>
 
-        <div className="z-20 shrink-0 border-t border-slate-100 bg-white px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
+        <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={onClose} disabled={busy}>
@@ -4011,29 +4012,29 @@ export function ManagerAddListingForm({
         title={editingOffer ? "Edit request option" : "Add request option"}
         onClose={() => setServiceModalOpen(false)}
         stackClassName="fixed inset-0 z-[10050] overflow-y-auto"
-        panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+        panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-6"
       >
         <div className="grid gap-3">
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Request name *</p>
-            <Input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: sanitizePlaceNameInput(e.target.value) }))} placeholder="e.g. Weekly cleaning, Linen set" className="bg-white" />
+            <p className="mb-1 text-[11px] font-medium text-muted">Request name *</p>
+            <Input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: sanitizePlaceNameInput(e.target.value) }))} placeholder="e.g. Weekly cleaning, Linen set" className="bg-card" />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <p className="mb-1 text-[11px] font-medium text-slate-600">Price</p>
-              <Input value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: e.target.value }))} placeholder="e.g. $25, Free" className="bg-white" />
+              <p className="mb-1 text-[11px] font-medium text-muted">Price</p>
+              <Input value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: e.target.value }))} placeholder="e.g. $25, Free" className="bg-card" />
             </div>
             <div>
-              <p className="mb-1 text-[11px] font-medium text-slate-600">Deposit (optional)</p>
-              <Input value={serviceForm.deposit} onChange={(e) => setServiceForm((f) => ({ ...f, deposit: sanitizeMoneyInput(e.target.value) }))} placeholder="e.g. $50" className="bg-white" />
+              <p className="mb-1 text-[11px] font-medium text-muted">Deposit (optional)</p>
+              <Input value={serviceForm.deposit} onChange={(e) => setServiceForm((f) => ({ ...f, deposit: sanitizeMoneyInput(e.target.value) }))} placeholder="e.g. $50" className="bg-card" />
             </div>
           </div>
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Description</p>
-            <textarea rows={3} value={serviceForm.description} onChange={(e) => setServiceForm((f) => ({ ...f, description: e.target.value }))} placeholder="What's included, how it works…" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+            <p className="mb-1 text-[11px] font-medium text-muted">Description</p>
+            <textarea rows={3} value={serviceForm.description} onChange={(e) => setServiceForm((f) => ({ ...f, description: e.target.value }))} placeholder="What's included, how it works…" className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200" />
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setServiceModalOpen(false)}>Cancel</Button>
           <Button type="button" className="rounded-full" onClick={handleSaveService} disabled={!serviceForm.name.trim()}>{editingOffer ? "Save changes" : "Add request"}</Button>
         </div>
