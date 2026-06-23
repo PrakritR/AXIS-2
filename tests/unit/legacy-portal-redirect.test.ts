@@ -12,6 +12,10 @@ describe("legacy-portal-redirect", () => {
     expect(legacyPaidPortalToPortal("/pro/inbox")).toBe("/portal/inbox");
   });
 
+  it("redirects legacy work-orders path", () => {
+    expect(legacyPaidPortalToPortal("/portal/work-orders")).toBe("/portal/services/work-orders");
+  });
+
   it("returns null for non-legacy paths", () => {
     expect(legacyPaidPortalToPortal("/portal/dashboard")).toBeNull();
     expect(legacyPaidPortalToPortal("/resident/dashboard")).toBeNull();

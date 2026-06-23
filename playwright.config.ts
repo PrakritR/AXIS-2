@@ -3,8 +3,8 @@ import dotenv from "dotenv";
 import path from "node:path";
 
 dotenv.config({ path: path.resolve(__dirname, ".env.test") });
-dotenv.config({ path: path.resolve(__dirname, ".env.local") });
-dotenv.config({ path: path.resolve(__dirname, ".env") });
+dotenv.config({ path: path.resolve(__dirname, ".env.local"), override: false });
+dotenv.config({ path: path.resolve(__dirname, ".env"), override: false });
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -32,6 +32,6 @@ export default defineConfig({
         timeout: 180_000,
       },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } } },
   ],
 });
