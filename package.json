@@ -2,6 +2,10 @@
   "name": "axis-2",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x",
+    "npm": "10.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -17,6 +21,7 @@
     "test:seed": "node --env-file=.env.test tests/helpers/seed-test-db.mjs",
     "test:cleanup": "node --env-file=.env.test tests/helpers/cleanup-test-db.mjs",
     "check": "npm run lint && npm run test:unit && npm run build",
+    "lockfile:verify": "node scripts/verify-lockfile.mjs",
     "admin:sync-account": "node scripts/ensure-admin-account.mjs",
     "admin:ensure-demo-manager": "node scripts/ensure-demo-manager-account.mjs",
     "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs"
