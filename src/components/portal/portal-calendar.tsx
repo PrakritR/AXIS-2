@@ -25,7 +25,7 @@ import { buildManagerPropertyFilterOptions, MANAGER_PORTFOLIO_REFRESH_EVENTS } f
 type CopyRange = "week" | "future" | "all";
 
 const selectClassName =
-  "h-10 min-w-[12rem] max-w-full rounded-full border border-slate-200/90 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:ring-2 focus:ring-primary/25";
+  "h-10 min-w-[12rem] max-w-full rounded-full border border-border bg-card px-3.5 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary/25";
 
 function ManagerCalendarPropertyFilter({
   properties,
@@ -57,7 +57,7 @@ function ManagerCalendarPropertyFilter({
         </select>
       </div>
       {!value ? (
-        <p className="min-w-0 text-xs leading-snug text-slate-500">
+        <p className="min-w-0 text-xs leading-snug text-muted">
           Choose a house before creating tour windows.
         </p>
       ) : null}
@@ -208,7 +208,7 @@ export function PortalCalendar({
           <ManagerCalendarPropertyFilter properties={managerProperties} value={activeCalendarPropertyId} onChange={setCalendarPropertyId} />
         }
       >
-        <p className="text-sm text-slate-500">{propertiesLoading ? "Loading houses…" : "Loading calendar…"}</p>
+        <p className="text-sm text-muted">{propertiesLoading ? "Loading houses…" : "Loading calendar…"}</p>
       </ManagerPortalPageShell>
     );
   }
@@ -225,7 +225,7 @@ export function PortalCalendar({
           <ManagerCalendarPropertyFilter properties={managerProperties} value={activeCalendarPropertyId} onChange={setCalendarPropertyId} />
         }
       >
-        <p className="text-sm text-slate-600">Sign in to manage your availability.</p>
+        <p className="text-sm text-muted">Sign in to manage your availability.</p>
       </ManagerPortalPageShell>
     );
   }
@@ -237,14 +237,14 @@ export function PortalCalendar({
       onClose={() => setCopyModalOpen(false)}
     >
       <div className="space-y-5">
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted">
           Copy availability from one house to another inside this manager account. Existing slots on the destination house are kept.
         </p>
 
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-900">Copy from</label>
+          <label className="text-sm font-semibold text-foreground">Copy from</label>
           <select
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+            className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
             value={copySourceId}
             onChange={(e) => {
               setCopySourceId(e.target.value);
@@ -259,9 +259,9 @@ export function PortalCalendar({
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-900">Copy to</label>
+          <label className="text-sm font-semibold text-foreground">Copy to</label>
           <select
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+            className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
             value={copyDestId}
             onChange={(e) => setCopyDestId(e.target.value)}
           >
@@ -275,7 +275,7 @@ export function PortalCalendar({
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-slate-900">Date range</p>
+          <p className="text-sm font-semibold text-foreground">Date range</p>
           <div className="space-y-2">
             {(
               [
@@ -289,7 +289,7 @@ export function PortalCalendar({
                 className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition ${
                   copyRange === id
                     ? "border-primary bg-primary/[0.06] ring-1 ring-primary/30"
-                    : "border-slate-200 bg-white hover:border-slate-300"
+                    : "border-border bg-card hover:border-primary/30"
                 }`}
               >
                 <input
@@ -301,8 +301,8 @@ export function PortalCalendar({
                   className="mt-0.5 accent-primary"
                 />
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{label}</p>
-                  <p className="text-xs text-slate-500">{desc}</p>
+                  <p className="text-sm font-semibold text-foreground">{label}</p>
+                  <p className="text-xs text-muted">{desc}</p>
                 </div>
               </label>
             ))}
@@ -310,15 +310,15 @@ export function PortalCalendar({
         </div>
 
         {copySourceId && copyDestId ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-            Copying <span className="font-semibold text-slate-800">{managerProperties.find((p) => p.id === copySourceId)?.name}</span>
+          <div className="rounded-xl border border-border bg-accent/40 px-4 py-3 text-xs text-muted">
+            Copying <span className="font-semibold text-foreground">{managerProperties.find((p) => p.id === copySourceId)?.name}</span>
             {" to "}
-            <span className="font-semibold text-slate-800">{managerProperties.find((p) => p.id === copyDestId)?.name}</span>
+            <span className="font-semibold text-foreground">{managerProperties.find((p) => p.id === copyDestId)?.name}</span>
             {copyRange === "week" ? " - this week" : copyRange === "future" ? " - future dates" : " - all dates"}
           </div>
         ) : null}
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setCopyModalOpen(false)}>
             Cancel
           </Button>
@@ -365,7 +365,7 @@ export function PortalCalendar({
         }
       >
         {propertiesLoading && managerProperties.length === 0 ? (
-          <p className="text-sm text-slate-500">Loading houses from the backend…</p>
+          <p className="text-sm text-muted">Loading houses from the backend…</p>
         ) : (
           <PortalCalendarPanels
             key={storageKey ?? "calendar-unavailable"}

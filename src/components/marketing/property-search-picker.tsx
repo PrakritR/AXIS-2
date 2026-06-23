@@ -39,11 +39,14 @@ function CheckSmIcon() {
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
+    <span className="inline-flex rounded-full border border-border/60 bg-accent/50 px-2.5 py-0.5 text-[11px] font-medium text-muted">
       {children}
     </span>
   );
 }
+
+const inputCls =
+  "w-full rounded-2xl border border-border/60 bg-[var(--glass-fill)] py-3 pl-10 pr-4 text-sm text-foreground outline-none transition-all placeholder:text-muted/60 focus:border-primary/30 focus:bg-card focus:ring-2 focus:ring-primary/25 hover:bg-card/80";
 
 export function PropertySearchPicker({
   options,
@@ -90,7 +93,7 @@ export function PropertySearchPicker({
   return (
     <div className="space-y-3">
       <div className="relative">
-        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted/60">
           <SearchIcon />
         </span>
         <input
@@ -105,7 +108,7 @@ export function PropertySearchPicker({
           placeholder={selected && !focused && !displayQuery ? selected.title : placeholder}
           aria-label={ariaLabel}
           aria-controls={listId}
-          className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15"
+          className={inputCls}
         />
         {selected ? (
           <button
@@ -115,7 +118,7 @@ export function PropertySearchPicker({
               setQuery("");
               inputRef.current?.focus();
             }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-primary hover:underline"
+            className="link-premium absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-primary"
           >
             Change
           </button>
@@ -123,9 +126,9 @@ export function PropertySearchPicker({
       </div>
 
       {selected && !showList ? (
-        <div className="rounded-2xl border border-primary/25 bg-primary/[0.06] p-4 ring-2 ring-primary/10">
-          <p className="text-sm font-semibold text-slate-900">{selected.title}</p>
-          {selected.subtitle ? <p className="mt-0.5 text-xs text-slate-500">{selected.subtitle}</p> : null}
+        <div className="glass-card rounded-2xl border border-primary/25 bg-primary/5 p-4 ring-2 ring-primary/10">
+          <p className="text-sm font-semibold text-foreground">{selected.title}</p>
+          {selected.subtitle ? <p className="mt-0.5 text-xs text-muted">{selected.subtitle}</p> : null}
           {selected.tags && selected.tags.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-2">
               {selected.tags.map((tag) => (
@@ -139,12 +142,12 @@ export function PropertySearchPicker({
       {showList ? (
         <div className="space-y-2">
           {options.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            <div className="glass-card rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">
               {listEmptyMessage}
             </div>
           ) : (
             <>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 {displayQuery.trim()
                   ? `${filtered.total} ${filtered.total === 1 ? "match" : "matches"}`
                   : filtered.truncated
@@ -158,7 +161,7 @@ export function PropertySearchPicker({
                 className="max-h-72 space-y-2 overflow-y-auto overscroll-contain pr-1"
               >
                 {filtered.items.length === 0 ? (
-                  <li className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  <li className="glass-card rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
                     {emptyMessage}
                   </li>
                 ) : (
@@ -177,15 +180,15 @@ export function PropertySearchPicker({
                           }}
                           className={`w-full rounded-2xl border p-4 text-left transition-all duration-150 ${
                             isSelected
-                              ? "border-primary bg-primary/[0.08] ring-2 ring-primary/20"
-                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                              ? "glass-card border-primary/30 bg-primary/5 ring-2 ring-primary/20"
+                              : "border-border bg-card hover:border-primary/20 hover:bg-accent/30"
                           }`}
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-slate-900">{option.title}</p>
+                              <p className="truncate text-sm font-semibold text-foreground">{option.title}</p>
                               {option.subtitle ? (
-                                <p className="mt-0.5 truncate text-xs text-slate-500">{option.subtitle}</p>
+                                <p className="mt-0.5 truncate text-xs text-muted">{option.subtitle}</p>
                               ) : null}
                               {option.tags && option.tags.length > 0 ? (
                                 <div className="mt-2 flex flex-wrap gap-2">
@@ -197,7 +200,7 @@ export function PropertySearchPicker({
                             </div>
                             <div
                               className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                                isSelected ? "border-primary bg-primary text-white" : "border-slate-300 bg-white"
+                                isSelected ? "border-primary bg-primary text-white" : "border-border bg-card"
                               }`}
                             >
                               {isSelected ? <CheckSmIcon /> : null}

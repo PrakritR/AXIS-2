@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e7e5df; }
+  @keyframes dchromeFlow { 0% { transform: rotate(0deg) scale(1.5); } 100% { transform: rotate(360deg) scale(1.5); } }
+  code { font-family: ui-monospace,'SF Mono',monospace; background:#f3f6fd; padding:1px 5px; border-radius:4px; font-size:.92em; color:#1e4fd6; }
+</style>
+</helmet>
+<div style="min-height:100vh; padding:56px 24px; background:#e7e5df; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif; color:#16213a;">
+  <div style="max-width:880px; margin:0 auto; background:#ffffff; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.08), 0 40px 80px -50px rgba(15,23,42,.4); overflow:hidden;">
+
+    <!-- COVER -->
+    <div style="position:relative; padding:64px 64px 56px; background:#080b14; overflow:hidden;">
+      <div style="position:absolute; inset:-40%; background:conic-gradient(from 0deg at 50% 50%, #c8ccd6, #2f6bff, #8fb4ff, #4a5a82, #cfd8ea, #2f6bff, #c8ccd6); filter:blur(70px) saturate(1.25); opacity:.85; animation:dchromeFlow 26s linear infinite;"></div>
+      <div style="position:absolute; inset:0; background:radial-gradient(ellipse 90% 80% at 50% 40%, rgba(6,9,18,.3), rgba(6,9,18,.8));"></div>
+      <div style="position:relative;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:44px;">
+          <div style="height:44px; width:44px; border-radius:13px; background:linear-gradient(150deg,rgba(255,255,255,.45),rgba(255,255,255,.08)); border:1px solid rgba(255,255,255,.4); box-shadow:inset 0 1px 0 rgba(255,255,255,.5); display:flex; align-items:center; justify-content:center;"><svg width="38" height="22" viewBox="0 0 46 26" fill="none"><path d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45" stroke="#fff" stroke-width="2.55" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 4L43 22" stroke="#bcd4ff" stroke-width="2.75" stroke-linecap="round"/><path d="M43 4L27 22" stroke="#dce8ff" stroke-width="2.55" stroke-linecap="round"/></svg></div>
+          <div style="line-height:1;"><div style="font-size:15px; font-weight:600; letter-spacing:-0.02em; color:#fff;">Axis Housing</div><div style="margin-top:3px; font-size:10px; font-weight:600; letter-spacing:0.22em; text-transform:uppercase; color:rgba(255,255,255,.6);">Blue Steel · Implementation spec</div></div>
+        </div>
+        <div style="font-family:ui-monospace,'SF Mono',monospace; font-size:12px; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:#bcd4ff; margin-bottom:14px;">Surface 01 / 05 · Marketing</div>
+        <h1 style="margin:0; font-size:48px; line-height:1.04; font-weight:600; letter-spacing:-0.035em; color:#fff;">Marketing &amp; Public</h1>
+        <p style="margin:18px 0 0; max-width:560px; font-size:16px; line-height:1.55; color:rgba(255,255,255,.8);">How to apply Blue Steel to the public marketing surface — homepage, listings, application, tours, partner, and billing. The chrome shows here; this is where the brand makes its first impression.</p>
+        <div style="margin-top:38px; display:flex; gap:34px; font-size:12px; color:rgba(255,255,255,.7);">
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Routes</div>11 + 2 redirects</div>
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Layout</div>(public)/layout.tsx</div>
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Default theme</div>Dark · light toggle</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:54px 64px 70px;">
+
+      <!-- HOW TO USE -->
+      <div style="margin:0 0 44px; padding:18px 22px; border-left:3px solid #2f6bff; background:#f3f6fd; border-radius:0 10px 10px 0;"><p style="margin:0; font-size:14px; line-height:1.6; color:#3a445e;"><strong style="color:#16213a;">Read first.</strong> This document depends on the system foundation in <strong style="color:#16213a;">"Blue Steel — Design Document"</strong> (substrate layers, color, type, motion, a11y). It does not repeat those; it tells your coding agent exactly what to change on this surface, route by route.</p></div>
+
+      <!-- 01 SCOPE -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">01</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Scope — routes &amp; components</h2></div>
+      <p style="margin:0 0 18px; font-size:15px; line-height:1.65; color:#3a445e;">Everything under <code>src/app/(public)/</code> plus shared chrome. The route group does not appear in URLs.</p>
+      <div style="margin-bottom:18px; border:1px solid #e6e9f0; border-radius:12px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:1.3fr 1.5fr 2fr; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#8a96b4; background:#f6f8fc; padding:11px 18px; border-bottom:1px solid #e6e9f0;"><span>Route</span><span>Component</span><span>Blue Steel focus</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.5fr 2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/</code><span style="color:#3a445e;">HomeHeroSearch</span><span style="color:#3a445e;">Hero chrome + glass search bar (marquee)</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.5fr 2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/rent/listings</code><span style="color:#3a445e;">RentListingsView</span><span style="color:#3a445e;">Calm grid; glass cards on a quiet base</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.5fr 2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/rent/listings/[id]</code><span style="color:#3a445e;">ListingDetailSections</span><span style="color:#3a445e;">Sticky price card + tables re-skinned</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.5fr 2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/rent/apply</code><span style="color:#3a445e;">RentalApplicationWizard</span><span style="color:#3a445e;">12-step wizard — calm, no chrome behind fields</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.5fr 2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/rent/tours-contact</code><span style="color:#3a445e;">PropertySearchPicker</span><span style="color:#3a445e;">Tabbed wizard + calendar/slots</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.5fr 2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/partner</code><span style="color:#3a445e;">inline</span><span style="color:#3a445e;">Hero chrome + feature cards + CTA band</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.5fr 2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/partner/pricing</code><span style="color:#3a445e;">EmbeddedCheckoutMount</span><span style="color:#3a445e;">Tier cards; featured tier carries accent</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.5fr 2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/partner/contact</code><span style="color:#3a445e;">PartnerMeetingScheduler</span><span style="color:#3a445e;">Tabbed scheduler + message form</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.5fr 2fr; padding:12px 18px; font-size:13px; line-height:1.45;"><code>/billing/success</code><span style="color:#3a445e;">inline</span><span style="color:#3a445e;">Centered chrome confirmation card</span></div>
+      </div>
+      <p style="margin:0 0 40px; font-size:13px; line-height:1.6; color:#6a7595;">Shared chrome to re-skin once: <strong style="color:#16213a;">PublicNavbar</strong> (glass strip + theme toggle + Open portal button), <strong style="color:#16213a;">PublicFooter</strong>, <strong style="color:#16213a;">PublicAtmosphere</strong> (replace orb field with the chrome substrate), <strong style="color:#16213a;">PublicMainTransition</strong> (keep <code>animate-page-enter</code>).</p>
+
+      <!-- 02 THEME POSTURE -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">02</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Theme posture &amp; where chrome lives</h2></div>
+      <ul style="margin:0 0 14px; padding-left:20px; font-size:14px; line-height:1.75; color:#3a445e;">
+        <li><strong style="color:#16213a;">Default dark, light toggle in nav.</strong> Open dark (marquee), remember the user's choice, honor OS preference. Both themes share geometry, type, and motion — only substrate + foreground invert.</li>
+        <li><strong style="color:#16213a;">Full chrome substrate</strong> behind: home hero, partner hero, billing/success. Use all four layers (conic + overlay + top gloss + legibility wash).</li>
+        <li><strong style="color:#16213a;">Quiet substrate</strong> (static base + faint corner glow, no rotation) behind: listings grid, listing detail, the application/tours wizards, contact forms. The metal must never sit behind dense fields or tables.</li>
+      </ul>
+      <p style="margin:0 0 40px; font-size:13px; line-height:1.6; color:#6a7595;">Live reference build: <strong style="color:#16213a;">"Axis Hero — Blue Steel (Light + Dark)"</strong> — copy its navbar, eyebrow, search bar, and card markup verbatim.</p>
+
+      <!-- 03 TOKEN MIGRATION -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">03</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Token migration · globals.css</h2></div>
+      <p style="margin:0 0 18px; font-size:15px; line-height:1.65; color:#3a445e;">Axis is Tailwind v4 with CSS variables in <code>:root</code> surfaced through <code>@theme inline</code>. Rebase the accent and add a dark scope; most components inherit automatically.</p>
+      <div style="margin-bottom:16px; border:1px solid #e6e9f0; border-radius:12px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:1.3fr 1.1fr 1.6fr; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#8a96b4; background:#f6f8fc; padding:11px 18px; border-bottom:1px solid #e6e9f0;"><span>Token</span><span>Current</span><span>Blue Steel</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.1fr 1.6fr; padding:11px 18px; font-size:12.5px; line-height:1.4; border-bottom:1px solid #eef1f6;"><code>--primary</code><span style="color:#8a96b4; font-family:ui-monospace,monospace;">#0a84ff</span><span style="font-family:ui-monospace,monospace; color:#1e4fd6;">#2f6bff</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.1fr 1.6fr; padding:11px 18px; font-size:12.5px; line-height:1.4; border-bottom:1px solid #eef1f6;"><code>--primary-alt</code><span style="color:#8a96b4; font-family:ui-monospace,monospace;">#4da3ff</span><span style="font-family:ui-monospace,monospace; color:#1e4fd6;">#5a8cff</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.1fr 1.6fr; padding:11px 18px; font-size:12.5px; line-height:1.4; border-bottom:1px solid #eef1f6;"><code>--foreground</code><span style="color:#8a96b4; font-family:ui-monospace,monospace;">#1d1d1f</span><span style="font-family:ui-monospace,monospace; color:#1e4fd6;">#0b1b3a (navy)</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.1fr 1.6fr; padding:11px 18px; font-size:12.5px; line-height:1.4; border-bottom:1px solid #eef1f6;"><code>--muted</code><span style="color:#8a96b4; font-family:ui-monospace,monospace;">#6e6e73</span><span style="font-family:ui-monospace,monospace; color:#1e4fd6;">#4a5878</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.1fr 1.6fr; padding:11px 18px; font-size:12.5px; line-height:1.4; border-bottom:1px solid #eef1f6;"><code>--background</code><span style="color:#8a96b4; font-family:ui-monospace,monospace;">#f3f5f9</span><span style="font-family:ui-monospace,monospace; color:#1e4fd6;">grad #f7f9fd→#dde5f2</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.1fr 1.6fr; padding:11px 18px; font-size:12.5px; line-height:1.4; border-bottom:1px solid #eef1f6;"><code>--border</code><span style="color:#8a96b4; font-family:ui-monospace,monospace;">15,23,42/.08</span><span style="font-family:ui-monospace,monospace; color:#1e4fd6;">#e6ebf3</span></div>
+        <div style="display:grid; grid-template-columns:1.3fr 1.1fr 1.6fr; padding:11px 18px; font-size:12.5px; line-height:1.4;"><code>--ring</code><span style="color:#8a96b4; font-family:ui-monospace,monospace;">10,132,255/.24</span><span style="font-family:ui-monospace,monospace; color:#1e4fd6;">47,107,255/.30</span></div>
+      </div>
+      <p style="margin:0 0 12px; font-size:13px; line-height:1.6; color:#6a7595;">New accents to add as variables: <code>--steel-light #bcd4ff</code>, <code>--cobalt-deep #1e4fd6</code>, <code>--sky #5a8cff</code>. Update <code>.axis-page-frame</code> and the <code>::selection</code> / budget-slider gradients to the cobalt pair.</p>
+      <p style="margin:0 0 40px; font-size:13px; line-height:1.6; color:#6a7595;">Add a <code>[data-theme="dark"]</code> block re-defining <code>--background:#080b14</code>, <code>--foreground:#fff</code>, <code>--muted:rgba(255,255,255,.62)</code>, <code>--card:rgba(255,255,255,.05)</code>, <code>--border:rgba(255,255,255,.08)</code>. The nav toggle sets <code>data-theme</code> on <code>&lt;html&gt;</code> and persists to localStorage.</p>
+
+      <!-- 04 COMPONENTS -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:18px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">04</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Component re-skins</h2></div>
+      <div style="margin-bottom:40px;">
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">PublicNavbar</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Sticky <code>backdrop-filter:blur(20px)</code> glass strip, hairline bottom border. Logo tile (frosted gradient, steel-light + sky X strokes), primary links, segmented sun/moon theme toggle, Sign in, metallic <em>Open portal</em> button. Mobile drawer inherits the glass + accent.</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">HomeHeroSearch</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Pill of segmented glass fields (Location / Move-in / Max budget) split by hairlines, round accent submit. A 7s diagonal <em>sheen</em> sweeps across. Budget value uses the accent; the slider track keeps the cobalt→sky fill via <code>--budget-pct</code>.</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">PropertyCard / RoomListingCard</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Glass card (18px radius), striped photo placeholder until real photos, price chip + mono caption, title + meta. Same geometry as today's <code>rounded-2xl</code> cards, re-skinned for glass. Hover keeps <code>--shadow-card-hover</code> but tinted cobalt.</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">Sticky price sidebar</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">On listing detail — frosted card on the quiet base. "Check availability" = metallic/cobalt primary, "Apply online" = secondary outline. Quick-facts list uses mono labels.</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">Interactive tables</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">FloorPlan / Bathroom / Shared / Lease / Amenities / Bundle tables sit on solid white (light) or <code>rgba(255,255,255,.05)</code> (dark) — never over moving chrome. Row hover = faint cobalt wash; active filter chip = cobalt fill.</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; border-bottom:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">Pricing tier cards</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Free / Pro / Business. Featured tier (Pro) gets the cobalt→sky gradient border + metallic CTA; others stay glass with secondary CTA. Monthly/Annual toggle reuses the segmented-pill pattern.</div></div>
+      </div>
+
+      <!-- buttons specimen -->
+      <div style="font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#8a96b4; margin-bottom:12px;">Button hierarchy</div>
+      <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:40px;">
+        <span style="padding:10px 20px; border-radius:999px; font-size:13px; font-weight:600; color:#fff; background:linear-gradient(135deg,#2f6bff,#5a8cff); box-shadow:0 8px 20px -8px rgba(47,107,255,.6);">Primary · light</span>
+        <span style="padding:10px 20px; border-radius:999px; font-size:13px; font-weight:600; color:#08142e; background:linear-gradient(135deg,#ffffff,#bcd4ff); box-shadow:0 6px 16px -6px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.9);">Metallic · dark</span>
+        <span style="padding:10px 20px; border-radius:999px; font-size:13px; font-weight:600; color:#2f6bff; background:#fff; box-shadow:inset 0 0 0 1px rgba(47,107,255,.3);">Secondary</span>
+      </div>
+
+      <!-- 05 PAGE NOTES -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:18px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">05</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Page-by-page notes</h2></div>
+      <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:40px;">
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-size:13px; font-weight:700; color:#16213a; margin-bottom:6px;">Homepage <code>/</code></div><div style="font-size:13px; line-height:1.6; color:#3a445e;">Full chrome behind hero. Replace the radial blue glow with the substrate. Eyebrow = glass pill with glowing accent dot. Headline accent fragment ("works for you") = clipped gradient (white→steel dark / cobalt→sky light). HomeEdgePanel button becomes a small glass tab.</div></div>
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-size:13px; font-weight:700; color:#16213a; margin-bottom:6px;">Listings <code>/rent/listings</code></div><div style="font-size:13px; line-height:1.6; color:#3a445e;">Quiet base. Filter summary bar = glass pill row. Property-browse vs room-search modes keep current logic; only card skin + accent change.</div></div>
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-size:13px; font-weight:700; color:#16213a; margin-bottom:6px;">Apply wizard <code>/rent/apply</code></div><div style="font-size:13px; line-height:1.6; color:#3a445e;">12 steps, calm base — no chrome. Step rail + progress bar use the cobalt→sky gradient (see portal wizard reference). Stripe fee step (12) keeps Stripe's own styling inside a glass frame.</div></div>
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-size:13px; font-weight:700; color:#16213a; margin-bottom:6px;">Partner <code>/partner</code> + pricing + contact</div><div style="font-size:13px; line-height:1.6; color:#3a445e;">Partner hero = full chrome with stat row. Six feature cards = glass. CTA band = cobalt→sky gradient. Pricing/contact sit on the quiet base.</div></div>
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-size:13px; font-weight:700; color:#16213a; margin-bottom:6px;">Billing success <code>/billing/success</code></div><div style="font-size:13px; line-height:1.6; color:#3a445e;">Centered chrome card with a single confirmation message + spinner while it auto-redirects to <code>/auth/create-account</code>. Fallback UI also on chrome.</div></div>
+      </div>
+
+      <!-- 06 MOTION & A11Y -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">06</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Motion &amp; accessibility</h2></div>
+      <ul style="margin:0 0 8px; padding-left:20px; font-size:14px; line-height:1.75; color:#3a445e;">
+        <li><code>chromeFlow</code> 24s linear (base conic) and <code>chromeShift</code> 18s ease-in-out (overlay) only on full-chrome heroes. <code>sheen</code> 7s on the search bar. Keep existing <code>animate-page-enter</code> for route transitions.</li>
+        <li>All ambient motion halts under <code>prefers-reduced-motion</code> — freeze to a static frame (the codebase already gates this; extend it to the new keyframes).</li>
+        <li>The legibility wash (layer 4) is required, not decorative — it guarantees ≥4.5:1 for body text over the metal. Keep primary copy in the central calm zone, off the bright top-gloss band.</li>
+        <li>Theme toggle is a real labeled button pair; the filled segment + icon carry state, never color alone.</li>
+      </ul>
+      <p style="margin:18px 0 0; font-size:13px; line-height:1.6; color:#6a7595;">See per-surface companions for Auth, Property Portal, Admin, and Resident.</p>
+
+      <div style="margin-top:40px; padding-top:24px; border-top:1px solid #eef1f6; display:flex; justify-content:space-between; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#a3adc4;"><span>Axis Housing · Blue Steel · Marketing</span><span>Spec 0.1</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

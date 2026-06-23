@@ -325,29 +325,29 @@ export function CosignerApplyFlow({
         style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
       >
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Co-signer form received</p>
-        <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Thank you — you&apos;re all set</h2>
-        <p className="mt-3 text-sm leading-relaxed text-slate-700">
+        <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Thank you — you&apos;re all set</h2>
+        <p className="mt-3 text-sm leading-relaxed text-foreground">
           Your co-signer details are on file and linked to the primary application. The property manager can review everything under{" "}
-          <strong className="text-slate-900">Property Portal → Applications</strong> on the primary applicant&apos;s record. The
+          <strong className="text-foreground">Property Portal → Applications</strong> on the primary applicant&apos;s record. The
           primary applicant does not need to resubmit.
         </p>
         <div className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linked primary application</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Linked primary application</p>
           {displayAxis ? (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Application ID (Axis ID)</p>
-              <p className="mt-1 font-mono text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{displayAxis}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted/70">Application ID (Axis ID)</p>
+              <p className="mt-1 font-mono text-lg font-bold tracking-tight text-foreground sm:text-xl">{displayAxis}</p>
             </div>
           ) : postSubmit.linkedSignerName ? (
-            <p className="text-sm font-medium text-slate-800">
-              Signer name: <span className="text-slate-900">{postSubmit.linkedSignerName}</span>
+            <p className="text-sm font-medium text-foreground">
+              Signer name: <span className="text-foreground">{postSubmit.linkedSignerName}</span>
             </p>
           ) : (
-            <p className="text-sm text-slate-600">Linked using the primary applicant&apos;s Axis ID or signer name from step 1.</p>
+            <p className="text-sm text-muted">Linked using the primary applicant&apos;s Axis ID or signer name from step 1.</p>
           )}
           {postSubmit.cosignerName ? (
-            <p className="border-t border-slate-100 pt-3 text-sm text-slate-700">
-              Co-signer: <span className="font-semibold text-slate-900">{postSubmit.cosignerName}</span>
+            <p className="border-t border-border pt-3 text-sm text-foreground">
+              Co-signer: <span className="font-semibold text-foreground">{postSubmit.cosignerName}</span>
             </p>
           ) : null}
         </div>
@@ -373,7 +373,7 @@ export function CosignerApplyFlow({
             Back to rental application
           </Button>
         </div>
-        <p className="mt-6 text-center text-sm text-slate-600">
+        <p className="mt-6 text-center text-sm text-muted">
           <Link href="/rent/apply" className="font-semibold text-primary underline-offset-4 hover:underline">
             Main application home
           </Link>
@@ -387,11 +387,11 @@ export function CosignerApplyFlow({
       className="mt-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
       style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
     >
-      <div className="border-b border-slate-100 pb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+      <div className="border-b border-border pb-6">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">
           Step {step} of {COSIGNER_STEPS} — Co-signer form
         </p>
-        <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{stepTitle}</p>
+        <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">{stepTitle}</p>
         <div className="-mx-1 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
           <div className="flex min-w-max gap-1 px-1">
             {COSIGNER_STEP_META.map((s) => {
@@ -410,7 +410,7 @@ export function CosignerApplyFlow({
                       : completed
                         ? "bg-primary/15 text-primary"
                         : reachable
-                          ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          ? "bg-slate-100 text-muted hover:bg-slate-200"
                           : "cursor-not-allowed bg-slate-50 text-slate-300"
                   }`}
                 >
@@ -577,7 +577,7 @@ export function CosignerApplyFlow({
           <>
             <div className="divide-y divide-slate-100">
               <ApplyFieldRow label="Not employed" optional hint="Check if you are not currently working.">
-                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
                   <input
                     type="checkbox"
                     checked={f.notEmployed}
@@ -748,11 +748,11 @@ export function CosignerApplyFlow({
                   : "border-slate-200 bg-slate-50/80"
               }`}
             >
-              <p className="text-sm font-semibold text-slate-800">
+              <p className="text-sm font-semibold text-foreground">
                 Consent for Credit and Background Check
                 <span className="font-semibold text-primary"> *</span>
               </p>
-              <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+              <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-foreground">
                 <input
                   type="checkbox"
                   checked={f.consentCredit}
@@ -806,7 +806,7 @@ export function CosignerApplyFlow({
         ) : null}
       </div>
 
-      <div className="mt-10 flex flex-col-reverse gap-3 border-t border-slate-100 pt-8 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-10 flex flex-col-reverse gap-3 border-t border-border pt-8 sm:flex-row sm:items-center sm:justify-between">
         <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack}>
           Back
         </Button>

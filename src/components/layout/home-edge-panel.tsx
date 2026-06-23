@@ -10,7 +10,7 @@ export function HomeEdgePanel() {
     <button
       type="button"
       aria-label="Quick settings"
-      className="fixed right-0 top-1/2 z-40 hidden h-11 w-11 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-[var(--shadow-card)] transition-[transform,box-shadow,filter,border-color] duration-200 ease-out hover:scale-105 hover:border-primary/25 hover:text-primary hover:shadow-[var(--shadow-card-hover)] active:scale-95 lg:flex"
+      className="glass-card fixed right-0 top-1/2 z-40 hidden h-11 w-11 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-l-[14px] rounded-r-none border-r-0 text-foreground transition-[transform,box-shadow,filter,border-color] duration-200 ease-out hover:scale-105 hover:border-primary/25 hover:text-primary hover:shadow-[var(--shadow-card-hover)] active:scale-95 lg:flex"
       onClick={() => showToast("Coming soon")}
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PropertyRequestEditForm } from "@/components/portal/property-request-edit-form";
@@ -91,46 +92,26 @@ function HouseIcon({ className }: { className?: string }) {
 
 function StatusPill({
   label,
-  variant,
+  tone,
 }: {
   label: string;
-  variant: "green" | "amber" | "slate" | "rose";
+  tone: "confirmed" | "pending" | "neutral" | "overdue";
 }) {
-  const styles = {
-    green: "border-emerald-200/90 bg-emerald-50 text-emerald-900",
-    amber: "border-amber-200/90 bg-amber-50 text-amber-950",
-    slate: "border-slate-200/90 bg-slate-50 text-slate-700",
-    rose: "border-rose-200/90 bg-rose-50 text-rose-900",
-  } as const;
-  const dot = {
-    green: "bg-emerald-500",
-    amber: "bg-amber-500",
-    slate: "bg-slate-400",
-    rose: "bg-rose-500",
-  }[variant];
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[variant]}`}
-    >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} aria-hidden />
-      {label}
-    </span>
-  );
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
-function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: "green" | "amber" | "slate" | "rose" } {
+function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; tone: "confirmed" | "pending" | "neutral" | "overdue" } {
   switch (bucket) {
     case 0:
-      return { label: "Pending review", variant: "amber" };
+      return { label: "Pending review", tone: "pending" };
     case 1:
-      return { label: "Approved · edits requested", variant: "amber" };
+      return { label: "Approved · edits requested", tone: "pending" };
     case 2:
-      return { label: "Listed", variant: "green" };
+      return { label: "Listed", tone: "confirmed" };
     case 3:
-      return { label: "Unlisted", variant: "slate" };
+      return { label: "Unlisted", tone: "neutral" };
     default:
-      return { label: "Rejected", variant: "rose" };
+      return { label: "Rejected", tone: "overdue" };
   }
 }
 
@@ -252,15 +233,15 @@ function AdminPropertyInlineDetails({
             )}
             <Button
               type="button"
-              variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              variant="danger"
+              className="rounded-full"
               onClick={() =>
                 row.adminRefId.startsWith("mgr-")
                   ? run("Listing removed from catalog.", moveListedToRejected(row.listingId ?? row.adminRefId))
                   : run("Declined submission.", movePendingToRejected(row.adminRefId))
               }
             >
-              REJECT
+              Reject
             </Button>
           </>
         ) : null}
@@ -280,11 +261,11 @@ function AdminPropertyInlineDetails({
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              variant="danger"
+              className="rounded-full"
               onClick={() => run("Declined.", declineFromRequestChange(row.adminRefId))}
             >
-              REJECT
+              Reject
             </Button>
           </>
         ) : null}
@@ -299,11 +280,11 @@ function AdminPropertyInlineDetails({
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              variant="danger"
+              className="rounded-full"
               onClick={() => run("Rejected listing.", moveListedToRejected(listingId))}
             >
-              REJECT
+              Reject
             </Button>
           </>
         ) : null}
@@ -322,11 +303,11 @@ function AdminPropertyInlineDetails({
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              variant="danger"
+              className="rounded-full"
               onClick={() => run("Moved to rejected.", moveUnlistedToRejected(row.adminRefId))}
             >
-              REJECT
+              Reject
             </Button>
           </>
         ) : null}
@@ -343,8 +324,8 @@ function AdminPropertyInlineDetails({
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              variant="danger"
+              className="rounded-full"
               onClick={() => run("Property deleted from rejected queue.", removeRejectedProperty(row.adminRefId))}
             >
               Delete property
@@ -450,7 +431,7 @@ export function AdminPropertiesClient() {
         ))}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
+      <div className="mt-4 glass-card rounded-2xl px-4 py-3 text-sm text-muted">
         {ADMIN_TAB_BANNER[activeKpi]}
       </div>
 
@@ -499,7 +480,7 @@ export function AdminPropertiesClient() {
                           ) : null}
                         </td>
                         <td className={PORTAL_TABLE_TD}>
-                          <StatusPill label={status.label} variant={status.variant} />
+                          <StatusPill label={status.label} tone={status.tone} />
                         </td>
                         <td className={`${PORTAL_TABLE_TD} text-right`}>
                           <Button

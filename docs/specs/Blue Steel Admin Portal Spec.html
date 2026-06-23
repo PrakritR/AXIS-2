@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e7e5df; }
+  @keyframes dchromeFlow { 0% { transform: rotate(0deg) scale(1.5); } 100% { transform: rotate(360deg) scale(1.5); } }
+  code { font-family: ui-monospace,'SF Mono',monospace; background:#f3f6fd; padding:1px 5px; border-radius:4px; font-size:.92em; color:#1e4fd6; }
+</style>
+</helmet>
+<div style="min-height:100vh; padding:56px 24px; background:#e7e5df; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif; color:#16213a;">
+  <div style="max-width:880px; margin:0 auto; background:#ffffff; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.08), 0 40px 80px -50px rgba(15,23,42,.4); overflow:hidden;">
+
+    <!-- COVER -->
+    <div style="position:relative; padding:64px 64px 56px; background:#0a0e18; overflow:hidden;">
+      <div style="position:absolute; inset:-40%; background:conic-gradient(from 0deg at 50% 50%, #b8bcc6, #2f6bff, #6f8db8, #3a4560, #c2cad8, #2f6bff, #b8bcc6); filter:blur(70px) saturate(.95); opacity:.42; animation:dchromeFlow 28s linear infinite;"></div>
+      <div style="position:absolute; inset:0; background:radial-gradient(ellipse 90% 80% at 50% 40%, rgba(10,14,24,.55), rgba(10,14,24,.94));"></div>
+      <div style="position:relative;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:44px;">
+          <div style="height:44px; width:44px; border-radius:13px; background:linear-gradient(150deg,rgba(255,255,255,.42),rgba(255,255,255,.07)); border:1px solid rgba(255,255,255,.38); box-shadow:inset 0 1px 0 rgba(255,255,255,.5); display:flex; align-items:center; justify-content:center;"><svg width="38" height="22" viewBox="0 0 46 26" fill="none"><path d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45" stroke="#fff" stroke-width="2.55" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 4L43 22" stroke="#bcd4ff" stroke-width="2.75" stroke-linecap="round"/><path d="M43 4L27 22" stroke="#dce8ff" stroke-width="2.55" stroke-linecap="round"/></svg></div>
+          <div style="line-height:1;"><div style="font-size:15px; font-weight:600; letter-spacing:-0.02em; color:#fff;">Axis Housing</div><div style="margin-top:3px; font-size:10px; font-weight:600; letter-spacing:0.22em; text-transform:uppercase; color:rgba(255,255,255,.6);">Blue Steel · Implementation spec</div></div>
+        </div>
+        <div style="font-family:ui-monospace,'SF Mono',monospace; font-size:12px; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:#bcd4ff; margin-bottom:14px;">Surface 04 / 05 · Admin</div>
+        <h1 style="margin:0; font-size:48px; line-height:1.04; font-weight:600; letter-spacing:-0.035em; color:#fff;">Admin Portal</h1>
+        <p style="margin:18px 0 0; max-width:560px; font-size:16px; line-height:1.55; color:rgba(255,255,255,.8);">The platform-operations surface. Same Blue Steel app shell as the property portal, tuned darker and more utilitarian — review queues, user management, and platform-wide oversight for admins only.</p>
+        <div style="margin-top:38px; display:flex; gap:34px; font-size:12px; color:rgba(255,255,255,.7);">
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Sections</div>~10 + 2 hidden</div>
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Nav</div>portals/admin.ts</div>
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Default theme</div>Dark · light available</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:54px 64px 70px;">
+
+      <div style="margin:0 0 44px; padding:18px 22px; border-left:3px solid #2f6bff; background:#f3f6fd; border-radius:0 10px 10px 0;"><p style="margin:0; font-size:14px; line-height:1.6; color:#3a445e;"><strong style="color:#16213a;">Read first.</strong> Admin inherits the entire <strong style="color:#16213a;">Property Portal spec</strong> — app shell, sidebar, KPI tiles, status palette, tables. This sheet covers only what differs for admin. Don't re-solve the shell.</p></div>
+
+      <!-- 01 IDENTITY -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">01</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Admin identity cues</h2></div>
+      <p style="margin:0 0 14px; font-size:15px; line-height:1.65; color:#3a445e;">Admins move between this and previewing other portals, so the surface must read unmistakably as "platform". Differentiate <strong style="color:#16213a;">without a second accent hue</strong> — stay on cobalt, shift the neutrals:</p>
+      <ul style="margin:0 0 14px; padding-left:20px; font-size:14px; line-height:1.75; color:#3a445e;">
+        <li><strong style="color:#16213a;">Default dark</strong> (vs light for managers). Deeper base <code>#0a0e18</code>, cooler/greyer sidebar chrome, slightly lower metal saturation.</li>
+        <li><strong style="color:#16213a;">"Admin" wordmark</strong> in the sidebar brand block ("Axis Housing · Admin") plus a small mono <code>ADMIN</code> tag pill near the logo.</li>
+        <li><strong style="color:#16213a;">Preview-as-user banner:</strong> when impersonating, a persistent cobalt glass strip at the very top ("Previewing as … · Exit") — reuse PortalTopBanners.</li>
+      </ul>
+      <p style="margin:0 0 40px; font-size:13px; line-height:1.6; color:#6a7595;">Everything else (nav active states, count badges, content surface, header action) matches the property portal exactly.</p>
+
+      <!-- 02 SECTIONS -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">02</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Sections &amp; patterns</h2></div>
+      <div style="margin-bottom:40px; border:1px solid #e6e9f0; border-radius:12px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#8a96b4; background:#f6f8fc; padding:11px 18px; border-bottom:1px solid #e6e9f0;"><span>Route</span><span>Component</span><span>Pattern</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/admin/dashboard</code><span style="color:#3a445e;">AdminDashboard</span><span style="color:#3a445e;">Platform KPIs + quick links</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/admin/properties</code><span style="color:#3a445e;">AdminPropertiesClient</span><span style="color:#3a445e;">Review queue: approve / reject / request changes</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/admin/axis-users</code><span style="color:#3a445e;">AdminAxisUsersClient</span><span style="color:#3a445e;">Unified user table; activate/disable; preview-as</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/admin/leases</code><span style="color:#3a445e;">AdminLeasesClient</span><span style="color:#3a445e;">Platform lease review; PDF; send back</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/admin/events</code><span style="color:#3a445e;">AdminEventsClient</span><span style="color:#3a445e;">Calendar: availability + inquiries</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/admin/inbox/*</code><span style="color:#3a445e;">AdminInboxClient</span><span style="color:#3a445e;">Thread list + reader (4 folders)</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/admin/profile</code><span style="color:#3a445e;">AdminProfileSection</span><span style="color:#3a445e;">Settings card + generated admin ID</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45;"><code>/admin/create-manager · create-resident</code><span style="color:#3a445e;">hidden</span><span style="color:#3a445e;">Provisioning forms (off-nav)</span></div>
+      </div>
+
+      <!-- 03 REVIEW QUEUE -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">03</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">The review-queue pattern</h2></div>
+      <p style="margin:0 0 14px; font-size:15px; line-height:1.65; color:#3a445e;">Properties and leases are decision queues — the admin's core loop. Standardize one pattern:</p>
+      <ul style="margin:0 0 14px; padding-left:20px; font-size:14px; line-height:1.75; color:#3a445e;">
+        <li><strong style="color:#16213a;">Queue row / card:</strong> submission summary on the calm surface, a status badge from the shared palette, and an action cluster.</li>
+        <li><strong style="color:#16213a;">Decision actions:</strong> <em>Approve</em> = cobalt primary; <em>Request changes</em> = secondary outline; <em>Reject / Unlist</em> = quiet danger (red text, no fill) — destructive actions never get a loud fill.</li>
+        <li><strong style="color:#16213a;">Filters/tabs:</strong> segmented-pill across queue states. Bulk states stay legible on a solid surface.</li>
+      </ul>
+      <p style="margin:0 0 40px; font-size:13px; line-height:1.6; color:#6a7595;">AxisUsers: one dense table for managers/owners/residents with role chips (cobalt), tier badges, and an active/disabled toggle. "Preview as user" = secondary button that triggers the impersonation banner.</p>
+
+      <!-- 04 DO/DONT -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:18px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">04</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Do &amp; don't</h2></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+        <div style="border:1px solid #d6ead9; background:#f4fbf5; border-radius:12px; padding:20px;"><div style="font-size:13px; font-weight:700; color:#1f8a5b; margin-bottom:12px;">DO</div><ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#3a445e;"><li>Mark the surface as admin (wordmark + tag).</li><li>Keep one review-queue pattern across sections.</li><li>Use a persistent banner while previewing.</li><li>Keep destructive actions quiet.</li></ul></div>
+        <div style="border:1px solid #f0d6d6; background:#fdf4f4; border-radius:12px; padding:20px;"><div style="font-size:13px; font-weight:700; color:#c0392b; margin-bottom:12px;">DON'T</div><ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#3a445e;"><li>Don't add an admin-only accent color.</li><li>Don't make Reject a filled red button.</li><li>Don't hide that you're impersonating.</li><li>Don't diverge from the portal shell.</li></ul></div>
+      </div>
+
+      <div style="margin-top:40px; padding-top:24px; border-top:1px solid #eef1f6; display:flex; justify-content:space-between; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#a3adc4;"><span>Axis Housing · Blue Steel · Admin</span><span>Spec 0.1</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

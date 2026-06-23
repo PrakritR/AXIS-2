@@ -24,7 +24,7 @@ import type { TabItem } from "@/components/ui/tabs";
 export const PORTAL_INBOX_TABLE_WRAP = PORTAL_DATA_TABLE_WRAP;
 
 export const PORTAL_INBOX_EMPTY_WRAP =
-  "flex flex-col items-center justify-center rounded-2xl border border-slate-200/90 bg-slate-50/30 px-4 py-16 text-center sm:py-20";
+  "flex flex-col items-center justify-center rounded-2xl border border-border bg-accent/25 px-4 py-16 text-center sm:py-20";
 
 export function InboxEmptyIcon({ className }: { className?: string }) {
   return (
@@ -50,8 +50,8 @@ export function PortalInboxEmptyState({ title, hint }: { title: string; hint?: R
       <AxisHeaderMarkTile>
         <InboxEmptyIcon className="h-[26px] w-[26px]" />
       </AxisHeaderMarkTile>
-      <p className="mt-4 text-sm font-medium text-slate-500">{title}</p>
-      {hint ? <div className="mt-2 text-xs text-slate-400">{hint}</div> : null}
+      <p className="mt-4 text-sm font-medium text-muted">{title}</p>
+      {hint ? <div className="mt-2 text-xs text-muted/70">{hint}</div> : null}
     </div>
   );
 }
@@ -105,7 +105,7 @@ export function InboxComposeModal({
     <Modal open={open} title={title} onClose={onClose}>
       <div className="space-y-4">
         <div>
-          <label className="text-xs font-semibold text-slate-600" htmlFor="inbox-compose-to">
+          <label className="text-xs font-semibold text-muted" htmlFor="inbox-compose-to">
             To (email)
           </label>
           <Input
@@ -119,13 +119,13 @@ export function InboxComposeModal({
           />
         </div>
         <div>
-          <label className="text-xs font-semibold text-slate-600" htmlFor="inbox-compose-subject">
+          <label className="text-xs font-semibold text-muted" htmlFor="inbox-compose-subject">
             Subject
           </label>
           <Input id="inbox-compose-subject" className="mt-1.5" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" />
         </div>
         <div>
-          <label className="text-xs font-semibold text-slate-600" htmlFor="inbox-compose-body">
+          <label className="text-xs font-semibold text-muted" htmlFor="inbox-compose-body">
             Message
           </label>
           <Textarea
@@ -217,18 +217,18 @@ export function PortalInboxMessageTable({
                 <Fragment key={row.id}>
                   <tr className={PORTAL_TABLE_TR}>
                     <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                      <p className="font-medium text-slate-900">{row.name}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{row.email}</p>
+                      <p className="font-medium text-foreground">{row.name}</p>
+                      <p className="mt-0.5 text-xs text-muted">{row.email}</p>
                     </td>
-                    <td className={`${PORTAL_TABLE_TD} align-middle text-slate-800`}>{row.topic}</td>
-                    <td className={`max-w-[220px] ${PORTAL_TABLE_TD} align-middle text-slate-600`}>
+                    <td className={`${PORTAL_TABLE_TD} align-middle text-foreground`}>{row.topic}</td>
+                    <td className={`max-w-[220px] ${PORTAL_TABLE_TD} align-middle text-muted`}>
                       <span className="line-clamp-2">{row.preview}</span>
                     </td>
-                    <td className={`${PORTAL_TABLE_TD} align-middle text-slate-500`}>{row.whenLabel}</td>
+                    <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{row.whenLabel}</td>
                     <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
                       {summaryActionsOnlyDetails ? (
                         isExpanded ? (
-                          <span className="text-xs text-slate-400">—</span>
+                          <span className="text-xs text-muted/70">—</span>
                         ) : (
                           <Button
                             type="button"
@@ -254,15 +254,15 @@ export function PortalInboxMessageTable({
                           {extra}
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400">—</span>
+                        <span className="text-xs text-muted/70">—</span>
                       )}
                     </td>
                   </tr>
                   {isExpanded ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
                       <td colSpan={5} className={`${PORTAL_TABLE_DETAIL_CELL} text-left`}>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Message</p>
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Message</p>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted">
                           {(detailText ?? "").trim() ? detailText : "—"}
                         </p>
                         <PortalTableDetailActions>

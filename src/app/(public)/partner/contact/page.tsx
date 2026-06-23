@@ -12,8 +12,8 @@ export default function PartnerContactPage() {
     <Suspense
       fallback={
         <div className="min-h-screen px-4 py-16 sm:py-20">
-          <div className="mx-auto max-w-2xl rounded-3xl border border-slate-200/80 bg-white p-8 shadow-[0_4px_32px_-4px_rgba(15,23,42,0.1)]">
-            <p className="text-center text-sm text-slate-500">Loading…</p>
+          <div className="glass-card mx-auto max-w-2xl rounded-3xl p-8">
+            <p className="text-center text-sm text-muted">Loading…</p>
           </div>
         </div>
       }
@@ -40,8 +40,8 @@ function PartnerContactInner() {
   return (
     <div className="min-h-screen px-4 py-16 sm:py-20">
       <div className="mx-auto max-w-2xl">
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-8 shadow-[0_4px_32px_-4px_rgba(15,23,42,0.1)]">
-          <h1 className="text-2xl font-bold tracking-tight text-[#0d1f4e]">Connect with Axis Team</h1>
+        <div className="glass-card rounded-3xl p-8">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Connect with Axis Team</h1>
 
           <div className="mt-5">
             <SegmentedTwo
@@ -132,7 +132,7 @@ function PartnerMessageForm({ showToast }: { showToast: (m: string) => void }) {
       <button
         type="button"
         onClick={submit}
-        className="mt-2 w-full rounded-2xl bg-[#0d1f4e] py-3.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#162d6e] active:scale-[0.98]"
+        className="btn-cobalt mt-2 w-full rounded-2xl py-3.5 text-sm font-semibold transition-all duration-150 active:scale-[0.98]"
       >
         Send message
       </button>
@@ -143,11 +143,11 @@ function PartnerMessageForm({ showToast }: { showToast: (m: string) => void }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-semibold text-slate-500">{label}</p>
+      <p className="mb-1.5 text-xs font-semibold text-muted">{label}</p>
       {children}
     </div>
   );
 }
 
 const inputCls =
-  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all duration-150 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15 hover:border-slate-300";
+  "w-full rounded-xl border border-border/60 bg-auth-input-bg px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted/60 focus:border-primary/40 focus:ring-2 focus:ring-primary/25 hover:border-primary/25";

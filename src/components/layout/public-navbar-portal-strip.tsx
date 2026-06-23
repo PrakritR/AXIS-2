@@ -17,9 +17,9 @@ export function PublicNavbarPortalStrip({
     <Link
       href="/auth/sign-in"
       onClick={() => onInteract?.()}
-      className={`inline-flex items-center justify-center rounded-full border border-slate-200/90 bg-white px-5 py-2 text-[14px] font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 active:scale-[0.98] ${className}`}
+      className={`btn-metallic inline-flex items-center justify-center rounded-full px-5 py-2 text-[14px] font-semibold transition hover:brightness-105 active:scale-[0.98] ${className}`}
     >
-      Portal
+      Open portal
     </Link>
   );
 }

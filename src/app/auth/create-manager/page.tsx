@@ -22,7 +22,7 @@ function CreateManagerRedirect() {
 
   return (
     <AuthCard>
-      <p className="text-center text-sm text-slate-600">Redirecting to create account…</p>
+      <p className="text-center text-sm text-muted">Redirecting to create account…</p>
     </AuthCard>
   );
 }
@@ -32,7 +32,7 @@ export default function CreateManagerPage() {
     <Suspense
       fallback={
         <AuthCard>
-          <p className="text-center text-sm text-slate-600">Loading…</p>
+          <p className="text-center text-sm text-muted">Loading…</p>
         </AuthCard>
       }
     >

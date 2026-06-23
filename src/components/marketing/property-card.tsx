@@ -89,7 +89,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_14px_44px_-34px_rgba(15,23,42,0.28)] transition duration-200 ease-out hover:border-primary/20 hover:shadow-[0_20px_54px_-36px_rgba(15,23,42,0.34)]">
+    <div className="glass-card flex h-full flex-col overflow-hidden rounded-[18px] transition duration-200 ease-out hover:border-primary/20 hover:shadow-[var(--shadow-card-hover)]">
       <div className="relative aspect-[16/10] overflow-hidden bg-slate-200">
         <Image src={slideSrc} alt={title} fill sizes="(min-width: 1024px) 33vw, 100vw" className="absolute inset-0 object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
@@ -140,11 +140,11 @@ export function PropertyCard({ property }: { property: MockProperty }) {
 
       <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
         <div>
-          <h3 className="text-lg font-bold text-slate-950">{title}</h3>
-          <p className="mt-1 text-sm text-slate-500">{fullAddress}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-700">
+          <h3 className="text-lg font-bold text-foreground">{title}</h3>
+          <p className="mt-1 text-sm text-muted">{fullAddress}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-foreground/80">
             <span className="inline-flex items-center gap-1.5">
-              <span className="text-slate-400" aria-hidden>
+              <span className="text-muted" aria-hidden>
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
                   <path
                     d="M4 12h16v8H4v-8Zm2-4h12v4H6V8Z"
@@ -157,7 +157,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
               <span className="font-medium">{rich.quickFacts.find((q) => q.label === "Bedrooms")?.value ?? property.beds} bedrooms</span>
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="text-slate-400" aria-hidden>
+              <span className="text-muted" aria-hidden>
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
                   <path
                     d="M6 4h12v16H6V4Zm3 4h6M9 14h6"
@@ -170,13 +170,13 @@ export function PropertyCard({ property }: { property: MockProperty }) {
               <span className="font-medium">{rich.quickFacts.find((q) => q.label === "Bathrooms")?.value ?? property.baths} bathrooms</span>
             </span>
           </div>
-          <p className="mt-3 text-sm leading-relaxed text-slate-600">{desc}</p>
+          <p className="mt-3 text-sm leading-relaxed text-muted">{desc}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {tags.map((t) => (
             <span
               key={t}
-              className="rounded-full border border-slate-200/90 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600"
+              className="rounded-full border border-border bg-accent px-2.5 py-1 text-[11px] font-semibold text-muted"
             >
               {t}
             </span>
@@ -189,7 +189,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
               className="w-full justify-center gap-2 text-[13px] sm:text-sm"
               style={{
                 background: "linear-gradient(135deg, var(--primary), var(--primary-alt))",
-                boxShadow: "0 4px 18px rgba(0,122,255,0.28)",
+                boxShadow: "0 4px 18px rgba(47,107,255,0.28)",
               }}
             >
               View listing

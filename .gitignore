@@ -49,3 +49,6 @@ coverage/
 # Misc
 *.log
 .eslintcache
+
+# Cursor IDE (local editor settings)
+.cursor/settings.json

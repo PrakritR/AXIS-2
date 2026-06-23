@@ -76,7 +76,7 @@ export function RentalApplicationWizard({ showToast }: { showToast: (msg: string
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-3xl px-4 py-16 text-center text-slate-600">Loading application…</div>
+        <div className="mx-auto max-w-3xl px-4 py-16 text-center text-muted">Loading application…</div>
       }
     >
       <RentalApplicationWizardInner showToast={showToast} />
@@ -619,7 +619,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       </div>
 
       <div className="mt-6 rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:p-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Choose your form</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">Choose your form</p>
         <div className="mt-4">
           <SegmentedTwo
             value={applicationPath}
@@ -629,7 +629,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             className="max-w-md"
           />
         </div>
-        <p className="mt-4 text-sm leading-relaxed text-slate-600">
+        <p className="mt-4 text-sm leading-relaxed text-muted">
           {applicationPath === "signer"
             ? "Use the signer form if you are the main applicant for the lease."
             : "Filing as a co-signer on someone else's application? Open the co-signer form."}
@@ -652,8 +652,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>
-            <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Save your application ID</h2>
-            <p className="mt-3 text-sm leading-relaxed text-slate-700">
+            <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Save your application ID</h2>
+            <p className="mt-3 text-sm leading-relaxed text-foreground">
               Use this application ID when you create your resident account (open signup below with it filled in), and
               use the same email address from this application. Share it with a co-signer if they apply separately.
               This ID only grants resident account creation. Until you create that resident account, your application
@@ -662,8 +662,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               application fee and approves your application. Stripe payments are marked paid automatically after checkout.
             </p>
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Application ID</p>
-              <p className="mt-2 font-mono text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{postSubmit.axisId}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Application ID</p>
+              <p className="mt-2 font-mono text-xl font-bold tracking-tight text-foreground sm:text-2xl">{postSubmit.axisId}</p>
             </div>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Link
@@ -682,11 +682,11 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             className="mt-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
             style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
           >
-            <div className="border-b border-slate-100 pb-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            <div className="border-b border-border pb-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">
                 Step {step} of {RENTAL_WIZARD_STEP_COUNT}
               </p>
-              <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{meta.title}</p>
+              <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">{meta.title}</p>
               <div className="-mx-1 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
                 <div className="flex min-w-max gap-1 px-1">
                   {STEP_META.map((s) => {
@@ -705,7 +705,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                             : completed
                               ? "bg-primary/15 text-primary"
                               : reachable
-                                ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                ? "bg-slate-100 text-muted hover:bg-slate-200"
                                 : "cursor-not-allowed bg-slate-50 text-slate-300"
                         }`}
                       >
@@ -745,7 +745,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               />
             </div>
 
-            <div className="mt-10 flex flex-col-reverse gap-3 border-t border-slate-100 pt-8 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-10 flex flex-col-reverse gap-3 border-t border-border pt-8 sm:flex-row sm:items-center sm:justify-between">
               <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack} disabled={step <= 1}>
                 {reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
               </Button>

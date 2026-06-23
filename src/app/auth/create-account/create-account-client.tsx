@@ -310,11 +310,11 @@ export default function CreateAccountClient() {
     }
   };
 
-  const readOnlyInputClass = "mt-1.5 bg-[#f1f5f9] text-slate-800 cursor-default";
+  const readOnlyInputClass = "mt-1.5 bg-[#f1f5f9] text-foreground cursor-default";
 
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Create account</h1>
+      <h1 className="text-center text-[22px] font-bold tracking-tight text-foreground">Create account</h1>
 
       <div className="mt-7">
         <label className="text-xs font-semibold text-[#334155]" htmlFor="account-type">
@@ -332,17 +332,17 @@ export default function CreateAccountClient() {
         </Select>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-[#e0e4ec] bg-[#f8fafc] p-4 text-sm leading-relaxed text-slate-600">
+      <div className="mt-6 rounded-2xl border border-[#e0e4ec] bg-[#f8fafc] p-4 text-sm leading-relaxed text-muted">
         {managerPostCheckout ? (
           <>
             {isAxisIntentSignup ? (
               <>
-                Your <span className="font-semibold text-slate-800">Axis ID</span> is reserved for this signup—use it
+                Your <span className="font-semibold text-foreground">Axis ID</span> is reserved for this signup—use it
                 when you need support. Set a password below to finish {managerSignupFinishPhrase(effectiveCheckoutPreview?.tier)}.
               </>
             ) : (
               <>
-                Payment confirmed. Your <span className="font-semibold text-slate-800">Axis ID</span> is tied to this
+                Payment confirmed. Your <span className="font-semibold text-foreground">Axis ID</span> is tied to this
                 checkout. Set a password below to finish {managerSignupFinishPhrase(effectiveCheckoutPreview?.tier)}.
               </>
             )}
@@ -360,14 +360,14 @@ export default function CreateAccountClient() {
             <Link className="font-semibold text-primary hover:opacity-90" href="/partner/pricing">
               Partner pricing
             </Link>
-            : choose <span className="font-semibold text-slate-800">Free</span> (no payment) or a paid plan (checkout). You
+            : choose <span className="font-semibold text-foreground">Free</span> (no payment) or a paid plan (checkout). You
             will return here with your Axis ID to set your password.
           </>
         )}
       </div>
 
       {role === "manager" && sessionIdFromUrl && effectivePreviewLoading ? (
-        <p className="mt-6 text-center text-sm text-slate-600">Loading checkout details…</p>
+        <p className="mt-6 text-center text-sm text-muted">Loading checkout details…</p>
       ) : null}
 
       {role === "manager" && sessionIdFromUrl && effectivePreviewError ? (
@@ -463,7 +463,7 @@ export default function CreateAccountClient() {
                 value={managerIdInput}
                 onChange={(e) => setManagerIdInput(e.target.value)}
               />
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-muted/70">
                 From your account setup email or the Axis ID confirmation page after checkout.
               </p>
             </div>
@@ -552,7 +552,7 @@ export default function CreateAccountClient() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              {displayedEmailStatusLoading ? <p className="mt-1 text-xs text-slate-400">Checking for an existing Axis login…</p> : null}
+              {displayedEmailStatusLoading ? <p className="mt-1 text-xs text-muted/70">Checking for an existing Axis login…</p> : null}
             </div>
           </>
         )}

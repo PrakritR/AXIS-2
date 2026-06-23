@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 function CreateAccountFallback() {
   return (
     <AuthCard>
-      <p className="text-center text-sm text-slate-600">Loading…</p>
+      <p className="text-center text-sm text-muted">Loading…</p>
     </AuthCard>
   );
 }

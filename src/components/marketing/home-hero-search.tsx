@@ -29,7 +29,7 @@ const BATHROOM_OPTIONS = [
 export const LISTINGS_PENDING_SEARCH_KEY = "axis:listings-pending-search:v1";
 
 const inputCls =
-  "[color-scheme:light] min-h-[44px] w-full rounded-xl border-0 bg-black/[0.04] px-3.5 py-2.5 text-[16px] text-[#1d1d1f] outline-none transition-all duration-200 placeholder:text-[#6e6e73]/60 focus:bg-white focus:ring-2 focus:ring-[#007aff]/25 hover:bg-black/[0.06] sm:py-3 sm:text-[14px]";
+  "min-h-[44px] w-full rounded-xl border border-border/60 bg-auth-input-bg px-3.5 py-2.5 text-[16px] text-foreground outline-none transition-all duration-200 placeholder:text-muted/60 focus:border-primary/40 focus:ring-2 focus:ring-primary/25 hover:border-primary/25 sm:py-3 sm:text-[14px]";
 
 export type HomeHeroSearchProps = {
   variant?: "hero" | "listings";
@@ -163,16 +163,11 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
   }
 
   return (
-    <div
-      className="mx-auto w-full max-w-[1060px] rounded-[1.35rem] px-4 py-6 ring-1 ring-white/60 sm:rounded-[1.75rem] sm:px-10 sm:py-9"
-      style={{
-        background: "rgba(255,255,255,0.82)",
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
-        border: "1px solid rgba(15,23,42,0.06)",
-        boxShadow: "var(--shadow-card), 0 1px 0 rgba(255,255,255,0.92) inset",
-      }}
-    >
+    <div className="hero-search-panel relative mx-auto w-full max-w-[1060px] overflow-hidden rounded-[1.35rem] px-4 py-6 sm:rounded-[1.75rem] sm:px-10 sm:py-9">
+      <div
+        className="sheen-sweep pointer-events-none absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/25 to-transparent"
+        aria-hidden
+      />
       {/* Row 1: main filters */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <FieldBlock label="Move-in date" required>
@@ -186,8 +181,8 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         {/* Budget slider */}
         <div>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6e6e73]">Max budget / mo</span>
-            <span className={`text-[13px] font-semibold transition-colors duration-200 ${budget < BUDGET_MAX ? "text-[#007aff]" : "text-[#6e6e73]/60"}`}>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Max budget / mo</span>
+            <span className={`text-[13px] font-semibold transition-colors duration-200 ${budget < BUDGET_MAX ? "text-primary" : "text-muted/60"}`}>
               {budgetLabel}
             </span>
           </div>
@@ -204,7 +199,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
               onChange={(e) => setBudget(Number(e.target.value))}
               className="budget-slider relative z-10 h-7 w-full cursor-pointer appearance-none bg-transparent"
             />
-            <div className="mt-1 flex justify-between gap-1 text-[11px] font-medium text-[#6e6e73]/50">
+            <div className="mt-1 flex justify-between gap-1 text-[11px] font-medium text-muted/50">
               {BUDGET_MARKERS.map((m) => (
                 <span key={m} className={m === BUDGET_MAX ? "text-right" : ""}>
                   {m === BUDGET_MAX ? "Any" : `$${m.toLocaleString()}`}
@@ -226,7 +221,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
       </div>
 
       {/* Row 2: ZIP + radius */}
-      <div className="mt-5 grid grid-cols-1 gap-5 border-t border-black/[0.05] pt-5 sm:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-5 border-t border-border pt-5 sm:grid-cols-2">
         <FieldBlock label="ZIP code" hint="5-digit US ZIP code">
           <div>
             <input
@@ -251,21 +246,20 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
         </FieldBlock>
       </div>
 
-      <div className="my-6 h-px w-full bg-black/[0.05]" />
+      <div className="my-6 h-px w-full bg-border" />
 
       {roomSearchReady ? (
         <div className="flex w-full flex-col items-center gap-3 text-center">
-          <p className="text-[13px] text-[#6e6e73]">
+          <p className="text-[13px] text-muted">
             {zipValid
-              ? <>Rooms within <strong className="font-semibold text-[#1d1d1f]">{radius} mi</strong> of <strong className="font-semibold text-[#1d1d1f]">{zipDigits}</strong></>
+              ? <>Rooms within <strong className="font-semibold text-foreground">{radius} mi</strong> of <strong className="font-semibold text-foreground">{zipDigits}</strong></>
               : "Rooms matching your filters"
             }
           </p>
           <a
             href={listingsHref}
             onClick={storePendingListingsSearch}
-            className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full px-8 py-3 text-[15px] font-semibold text-white transition-all duration-200 hover:-translate-y-[1px] active:scale-[0.98] sm:min-h-0 sm:py-2.5 sm:text-[14px]"
-            style={{ background: "linear-gradient(135deg, #007aff, #339cff)", boxShadow: "0 4px 20px rgba(0,122,255,0.35)" }}
+            className="btn-cobalt inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full px-8 py-3 text-[15px] font-semibold transition-all duration-200 hover:-translate-y-[1px] active:scale-[0.98] sm:min-h-0 sm:py-2.5 sm:text-[14px]"
           >
             <SearchIcon /> {variant === "listings" ? "Apply search" : "View listings"}
           </a>
@@ -279,17 +273,17 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
                 /* ignore */
               }
             }}
-            className="text-[13px] font-semibold text-[#007aff] underline-offset-4 hover:underline"
+            className="text-[13px] font-semibold text-primary underline-offset-4 hover:underline"
           >
             View all houses
           </Link>
 
-          <div className="mt-6 w-full border-t border-black/[0.06] pt-6 text-left">
-            <p className="text-center text-sm font-semibold text-[#1d1d1f]">
+          <div className="mt-6 w-full border-t border-border pt-6 text-left">
+            <p className="text-center text-sm font-semibold text-foreground">
               {filteredRooms.length} room{filteredRooms.length === 1 ? "" : "s"} match
             </p>
             {filteredRooms.length === 0 ? (
-              <p className="mt-4 text-center text-[13px] text-[#6e6e73]">No rooms match these filters.</p>
+              <p className="mt-4 text-center text-[13px] text-muted">No rooms match these filters.</p>
             ) : (
               <div className="mt-4 grid w-full gap-4 sm:grid-cols-2">
                 {filteredRooms.map((room) => (
@@ -299,10 +293,10 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
             )}
           </div>
         </div>
-      ) : (
+      ) : variant === "listings" ? null : (
         <div className="w-full">
           <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm font-semibold text-[#1d1d1f]">
+            <p className="text-sm font-semibold text-foreground">
               {combinedProperties.length} house{combinedProperties.length === 1 ? "" : "s"} available
             </p>
             <Link
@@ -315,15 +309,15 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
                   /* ignore */
                 }
               }}
-              className="text-[13px] font-semibold text-[#007aff] hover:underline underline-offset-2"
+              className="text-[13px] font-semibold text-primary hover:underline underline-offset-2"
             >
               View all →
             </Link>
           </div>
           {combinedProperties.length === 0 ? (
-            <p className="py-6 text-center text-[13px] text-[#6e6e73]">No listings available yet.</p>
+            <p className="py-6 text-center text-[13px] text-muted">No listings available yet.</p>
           ) : (
-            <div className="grid w-full gap-4 sm:grid-cols-2">
+            <div className="grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {combinedProperties.slice(0, 6).map((property) => (
                 <PropertyCard key={property.id} property={property} />
               ))}
@@ -341,7 +335,7 @@ export function HomeHeroSearch(props: HomeHeroSearchProps = {}) {
                     /* ignore */
                   }
                 }}
-                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#007aff] hover:underline underline-offset-2"
+                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:underline underline-offset-2"
               >
                 See all {combinedProperties.length} houses →
               </Link>
@@ -357,11 +351,11 @@ function FieldBlock({ label, optional, required: isRequired, hint, children }: {
   return (
     <div>
       <div className="mb-2 flex items-baseline gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6e6e73]">{label}</span>
-        {isRequired && <span className="text-[11px] font-medium text-[#007aff]">(required)</span>}
-        {optional && <span className="text-[11px] font-normal text-[#6e6e73]/50">(optional)</span>}
+        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</span>
+        {isRequired && <span className="text-[11px] font-medium text-primary">(required)</span>}
+        {optional && <span className="text-[11px] font-normal text-muted/50">(optional)</span>}
       </div>
-      {hint && <p className="mb-1.5 text-[11px] text-[#6e6e73]/50">{hint}</p>}
+      {hint && <p className="mb-1.5 text-[11px] text-muted/50">{hint}</p>}
       {children}
     </div>
   );
@@ -369,7 +363,7 @@ function FieldBlock({ label, optional, required: isRequired, hint, children }: {
 
 function ChevronIcon() {
   return (
-    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#6e6e73]/60" aria-hidden>
+    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted/60" aria-hidden>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
         <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>

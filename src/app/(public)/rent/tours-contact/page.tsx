@@ -295,13 +295,13 @@ function TourFlow({
       <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-white p-7 shadow-sm">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-5">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Tour request sent</p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">Your tour request is in</h2>
-          <p className="mt-3 text-sm leading-relaxed text-slate-700">
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Your tour request is in</h2>
+          <p className="mt-3 text-sm leading-relaxed text-foreground">
             We sent your tour request to the Axis team. Check your email for tour confirmation, the meeting link if needed,
             and next steps.
           </p>
           {selectedProperty ? (
-            <p className="mt-3 text-sm font-medium text-slate-800">
+            <p className="mt-3 text-sm font-medium text-foreground">
               Requested tour: {selectedProperty.title}
               {selectedDay && selectedSlotIndex != null
                 ? ` · ${MONTHS[calMonth]} ${selectedDay}, ${calYear} · ${formatAvailabilitySlotLabel(selectedSlotIndex)}`
@@ -324,7 +324,7 @@ function TourFlow({
               setSelectedDay(null);
               setSelectedSlotIndex(null);
             }}
-            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-foreground hover:bg-slate-50"
           >
             Request another tour
           </button>
@@ -340,7 +340,7 @@ function TourFlow({
   }
 
   return (
-    <div className="mt-4 rounded-3xl border border-slate-200/80 bg-white p-7 shadow-sm">
+    <div className="mt-4 rounded-3xl border border-border bg-white p-7 shadow-sm">
       {/* Step indicator */}
       <div className="flex items-center gap-2 text-sm">
         {steps.map((s, i) => {
@@ -373,12 +373,12 @@ function TourFlow({
                   ? "bg-primary text-white"
                   : s.n < step
                   ? "bg-primary/20 text-primary"
-                  : "bg-slate-100 text-slate-400"
+                  : "bg-slate-100 text-muted/70"
               }`}>
                 {s.n < step ? <CheckSmIcon /> : s.n}
               </span>
               <span className={`hidden sm:inline text-sm ${
-                step === s.n ? "font-semibold text-slate-800" : "text-slate-400"
+                step === s.n ? "font-semibold text-foreground" : "text-muted/70"
               }`}>
                 {s.label}
               </span>
@@ -606,7 +606,7 @@ function TourFlow({
               }
               setStep((s) => (s - 1) as TourStep);
             }}
-            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-muted hover:bg-slate-50"
           >
             Back
           </button>
@@ -670,7 +670,7 @@ function Step1({
   if (phase === "property") {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-slate-500">Choose a property to tour. You&apos;ll pick a specific room next.</p>
+        <p className="text-sm text-muted">Choose a property to tour. You&apos;ll pick a specific room next.</p>
         <div data-wizard-field="property" className={wizardSectionErrorClass(Boolean(fieldErrors.property))}>
           <PropertySearchPicker
             options={buildingOptions}
@@ -691,7 +691,7 @@ function Step1({
 
   const building = buildings.find((x) => x.buildingId === selectedBuildingId);
   if (!building) {
-    return <p className="text-sm text-slate-500">Select a property to see available rooms.</p>;
+    return <p className="text-sm text-muted">Select a property to see available rooms.</p>;
   }
 
   const roomOptions: PropertySearchOption[] = building.units.flatMap((p) =>
@@ -707,8 +707,8 @@ function Step1({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-slate-500">
-          Choose a room at <span className="font-semibold text-slate-800">{building.buildingName}</span>.
+        <p className="text-sm text-muted">
+          Choose a room at <span className="font-semibold text-foreground">{building.buildingName}</span>.
         </p>
         <button
           type="button"
@@ -783,8 +783,8 @@ function Step2({
           No tour windows are published for this property yet. Pick a different house or send a message to Axis.
         </p>
       ) : (
-        <p className="text-sm text-slate-600">
-          Pick one published 30-minute window for <span className="font-semibold text-slate-800">{property.title}</span>.
+        <p className="text-sm text-muted">
+          Pick one published 30-minute window for <span className="font-semibold text-foreground">{property.title}</span>.
         </p>
       )}
       {/* Calendar */}
@@ -797,7 +797,7 @@ function Step2({
           <button type="button" onClick={onPrevMonth} className="rounded-full p-1.5 hover:bg-slate-100">
             <ChevronLeftIcon />
           </button>
-          <p className="text-sm font-semibold text-slate-800">{MONTHS[calMonth]} {calYear}</p>
+          <p className="text-sm font-semibold text-foreground">{MONTHS[calMonth]} {calYear}</p>
           <button type="button" onClick={onNextMonth} className="rounded-full p-1.5 hover:bg-slate-100">
             <ChevronRightIcon />
           </button>
@@ -805,7 +805,7 @@ function Step2({
 
         <div className="grid grid-cols-7 gap-1">
           {DAYS.map((d) => (
-            <div key={d} className="py-1 text-center text-[11px] font-semibold uppercase text-slate-400">{d}</div>
+            <div key={d} className="py-1 text-center text-[11px] font-semibold uppercase text-muted/70">{d}</div>
           ))}
           {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
           {Array.from({ length: daysInMonth }).map((_, i) => {
@@ -825,7 +825,7 @@ function Step2({
                   isSelected
                     ? "bg-primary text-white shadow-sm"
                     : isAvailable && !isPast
-                    ? "bg-white text-slate-800 hover:bg-primary/[0.08] hover:text-primary"
+                    ? "bg-white text-foreground hover:bg-primary/[0.08] hover:text-primary"
                     : "cursor-not-allowed text-slate-300"
                 }`}
               >
@@ -839,11 +839,11 @@ function Step2({
       {/* Time slots */}
       {selectedDay && (
         <div>
-          <p className="mb-3 text-sm font-semibold text-slate-700">
+          <p className="mb-3 text-sm font-semibold text-foreground">
             Available times — {MONTHS[calMonth]} {selectedDay}
           </p>
           {openSlots.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-muted">
               No published tour windows for this day.
             </p>
           ) : (
@@ -856,7 +856,7 @@ function Step2({
                   className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
                     selectedSlotIndex === slotIndex
                       ? "border-primary bg-primary text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-primary hover:text-primary"
+                      : "border-slate-200 bg-white text-foreground hover:border-primary hover:text-primary"
                   }`}
                 >
                   {formatAvailabilitySlotLabel(slotIndex)}
@@ -869,8 +869,8 @@ function Step2({
 
       {selectedSlotIndex != null && managersAtSelectedSlot.length > 1 && (
         <div>
-          <p className="mb-3 text-sm font-semibold text-slate-700">Multiple managers are available</p>
-          <p className="mb-3 text-xs text-slate-500">
+          <p className="mb-3 text-sm font-semibold text-foreground">Multiple managers are available</p>
+          <p className="mb-3 text-xs text-muted">
             We&apos;ll send this request to every available manager for this house. The first manager to approve gets the tour.
           </p>
         </div>
@@ -900,9 +900,9 @@ function Step3({
   return (
     <div className="space-y-5">
       {/* Summary */}
-      <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm">
-        <p className="font-semibold text-slate-800">{roomLabel || property?.title}</p>
-        <p className="mt-0.5 text-slate-500">
+      <div className="rounded-2xl border border-border bg-slate-50 px-4 py-3 text-sm">
+        <p className="font-semibold text-foreground">{roomLabel || property?.title}</p>
+        <p className="mt-0.5 text-muted">
           {MONTHS[month]} {day}, {year} · {slotIndex != null ? formatAvailabilitySlotLabel(slotIndex) : ""}
         </p>
       </div>
@@ -985,16 +985,16 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
   return (
     <div className="mt-4 space-y-3">
       {/* Topic */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-bold text-slate-900">Topic</h2>
-        <p className="mt-1 text-sm leading-relaxed text-slate-500">
+      <div className="rounded-3xl border border-border bg-white p-6 shadow-sm">
+        <h2 className="text-base font-bold text-foreground">Topic</h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">
           For rent, payments, maintenance, or portal login issues, use the{" "}
           <Link href="/resident/dashboard" className="font-semibold text-primary hover:underline">
             resident portal
           </Link>
           . These topics are for leasing questions, the area around our homes, and availability.
         </p>
-        <p className="mt-4 text-xs font-semibold text-slate-600">What do you need help with? *</p>
+        <p className="mt-4 text-xs font-semibold text-muted">What do you need help with? *</p>
         <div className="relative mt-2">
           <select
             value={topic}
@@ -1012,7 +1012,7 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
               </option>
             ))}
           </select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted/70">
             <ChevronDownIcon />
           </span>
         </div>
@@ -1032,9 +1032,9 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
       </div>
 
       {/* Property context */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-bold text-slate-900">Property context</h2>
-        <p className="mt-1 text-sm text-slate-500">Optional — helps us answer about a specific listing.</p>
+      <div className="rounded-3xl border border-border bg-white p-6 shadow-sm">
+        <h2 className="text-base font-bold text-foreground">Property context</h2>
+        <p className="mt-1 text-sm text-muted">Optional — helps us answer about a specific listing.</p>
 
         {msgPhase === "building" ? (
           <div className="mt-4">
@@ -1060,7 +1060,7 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
         ) : (
           <div className="mt-4 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-slate-800">
+              <p className="text-sm font-semibold text-foreground">
                 {msgBuilding ? `Rooms at ${msgBuilding.buildingName}` : "Choose a room"}
               </p>
               <button
@@ -1113,9 +1113,9 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
       </div>
 
       {/* Contact & message */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-bold text-slate-900">Your contact & message</h2>
-        <p className="mt-1 text-sm text-slate-500">We will reply to the email you provide</p>
+      <div className="rounded-3xl border border-border bg-white p-6 shadow-sm">
+        <h2 className="text-base font-bold text-foreground">Your contact & message</h2>
+        <p className="mt-1 text-sm text-muted">We will reply to the email you provide</p>
         <div className="mt-5 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name *">
@@ -1160,7 +1160,7 @@ function Field({
 }) {
   return (
     <div data-wizard-field={fieldKey}>
-      <p className="mb-1.5 text-xs font-semibold text-slate-500">{label}</p>
+      <p className="mb-1.5 text-xs font-semibold text-muted">{label}</p>
       {children}
       {error ? <p className="mt-1 text-xs font-medium text-red-600">{error}</p> : null}
     </div>
@@ -1169,7 +1169,7 @@ function Field({
 
 
 const inputCls =
-  "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all duration-150 placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15 hover:border-slate-300";
+  "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted/70 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15 hover:border-slate-300";
 
 function CheckSmIcon() {
   return (

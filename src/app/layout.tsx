@@ -1,4 +1,5 @@
 import { AppUiProvider } from "@/components/providers/app-ui-provider";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
@@ -6,7 +7,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
-  themeColor: "#f3f5f9",
+  themeColor: "#080b14",
   viewportFit: "cover",
 };
 
@@ -25,9 +26,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('axis:theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`,
+          }}
+        />
+      </head>
       <body className="min-h-full overflow-x-clip bg-background text-foreground">
-        <AppUiProvider>{children}</AppUiProvider>
+        <ThemeProvider defaultTheme="dark">
+          <AppUiProvider>{children}</AppUiProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

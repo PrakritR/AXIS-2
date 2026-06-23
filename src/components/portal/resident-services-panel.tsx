@@ -156,7 +156,7 @@ function ServiceRequestCard({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.06)]">
+        <div className="glass-card rounded-2xl border border-border p-4">
       <input
         ref={returnPhotoRef}
         type="file"
@@ -232,12 +232,13 @@ function ServiceRequestCard({
             <li>Upload the photo below — your manager will review it.</li>
             <li>Your deposit will be refunded once the return is confirmed.</li>
           </ol>
-          <Button
-            type="button"
-            className="mt-3 rounded-full bg-violet-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-            onClick={() => returnPhotoRef.current?.click()}
-            disabled={uploading}
-          >
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 rounded-full px-4 py-1.5 text-xs font-semibold"
+              onClick={() => returnPhotoRef.current?.click()}
+              disabled={uploading}
+            >
             {uploading ? "Uploading…" : "Upload return photo"}
           </Button>
         </div>
@@ -277,12 +278,12 @@ function ServiceRequestCard({
       ) : null}
 
       <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
-        <Button
-          type="button"
-          variant="outline"
-          className="rounded-full border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-          onClick={removeRequest}
-        >
+            <Button
+              type="button"
+              variant="danger"
+              className="rounded-full px-3 text-xs font-semibold"
+              onClick={removeRequest}
+            >
           Delete request
         </Button>
       </div>
@@ -705,8 +706,9 @@ export function ResidentServicesPanel({
       </div>
 
       {!servicesUnlocked ? (
-        <div className="mb-6 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-4 text-sm text-amber-950">
-          Services are locked until your lease is fully signed by you and your manager.
+        <div className="glass-card mb-6 rounded-2xl px-4 py-4 text-sm text-muted">
+          <p className="font-medium text-foreground">Services unlock after your lease is fully signed</p>
+          <p className="mt-1">Maintenance and service requests become available once you and your manager have both signed.</p>
         </div>
       ) : null}
 
@@ -887,7 +889,7 @@ export function ResidentServicesPanel({
         open={modalMode === "maintenance"}
         title="Report maintenance"
         onClose={() => { setModalMode("none"); resetMaintenance(); }}
-        panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+        panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl glass-card p-5 shadow-[var(--shadow-card)] sm:p-6"
       >
         <p className="text-xs text-slate-500">Describe the issue — your property manager will be notified.</p>
         <div className="mt-4 grid gap-3">
@@ -954,7 +956,7 @@ export function ResidentServicesPanel({
         open={modalMode === "service"}
         title="Submit request"
         onClose={() => { setModalMode("none"); resetService(); }}
-        panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+        panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl glass-card p-5 shadow-[var(--shadow-card)] sm:p-6"
       >
         {availableOffers.length === 0 ? (
           <div className="py-8 text-center">

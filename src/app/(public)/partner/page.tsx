@@ -1,107 +1,110 @@
 import Link from "next/link";
+import { ChromeSubstrate } from "@/components/brand/chrome-substrate";
+import { RevealOnView } from "@/components/motion/reveal-on-view";
+
+const STATS = [
+  { value: "3", label: "Properties managed" },
+  { value: "14", label: "Avg. days to lease" },
+  { value: "98%", label: "Resident satisfaction" },
+] as const;
 
 export default function PartnerLandingPage() {
   return (
-    <div className="bg-white">
+    <div className="bg-background">
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-[#eef6ff] via-[#f5f9ff] to-white pb-24 pt-20 sm:pt-28">
-        <div className="mx-auto max-w-4xl px-6 text-center">
-          <h1 className="text-[2.6rem] font-bold leading-[1.1] tracking-tight text-[#0d1f4e] sm:text-5xl md:text-[3.25rem]">
-            We manage your property<br className="hidden sm:block" /> so you don&apos;t have to.
+      <section className="hero-chrome-scene relative overflow-hidden pb-20 pt-14 sm:pb-24 sm:pt-20 md:pt-24">
+        <ChromeSubstrate variant="full" />
+        <div className="relative mx-auto max-w-4xl px-4 text-center sm:px-6">
+          <div className="hero-eyebrow animate-fade-up mb-5 inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-md sm:mb-6 sm:px-4">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--steel-light)] shadow-[0_0_10px_rgba(188,212,255,0.9)]" />
+            <span className="text-xs font-semibold tracking-wide sm:text-[13px]">Axis Housing · Partner program</span>
+          </div>
+          <h1 className="hero-title animate-fade-up text-[2.25rem] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[3.25rem] md:text-[3.75rem]" style={{ animationDelay: "60ms" }}>
+            We manage your property so <span className="text-gradient-accent">you don&apos;t have to</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-500">
-            We currently manage <strong className="font-semibold text-slate-700">3 properties</strong> and help owners maximize revenue while minimizing effort — from tenant sourcing to monthly reporting.
+          <p className="hero-subtitle animate-fade-up mx-auto mt-5 max-w-2xl text-base leading-relaxed sm:text-lg" style={{ animationDelay: "90ms" }}>
+            Full-service management or self-serve software — we help owners maximize revenue while minimizing effort.
           </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href="/partner/contact?tab=schedule"
-              className="inline-flex items-center justify-center rounded-2xl px-8 py-3.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(0,122,255,0.34)] transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_36px_-8px_rgba(0,122,255,0.46)] hover:brightness-105 active:translate-y-px active:scale-[0.98]"
-              style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
-            >
-              Book a consultation
-            </Link>
-            <Link
-              href="/partner/pricing"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-8 py-3.5 text-sm font-semibold text-slate-700 shadow-sm transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:shadow-md active:translate-y-px active:scale-[0.99]"
-            >
-              Use our software
-            </Link>
+          <div className="animate-fade-up mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4" style={{ animationDelay: "120ms" }}>
+            <Link href="/partner/contact?tab=schedule" className="btn-cobalt inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:scale-[0.98] sm:w-auto">Book a consultation</Link>
+            <Link href="/partner/pricing" className="btn-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-foreground transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:scale-[0.99] sm:w-auto">Use our software</Link>
+          </div>
+          <div className="animate-fade-up mx-auto mt-12 grid max-w-2xl grid-cols-3 gap-4 sm:mt-14 sm:gap-6" style={{ animationDelay: "150ms" }}>
+            {STATS.map((stat) => (
+              <div key={stat.label} className="glass-card rounded-2xl px-3 py-4 sm:px-4">
+                <p className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{stat.value}</p>
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted sm:text-[11px]">{stat.label}</p>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="pointer-events-none absolute -right-32 -top-32 h-[480px] w-[480px] rounded-full bg-primary/[0.06] blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-16 -left-24 h-[360px] w-[360px] rounded-full bg-[rgba(51,156,255,0.08)] blur-3xl" />
       </section>
 
       {/* ── What we handle ── */}
-      <section className="mx-auto max-w-6xl px-6 py-20 sm:py-24">
-        <div className="text-center">
-          <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">What we handle</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0d1f4e] sm:text-4xl">
-            Full-service, start to finish
-          </h2>
-        </div>
-
-        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((f) => (
-            <div
-              key={f.title}
-              className="group rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm transition-all duration-200 hover:border-primary/25 hover:shadow-[0_8px_32px_-4px_rgba(0,122,255,0.12)]"
-            >
+      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+        <RevealOnView>
+          <div className="text-center">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">What we handle</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">Full-service, start to finish</h2>
+          </div>
+        </RevealOnView>
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((f, i) => (
+            <RevealOnView key={f.title} delayMs={i * 60}>
+              <div className="glass-card group h-full rounded-2xl p-7 transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-card-hover)]">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/[0.08] text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-white">
                 {f.icon}
               </div>
-              <h3 className="mt-5 text-base font-semibold text-slate-900">{f.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500">{f.body}</p>
-            </div>
+              <h3 className="mt-5 text-base font-semibold text-foreground">{f.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">{f.body}</p>
+              </div>
+            </RevealOnView>
           ))}
         </div>
       </section>
 
       {/* ── How it works ── */}
-      <section className="border-y border-slate-100 bg-slate-50/60 py-20 sm:py-24">
-        <div className="mx-auto max-w-5xl px-6">
-          <div className="text-center">
-            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">How it works</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0d1f4e] sm:text-4xl">
-              Simple for you. Thorough for us.
-            </h2>
-          </div>
-          <ol className="mt-14 grid gap-6 md:grid-cols-3">
+      <section className="border-y border-border/60 bg-accent/15 py-16 sm:py-20">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+          <RevealOnView>
+            <div className="text-center">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">How it works</p>
+              <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">Simple for you. Thorough for us.</h2>
+            </div>
+          </RevealOnView>
+          <ol className="mt-12 grid gap-6 md:grid-cols-3">
             {HOW_STEPS.map((s, i) => (
-              <li key={s.title} className="relative rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+              <RevealOnView key={s.title} delayMs={i * 80}>
+                <li className="glass-card rounded-2xl p-7">
                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
                   {i + 1}
                 </span>
-                <h3 className="mt-5 text-base font-semibold text-slate-900">{s.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-500">{s.body}</p>
-              </li>
+                <h3 className="mt-5 text-base font-semibold text-foreground">{s.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
+                </li>
+              </RevealOnView>
             ))}
           </ol>
         </div>
       </section>
 
       {/* ── CTA ── */}
-      <section id="consultation" className="py-20 sm:py-24" style={{ background: "linear-gradient(135deg, #005fd1 0%, var(--primary) 45%, var(--primary-alt) 100%)" }}>
-        <div className="mx-auto max-w-3xl px-6 text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Interested in working with us?
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-white/85">
-            Schedule a consultation to discuss full-service management and how we can help.
-          </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link
-              href="/partner/contact?tab=schedule"
-              className="inline-flex items-center justify-center rounded-2xl bg-white px-9 py-3.5 text-sm font-semibold text-primary shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-200 hover:bg-slate-50 active:scale-[0.98]"
-            >
-              Book Consultation
-            </Link>
+      <section
+        id="consultation"
+        className="py-16 sm:py-20"
+        style={{ background: "linear-gradient(135deg, var(--cobalt-deep) 0%, var(--primary) 45%, var(--sky) 100%)" }}
+      >
+        <RevealOnView>
+          <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
+            <h2 className="text-2xl font-semibold tracking-[-0.02em] text-white sm:text-3xl">Interested in working with us?</h2>
+            <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-white/85">Schedule a consultation to discuss full-service management and how we can help.</p>
+            <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
+              <Link href="/partner/contact?tab=schedule" className="btn-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-foreground transition-[transform,filter] duration-200 active:scale-[0.99] sm:w-auto">Book consultation</Link>
+            </div>
+            <p className="mt-6 text-sm text-white/70">No commitment required · Typically respond within 1 business day</p>
           </div>
-          <p className="mt-8 text-sm text-white/70">
-            No commitment required · Typically respond within 1 business day
-          </p>
-        </div>
+        </RevealOnView>
       </section>
 
     </div>

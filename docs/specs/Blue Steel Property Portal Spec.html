@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e7e5df; }
+  @keyframes dchromeFlow { 0% { transform: rotate(0deg) scale(1.5); } 100% { transform: rotate(360deg) scale(1.5); } }
+  code { font-family: ui-monospace,'SF Mono',monospace; background:#f3f6fd; padding:1px 5px; border-radius:4px; font-size:.92em; color:#1e4fd6; }
+</style>
+</helmet>
+<div style="min-height:100vh; padding:56px 24px; background:#e7e5df; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif; color:#16213a;">
+  <div style="max-width:880px; margin:0 auto; background:#ffffff; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.08), 0 40px 80px -50px rgba(15,23,42,.4); overflow:hidden;">
+
+    <!-- COVER -->
+    <div style="position:relative; padding:64px 64px 56px; background:#0b1120; overflow:hidden;">
+      <div style="position:absolute; inset:-40%; background:conic-gradient(from 0deg at 50% 50%, #c8ccd6, #2f6bff, #8fb4ff, #4a5a82, #cfd8ea, #2f6bff, #c8ccd6); filter:blur(70px) saturate(1.1); opacity:.5; animation:dchromeFlow 26s linear infinite;"></div>
+      <div style="position:absolute; inset:0; background:radial-gradient(ellipse 90% 80% at 50% 40%, rgba(11,17,32,.5), rgba(11,17,32,.92));"></div>
+      <div style="position:relative;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:44px;">
+          <div style="height:44px; width:44px; border-radius:13px; background:linear-gradient(150deg,rgba(255,255,255,.45),rgba(255,255,255,.08)); border:1px solid rgba(255,255,255,.4); box-shadow:inset 0 1px 0 rgba(255,255,255,.5); display:flex; align-items:center; justify-content:center;"><svg width="38" height="22" viewBox="0 0 46 26" fill="none"><path d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45" stroke="#fff" stroke-width="2.55" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 4L43 22" stroke="#bcd4ff" stroke-width="2.75" stroke-linecap="round"/><path d="M43 4L27 22" stroke="#dce8ff" stroke-width="2.55" stroke-linecap="round"/></svg></div>
+          <div style="line-height:1;"><div style="font-size:15px; font-weight:600; letter-spacing:-0.02em; color:#fff;">Axis Housing</div><div style="margin-top:3px; font-size:10px; font-weight:600; letter-spacing:0.22em; text-transform:uppercase; color:rgba(255,255,255,.6);">Blue Steel · Implementation spec</div></div>
+        </div>
+        <div style="font-family:ui-monospace,'SF Mono',monospace; font-size:12px; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:#bcd4ff; margin-bottom:14px;">Surface 03 / 05 · Property portal</div>
+        <h1 style="margin:0; font-size:48px; line-height:1.04; font-weight:600; letter-spacing:-0.035em; color:#fff;">Property Portal</h1>
+        <p style="margin:18px 0 0; max-width:560px; font-size:16px; line-height:1.55; color:rgba(255,255,255,.8);">The managers &amp; owners workspace. Blue Steel as an <em>app theme</em>: the metallic finish retreats to the sidebar brand header; content sits on a calm steel/navy surface with cobalt accents and dense, legible data.</p>
+        <div style="margin-top:38px; display:flex; gap:34px; font-size:12px; color:rgba(255,255,255,.7);">
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Sections</div>~20 routes/tabs</div>
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Nav</div>portals/pro.ts</div>
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Default theme</div>Light · dark available</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:54px 64px 70px;">
+
+      <div style="margin:0 0 44px; padding:18px 22px; border-left:3px solid #2f6bff; background:#f3f6fd; border-radius:0 10px 10px 0;"><p style="margin:0; font-size:14px; line-height:1.6; color:#3a445e;"><strong style="color:#16213a;">Read first.</strong> Live reference build: <strong style="color:#16213a;">"Axis Portal — Blue Steel Dashboards"</strong> (manager dashboard + new-listing wizard, both themes). Copy its shell, sidebar, tiles, and wizard markup directly. Token migration is in the Marketing spec.</p></div>
+
+      <!-- 01 APP SHELL -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">01</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">App shell</h2></div>
+      <p style="margin:0 0 18px; font-size:15px; line-height:1.65; color:#3a445e;">Rendered by <code>renderPortalSection("pro", …)</code> with <strong style="color:#16213a;">PortalSidebar</strong> + <strong style="color:#16213a;">PortalTopBanners</strong>. The shell is the one place metal appears — confined to the sidebar brand header.</p>
+      <ul style="margin:0 0 14px; padding-left:20px; font-size:14px; line-height:1.75; color:#3a445e;">
+        <li><strong style="color:#16213a;">Sidebar (266px):</strong> brand header carries a contained chrome gradient (<code>linear-gradient(135deg,#2a3c5e,#16233f,#0e1830)</code> dark / <code>#e9eefb→#d7e1f3</code> light) with a soft radial highlight + the frosted logo tile. Nav below sits on the calm surface.</li>
+        <li><strong style="color:#16213a;">Nav items:</strong> 14px, 14px radius. Active = glass fill + inset border + glowing accent dot (dark) / white card + soft shadow + cobalt dot (light). Count badges = metallic pill (dark) / cobalt pill (light).</li>
+        <li><strong style="color:#16213a;">Content surface:</strong> dark <code>#0b1120</code> + a faint cobalt corner glow; light <code>linear-gradient(180deg,#f5f8fd,#e9eef7)</code>. Header bar holds the section title + a metallic/cobalt primary action (e.g. <em>Add listing</em>).</li>
+        <li><strong style="color:#16213a;">PortalTopBanners:</strong> free-tier upgrade + admin-preview banners become tinted glass strips (cobalt for info, amber for action-needed).</li>
+      </ul>
+      <p style="margin:0 0 40px; font-size:13px; line-height:1.6; color:#6a7595;">PublicNavbar stays on authenticated areas per current architecture; give it the same glass treatment as marketing but anchored to the active theme.</p>
+
+      <!-- 02 SECTIONS -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">02</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Sections &amp; what changes</h2></div>
+      <div style="margin-bottom:40px; border:1px solid #e6e9f0; border-radius:12px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#8a96b4; background:#f6f8fc; padding:11px 18px; border-bottom:1px solid #e6e9f0;"><span>Route</span><span>Component</span><span>Pattern</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/portal/dashboard</code><span style="color:#3a445e;">ManagerDashboard</span><span style="color:#3a445e;">KPI tiles + banners + 3-column lists</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/portal/properties</code><span style="color:#3a445e;">ManagerProperties</span><span style="color:#3a445e;">List + add/edit form; tier caps</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/portal/applications</code><span style="color:#3a445e;">ManagerApplications</span><span style="color:#3a445e;">Status-tabbed inbox; approve/deny</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/portal/residents/*</code><span style="color:#3a445e;">ManagerResidents</span><span style="color:#3a445e;">Roster table; current/previous tabs</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/portal/leases</code><span style="color:#3a445e;">ManagerLeases</span><span style="color:#3a445e;">Pipeline stages; PDF upload/generate</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/portal/payments</code><span style="color:#3a445e;">ManagerPayments</span><span style="color:#3a445e;">Ledger table; Stripe Connect</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/portal/calendar</code><span style="color:#3a445e;">PortalCalendar</span><span style="color:#3a445e;">Availability blocks; tour confirms</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/portal/services/*</code><span style="color:#3a445e;">ManagerAllServicesPanel</span><span style="color:#3a445e;">Requests + work-orders</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/portal/inbox/*</code><span style="color:#3a445e;">ManagerInbox</span><span style="color:#3a445e;">Thread list + reader (4 folders)</span></div>
+        <div style="display:grid; grid-template-columns:1.5fr 1.3fr 1.8fr; padding:11px 18px; font-size:12.5px; line-height:1.45;"><code>/portal/plan · profile · relationships</code><span style="color:#3a445e;">ManagerPlan / Profile</span><span style="color:#3a445e;">Settings cards + tier upgrade</span></div>
+      </div>
+
+      <!-- 03 DATA COMPONENTS -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:18px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">03</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Data components</h2></div>
+      <div style="margin-bottom:32px;">
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">KPI tile</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">16px radius, glass fill (<code>rgba(255,255,255,.05)</code> dark / white + soft shadow light). Big number 32px/700, label, small caption. Tiles that need attention take an amber border; neutral tiles take the standard border.</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">List card</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Mono uppercase section label + "View all" accent link, then rows. Each row = name + sub-line + a status badge. Row background is a faint inset fill.</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">Status badge</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Pending = amber, Approved/info = cobalt, Confirmed/paid = green, Overdue/error = red. Pill, 10px/700. Defined once for both themes (see palette below).</div></div>
+        <div style="padding:15px 0; border-top:1px solid #eef1f6; border-bottom:1px solid #eef1f6; display:grid; grid-template-columns:170px 1fr; gap:18px;"><div style="font-size:14px; font-weight:600;">Table / ledger</div><div style="font-size:13px; line-height:1.55; color:#3a445e;">Solid surface only — never over chrome. Mono column headers, hairline rows, faint cobalt hover. Lease pipeline + payment ledger share this. Tabs (pending/approved/rejected) reuse the segmented-pill.</div></div>
+      </div>
+
+      <!-- status palette -->
+      <div style="font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#8a96b4; margin-bottom:12px;">Status palette</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:40px;">
+        <span style="font-size:11px; font-weight:700; color:#a06b15; background:#fdeccb; padding:4px 12px; border-radius:999px;">Pending</span>
+        <span style="font-size:11px; font-weight:700; color:#2f6bff; background:#e2ebff; padding:4px 12px; border-radius:999px;">Approved</span>
+        <span style="font-size:11px; font-weight:700; color:#1f8a5b; background:#d8f3e4; padding:4px 12px; border-radius:999px;">Confirmed</span>
+        <span style="font-size:11px; font-weight:700; color:#c0392b; background:#fbe1de; padding:4px 12px; border-radius:999px;">Overdue</span>
+        <span style="font-size:11px; font-weight:700; color:#bcd4ff; background:rgba(124,140,255,.18); padding:4px 12px; border-radius:999px; box-shadow:inset 0 0 0 1px rgba(124,140,255,.3);">Dark variant</span>
+      </div>
+
+      <!-- 04 NEW-LISTING WIZARD -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">04</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">New-listing wizard</h2></div>
+      <p style="margin:0 0 14px; font-size:15px; line-height:1.65; color:#3a445e;">8-step flow with a left step rail, top progress bar, and footer dots. The reference build is the canonical spec — match its rail (active step = numbered cobalt circle + glass pill), progress fill (cobalt→sky), field styling, and stepper control.</p>
+      <p style="margin:0 0 40px; font-size:13px; line-height:1.6; color:#6a7595;">Same rail + progress + footer pattern serves the resident-facing flows and the marketing application wizard — build it once as a shared shell.</p>
+
+      <!-- 05 TIER GATING -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">05</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Subscription gating</h2></div>
+      <p style="margin:0 0 14px; font-size:15px; line-height:1.65; color:#3a445e;">Free tier hides Residents, Services, Inbox, and account links and shows <strong style="color:#16213a;">PortalTierPaywall</strong>. Style the paywall as a centered glass card with a chrome accent strip, tier comparison, and a metallic/cobalt upgrade CTA — the one moment chrome may bloom inside the app to signal "premium".</p>
+
+      <!-- 06 DO/DONT -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:18px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">06</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Do &amp; don't</h2></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+        <div style="border:1px solid #d6ead9; background:#f4fbf5; border-radius:12px; padding:20px;"><div style="font-size:13px; font-weight:700; color:#1f8a5b; margin-bottom:12px;">DO</div><ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#3a445e;"><li>Confine metal to the sidebar brand header.</li><li>Keep tables/ledgers on solid surfaces.</li><li>Reuse the status palette everywhere.</li><li>Default to light for daily data work.</li></ul></div>
+        <div style="border:1px solid #f0d6d6; background:#fdf4f4; border-radius:12px; padding:20px;"><div style="font-size:13px; font-weight:700; color:#c0392b; margin-bottom:12px;">DON'T</div><ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#3a445e;"><li>Don't animate chrome behind data.</li><li>Don't invent new status colors.</li><li>Don't reskin one section in isolation.</li><li>Don't shrink data text below 13px.</li></ul></div>
+      </div>
+
+      <div style="margin-top:40px; padding-top:24px; border-top:1px solid #eef1f6; display:flex; justify-content:space-between; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#a3adc4;"><span>Axis Housing · Blue Steel · Property portal</span><span>Spec 0.1</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

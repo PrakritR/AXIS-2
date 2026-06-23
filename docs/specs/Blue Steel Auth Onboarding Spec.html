@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e7e5df; }
+  @keyframes dchromeFlow { 0% { transform: rotate(0deg) scale(1.5); } 100% { transform: rotate(360deg) scale(1.5); } }
+  code { font-family: ui-monospace,'SF Mono',monospace; background:#f3f6fd; padding:1px 5px; border-radius:4px; font-size:.92em; color:#1e4fd6; }
+</style>
+</helmet>
+<div style="min-height:100vh; padding:56px 24px; background:#e7e5df; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif; color:#16213a;">
+  <div style="max-width:880px; margin:0 auto; background:#ffffff; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.08), 0 40px 80px -50px rgba(15,23,42,.4); overflow:hidden;">
+
+    <!-- COVER -->
+    <div style="position:relative; padding:64px 64px 56px; background:#080b14; overflow:hidden;">
+      <div style="position:absolute; inset:-40%; background:conic-gradient(from 0deg at 50% 50%, #c8ccd6, #2f6bff, #8fb4ff, #4a5a82, #cfd8ea, #2f6bff, #c8ccd6); filter:blur(70px) saturate(1.25); opacity:.85; animation:dchromeFlow 26s linear infinite;"></div>
+      <div style="position:absolute; inset:0; background:radial-gradient(ellipse 90% 80% at 50% 40%, rgba(6,9,18,.3), rgba(6,9,18,.8));"></div>
+      <div style="position:relative;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:44px;">
+          <div style="height:44px; width:44px; border-radius:13px; background:linear-gradient(150deg,rgba(255,255,255,.45),rgba(255,255,255,.08)); border:1px solid rgba(255,255,255,.4); box-shadow:inset 0 1px 0 rgba(255,255,255,.5); display:flex; align-items:center; justify-content:center;"><svg width="38" height="22" viewBox="0 0 46 26" fill="none"><path d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45" stroke="#fff" stroke-width="2.55" stroke-linecap="round" stroke-linejoin="round"/><path d="M27 4L43 22" stroke="#bcd4ff" stroke-width="2.75" stroke-linecap="round"/><path d="M43 4L27 22" stroke="#dce8ff" stroke-width="2.55" stroke-linecap="round"/></svg></div>
+          <div style="line-height:1;"><div style="font-size:15px; font-weight:600; letter-spacing:-0.02em; color:#fff;">Axis Housing</div><div style="margin-top:3px; font-size:10px; font-weight:600; letter-spacing:0.22em; text-transform:uppercase; color:rgba(255,255,255,.6);">Blue Steel · Implementation spec</div></div>
+        </div>
+        <div style="font-family:ui-monospace,'SF Mono',monospace; font-size:12px; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:#bcd4ff; margin-bottom:14px;">Surface 02 / 05 · Auth</div>
+        <h1 style="margin:0; font-size:48px; line-height:1.04; font-weight:600; letter-spacing:-0.035em; color:#fff;">Auth &amp; Onboarding</h1>
+        <p style="margin:18px 0 0; max-width:560px; font-size:16px; line-height:1.55; color:rgba(255,255,255,.8);">Sign-in, role-based registration, and the post-checkout onboarding flow. A single centered glass card floating on full chrome — the bridge between the marketing marquee and the calm portals.</p>
+        <div style="margin-top:38px; display:flex; gap:34px; font-size:12px; color:rgba(255,255,255,.7);">
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Routes</div>8 pages + 1 route</div>
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Layout</div>auth/layout.tsx · AuthCard</div>
+          <div><div style="font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,.45); font-size:10px; margin-bottom:5px;">Default theme</div>Dark (marquee)</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:54px 64px 70px;">
+
+      <div style="margin:0 0 44px; padding:18px 22px; border-left:3px solid #2f6bff; background:#f3f6fd; border-radius:0 10px 10px 0;"><p style="margin:0; font-size:14px; line-height:1.6; color:#3a445e;"><strong style="color:#16213a;">Read first.</strong> Depends on the system foundation in <strong style="color:#16213a;">"Blue Steel — Design Document"</strong> and shares the token migration in the Marketing spec. This sheet covers only the auth surface.</p></div>
+
+      <!-- 01 SCOPE -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">01</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Scope — routes</h2></div>
+      <p style="margin:0 0 18px; font-size:15px; line-height:1.65; color:#3a445e;">Everything under <code>src/app/auth/</code>. All visible pages use <strong style="color:#16213a;">AuthLayout</strong> (centered card, max 460px, navbar + footer) and the shared <strong style="color:#16213a;">AuthCard</strong>.</p>
+      <div style="margin-bottom:40px; border:1px solid #e6e9f0; border-radius:12px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:1.4fr 2.2fr; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#8a96b4; background:#f6f8fc; padding:11px 18px; border-bottom:1px solid #e6e9f0;"><span>Route</span><span>Purpose</span></div>
+        <div style="display:grid; grid-template-columns:1.4fr 2.2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/auth/sign-in</code><span style="color:#3a445e;">Email/password → Supabase → continue</span></div>
+        <div style="display:grid; grid-template-columns:1.4fr 2.2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/auth/create-account</code><span style="color:#3a445e;">Role-based registration (manager/owner/resident)</span></div>
+        <div style="display:grid; grid-template-columns:1.4fr 2.2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/auth/create-owner</code><span style="color:#3a445e;">Owner invite landing</span></div>
+        <div style="display:grid; grid-template-columns:1.4fr 2.2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/auth/manager-id</code><span style="color:#3a445e;">Post-checkout: reserved Axis Manager ID, 3-step progress</span></div>
+        <div style="display:grid; grid-template-columns:1.4fr 2.2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/auth/choose-portal</code><span style="color:#3a445e;">Multi-role picker — admin / property / resident / owner cards</span></div>
+        <div style="display:grid; grid-template-columns:1.4fr 2.2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/auth/continue</code><span style="color:#3a445e;">Post-login router (loading state only)</span></div>
+        <div style="display:grid; grid-template-columns:1.4fr 2.2fr; padding:12px 18px; font-size:13px; line-height:1.45; border-bottom:1px solid #eef1f6;"><code>/auth/forgot-password</code><span style="color:#3a445e;">Reset request</span></div>
+        <div style="display:grid; grid-template-columns:1.4fr 2.2fr; padding:12px 18px; font-size:13px; line-height:1.45;"><code>/auth/callback</code><span style="color:#3a445e;">OAuth route handler — no UI</span></div>
+      </div>
+
+      <!-- 02 LAYOUT -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">02</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">The auth scene</h2></div>
+      <p style="margin:0 0 14px; font-size:15px; line-height:1.65; color:#3a445e;">One scene, reused by every page: <strong style="color:#16213a;">full chrome substrate</strong> (all four layers) behind a single floating <strong style="color:#16213a;">glass AuthCard</strong>, with the PublicNavbar on top and PublicFooter below. This is a marquee moment — keep it dark by default.</p>
+      <ul style="margin:0 0 14px; padding-left:20px; font-size:14px; line-height:1.75; color:#3a445e;">
+        <li><strong style="color:#16213a;">AuthCard:</strong> 460px max, 24px radius, frosted glass (<code>blur(24px)</code>), 22–32% white border, inset top highlight, deep ambient shadow. Replace today's solid white card background with the glass fill.</li>
+        <li><strong style="color:#16213a;">Title:</strong> display weight 600, navy on light / white on dark. Optional accent fragment uses the clipped gradient.</li>
+        <li><strong style="color:#16213a;">Fields:</strong> map the existing <code>--auth-input-bg</code> to the glass field fill — <code>rgba(255,255,255,.10)</code> on dark, <code>rgba(255,255,255,.66)</code> on light — with a visible <code>≥1px</code> border and cobalt focus ring (<code>--ring</code>).</li>
+        <li><strong style="color:#16213a;">Submit:</strong> full-width metallic (dark) / cobalt→sky (light) pill. Secondary links ("Forgot password?", "Sign in") use the accent color.</li>
+      </ul>
+      <p style="margin:0 0 40px; font-size:13px; line-height:1.6; color:#6a7595;">The legibility wash keeps the card edge and label text readable over the moving metal — required, not optional.</p>
+
+      <!-- 03 ONBOARDING SPECIALS -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:16px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">03</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Onboarding specials</h2></div>
+      <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:40px;">
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-size:13px; font-weight:700; color:#16213a; margin-bottom:6px;">manager-id — reserved ID</div><div style="font-size:13px; line-height:1.6; color:#3a445e;">Show the Axis Manager ID in a mono, monospace chip with a copy button (glass, accent on copy-confirm). The 3-step progress strip reuses the cobalt→sky gradient bar + numbered circles from the portal wizard rail.</div></div>
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-size:13px; font-weight:700; color:#16213a; margin-bottom:6px;">choose-portal — role cards</div><div style="font-size:13px; line-height:1.6; color:#3a445e;">Each portal (admin / property / resident / owner) is a glass card with an accent dot, label, and short description. Hover lifts with a cobalt-tinted shadow; selected gets the cobalt gradient border.</div></div>
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-size:13px; font-weight:700; color:#16213a; margin-bottom:6px;">continue — router loading</div><div style="font-size:13px; line-height:1.6; color:#3a445e;">Minimal: centered logo tile + a small steel-light spinner on the chrome. No card needed; it redirects within a beat.</div></div>
+        <div style="border:1px solid #e6e9f0; border-radius:12px; padding:18px 20px;"><div style="font-size:13px; font-weight:700; color:#16213a; margin-bottom:6px;">create-account — role variants</div><div style="font-size:13px; line-height:1.6; color:#3a445e;">One card, copy varies by <code>?role=</code>. When <code>session_id</code>/<code>slot</code> are present, show a small confirmed-context chip above the form (glass + accent dot).</div></div>
+      </div>
+
+      <!-- 04 DO/DONT -->
+      <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:18px;"><span style="font-family:ui-monospace,monospace; font-size:13px; font-weight:700; color:#2f6bff;">04</span><h2 style="margin:0; font-size:24px; font-weight:600; letter-spacing:-0.02em;">Do &amp; don't</h2></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:8px;">
+        <div style="border:1px solid #d6ead9; background:#f4fbf5; border-radius:12px; padding:20px;"><div style="font-size:13px; font-weight:700; color:#1f8a5b; margin-bottom:12px;">DO</div><ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#3a445e;"><li>Keep one centered card on full chrome.</li><li>Keep the legibility wash behind the card.</li><li>Honor the user's theme + OS preference.</li><li>Use real focus rings and labeled fields.</li></ul></div>
+        <div style="border:1px solid #f0d6d6; background:#fdf4f4; border-radius:12px; padding:20px;"><div style="font-size:13px; font-weight:700; color:#c0392b; margin-bottom:12px;">DON'T</div><ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.7; color:#3a445e;"><li>Don't stack multiple cards over the metal.</li><li>Don't run long multi-field forms here — link out.</li><li>Don't lose contrast on field borders.</li><li>Don't add a second accent hue.</li></ul></div>
+      </div>
+
+      <div style="margin-top:40px; padding-top:24px; border-top:1px solid #eef1f6; display:flex; justify-content:space-between; font-family:ui-monospace,monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#a3adc4;"><span>Axis Housing · Blue Steel · Auth</span><span>Spec 0.1</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -27,7 +27,7 @@ import { wizardSectionErrorClass } from "@/lib/wizard-field-errors";
 const pillWrap = "flex flex-wrap gap-2 rounded-full border border-slate-200 bg-slate-50/90 p-1";
 const pillActive = "rounded-full px-4 py-2.5 text-sm font-semibold bg-primary text-primary-foreground shadow-sm transition min-h-[44px] sm:min-h-0";
 const pillIdle =
-  "rounded-full px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-white hover:text-slate-900 min-h-[44px] sm:min-h-0";
+  "rounded-full px-4 py-2.5 text-sm font-semibold text-muted transition hover:bg-white hover:text-foreground min-h-[44px] sm:min-h-0";
 
 function Label({
   children,
@@ -41,10 +41,10 @@ function Label({
   htmlFor?: string;
 }) {
   return (
-    <label htmlFor={htmlFor} className="block text-sm font-semibold text-slate-800">
+    <label htmlFor={htmlFor} className="block text-sm font-semibold text-foreground">
       {children}
       {required ? <span className="text-primary"> *</span> : null}
-      {optional ? <span className="pl-1 font-normal text-slate-400">(optional)</span> : null}
+      {optional ? <span className="pl-1 font-normal text-muted/70">(optional)</span> : null}
     </label>
   );
 }
@@ -55,7 +55,7 @@ function FieldError({ msg }: { msg?: string }) {
 }
 
 function StepIntro({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <p className={`text-sm leading-relaxed text-slate-600 ${className}`}>{children}</p>;
+  return <p className={`text-sm leading-relaxed text-muted ${className}`}>{children}</p>;
 }
 
 function YesNoPills({
@@ -114,7 +114,7 @@ export type WizardStepsProps = {
 
 function displayOrDash(v: string | null | undefined) {
   const t = (v ?? "").trim();
-  return t ? t : <span className="text-slate-400">Not provided</span>;
+  return t ? t : <span className="text-muted/70">Not provided</span>;
 }
 
 function maskSsnReview(ssn: string) {
@@ -135,9 +135,9 @@ function ReviewSection({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-100 bg-slate-50/60 p-5">
+    <section className="rounded-2xl border border-border bg-slate-50/60 p-5">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{title}</h3>
+        <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-muted">{title}</h3>
         <button type="button" onClick={() => onEdit(stepTarget)} className="shrink-0 text-sm font-semibold text-primary hover:underline">
           Edit
         </button>
@@ -149,9 +149,9 @@ function ReviewSection({
 
 function ReviewRow({ k, v }: { k: string; v: ReactNode }) {
   return (
-    <div className="grid gap-1 border-b border-slate-100/80 pb-3 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,38%)_1fr] sm:gap-4">
-      <dt className="font-medium text-slate-500">{k}</dt>
-      <dd className="text-slate-900">{v}</dd>
+    <div className="grid gap-1 border-b border-border/80 pb-3 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,38%)_1fr] sm:gap-4">
+      <dt className="font-medium text-muted">{k}</dt>
+      <dd className="text-foreground">{v}</dd>
     </div>
   );
 }
@@ -163,7 +163,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Group application</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Group application</h2>
           <StepIntro className="mt-3">
             If you are applying with roommates, one person should submit first. Everyone else joins using the same Group ID
             so your applications stay linked.
@@ -191,7 +191,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         {form.applyingAsGroup === "yes" ? (
           <div className="space-y-6 rounded-2xl border border-primary/15 bg-gradient-to-b from-primary/[0.08] to-white p-5 shadow-sm sm:p-6">
             <p className="text-sm font-semibold text-primary">Group application</p>
-            <p className="text-sm leading-relaxed text-slate-700">
+            <p className="text-sm leading-relaxed text-foreground">
               You will either start the group and receive a Group ID to share, or paste the Group ID from the first applicant.
             </p>
 
@@ -205,8 +205,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   onClick={() => patch({ groupRole: "first", groupId: "" })}
                   className={`rounded-2xl border-2 px-4 py-4 text-left text-sm font-semibold leading-snug transition ${
                     form.groupRole === "first"
-                      ? "border-primary bg-white text-[#0f172a] shadow-md ring-2 ring-primary/15"
-                      : "border-slate-200 bg-white/80 text-slate-700 hover:border-slate-300"
+                      ? "border-primary bg-white text-foreground shadow-md ring-2 ring-primary/15"
+                      : "border-slate-200 bg-white/80 text-foreground hover:border-slate-300"
                   }`}
                 >
                   I am the first person applying
@@ -216,8 +216,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   onClick={() => patch({ groupRole: "joining", groupSize: "" })}
                   className={`rounded-2xl border-2 px-4 py-4 text-left text-sm font-semibold leading-snug transition ${
                     form.groupRole === "joining"
-                      ? "border-primary bg-white text-[#0f172a] shadow-md ring-2 ring-primary/15"
-                      : "border-slate-200 bg-white/80 text-slate-700 hover:border-slate-300"
+                      ? "border-primary bg-white text-foreground shadow-md ring-2 ring-primary/15"
+                      : "border-slate-200 bg-white/80 text-foreground hover:border-slate-300"
                   }`}
                 >
                   I am joining an existing group
@@ -231,7 +231,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <Label htmlFor="groupSize" required>
                   How many people are applying together?
                 </Label>
-                <p className="text-xs text-slate-500">Include yourself. Whole numbers from 2 to 30.</p>
+                <p className="text-xs text-muted">Include yourself. Whole numbers from 2 to 30.</p>
                 <Select
                   id="groupSize"
                   value={form.groupSize}
@@ -245,7 +245,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                     </option>
                   ))}
                 </Select>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted">
                   We&apos;ll generate a Group ID after submission for you to share with roommates.
                 </p>
                 <FieldError msg={errors.groupSize} />
@@ -257,7 +257,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <Label htmlFor="groupId" required>
                   Group ID
                 </Label>
-                <p className="text-xs text-slate-500">Paste the Group ID shared by the first applicant. Format: AXISGRP-…</p>
+                <p className="text-xs text-muted">Paste the Group ID shared by the first applicant. Format: AXISGRP-…</p>
                 <Input
                   id="groupId"
                   value={form.groupId}
@@ -279,7 +279,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Co-signer</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Co-signer</h2>
           <StepIntro>
             A co-signer may strengthen your application. This step only records your intent; they will complete a separate
             short form later.
@@ -296,9 +296,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           />
         </div>
         {form.hasCosigner === "yes" ? (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 text-sm leading-relaxed text-slate-700">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 text-sm leading-relaxed text-foreground">
             After you pay the listing&apos;s application fee on the last step, you&apos;ll receive an{" "}
-            <strong className="text-slate-900">Axis ID</strong> to share with your co-signer so they can link their information to yours.
+            <strong className="text-foreground">Axis ID</strong> to share with your co-signer so they can link their information to yours.
           </div>
         ) : null}
       </div>
@@ -334,7 +334,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Property information</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Property information</h2>
           <StepIntro>
             Choose the listing you are applying for and your room preferences. Lease dates should match what you are prepared to
             sign.
@@ -364,12 +364,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
 
         <div className="space-y-2">
           <Label required>Room preferences</Label>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             Your first choice is used for availability and processing; second and third choices help with placement.
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">1st choice</span>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">1st choice</span>
               <div data-wizard-field="roomChoice1">
                 <Select
                   value={form.roomChoice1}
@@ -388,7 +388,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               </div>
             </div>
             <div>
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">2nd choice</span>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">2nd choice</span>
               <Select
                 value={form.roomChoice2}
                 disabled={!form.propertyId}
@@ -404,7 +404,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <FieldError msg={errors.roomChoice2} />
             </div>
             <div>
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">3rd choice</span>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">3rd choice</span>
               <Select
                 value={form.roomChoice3}
                 disabled={!form.propertyId}
@@ -588,7 +588,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Signer information</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Signer information</h2>
           <StepIntro className="mt-3">
             Enter your legal name and contact details exactly as they appear on your ID. This section is encrypted in transit in
             production environments.
@@ -596,7 +596,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-slate-50/40 p-5 sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Identity & contact</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Identity & contact</p>
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="fullLegalName" required>
@@ -693,7 +693,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Current address</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Current address</h2>
           <StepIntro className="mt-3">Where you live today. Landlord and move dates help us verify your rental history.</StepIntro>
         </div>
         <div className="space-y-2">
@@ -810,7 +810,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Previous address</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Previous address</h2>
           <StepIntro className="mt-3">If this is your first lease, you can indicate that you have no prior address to report.</StepIntro>
         </div>
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -820,7 +820,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             checked={form.noPreviousAddress}
             onChange={(e) => patch({ noPreviousAddress: e.target.checked })}
           />
-          <span className="text-sm font-medium text-slate-800">I do not have a previous address to provide</span>
+          <span className="text-sm font-medium text-foreground">I do not have a previous address to provide</span>
         </label>
 
         {!form.noPreviousAddress ? (
@@ -934,7 +934,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Employment and income</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Employment and income</h2>
           <StepIntro className="mt-3">
             Income helps us confirm you can meet rent obligations when you are employed—enter at least one positive amount
             in the income section below. If you are not employed, income is optional; use Other income for benefits or support
@@ -949,13 +949,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             checked={form.notEmployed}
             onChange={(e) => patch({ notEmployed: e.target.checked })}
           />
-          <span className="text-sm font-medium text-slate-800">I am not currently employed</span>
+          <span className="text-sm font-medium text-foreground">I am not currently employed</span>
         </label>
 
         {errors._general ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errors._general}</p> : null}
 
         <div className={`space-y-5 rounded-2xl border border-slate-200 p-5 sm:p-6 ${form.notEmployed ? "opacity-50" : ""}`}>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Employment</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Employment</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="employer" required={!form.notEmployed}>
@@ -1014,7 +1014,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
 
         <div className="space-y-4 rounded-2xl border border-slate-200 p-5 sm:p-6">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Income</p>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Income</p>
             <StepIntro className="mt-2">
               If you are employed, provide at least one of the amounts below (you do not need to fill all three). If you
               checked &ldquo;not currently employed,&rdquo; all income fields are optional.
@@ -1069,11 +1069,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">References</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">References</h2>
           <StepIntro className="mt-3">List people who can speak to your character or employment. Avoid family members when possible.</StepIntro>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Reference 1</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted/70">Reference 1</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="ref1Name" required>
@@ -1112,8 +1112,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Reference 2</p>
-          <p className="mt-1 text-xs text-slate-500">Optional — leave blank if you only have one reference.</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted/70">Reference 2</p>
+          <p className="mt-1 text-xs text-muted">Optional — leave blank if you only have one reference.</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="ref2Name" optional>
@@ -1153,7 +1153,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Additional details</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Additional details</h2>
           <StepIntro className="mt-3">
             These questions are standard for rental screening. Your answers are reviewed in context; answer honestly.
           </StepIntro>
@@ -1189,7 +1189,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <Textarea id="pets" value={form.pets} onChange={(e) => patch({ pets: e.target.value })} placeholder="Type, breed, weight, or write “None”" rows={2} />
         </div>
 
-        <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+        <div className="space-y-3 rounded-xl border border-border bg-slate-50/50 p-4">
           <Label required>Eviction history</Label>
           <YesNoPills
             value={form.evictionHistory}
@@ -1212,7 +1212,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           ) : null}
         </div>
-        <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+        <div className="space-y-3 rounded-xl border border-border bg-slate-50/50 p-4">
           <Label required>Bankruptcy history</Label>
           <YesNoPills
             value={form.bankruptcyHistory}
@@ -1235,7 +1235,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           ) : null}
         </div>
-        <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+        <div className="space-y-3 rounded-xl border border-border bg-slate-50/50 p-4">
           <Label required>Criminal history</Label>
           <YesNoPills
             value={form.criminalHistory}
@@ -1266,10 +1266,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Consent and signature</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Consent and signature</h2>
           <StepIntro className="mt-3">Review the authorizations below. Your typed name carries the same effect as a handwritten signature.</StepIntro>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 text-sm leading-relaxed text-slate-700">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 text-sm leading-relaxed text-foreground">
           <p>
             By submitting this application, you authorize the property manager to obtain consumer reports (including credit and
             criminal history) and to verify employment, income, and rental history. You understand that false or incomplete
@@ -1286,7 +1286,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             checked={form.consentCredit}
             onChange={(e) => patch({ consentCredit: e.target.checked })}
           />
-          <span className="text-sm font-medium text-slate-800">I authorize a credit and background check.</span>
+          <span className="text-sm font-medium text-foreground">I authorize a credit and background check.</span>
         </label>
         <FieldError msg={errors.consentCredit} />
         <label
@@ -1299,7 +1299,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             checked={form.consentTruth}
             onChange={(e) => patch({ consentTruth: e.target.checked })}
           />
-          <span className="text-sm font-medium text-slate-800">I confirm the information provided is true and complete.</span>
+          <span className="text-sm font-medium text-foreground">I confirm the information provided is true and complete.</span>
         </label>
         <FieldError msg={errors.consentTruth} />
         <div className="grid gap-4 sm:grid-cols-2">
@@ -1333,7 +1333,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Review</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Review</h2>
           <StepIntro className="mt-3">Confirm everything below, then continue to the application fee step.</StepIntro>
         </div>
         <div className="space-y-4">
@@ -1460,7 +1460,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <ReviewRow k="Date signed" v={displayOrDash(form.dateSigned)} />
           </ReviewSection>
         </div>
-        <p className="text-center text-xs text-slate-500">Next: application fee confirmation before final submit.</p>
+        <p className="text-center text-xs text-muted">Next: application fee confirmation before final submit.</p>
       </div>
     );
   }
@@ -1494,13 +1494,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Application fee</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Application fee</h2>
           <StepIntro className="mt-2">Choose how you want to pay the application fee.</StepIntro>
         </div>
         {applicationFeeGate.needsFee ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-5 sm:p-6">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Application fee</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900">{appFeeLabel}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Application fee</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">{appFeeLabel}</p>
             {applicationFeeGate.paid ? (
               <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
                 Paid
@@ -1508,13 +1508,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             ) : null}
           </div>
         ) : (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-foreground">
             No application fee is required for this listing.
           </div>
         )}
         {showChannelPick ? (
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
-            <p className="text-sm font-semibold text-slate-900">Payment method</p>
+            <p className="text-sm font-semibold text-foreground">Payment method</p>
             {channels.ach ? (
               <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                 <input
@@ -1525,8 +1525,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   onChange={() => patch({ applicationFeePayChannel: "ach", applicationFeeZelleSentConfirmed: false })}
                 />
                 <span>
-                  <span className="text-sm font-semibold text-slate-900">Bank transfer (ACH)</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                  <span className="text-sm font-semibold text-foreground">Bank transfer (ACH)</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">
                     Pay securely via bank account — {axisAchFeeDisplayLabel()}. Clears in 3–5 business days.
                   </span>
                 </span>
@@ -1542,8 +1542,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   onChange={() => patch({ applicationFeePayChannel: "zelle", applicationFeeZelleSentConfirmed: false })}
                 />
                 <span>
-                  <span className="text-sm font-semibold text-slate-900">Zelle</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                  <span className="text-sm font-semibold text-foreground">Zelle</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">
                     Submit now and manager sees the fee as pending.
                   </span>
                 </span>
@@ -1559,8 +1559,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   onChange={() => patch({ applicationFeePayChannel: "venmo", applicationFeeZelleSentConfirmed: false })}
                 />
                 <span>
-                  <span className="text-sm font-semibold text-slate-900">Venmo</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                  <span className="text-sm font-semibold text-foreground">Venmo</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">
                     Submit now and manager sees the fee as pending.
                   </span>
                 </span>
@@ -1576,8 +1576,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   onChange={() => patch({ applicationFeePayChannel: "other", applicationFeeZelleSentConfirmed: false })}
                 />
                 <span>
-                  <span className="text-sm font-semibold text-slate-900">Other</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                  <span className="text-sm font-semibold text-foreground">Other</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">
                     Follow the manager&apos;s instructions to pay the fee.
                   </span>
                 </span>
@@ -1586,8 +1586,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         ) : null}
         {applicationFeeGate.needsFee && singleChannelLabel ? (
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700">
-            <span className="font-semibold text-slate-900">Payment method:</span> {singleChannelLabel}
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-foreground">
+            <span className="font-semibold text-foreground">Payment method:</span> {singleChannelLabel}
           </div>
         ) : null}
         {applicationFeeGate.needsFee && isAchApplicationFeeChannel(payChannel) ? (
@@ -1638,7 +1638,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               checked={form.applicationFeeZelleSentConfirmed}
               onChange={(e) => patch({ applicationFeeZelleSentConfirmed: e.target.checked })}
             />
-            <span className="text-sm leading-relaxed text-slate-800">
+            <span className="text-sm leading-relaxed text-foreground">
               {payChannel === "other" ? (
                 <>
                   I confirm I followed the manager&apos;s instructions and sent the application fee.

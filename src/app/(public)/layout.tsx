@@ -1,6 +1,6 @@
+import { ChromeSubstrate } from "@/components/brand/chrome-substrate";
 import { PublicFooter } from "@/components/layout/public-footer";
 import { PublicNavbar } from "@/components/layout/public-navbar";
-import { PublicAtmosphere } from "@/components/motion/public-atmosphere";
 import { PublicMainTransition } from "@/components/motion/public-main-transition";
 
 export default function PublicLayout({
@@ -10,7 +10,7 @@ export default function PublicLayout({
 }) {
   return (
     <div className="axis-page-frame relative flex min-h-screen flex-col">
-      <PublicAtmosphere />
+      <ChromeSubstrate variant="quiet" />
       <PublicNavbar />
       <PublicMainTransition>
         <main className="flex-1">{children}</main>

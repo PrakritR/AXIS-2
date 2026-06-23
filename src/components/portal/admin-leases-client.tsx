@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { AdminLeaseBucketIndex } from "@/lib/demo-admin-leases";
@@ -46,37 +47,14 @@ function DocIcon({ className }: { className?: string }) {
 }
 
 function StatusPill({ bucket }: { bucket: AdminLeaseBucketIndex }) {
-  const map: Record<number, { label: string; cls: string; dot: string }> = {
-    0: {
-      label: "Manager review",
-      cls: "border-amber-200/90 bg-amber-50 text-amber-950",
-      dot: "bg-amber-500",
-    },
-    1: {
-      label: "Admin review",
-      cls: "border-sky-200/90 bg-sky-50 text-sky-950",
-      dot: "bg-sky-500",
-    },
-    2: {
-      label: "Resident signature pending",
-      cls: "border-violet-200/90 bg-violet-50 text-violet-950",
-      dot: "bg-violet-500",
-    },
-    3: {
-      label: "Manager signature pending / signed",
-      cls: "border-emerald-200/90 bg-emerald-50 text-emerald-900",
-      dot: "bg-emerald-500",
-    },
+  const map: Record<number, { label: string; tone: "pending" | "approved" | "confirmed" | "neutral" }> = {
+    0: { label: "Manager review", tone: "pending" },
+    1: { label: "Admin review", tone: "approved" },
+    2: { label: "Resident signature pending", tone: "approved" },
+    3: { label: "Manager signature pending / signed", tone: "confirmed" },
   };
   const s = map[bucket] ?? map[0]!;
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${s.cls}`}
-    >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.dot}`} aria-hidden />
-      {s.label}
-    </span>
-  );
+  return <Badge tone={s.tone}>{s.label}</Badge>;
 }
 
 function bucketToPillIndex(b: LeasePipelineRow["bucket"]): AdminLeaseBucketIndex {
@@ -323,7 +301,7 @@ export function AdminLeasesClient() {
   return (
     <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Leases</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Leases</h1>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <PortalPropertyFilterPill
             propertyOptions={propertyOptions}

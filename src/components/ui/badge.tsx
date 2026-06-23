@@ -1,11 +1,15 @@
 import type { ReactNode } from "react";
 
 const tones: Record<string, string> = {
-  neutral: "bg-slate-100/80 text-slate-700 border-slate-200/80",
-  success: "bg-emerald-50 text-emerald-800 border-emerald-200/80",
-  warning: "bg-amber-50 text-amber-900 border-amber-200/80",
-  danger: "bg-red-50 text-red-800 border-red-200/80",
-  info: "border-primary/15 bg-primary/[0.06] text-primary",
+  neutral: "border-border bg-foreground/5 text-muted",
+  success: "border-[color-mix(in_srgb,var(--status-confirmed-fg)_30%,transparent)] bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]",
+  warning: "border-[color-mix(in_srgb,var(--status-pending-fg)_30%,transparent)] bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]",
+  danger: "border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] text-[var(--status-overdue-fg)]",
+  info: "border-[color-mix(in_srgb,var(--status-approved-fg)_30%,transparent)] bg-[var(--status-approved-bg)] text-[var(--status-approved-fg)]",
+  pending: "border-[color-mix(in_srgb,var(--status-pending-fg)_30%,transparent)] bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]",
+  approved: "border-[color-mix(in_srgb,var(--status-approved-fg)_30%,transparent)] bg-[var(--status-approved-bg)] text-[var(--status-approved-fg)]",
+  confirmed: "border-[color-mix(in_srgb,var(--status-confirmed-fg)_30%,transparent)] bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]",
+  overdue: "border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] text-[var(--status-overdue-fg)]",
 };
 
 export function Badge({
@@ -17,7 +21,7 @@ export function Badge({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-[0.01em] ${tones[tone]}`}
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-[0.02em] ${tones[tone] ?? tones.neutral}`}
     >
       {children}
     </span>

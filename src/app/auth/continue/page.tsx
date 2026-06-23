@@ -1,6 +1,6 @@
 "use client";
 
-import { AuthCard } from "@/components/auth/auth-card";
+import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useSearchParams } from "next/navigation";
@@ -47,6 +47,18 @@ async function fetchLegacyRole(
 function fallbackRolesFromUser(user: { user_metadata?: Record<string, unknown> | null; app_metadata?: Record<string, unknown> | null }): AuthRole[] {
   const role = user.user_metadata?.role ?? user.app_metadata?.role;
   return isAuthRole(role) ? [role] : [];
+}
+
+function AuthContinueLoading() {
+  return (
+    <div className="flex flex-col items-center gap-6 py-10" role="status" aria-live="polite">
+      <AxisLogoMark />
+      <div
+        className="h-8 w-8 animate-spin rounded-full border-2 border-steel-light/25 border-t-steel-light"
+        aria-hidden
+      />
+    </div>
+  );
 }
 
 function ContinueContent() {
@@ -101,17 +113,21 @@ function ContinueContent() {
   }, [nextPath]);
 
   return (
-    <AuthCard>
-      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Loading your portal</h1>
-      <p className="mt-4 text-center text-sm text-slate-600">Finishing sign-in and opening the right portal for this account.</p>
-      {errorText ? <p className="mt-5 text-center text-sm text-rose-600">{errorText}</p> : null}
-    </AuthCard>
+    <div className="flex flex-col items-center gap-6 py-10">
+      <AxisLogoMark />
+      <div
+        className="h-8 w-8 animate-spin rounded-full border-2 border-steel-light/25 border-t-steel-light"
+        role="status"
+        aria-label="Loading your portal"
+      />
+      {errorText ? <p className="max-w-sm text-center text-sm text-rose-600">{errorText}</p> : null}
+    </div>
   );
 }
 
 export default function AuthContinuePage() {
   return (
-    <Suspense fallback={<AuthCard><p className="text-center text-sm text-slate-600">Loading…</p></AuthCard>}>
+    <Suspense fallback={<AuthContinueLoading />}>
       <ContinueContent />
     </Suspense>
   );

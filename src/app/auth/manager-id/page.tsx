@@ -25,7 +25,7 @@ function Step({ n, label, done }: { n: number; label: string; done?: boolean }) 
           n
         )}
       </span>
-      <p className={`text-sm leading-relaxed ${done ? "text-slate-400 line-through" : "text-slate-700"}`}>{label}</p>
+      <p className={`text-sm leading-relaxed ${done ? "text-muted/70 line-through" : "text-foreground"}`}>{label}</p>
     </div>
   );
 }
@@ -86,7 +86,7 @@ function ManagerIdContent() {
   if (isLoading) {
     return (
       <AuthCard>
-        <p className="text-center text-sm text-slate-500">Loading your account details…</p>
+        <p className="text-center text-sm text-muted">Loading your account details…</p>
       </AuthCard>
     );
   }
@@ -113,33 +113,33 @@ function ManagerIdContent() {
             <circle cx="12" cy="7" r="4" />
           </svg>
         </span>
-        <h1 className="mt-4 text-[22px] font-bold tracking-tight text-[#0f172a]">
+        <h1 className="mt-4 text-[22px] font-bold tracking-tight text-foreground">
           {managerSignupReservedHeadline(preview.tier)}
         </h1>
         {preview.fullName ? (
-          <p className="mt-1 text-sm text-slate-500">Welcome, {preview.fullName}</p>
+          <p className="mt-1 text-sm text-muted">Welcome, {preview.fullName}</p>
         ) : null}
       </div>
 
       {/* Axis ID display */}
       <div className="mt-7 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Your Axis ID</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted">Your Axis ID</p>
         <div className="mt-2 flex items-center justify-between gap-3">
           <p className="font-mono text-2xl font-bold tracking-wide text-[#0d1f4e]">{preview.managerId}</p>
           <button
             type="button"
             onClick={copy}
-            className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-slate-50 transition-colors"
           >
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
-        <p className="mt-2 text-xs text-slate-400">Save this — you&apos;ll need it to access support or activate your account later.</p>
+        <p className="mt-2 text-xs text-muted/70">Save this — you&apos;ll need it to access support or activate your account later.</p>
       </div>
 
       {/* Steps */}
-      <div className="mt-7 space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400 mb-4">Account setup steps</p>
+      <div className="mt-7 space-y-3 rounded-2xl border border-border bg-slate-50/50 p-4">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted/70 mb-4">Account setup steps</p>
         <Step n={1} label="Reserve your Axis ID" done />
         <Step n={2} label="Set a password to activate your portal" />
         <Step n={3} label="Sign in to Axis" />
@@ -156,7 +156,7 @@ function ManagerIdContent() {
         Set up my account →
       </button>
 
-      <p className="mt-5 text-center text-sm text-slate-400">
+      <p className="mt-5 text-center text-sm text-muted/70">
         Already set a password?{" "}
         <Link href="/auth/sign-in" className="font-semibold text-primary hover:underline">
           Sign in
@@ -168,7 +168,7 @@ function ManagerIdContent() {
 
 export default function ManagerIdPage() {
   return (
-    <Suspense fallback={<AuthCard><p className="text-center text-sm text-slate-500">Loading…</p></AuthCard>}>
+    <Suspense fallback={<AuthCard><p className="text-center text-sm text-muted">Loading…</p></AuthCard>}>
       <ManagerIdContent />
     </Suspense>
   );
