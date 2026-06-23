@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   try {
     const ctx = await getPortalAccessContext();
     if (!ctx.user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    if (!hasAdminRole(ctx) && !hasRole(ctx, "manager") && !hasRole(ctx, "owner")) {
+    if (!hasAdminRole(ctx) && !hasRole(ctx, "manager")) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 

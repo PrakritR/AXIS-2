@@ -7,6 +7,7 @@ export type PortalAccountIndex = {
   residentEmails: Set<string>;
   residentUserIds: Set<string>;
   managerUserIds: Set<string>;
+  managerEmails: Set<string>;
 };
 
 function normalizeEmail(value: unknown): string {
@@ -27,26 +28,36 @@ export async function loadPortalAccountIndex(db: ServiceDb): Promise<PortalAccou
     return [...new Set([...fromRoles, ...fromLegacy])];
   }
 
-  const [managerIds, residentIds] = await Promise.all([idsForRole("manager"), idsForRole("resident")]);
-  const managerUserIds = new Set(managerIds.filter(Boolean));
+  const [managerIds, residentIds, proIds, ownerIds] = await Promise.all([
+    idsForRole("manager"),
+    idsForRole("resident"),
+    idsForRole("pro"),
+    idsForRole("owner"),
+  ]);
+  const managerUserIds = new Set([...managerIds, ...proIds, ...ownerIds].filter(Boolean));
   const residentUserIds = new Set(residentIds.filter(Boolean));
 
   const profileIds = [...new Set([...managerUserIds, ...residentUserIds])];
   const residentEmails = new Set<string>();
+  const managerEmails = new Set<string>();
   if (profileIds.length > 0) {
     const { data: profiles } = await db.from("profiles").select("id, email, role").in("id", profileIds);
     for (const profile of profiles ?? []) {
       const email = normalizeEmail(profile.email);
       const id = normalizeId(profile.id);
       const role = String(profile.role ?? "").toLowerCase();
+      if (id && managerUserIds.has(id) && email) {
+        managerEmails.add(email);
+      }
       if (id && residentUserIds.has(id)) {
         if (email) residentEmails.add(email);
       }
       if (role === "resident" && email) residentEmails.add(email);
+      if (role === "manager" && email) managerEmails.add(email);
     }
   }
 
-  return { residentEmails, residentUserIds, managerUserIds };
+  return { residentEmails, residentUserIds, managerUserIds, managerEmails };
 }
 
 function residentStillExists(
@@ -81,6 +92,28 @@ function managerStillExists(
     if (nestedId && index.managerUserIds.has(nestedId)) return true;
   }
   return false;
+}
+
+/** Inbox threads can be owned by a manager or resident; participant_email is only a resident counterparty when owner is a manager. */
+export function isOrphanInboxThread(
+  record: { participant_email?: unknown; owner_user_id?: unknown },
+  index: PortalAccountIndex,
+): boolean {
+  const ownerId = normalizeId(record.owner_user_id);
+  const email = normalizeEmail(record.participant_email);
+
+  const ownerValid = !ownerId || index.managerUserIds.has(ownerId) || index.residentUserIds.has(ownerId);
+  const participantOrphan = Boolean(
+    email &&
+      ownerId &&
+      index.managerUserIds.has(ownerId) &&
+      !index.residentEmails.has(email) &&
+      !index.managerEmails.has(email),
+  );
+  const ownerOrphan = Boolean(ownerId && !ownerValid);
+  const residentMailboxOrphan = Boolean(!ownerId && email && !index.residentEmails.has(email));
+
+  return ownerOrphan || participantOrphan || residentMailboxOrphan;
 }
 
 function isOrphanResidentScopedRecord(
@@ -168,11 +201,9 @@ export async function purgeOrphanedPortalRecords(db: ServiceDb): Promise<{
   const orphanInboxIds = (inboxRecords ?? [])
     .filter((record) => {
       const email = normalizeEmail(record.participant_email);
-      const ownerId = normalizeId(record.owner_user_id);
-      const residentMissing = email && !index.residentEmails.has(email);
-      const managerMissing = ownerId && !index.managerUserIds.has(ownerId);
-      if (residentMissing) purgedEmails.add(email);
-      return residentMissing || managerMissing;
+      const orphan = isOrphanInboxThread(record, index);
+      if (orphan && email) purgedEmails.add(email);
+      return orphan;
     })
     .map((record) => record.id as string)
     .filter(Boolean);

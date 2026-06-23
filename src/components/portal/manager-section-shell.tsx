@@ -45,7 +45,7 @@ export function PortalPropertyFilterPill({
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    setMounted(true);
+    queueMicrotask(() => setMounted(true));
   }, []);
 
   const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);

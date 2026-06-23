@@ -152,7 +152,7 @@ export function CosignerApplyFlow({
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const validateStep1 = (): boolean => {
+  const validateStep1 = (): Record<string, string> => {
     const errs: Record<string, string> = {};
     const id = f.signerAppId.trim();
     const name = f.signerFullName.trim();
@@ -168,10 +168,10 @@ export function CosignerApplyFlow({
       if (id && id.length < 4) errs.signerAppId = "Axis ID looks too short.";
     }
     setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
+    return errs;
   };
 
-  const validateStep2 = (): boolean => {
+  const validateStep2 = (): Record<string, string> => {
     const errs: Record<string, string> = {};
     const n = validateFullName(f.fullName);
     if (!n.ok) errs.fullName = n.message;
@@ -194,16 +194,16 @@ export function CosignerApplyFlow({
     const z = validateZip(f.zip);
     if (!z.ok) errs.zip = z.message;
     setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
+    return errs;
   };
 
-  const validateStep3 = (): boolean => {
+  const validateStep3 = (): Record<string, string> => {
     const errs: Record<string, string> = {};
     if (f.notEmployed) {
       const o = validateMoney(f.otherIncome, "Other / non-employment income");
       if (!o.ok) errs.otherIncome = o.message;
       setFieldErrors(errs);
-      return Object.keys(errs).length === 0;
+      return errs;
     }
     const en = validateRequired(f.employerName, "Employer name");
     if (!en.ok) errs.employerName = en.message;
@@ -224,19 +224,19 @@ export function CosignerApplyFlow({
       if (!sp.ok) errs.supervisorPhone = sp.message;
     }
     setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
+    return errs;
   };
 
-  const validateStep4 = (): boolean => {
+  const validateStep4 = (): Record<string, string> => {
     const errs: Record<string, string> = {};
     if (!f.bankruptcy) errs.bankruptcy = "Select a bankruptcy history option.";
     if (!f.criminal) errs.criminal = "Select a criminal convictions option.";
     if (!f.consentCredit) errs.consentCredit = "Consent for credit and background check is required.";
     setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
+    return errs;
   };
 
-  const validateStep5 = (): boolean => {
+  const validateStep5 = (): Record<string, string> => {
     const errs: Record<string, string> = {};
     const sig = validateFullName(f.signature);
     if (!sig.ok) {
@@ -245,125 +245,40 @@ export function CosignerApplyFlow({
     const d = validateDateRequired(f.dateSigned, "Date signed");
     if (!d.ok) errs.dateSigned = d.message;
     setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
+    return errs;
   };
 
   const handleContinue = () => {
     if (step === 1) {
-      const errs1 = (() => {
-        const errs: Record<string, string> = {};
-        const id = f.signerAppId.trim();
-        const name = f.signerFullName.trim();
-        if (!id && !name) {
-          const msg = "Enter an Axis ID or the signer’s full name.";
-          errs.signerAppId = msg;
-          errs.signerFullName = msg;
-        } else {
-          if (name) {
-            const r = validateFullName(name);
-            if (!r.ok) errs.signerFullName = r.message;
-          }
-          if (id && id.length < 4) errs.signerAppId = "Axis ID looks too short.";
-        }
-        return errs;
-      })();
-      setFieldErrors(errs1);
+      const errs1 = validateStep1();
       if (Object.keys(errs1).length > 0) {
         queueMicrotask(() => scrollToFirstWizardFieldError(COSIGNER_STEP_FIELD_ORDER[1] ?? [], errs1));
         return;
       }
     }
     if (step === 2) {
-      const errs2 = (() => {
-        const errs: Record<string, string> = {};
-        const n = validateFullName(f.fullName);
-        if (!n.ok) errs.fullName = n.message;
-        const e = validateEmail(f.email);
-        if (!e.ok) errs.email = e.message;
-        const ph = validatePhone10(f.phone);
-        if (!ph.ok) errs.phone = ph.message;
-        const dob = validateDateRequired(f.dob, "Date of birth");
-        if (!dob.ok) errs.dob = dob.message;
-        const dl = validateRequired(f.dlNumber, "Driver's license / ID number");
-        if (!dl.ok) errs.dlNumber = dl.message;
-        const ssn = validateSsn(f.ssn);
-        if (!ssn.ok) errs.ssn = ssn.message;
-        const ad = validateRequired(f.address, "Current address");
-        if (!ad.ok) errs.address = ad.message;
-        const ci = validateRequired(f.city, "City");
-        if (!ci.ok) errs.city = ci.message;
-        const st = validateStateAbbrev(f.state);
-        if (!st.ok) errs.state = st.message;
-        const z = validateZip(f.zip);
-        if (!z.ok) errs.zip = z.message;
-        return errs;
-      })();
-      setFieldErrors(errs2);
+      const errs2 = validateStep2();
       if (Object.keys(errs2).length > 0) {
         queueMicrotask(() => scrollToFirstWizardFieldError(COSIGNER_STEP_FIELD_ORDER[2] ?? [], errs2));
         return;
       }
     }
     if (step === 3) {
-      const errs3 = (() => {
-        const errs: Record<string, string> = {};
-        if (f.notEmployed) {
-          const o = validateMoney(f.otherIncome, "Other / non-employment income");
-          if (!o.ok) errs.otherIncome = o.message;
-          return errs;
-        }
-        const en = validateRequired(f.employerName, "Employer name");
-        if (!en.ok) errs.employerName = en.message;
-        const ea = validateRequired(f.employerAddress, "Employer address");
-        if (!ea.ok) errs.employerAddress = ea.message;
-        const sn = validateRequired(f.supervisorName, "Supervisor name");
-        if (!sn.ok) errs.supervisorName = sn.message;
-        const jt = validateRequired(f.jobTitle, "Job title");
-        if (!jt.ok) errs.jobTitle = jt.message;
-        const mi = validateMoney(f.monthlyIncome, "Monthly income");
-        if (!mi.ok) errs.monthlyIncome = mi.message;
-        const ai = validateMoney(f.annualIncome, "Annual income");
-        if (!ai.ok) errs.annualIncome = ai.message;
-        const es = validateDateRequired(f.employmentStart, "Employment start date");
-        if (!es.ok) errs.employmentStart = es.message;
-        if (f.supervisorPhone.trim()) {
-          const sp = validatePhone10(f.supervisorPhone);
-          if (!sp.ok) errs.supervisorPhone = sp.message;
-        }
-        return errs;
-      })();
-      setFieldErrors(errs3);
+      const errs3 = validateStep3();
       if (Object.keys(errs3).length > 0) {
         queueMicrotask(() => scrollToFirstWizardFieldError(COSIGNER_STEP_FIELD_ORDER[3] ?? [], errs3));
         return;
       }
     }
     if (step === 4) {
-      const errs4 = (() => {
-        const errs: Record<string, string> = {};
-        if (!f.bankruptcy) errs.bankruptcy = "Select a bankruptcy history option.";
-        if (!f.criminal) errs.criminal = "Select a criminal convictions option.";
-        if (!f.consentCredit) errs.consentCredit = "Consent for credit and background check is required.";
-        return errs;
-      })();
-      setFieldErrors(errs4);
+      const errs4 = validateStep4();
       if (Object.keys(errs4).length > 0) {
         queueMicrotask(() => scrollToFirstWizardFieldError(COSIGNER_STEP_FIELD_ORDER[4] ?? [], errs4));
         return;
       }
     }
     if (step === 5) {
-      const errs5 = (() => {
-        const errs: Record<string, string> = {};
-        const sig = validateFullName(f.signature);
-        if (!sig.ok) {
-          errs.signature = sig.message === "Name is required." ? "Co-signer signature is required." : sig.message;
-        }
-        const d = validateDateRequired(f.dateSigned, "Date signed");
-        if (!d.ok) errs.dateSigned = d.message;
-        return errs;
-      })();
-      setFieldErrors(errs5);
+      const errs5 = validateStep5();
       if (Object.keys(errs5).length > 0) {
         queueMicrotask(() => scrollToFirstWizardFieldError(COSIGNER_STEP_FIELD_ORDER[5] ?? [], errs5));
         return;
@@ -725,7 +640,7 @@ export function CosignerApplyFlow({
                       className={err("supervisorName")}
                     />
                   </Field>
-                  <Field label="Supervisor phone" optional error={fieldErrors.supervisorPhone}>
+                  <Field fieldKey="supervisorPhone" label="Supervisor phone" optional error={fieldErrors.supervisorPhone}>
                     <Input
                       value={f.supervisorPhone}
                       onChange={(e) => {
@@ -736,7 +651,7 @@ export function CosignerApplyFlow({
                       className={err("supervisorPhone")}
                     />
                   </Field>
-                  <Field label="Job title" error={fieldErrors.jobTitle}>
+                  <Field fieldKey="jobTitle" label="Job title" error={fieldErrors.jobTitle}>
                     <Input
                       value={f.jobTitle}
                       onChange={(e) => {

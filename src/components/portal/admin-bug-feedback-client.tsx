@@ -64,7 +64,7 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
   }, []);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => void refresh());
     const onRefresh = () => void refresh();
     window.addEventListener(ADMIN_UI_EVENT, onRefresh);
     return () => window.removeEventListener(ADMIN_UI_EVENT, onRefresh);
@@ -278,8 +278,10 @@ function AdminRowEditor({
   const [notes, setNotes] = useState(row.adminNotes ?? "");
 
   useEffect(() => {
-    setStatus(row.status);
-    setNotes(row.adminNotes ?? "");
+    queueMicrotask(() => {
+      setStatus(row.status);
+      setNotes(row.adminNotes ?? "");
+    });
   }, [row.adminNotes, row.status]);
 
   return (

@@ -48,7 +48,7 @@ export function ManagerLeases() {
   const [clientReady, setClientReady] = useState(false);
 
   useEffect(() => {
-    setClientReady(true);
+    queueMicrotask(() => setClientReady(true));
   }, []);
 
   useEffect(() => {

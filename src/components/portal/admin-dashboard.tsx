@@ -116,22 +116,6 @@ export function AdminDashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/portal/purge-orphaned-records", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: "admin_global" }),
-    })
-      .then(async (res) => {
-        if (!res.ok || cancelled) return;
-        await Promise.allSettled([
-          syncLeasePipelineFromServer(null, { force: true }),
-          syncPropertyPipelineFromServer(),
-          syncHouseholdChargesFromServer(true),
-        ]);
-        if (!cancelled) bump();
-      })
-      .catch(() => undefined);
 
     void Promise.allSettled([
       syncScheduleRecordsFromServer(),

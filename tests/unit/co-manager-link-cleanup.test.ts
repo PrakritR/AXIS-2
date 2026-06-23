@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isOrphanCoManagerRelationship } from "@/lib/auth/purge-orphaned-co-manager-links";
-import { proRelationshipRowsFromInvites } from "@/lib/pro-relationships";
+import { proRelationshipRowsFromInvites, scopedRelationshipDeletesForRevokedInvite } from "@/lib/pro-relationships";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 
 describe("co-manager link cleanup helpers", () => {
@@ -62,5 +62,22 @@ describe("co-manager link cleanup helpers", () => {
         index,
       ),
     ).toBe(false);
+  });
+
+  it("scopes revoke deletes to the two participant workspaces only", () => {
+    const inviteA = {
+      inviter_user_id: "manager-a",
+      invitee_user_id: "manager-b",
+      inviter_axis_id: "axis-a",
+      invitee_axis_id: "axis-b",
+    };
+    expect(scopedRelationshipDeletesForRevokedInvite(inviteA)).toEqual([
+      { managerUserId: "manager-a", linkedAxisId: "axis-b" },
+      { managerUserId: "manager-b", linkedAxisId: "axis-a" },
+    ]);
+
+    const unrelatedRow = { managerUserId: "manager-c", linkedAxisId: "axis-b" };
+    const scopes = scopedRelationshipDeletesForRevokedInvite(inviteA);
+    expect(scopes).not.toContainEqual(unrelatedRow);
   });
 });

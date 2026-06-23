@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { asStringArray, serializeInvite, type InviteRow } from "@/app/api/pro/account-links/route";
 import { looksLikeAccountLinksMissingTable } from "@/lib/account-links";
 import { normalizeCoManagerPermissions } from "@/lib/co-manager-permissions";
+import { scopedRelationshipDeletesForRevokedInvite } from "@/lib/pro-relationships";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -82,9 +83,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
       }
 
       await svc.from("portal_pro_relationship_records").delete().eq("id", id);
-      const coManagerAxisId = String(invite.invitee_axis_id ?? "").trim();
-      if (coManagerAxisId) {
-        await svc.from("portal_pro_relationship_records").delete().filter("row_data->>linkedAxisId", "eq", coManagerAxisId);
+
+      for (const scope of scopedRelationshipDeletesForRevokedInvite(invite)) {
+        await svc
+          .from("portal_pro_relationship_records")
+          .delete()
+          .eq("manager_user_id", scope.managerUserId)
+          .filter("row_data->>linkedAxisId", "eq", scope.linkedAxisId);
       }
 
       return NextResponse.json({ ok: true, invite: serializeInvite(updated as InviteRow, user.id) });

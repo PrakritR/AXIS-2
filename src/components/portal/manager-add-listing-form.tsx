@@ -947,7 +947,7 @@ export function ManagerAddListingForm({
 
   useEffect(() => {
     if (stepIndex !== 2) return;
-    setSub((s) => (s.bathrooms.length > 0 ? s : { ...s, bathrooms: [emptyBathroom(0)] }));
+    queueMicrotask(() => setSub((s) => (s.bathrooms.length > 0 ? s : { ...s, bathrooms: [emptyBathroom(0)] })));
   }, [stepIndex]);
 
   useEffect(() => {

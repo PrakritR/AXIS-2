@@ -60,6 +60,28 @@ export function normalizeProRelationshipRecord(raw: unknown): ProRelationshipRec
   };
 }
 
+export type RevokedInviteRelationshipScope = {
+  managerUserId: string;
+  linkedAxisId: string;
+};
+
+/** Workspace-scoped relationship rows to remove when a single co-manager link is revoked. */
+export function scopedRelationshipDeletesForRevokedInvite(invite: {
+  inviter_user_id?: string | null;
+  invitee_user_id?: string | null;
+  inviter_axis_id?: string | null;
+  invitee_axis_id?: string | null;
+}): RevokedInviteRelationshipScope[] {
+  const inviterId = String(invite.inviter_user_id ?? "").trim();
+  const inviteeId = String(invite.invitee_user_id ?? "").trim();
+  const inviterAxis = String(invite.inviter_axis_id ?? "").trim();
+  const inviteeAxis = String(invite.invitee_axis_id ?? "").trim();
+  const scopes: RevokedInviteRelationshipScope[] = [];
+  if (inviterId && inviteeAxis) scopes.push({ managerUserId: inviterId, linkedAxisId: inviteeAxis });
+  if (inviteeId && inviterAxis) scopes.push({ managerUserId: inviteeId, linkedAxisId: inviterAxis });
+  return scopes;
+}
+
 function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
   return normalizeProRelationshipRecord(r);
 }

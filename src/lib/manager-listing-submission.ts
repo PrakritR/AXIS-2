@@ -766,12 +766,12 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       : 0;
 
   const primaryRoom = rooms.find((r) => r.name.trim());
-  let entireHomeUtilitiesEstimate =
+  const entireHomeUtilitiesEstimate =
     typeof sub.entireHomeUtilitiesEstimate === "string" ? sub.entireHomeUtilitiesEstimate : (primaryRoom?.utilitiesEstimate ?? "");
-  let entireHomeProrateMethod: "auto" | "daily_rate" =
+  const entireHomeProrateMethod: "auto" | "daily_rate" =
     sub.entireHomeProrateMethod === "daily_rate" ? "daily_rate" : (primaryRoom?.prorateMethod === "daily_rate" ? "daily_rate" : "auto");
-  let entireHomeDailyRentRate = sub.entireHomeDailyRentRate ?? primaryRoom?.dailyRentRate;
-  let entireHomeDailyUtilitiesRate = sub.entireHomeDailyUtilitiesRate ?? primaryRoom?.dailyUtilitiesRate;
+  const entireHomeDailyRentRate = sub.entireHomeDailyRentRate ?? primaryRoom?.dailyRentRate;
+  const entireHomeDailyUtilitiesRate = sub.entireHomeDailyUtilitiesRate ?? primaryRoom?.dailyUtilitiesRate;
 
   let normalizedRooms = rooms;
   if (isEntireHomeListing({ listingPlaceCategoryId })) {

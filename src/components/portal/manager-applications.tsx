@@ -291,12 +291,12 @@ function ManagerApplicationPlacementEditor({
   useEffect(() => {
     if (userEditedLeaseEndRef.current) return;
     if (leaseTerm === "Month-to-Month") {
-      setLeaseEnd("");
+      queueMicrotask(() => setLeaseEnd(""));
       return;
     }
     if (!shouldAutoComputeLeaseEnd(leaseTerm, row.application?.rentalType) || !leaseStart) return;
     const computed = computeLeaseEndDate(leaseStart, leaseTerm);
-    if (computed) setLeaseEnd(computed);
+    if (computed) queueMicrotask(() => setLeaseEnd(computed));
   }, [leaseStart, leaseTerm, row.application?.rentalType]);
 
   const roomOptions = useMemo(

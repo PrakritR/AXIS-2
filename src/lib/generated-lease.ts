@@ -120,7 +120,11 @@ export function leaseContextFromApplication(application: Partial<RentalWizardFor
   });
   const normalizedApplication: Partial<RentalWizardFormState> = {
     ...application,
-    ...resolveApplicationPersonalFields({ name: application.fullLegalName, email: application.email, application }),
+    ...resolveApplicationPersonalFields({
+      name: application.fullLegalName ?? "",
+      email: application.email ?? "",
+      application: application as RentalWizardFormState,
+    }),
     leaseTerm: dates.leaseTerm || application.leaseTerm,
     leaseStart: dates.leaseStart,
     leaseEnd: dates.leaseEnd,

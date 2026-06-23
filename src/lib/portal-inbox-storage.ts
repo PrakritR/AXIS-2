@@ -85,7 +85,7 @@ export function mergeInboxRowsWithLocalTrash(
           unread: false,
         };
       }
-      if (localRow.folder !== "trash" && serverRow.folder === "trash" && localRow.folder !== serverRow.folder) {
+      if (localRow.folder !== "trash" && serverRow.folder === "trash") {
         return { ...serverRow, folder: localRow.folder, previousFolder: undefined, unread: localRow.unread };
       }
       return serverRow;

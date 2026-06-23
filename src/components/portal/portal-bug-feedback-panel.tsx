@@ -51,7 +51,7 @@ export function PortalBugFeedbackPanel({
   }, []);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => void refresh());
     const onRefresh = () => void refresh();
     window.addEventListener(ADMIN_UI_EVENT, onRefresh);
     return () => window.removeEventListener(ADMIN_UI_EVENT, onRefresh);

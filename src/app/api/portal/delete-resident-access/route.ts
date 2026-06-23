@@ -32,14 +32,23 @@ export async function POST(req: Request) {
       purgeData?: unknown;
       applicationId?: unknown;
     } | null;
-    const email = normalizeEmail(body?.email);
+    const emailInput = normalizeEmail(body?.email);
     const applicationId = typeof body?.applicationId === "string" ? body.applicationId.trim() : "";
-    if (!email && !applicationId) {
+    if (!emailInput && !applicationId) {
       return NextResponse.json({ error: "Email or applicationId is required." }, { status: 400 });
     }
     const purgeData = body?.purgeData === true;
 
     const svc = createSupabaseServiceRoleClient();
+    let email = emailInput;
+    if (!email && applicationId) {
+      const { data: appRow } = await svc
+        .from("manager_application_records")
+        .select("resident_email")
+        .eq("id", applicationId)
+        .maybeSingle();
+      email = normalizeEmail(appRow?.resident_email);
+    }
     const { data: requestor } = await svc.from("profiles").select("role").eq("id", user.id).maybeSingle();
     if (!requestor || !canManageResidentAccess(requestor.role)) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });

@@ -72,6 +72,7 @@ import {
   deliverPortalInboxMessage,
 } from "@/lib/portal-message-delivery";
 import {
+  appendLeaseThreadMessage,
   deleteLeasePipelineRow,
   deleteLeasePipelineRowsForResident,
   generateLeaseHtmlForRow,

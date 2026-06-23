@@ -59,6 +59,10 @@ function CheckIcon({ muted }: { muted?: boolean }) {
   );
 }
 
+function continueInCurrentTab(url: string) {
+  window.location.href = url;
+}
+
 function periodEndLabel(unix: number | null | undefined): string | null {
   if (unix == null || typeof unix !== "number" || !Number.isFinite(unix) || unix <= 0) return null;
   return formatPacificDate(new Date(unix * 1000), { month: "long", day: "numeric", year: "numeric" });

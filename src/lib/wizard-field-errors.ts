@@ -82,7 +82,17 @@ export const LISTING_STEP_FIELD_ORDER: Record<number, string[]> = {
 export const COSIGNER_STEP_FIELD_ORDER: Record<number, string[]> = {
   1: ["signerAppId", "signerFullName"],
   2: ["fullName", "email", "phone", "dob", "dlNumber", "ssn", "address", "city", "state", "zip"],
-  3: ["employerName", "monthlyIncome", "annualIncome", "otherIncome"],
+  3: [
+    "employerName",
+    "employerAddress",
+    "supervisorName",
+    "supervisorPhone",
+    "jobTitle",
+    "monthlyIncome",
+    "annualIncome",
+    "employmentStart",
+    "otherIncome",
+  ],
   4: ["bankruptcy", "criminal", "consentCredit"],
   5: ["signature", "dateSigned"],
 };
