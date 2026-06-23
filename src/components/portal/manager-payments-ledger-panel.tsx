@@ -22,7 +22,7 @@ import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/d
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 
 function statusTone(label: string) {
   const l = label.toLowerCase();
@@ -78,8 +78,12 @@ export function ManagerPaymentsLedgerPanel({
     setReminderPreview({ row, subject, body: lines.join("\n") });
   };
 
-  const doSendReminder = async () => {
+  const doSendReminder = async (skipMessage: boolean) => {
     if (!reminderPreview) return;
+    if (skipMessage) {
+      setReminderPreview(null);
+      return;
+    }
     const { row } = reminderPreview;
     const email = row.residentEmail?.trim();
     if (!email) return;
@@ -176,28 +180,19 @@ export function ManagerPaymentsLedgerPanel({
   return (
     <>
     {reminderPreview && (
-      <Modal open title="Send payment reminder" onClose={() => setReminderPreview(null)}>
-        <div className="space-y-4 p-1">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">To</p>
-            <p className="mt-0.5 text-sm text-slate-800">{reminderPreview.row.residentEmail}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Subject</p>
-            <p className="mt-0.5 text-sm text-slate-800">{reminderPreview.subject}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">{reminderPreview.body}</pre>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setReminderPreview(null)}>Cancel</Button>
-            <Button type="button" variant="primary" disabled={!!sendingReminderId} onClick={() => void doSendReminder()}>
-              {sendingReminderId ? "Sending…" : "Send"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <PortalNotificationPreviewModal
+        open
+        title="Send payment reminder"
+        onClose={() => setReminderPreview(null)}
+        recipient={reminderPreview.row.residentEmail ?? ""}
+        subject={reminderPreview.subject}
+        body={reminderPreview.body}
+        confirmLabel="Send"
+        confirmLabelWithoutMessage="Close without sending"
+        confirmBusy={!!sendingReminderId}
+        confirmBusyLabel="Sending…"
+        onConfirm={(skipMessage) => void doSendReminder(skipMessage)}
+      />
     )}
     <div className={PORTAL_DATA_TABLE_WRAP}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>

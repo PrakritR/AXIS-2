@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDate, formatPacificDateTime } from "@/lib/pacific-time";
@@ -460,7 +461,7 @@ export function PortalCalendarPanels({
     });
   }, [scheduleOwnerLabel, selectedBlock, showToast]);
 
-  const confirmTourWithNotification = useCallback(async () => {
+  const confirmTourWithNotification = useCallback(async (skipMessage: boolean) => {
     if (!tourConfirmPreview || tourConfirmBusy) return;
     const { meeting } = tourConfirmPreview;
     setTourConfirmBusy(true);
@@ -468,7 +469,7 @@ export function PortalCalendarPanels({
       const result = await acceptPartnerInquiryFromServer(meeting.sourceId, {
         start: meeting.startIso,
         end: meeting.endIso,
-        notifyTenant: true,
+        notifyTenant: !skipMessage,
       });
       if (!result.ok) {
         showToast(result.error ?? "Could not confirm tour.");
@@ -478,7 +479,9 @@ export function PortalCalendarPanels({
       setSelectedBlock(null);
       setMeetingRefresh((n) => n + 1);
       reloadAvailability();
-      if (result.notificationSkipped) {
+      if (skipMessage) {
+        showToast("Tour confirmed (no guest notification sent).");
+      } else if (result.notificationSkipped) {
         showToast("Tour confirmed. Confirmation sent to Axis inbox (email skipped for demo address or missing provider).");
       } else if (result.error) {
         showToast("Tour confirmed, but the confirmation email could not be sent.");
@@ -900,48 +903,22 @@ export function PortalCalendarPanels({
   );
 
   const tourConfirmPreviewModal = (
-    <Modal
+    <PortalNotificationPreviewModal
       open={tourConfirmPreview !== null}
       title="Confirm tour — guest notification preview"
       onClose={() => setTourConfirmPreview(null)}
+      recipient={tourConfirmPreview?.meeting.email ?? ""}
+      subject={tourConfirmPreview?.subject ?? ""}
+      body={tourConfirmPreview?.body ?? ""}
+      intro="Confirming this tour will schedule it on your calendar and send the message below to the guest via Axis inbox and email."
+      skipMessageLabel="Don't message guest"
+      confirmLabel="Confirm tour & send notification"
+      confirmLabelWithoutMessage="Confirm tour only"
+      confirmBusy={tourConfirmBusy}
+      confirmBusyLabel="Confirming…"
       panelClassName="relative z-[90] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:my-4 sm:p-6"
-    >
-      {tourConfirmPreview ? (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">
-            Confirming this tour will schedule it on your calendar and send the message below to the guest via Axis inbox and email.
-          </p>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{tourConfirmPreview.meeting.email}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{tourConfirmPreview.subject}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-              {tourConfirmPreview.body}
-            </pre>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setTourConfirmPreview(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={tourConfirmBusy}
-              onClick={() => void confirmTourWithNotification()}
-            >
-              {tourConfirmBusy ? "Confirming…" : "Confirm tour & send notification"}
-            </Button>
-          </div>
-        </div>
-      ) : null}
-    </Modal>
+      onConfirm={(skipMessage) => void confirmTourWithNotification(skipMessage)}
+    />
   );
 
   if (!storageKey) {

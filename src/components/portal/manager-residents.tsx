@@ -5,6 +5,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
@@ -906,7 +907,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     });
   }
 
-  async function confirmChargeNotice() {
+  async function confirmChargeNotice(skipMessage: boolean) {
     if (!selected || !chargeNoticePreview) return;
     setChargeNoticeBusy(true);
     try {
@@ -926,6 +927,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       }
       setAddChargeOpen(false);
       setChargeTab("pending");
+      if (skipMessage) {
+        showToast("Charge added (no notification sent).");
+        return;
+      }
       const amountLabel = `$${chargeNoticePreview.amount.toFixed(2)}`;
       const subject = `New charge: ${chargeNoticePreview.title}`;
       const body = buildNewChargeNoticeBody({
@@ -1159,7 +1164,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     });
   }
 
-  async function confirmSendLeaseToResident() {
+  async function confirmSendLeaseToResident(skipMessage: boolean) {
     if (!leaseSentPreview || leaseSendBusy) return;
     const { res, lease, subject, body } = leaseSentPreview;
     setLeaseSentPreview(null);
@@ -1171,20 +1176,24 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         return;
       }
       appendLeaseThreadMessage(lease.id, "manager", "Sent lease to resident for review and signature.", userId);
-      const notice = await deliverPortalInboxMessage({
-        fromName: managerEmail ?? "Property Manager",
-        toEmails: [res.email],
-        subject,
-        text: body,
-      });
-      if (notice.ok) {
-        showToast(
-          notice.skipped
-            ? "Lease sent to resident portal (demo inbox only)."
-            : "Lease sent to resident portal with inbox and email notification.",
-        );
+      if (skipMessage) {
+        showToast("Lease sent to resident portal (no notification sent).");
       } else {
-        showToast("Lease sent to resident portal. Notification could not be delivered.");
+        const notice = await deliverPortalInboxMessage({
+          fromName: managerEmail ?? "Property Manager",
+          toEmails: [res.email],
+          subject,
+          text: body,
+        });
+        if (notice.ok) {
+          showToast(
+            notice.skipped
+              ? "Lease sent to resident portal (demo inbox only)."
+              : "Lease sent to resident portal with inbox and email notification.",
+          );
+        } else {
+          showToast("Lease sent to resident portal. Notification could not be delivered.");
+        }
       }
       await syncLeasePipelineFromServer(userId);
       setLeaseTick((n) => n + 1);
@@ -2780,204 +2789,110 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         </div>
       </Modal>
 
-      <Modal
-        open={chargeNoticePreview !== null}
+      <PortalNotificationPreviewModal
+        open={chargeNoticePreview !== null && selected !== null}
         title="New charge — notification preview"
         onClose={() => setChargeNoticePreview(null)}
-      >
-        {chargeNoticePreview && selected ? (
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-              <p className="text-sm text-slate-900">{selected.email}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-              <p className="text-sm text-slate-900">New charge: {chargeNoticePreview.title}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-              <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-                {buildNewChargeNoticeBody({
-                  residentName: selected.name,
-                  chargeTitle: chargeNoticePreview.title,
-                  amountLabel: `$${chargeNoticePreview.amount.toFixed(2)}`,
-                  propertyLabel: selected.propertyLabel,
-                })}
-              </pre>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" className="rounded-full" onClick={() => setChargeNoticePreview(null)}>
-                Cancel
-              </Button>
-              <Button type="button" variant="primary" className="rounded-full" disabled={chargeNoticeBusy} onClick={() => void confirmChargeNotice()}>
-                {chargeNoticeBusy ? "Adding…" : "Add charge & send notice"}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
+        recipient={selected?.email ?? ""}
+        subject={chargeNoticePreview ? `New charge: ${chargeNoticePreview.title}` : ""}
+        body={
+          chargeNoticePreview && selected
+            ? buildNewChargeNoticeBody({
+                residentName: selected.name,
+                chargeTitle: chargeNoticePreview.title,
+                amountLabel: `$${chargeNoticePreview.amount.toFixed(2)}`,
+                propertyLabel: selected.propertyLabel,
+              })
+            : ""
+        }
+        confirmLabel="Add charge & send notice"
+        confirmLabelWithoutMessage="Add charge only"
+        confirmBusy={chargeNoticeBusy}
+        confirmBusyLabel="Adding…"
+        onConfirm={(skipMessage) => void confirmChargeNotice(skipMessage)}
+      />
 
-      <Modal
+      <PortalNotificationPreviewModal
         open={welcomePreviewFor !== null}
         title="Email account setup — preview"
         onClose={() => setWelcomePreviewFor(null)}
-      >
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{welcomePreviewFor?.email}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{RESIDENT_WELCOME_EMAIL_SUBJECT}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-              {welcomePreviewContent}
-            </pre>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setWelcomePreviewFor(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={welcomeEmailBusyForResident === welcomePreviewFor?.id}
-              onClick={() => {
-                if (!welcomePreviewFor) return;
-                const res = welcomePreviewFor;
-                setWelcomePreviewFor(null);
-                void sendResidentAccountEmail(res);
-              }}
-            >
-              {welcomeEmailBusyForResident === welcomePreviewFor?.id ? "Sending…" : "Send email"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        recipient={welcomePreviewFor?.email ?? ""}
+        subject={RESIDENT_WELCOME_EMAIL_SUBJECT}
+        body={welcomePreviewContent}
+        confirmLabel="Send email"
+        confirmLabelWithoutMessage="Close without sending"
+        confirmBusy={welcomePreviewFor !== null && welcomeEmailBusyForResident === welcomePreviewFor.id}
+        confirmBusyLabel="Sending…"
+        onConfirm={(skipMessage) => {
+          if (!welcomePreviewFor) return;
+          if (skipMessage) {
+            setWelcomePreviewFor(null);
+            return;
+          }
+          const res = welcomePreviewFor;
+          setWelcomePreviewFor(null);
+          void sendResidentAccountEmail(res);
+        }}
+      />
 
-      <Modal
+      <PortalNotificationPreviewModal
         open={reminderPreview !== null}
         title="Payment reminder — preview"
         onClose={() => setReminderPreview(null)}
-      >
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{reminderPreview?.res.email}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{reminderPreview?.subject}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-              {reminderPreview?.body}
-            </pre>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setReminderPreview(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={reminderBusy}
-              onClick={() => {
-                if (!reminderPreview) return;
-                void doSendPaymentReminder(reminderPreview.res, reminderPreview.subject, reminderPreview.body);
-              }}
-            >
-              {reminderBusy ? "Sending…" : "Send reminder"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        recipient={reminderPreview?.res.email ?? ""}
+        subject={reminderPreview?.subject ?? ""}
+        body={reminderPreview?.body ?? ""}
+        confirmLabel="Send reminder"
+        confirmLabelWithoutMessage="Close without sending"
+        confirmBusy={reminderBusy}
+        confirmBusyLabel="Sending…"
+        onConfirm={(skipMessage) => {
+          if (!reminderPreview) return;
+          if (skipMessage) {
+            setReminderPreview(null);
+            return;
+          }
+          void doSendPaymentReminder(reminderPreview.res, reminderPreview.subject, reminderPreview.body);
+        }}
+      />
 
-      <Modal
+      <PortalNotificationPreviewModal
         open={leaseSentPreview !== null}
         title="Send lease to resident — preview"
         onClose={() => setLeaseSentPreview(null)}
-      >
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{leaseSentPreview?.recipient}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{leaseSentPreview?.subject}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-              {leaseSentPreview?.body}
-            </pre>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setLeaseSentPreview(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={leaseSendBusy}
-              onClick={() => void confirmSendLeaseToResident()}
-            >
-              {leaseSendBusy ? "Sending…" : "Send lease & notification"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        recipient={leaseSentPreview?.recipient ?? ""}
+        subject={leaseSentPreview?.subject ?? ""}
+        body={leaseSentPreview?.body ?? ""}
+        footerNote="The lease will be released to the resident portal after you confirm. This message is delivered to Axis inbox and email."
+        confirmLabel="Send lease & notification"
+        confirmLabelWithoutMessage="Send lease only"
+        confirmBusy={leaseSendBusy}
+        confirmBusyLabel="Sending…"
+        onConfirm={(skipMessage) => void confirmSendLeaseToResident(skipMessage)}
+      />
 
-      <Modal
+      <PortalNotificationPreviewModal
         open={leaseReminderPreview !== null}
         title="Lease signing reminder — preview"
         onClose={() => setLeaseReminderPreview(null)}
-      >
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{leaseReminderPreview?.recipient}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{leaseReminderPreview?.subject}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-              {leaseReminderPreview?.body}
-            </pre>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setLeaseReminderPreview(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={leaseReminderBusy}
-              onClick={() => {
-                if (!leaseReminderPreview) return;
-                const preview = leaseReminderPreview;
-                setLeaseReminderPreview(null);
-                void sendLeaseSigningReminder(preview.res, preview.leaseId, preview.subject, preview.body);
-              }}
-            >
-              {leaseReminderBusy ? "Sending…" : "Send reminder"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        recipient={leaseReminderPreview?.recipient ?? ""}
+        subject={leaseReminderPreview?.subject ?? ""}
+        body={leaseReminderPreview?.body ?? ""}
+        confirmLabel="Send reminder"
+        confirmLabelWithoutMessage="Close without sending"
+        confirmBusy={leaseReminderBusy}
+        confirmBusyLabel="Sending…"
+        onConfirm={(skipMessage) => {
+          if (!leaseReminderPreview) return;
+          if (skipMessage) {
+            setLeaseReminderPreview(null);
+            return;
+          }
+          const preview = leaseReminderPreview;
+          setLeaseReminderPreview(null);
+          void sendLeaseSigningReminder(preview.res, preview.leaseId, preview.subject, preview.body);
+        }}
+      />
 
       <Modal open={messageOpen} title="Message resident" onClose={() => setMessageOpen(false)}>
         <div className="space-y-3">
