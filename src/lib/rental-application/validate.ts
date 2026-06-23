@@ -10,7 +10,12 @@ import {
   validateStateAbbrev,
   validateZip,
 } from "@/app/(public)/rent/apply/apply-validation";
-import { propertyAllowsShortTermRental } from "./data";
+import { propertyAllowsShortTermRental, listingAllowedLeaseTerms, getPropertyById } from "./data";
+import { listingApplicationFeeAmount } from "@/lib/household-charges";
+import {
+  isAchApplicationFeeChannel,
+  resolveApplicationFeePayChannel,
+} from "./application-fee-channel";
 import type { RentalWizardErrors, RentalWizardFormState } from "./types";
 import { digitsOnly, parseMoneyInput } from "./masks";
 
@@ -83,6 +88,12 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
     if (r2 && r2 === r1) e.roomChoice2 = "Second choice must differ from your first choice.";
     if (r3 && (r3 === r1 || r3 === r2)) e.roomChoice3 = "Third choice must differ from your other choices.";
     if (!f.leaseTerm.trim()) e.leaseTerm = "Lease term is required.";
+    if (f.rentalType !== "short_term" && f.propertyId.trim() && f.leaseTerm.trim()) {
+      const allowed = listingAllowedLeaseTerms(f.propertyId);
+      if (allowed.length > 0 && !allowed.includes(f.leaseTerm)) {
+        e.leaseTerm = "This lease term is not offered for the selected property.";
+      }
+    }
     if (f.rentalType === "short_term" && !propertyAllowsShortTermRental(f.propertyId)) {
       e.leaseTerm = "This listing does not allow short-term stays.";
     }
@@ -235,6 +246,20 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
   }
 
   if (step === 12) {
+    const pid = f.propertyId.trim();
+    const { amount } = listingApplicationFeeAmount(pid);
+    const needsFee = Boolean(pid && amount > 0);
+    if (needsFee) {
+      const prop = getPropertyById(pid);
+      const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+      const payChannel = resolveApplicationFeePayChannel(sub, f.applicationFeePayChannel);
+      if (!isAchApplicationFeeChannel(payChannel) && !f.applicationFeeZelleSentConfirmed) {
+        e.applicationFeeZelleSentConfirmed =
+          payChannel === "other"
+            ? "Confirm you followed the manager's payment instructions."
+            : `Confirm you sent the application fee by ${payChannel === "venmo" ? "Venmo" : "Zelle"}.`;
+      }
+    }
     return e;
   }
 

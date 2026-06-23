@@ -3,10 +3,14 @@
  * Primary flow: `/api/pro/account-links` + `account_link_invites` table.
  */
 
+import type { CoManagerPermissions } from "@/lib/co-manager-permissions";
+import { coManagerPermissionsFromLegacy } from "@/lib/co-manager-permissions";
+import type { AccountLinkInviteDto } from "@/lib/account-links";
+
 export const AXIS_ID_LABEL = "Axis ID";
 
-/** Owner tab ↔ owner workspaces; Manager tab ↔ manager workspaces. */
-export type ProRelationshipPerspective = "owner_tab" | "manager_tab";
+/** @deprecated Owner tab removed — all links are co-manager (manager) links. */
+export type ProRelationshipPerspective = "manager_tab";
 
 export type ProRelationshipRecord = {
   id: string;
@@ -16,7 +20,9 @@ export type ProRelationshipRecord = {
   /** Amount of managed revenue this manager receives on the linked properties (0–100). */
   payoutPercentForManager: number;
   assignedPropertyIds: string[];
-  /** Whether the linked account is allowed to edit the assigned listings. */
+  /** Permissions granted by the primary manager to this co-manager. */
+  coManagerPermissions?: CoManagerPermissions;
+  /** @deprecated Use coManagerPermissions.editListings */
   canEditListing?: boolean;
   createdAt: string;
 };
@@ -24,15 +30,12 @@ export type ProRelationshipRecord = {
 const memoryByUser = new Map<string, ProRelationshipRecord[]>();
 
 function migrateLegacyPerspective(p: string): ProRelationshipPerspective {
-  if (p === "manager_tab" || p === "owner_tab") return p;
-  /** @deprecated inverted names from earlier build */
-  if (p === "owner_linked_manager") return "owner_tab";
-  if (p === "manager_linked_owner") return "manager_tab";
-  return "owner_tab";
+  return "manager_tab";
 }
 
-function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
-  if (!r || typeof r !== "object") return null;
+export function normalizeProRelationshipRecord(raw: unknown): ProRelationshipRecord | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
   const id = r.id;
   const linkedAxisId = r.linkedAxisId;
   if (typeof id !== "string" || typeof linkedAxisId !== "string") return null;
@@ -48,9 +51,60 @@ function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
     perspective,
     payoutPercentForManager: Number.isFinite(payout) ? payout : 15,
     assignedPropertyIds: assigned as string[],
+    coManagerPermissions: coManagerPermissionsFromLegacy({
+      canEditListing: r.canEditListing === true,
+      coManagerPermissions: r.coManagerPermissions,
+    }),
     canEditListing: r.canEditListing === true ? true : undefined,
     createdAt: typeof r.createdAt === "string" ? r.createdAt : new Date().toISOString(),
   };
+}
+
+export type RevokedInviteRelationshipScope = {
+  managerUserId: string;
+  linkedAxisId: string;
+};
+
+/** Workspace-scoped relationship rows to remove when a single co-manager link is revoked. */
+export function scopedRelationshipDeletesForRevokedInvite(invite: {
+  inviter_user_id?: string | null;
+  invitee_user_id?: string | null;
+  inviter_axis_id?: string | null;
+  invitee_axis_id?: string | null;
+}): RevokedInviteRelationshipScope[] {
+  const inviterId = String(invite.inviter_user_id ?? "").trim();
+  const inviteeId = String(invite.invitee_user_id ?? "").trim();
+  const inviterAxis = String(invite.inviter_axis_id ?? "").trim();
+  const inviteeAxis = String(invite.invitee_axis_id ?? "").trim();
+  const scopes: RevokedInviteRelationshipScope[] = [];
+  if (inviterId && inviteeAxis) scopes.push({ managerUserId: inviterId, linkedAxisId: inviteeAxis });
+  if (inviteeId && inviterAxis) scopes.push({ managerUserId: inviteeId, linkedAxisId: inviterAxis });
+  return scopes;
+}
+
+function migrateRow(r: Record<string, unknown>): ProRelationshipRecord | null {
+  return normalizeProRelationshipRecord(r);
+}
+
+export function proRelationshipRowsFromInvites(invites: AccountLinkInviteDto[]): ProRelationshipRecord[] {
+  return invites
+    .filter((inv) => inv.status === "accepted")
+    .map((inv) => {
+      const perms = coManagerPermissionsFromLegacy({
+        coManagerPermissions: inv.coManagerPermissions,
+      });
+      return {
+        id: inv.id,
+        linkedAxisId: inv.linkedAxisId,
+        linkedDisplayName: inv.linkedDisplayName ?? undefined,
+        perspective: "manager_tab" as const,
+        payoutPercentForManager: inv.payoutPercentForManager,
+        assignedPropertyIds: inv.assignedPropertyIds,
+        coManagerPermissions: perms,
+        canEditListing: perms.editListings ? true : undefined,
+        createdAt: inv.createdAt,
+      };
+    });
 }
 
 export function readProRelationships(userId: string): ProRelationshipRecord[] {

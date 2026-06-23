@@ -2,7 +2,6 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
-import { Badge } from "@/components/ui/badge";
 import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -28,11 +27,10 @@ type SimpleRow = {
   joinedAt: string | null;
 };
 
-type AccountKind = "manager" | "owner" | "resident";
+type AccountKind = "manager" | "resident";
 
 type UnifiedRow =
   | ({ kind: "manager" } & ManagerRow)
-  | ({ kind: "owner" } & SimpleRow)
   | ({ kind: "resident" } & SimpleRow);
 
 type CategoryFilter = "management" | "resident";
@@ -51,29 +49,49 @@ function UsersEmptyIcon({ className }: { className?: string }) {
 }
 
 function StatusPill({ active }: { active: boolean }) {
-  return <Badge tone={active ? "confirmed" : "neutral"}>{active ? "Active" : "Disabled"}</Badge>;
+  if (active) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+        Active
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />
+      Disabled
+    </span>
+  );
 }
 
 function RolePill({ kind }: { kind: AccountKind }) {
+  const styles: Record<AccountKind, string> = {
+    manager: "border-sky-200/90 bg-sky-50 text-sky-900",
+    resident: "border-violet-200/90 bg-violet-50 text-violet-900",
+  };
   const labels: Record<AccountKind, string> = {
     manager: "Management",
-    owner: "Management",
     resident: "Resident",
   };
   return (
-    <span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--status-approved-fg)_30%,transparent)] bg-[var(--status-approved-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--status-approved-fg)]">
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[kind]}`}>
       {labels[kind]}
     </span>
   );
 }
 
 function TierBadge({ tier }: { tier: string }) {
-  const key = tier.toLowerCase();
-  const tone = key === "pro" ? "approved" : key === "business" ? "confirmed" : "neutral";
+  const colors: Record<string, string> = {
+    pro: "border-blue-200/90 bg-blue-50 text-blue-800",
+    business: "border-violet-200/90 bg-violet-50 text-violet-800",
+    free: "border-slate-200/90 bg-slate-100 text-slate-600",
+  };
+  const cls = colors[tier.toLowerCase()] ?? colors.free;
   return (
-    <Badge tone={tone}>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${cls}`}>
       {tier}
-    </Badge>
+    </span>
   );
 }
 
@@ -154,7 +172,7 @@ function ManagerDetailRow({
             </Button>
             {confirmDelete ? (
               <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5">
-                <span className="text-xs font-semibold text-rose-800">Delete permanently?</span>
+                <span className="text-xs font-semibold text-rose-800">Delete manager and all properties?</span>
                 <button
                   type="button"
                   className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
@@ -197,8 +215,8 @@ function SimpleAccountDetailRow({
   onRefresh,
   showToast,
 }: {
-  row: { kind: "owner" } & SimpleRow | { kind: "resident" } & SimpleRow;
-  apiPath: "/api/admin/owners" | "/api/admin/residents";
+  row: { kind: "resident" } & SimpleRow;
+  apiPath: "/api/admin/residents";
   accountLabel: string;
   onRefresh: () => void;
   showToast: (m: string) => void;
@@ -274,7 +292,11 @@ function SimpleAccountDetailRow({
             </Button>
             {confirmDelete ? (
               <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5">
-                <span className="text-xs font-semibold text-rose-800">Delete permanently?</span>
+                <span className="text-xs font-semibold text-rose-800">
+                  {apiPath === "/api/admin/residents"
+                    ? "Delete resident, leases, and payments?"
+                    : "Delete permanently?"}
+                </span>
                 <button
                   type="button"
                   className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
@@ -322,16 +344,12 @@ function ExpandedRow({
   if (row.kind === "manager") {
     return <ManagerDetailRow row={row} onRefresh={onRefresh} showToast={showToast} />;
   }
-  if (row.kind === "owner") {
-    return <SimpleAccountDetailRow row={row} apiPath="/api/admin/owners" accountLabel="Owner" onRefresh={onRefresh} showToast={showToast} />;
-  }
   return <SimpleAccountDetailRow row={row} apiPath="/api/admin/residents" accountLabel="Resident" onRefresh={onRefresh} showToast={showToast} />;
 }
 
 export function AdminAxisUsersClient() {
   const { showToast } = useAppUi();
   const [managers, setManagers] = useState<ManagerRow[]>([]);
-  const [owners, setOwners] = useState<SimpleRow[]>([]);
   const [residents, setResidents] = useState<SimpleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -344,20 +362,11 @@ export function AdminAxisUsersClient() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [mRes, oRes, rRes] = await Promise.all([
-        fetch("/api/admin/managers"),
-        fetch("/api/admin/owners"),
-        fetch("/api/admin/residents"),
-      ]);
+      const [mRes, rRes] = await Promise.all([fetch("/api/admin/managers"), fetch("/api/admin/residents")]);
       const mJson = (await mRes.json()) as { managers?: ManagerRow[]; error?: string };
-      const oJson = (await oRes.json()) as { owners?: SimpleRow[]; error?: string };
       const rJson = (await rRes.json()) as { residents?: SimpleRow[]; error?: string };
       if (!mRes.ok) {
         setLoadError(mJson.error ?? "Could not load manager accounts.");
-        return;
-      }
-      if (!oRes.ok) {
-        setLoadError(oJson.error ?? "Could not load owner accounts.");
         return;
       }
       if (!rRes.ok) {
@@ -365,7 +374,6 @@ export function AdminAxisUsersClient() {
         return;
       }
       setManagers(mJson.managers ?? []);
-      setOwners(oJson.owners ?? []);
       setResidents(rJson.residents ?? []);
     } catch {
       setLoadError("Could not reach the server. Check that Supabase env vars are configured.");
@@ -381,14 +389,13 @@ export function AdminAxisUsersClient() {
 
   const unified = useMemo((): UnifiedRow[] => {
     const m: UnifiedRow[] = managers.map((r) => ({ kind: "manager" as const, ...r }));
-    const o: UnifiedRow[] = owners.map((r) => ({ kind: "owner" as const, ...r }));
     const res: UnifiedRow[] = residents.map((r) => ({ kind: "resident" as const, ...r }));
-    return [...m, ...o, ...res].sort((a, b) => {
+    return [...m, ...res].sort((a, b) => {
       const an = (a.email || a.kind).toLowerCase();
       const bn = (b.email || b.kind).toLowerCase();
       return an.localeCompare(bn);
     });
-  }, [managers, owners, residents]);
+  }, [managers, residents]);
 
   const categoryCounts = useMemo(() => {
     const c = { management: 0, resident: 0 };
@@ -406,7 +413,6 @@ export function AdminAxisUsersClient() {
       if (category === "resident" && row.kind !== "resident") continue;
       if (category === "management" && row.kind === "resident") continue;
       if (row.kind === "manager" && tierFilter !== "all" && row.tier.toLowerCase() !== tierFilter) continue;
-      if (row.kind === "owner" && tierFilter !== "all") continue;
       if (row.active) a += 1;
       else d += 1;
     }
@@ -420,7 +426,6 @@ export function AdminAxisUsersClient() {
       if (category === "resident" && row.kind !== "resident") return false;
       if (category === "management" && row.kind === "resident") return false;
       if (row.kind === "manager" && tierFilter !== "all" && row.tier.toLowerCase() !== tierFilter) return false;
-      if (row.kind === "owner" && tierFilter !== "all") return false;
       return true;
     });
   }, [unified, statusTab, category, tierFilter]);
@@ -447,7 +452,7 @@ export function AdminAxisUsersClient() {
   return (
     <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Axis users</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Axis users</h1>
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => void load()}>
           Refresh
         </Button>
@@ -533,7 +538,7 @@ export function AdminAxisUsersClient() {
         ) : null}
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-border glass-card">
+      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <p className="text-sm text-slate-400">Loading…</p>
@@ -592,8 +597,8 @@ export function AdminAxisUsersClient() {
                         <td className="px-5 py-4 text-right align-middle">
                           <Button
                             type="button"
-                            variant="secondary"
-                            className="rounded-full px-4 py-2 text-sm font-medium"
+                            variant="outline"
+                            className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
                             onClick={() => setExpandedKey(isOpen ? null : rowKey)}
                             aria-expanded={isOpen}
                           >

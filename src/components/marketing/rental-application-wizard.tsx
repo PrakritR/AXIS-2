@@ -32,12 +32,21 @@ import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/l
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
+import {
+  computeLeaseEndDate,
+  normalizeIsoDateInput,
+  shouldAutoComputeLeaseEnd,
+} from "@/lib/rental-application/lease-dates";
 import { RENTAL_WIZARD_STEP_COUNT } from "@/lib/rental-application/types";
 import { maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
+import {
+  RENTAL_WIZARD_STEP_FIELD_ORDER,
+  scrollToFirstWizardFieldError,
+} from "@/lib/wizard-field-errors";
 import { appendManagerApplicationRow, syncPublicApprovedApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { RentalWizardStepBody } from "./rental-wizard-steps";
-import { WizardShell } from "@/components/ui/wizard-shell";
+import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
 
 const processedApplicationFeeSessions = new Set<string>();
 
@@ -79,6 +88,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const searchParams = useSearchParams();
   const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
   const [step, setStep] = useState(1);
+  const [maxStepReached, setMaxStepReached] = useState(1);
   const [form, setForm] = useState<RentalWizardFormState>(() => {
     const draft = loadRentalWizardDraft();
     return draft ? { ...createInitialRentalWizardState(), ...draft } : createInitialRentalWizardState();
@@ -187,7 +197,22 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   }, [draftReady, listingPrefillKey, searchParams]);
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
-    setForm((f) => ({ ...f, ...p }));
+    setForm((f) => {
+      const merged: RentalWizardFormState = { ...f, ...p };
+      if ("leaseStart" in p) merged.leaseStart = normalizeIsoDateInput(p.leaseStart);
+      if ("leaseEnd" in p) merged.leaseEnd = p.leaseEnd ? normalizeIsoDateInput(p.leaseEnd) : "";
+      if ("leaseTerm" in p && p.leaseTerm === "Month-to-Month") merged.leaseEnd = "";
+      const endExplicit = "leaseEnd" in p;
+      if (
+        !endExplicit &&
+        ("leaseTerm" in p || "leaseStart" in p) &&
+        shouldAutoComputeLeaseEnd(merged.leaseTerm, merged.rentalType)
+      ) {
+        const computed = computeLeaseEndDate(merged.leaseStart, merged.leaseTerm);
+        if (computed) merged.leaseEnd = computed;
+      }
+      return merged;
+    });
     if (Object.keys(p).some((k) => ["propertyId", "roomChoice1", "roomChoice2", "roomChoice3", "rentalType", "leaseTerm", "leaseStart", "leaseEnd"].includes(k))) {
       setShowAvailabilityWarnings(false);
     }
@@ -227,20 +252,22 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   }, []);
 
   const goToStep = useCallback((n: number) => {
+    if (!canNavigateToWizardStep(n, maxStepReached)) return;
     setStep(n);
     setErrors({});
     setReviewReturnStep(null);
     if (n === 3) setShowAvailabilityWarnings(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [maxStepReached]);
 
   const editFromReview = useCallback((n: number) => {
+    if (!canNavigateToWizardStep(n, maxStepReached)) return;
     setStep(n);
     setErrors({});
     setReviewReturnStep(n);
     if (n === 3) setShowAvailabilityWarnings(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [maxStepReached]);
 
   const validateAllPrior = useCallback(() => {
     for (let s = 1; s <= 10; s++) {
@@ -249,6 +276,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         setErrors(e);
         setStep(s);
         showToast("Please review the highlighted fields before submitting.");
+        queueMicrotask(() =>
+          scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[s] ?? [], e),
+        );
         return false;
       }
     }
@@ -292,6 +322,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         managerUserId: listing?.managerUserId ?? feeCharge?.managerUserId ?? prop?.managerUserId ?? null,
         stage: "Submitted",
         bucket: "pending",
+        backgroundCheckStatus: "pending_review",
         detail: `Submitted ${new Date().toLocaleString()}`,
         email: emailTrim,
         application: structuredClone(form),
@@ -321,7 +352,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     if (isAchApplicationFeeChannel(payChannel)) {
       return checkoutBusy ? "Opening bank checkout…" : applicationFeeGate.paid ? "Submit application" : "Pay with bank (ACH)";
     }
-    if (payChannel === "zelle" || payChannel === "venmo") {
+    if (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other") {
       return "Submit application";
     }
     return "Submit application";
@@ -490,25 +521,22 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           return;
         }
 
-        if (needsFee && (payChannel === "zelle" || payChannel === "venmo")) {
+        if (needsFee && (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other")) {
+          const e = validateRentalWizardStep(12, form);
+          if (countValidationErrors(e) > 0) {
+            setErrors(e);
+            showToast("Please confirm your application fee payment before submitting.");
+            queueMicrotask(() =>
+              scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[12] ?? [], e),
+            );
+            return;
+          }
           ensurePendingApplicationFeeCharge({
             residentEmail: form.email,
             residentName: form.fullLegalName,
             residentUserId,
             propertyId: pid,
           });
-          const paymentLabel = payChannel === "venmo" ? "Venmo" : "Zelle";
-          const paymentContact =
-            payChannel === "venmo"
-              ? sub?.venmoContact?.trim() ?? "the manager's Venmo contact"
-              : sub?.zelleContact?.trim() ?? "the manager's Zelle contact";
-          const confirmed =
-            typeof window === "undefined"
-              ? true
-              : window.confirm(`Confirm you already sent the application fee by ${paymentLabel} to ${paymentContact}.`);
-          if (!confirmed) {
-            return;
-          }
           finalizeApplicationSubmit(residentUserId);
           return;
         }
@@ -520,6 +548,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     if (step === 11) {
       if (!validateAllPrior()) return;
       setStep(12);
+      setMaxStepReached((m) => nextWizardMaxReached(m, 12));
       setErrors({});
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -528,6 +557,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     setErrors(e);
     if (countValidationErrors(e) > 0) {
       showToast("Please fix the highlighted fields before continuing.");
+      queueMicrotask(() =>
+        scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[step] ?? [], e),
+      );
       return;
     }
     if (step === 3) {
@@ -548,7 +580,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       setStep(11);
       setReviewReturnStep(null);
     } else {
-      setStep((s) => s + 1);
+      const next = step + 1;
+      setStep(next);
+      setMaxStepReached((m) => nextWizardMaxReached(m, next));
     }
     setErrors({});
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -576,16 +610,16 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   };
 
   const meta = STEP_META[step - 1];
-  const wizardSteps = STEP_META.map((s) => ({ id: String(s.n), label: s.title }));
+  const progressPct = Math.round((step / RENTAL_WIZARD_STEP_COUNT) * 100);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:py-14">
+    <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
       <div className="text-center sm:text-left">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Residential rental application</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[#0d1f4e] sm:text-3xl md:text-4xl">Residential rental application</h1>
       </div>
 
-      <div className="glass-card mt-6 rounded-3xl p-5 sm:p-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Choose your form</p>
+      <div className="mt-6 rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:p-6">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">Choose your form</p>
         <div className="mt-4">
           <SegmentedTwo
             value={applicationPath}
@@ -613,10 +647,13 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
       {applicationPath === "signer" ? (
         postSubmit ? (
-          <div className="glass-card mt-8 rounded-3xl border border-[var(--status-confirmed-bg)] p-6 sm:p-9 md:p-11">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--status-confirmed-fg)]">Application received</p>
+          <div
+            className="mt-8 rounded-3xl border border-emerald-200/90 bg-emerald-50/40 p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+            style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>
             <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Save your application ID</h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted">
+            <p className="mt-3 text-sm leading-relaxed text-foreground">
               Use this application ID when you create your resident account (open signup below with it filled in), and
               use the same email address from this application. Share it with a co-signer if they apply separately.
               This ID only grants resident account creation. Until you create that resident account, your application
@@ -624,14 +661,14 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               <strong>Payments</strong>, <strong>Profile</strong>, and <strong>Inbox</strong> until the manager confirms your
               application fee and approves your application. Stripe payments are marked paid automatically after checkout.
             </p>
-            <div className="mt-6 rounded-2xl border border-border bg-card px-5 py-4">
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted">Application ID</p>
               <p className="mt-2 font-mono text-xl font-bold tracking-tight text-foreground sm:text-2xl">{postSubmit.axisId}</p>
             </div>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Link
                 href={`/auth/create-account?role=resident&axis_id=${encodeURIComponent(postSubmit.axisId)}`}
-                className="btn-metallic inline-flex min-h-[48px] items-center justify-center rounded-full px-8 text-[14px] font-semibold text-foreground transition hover:-translate-y-0.5 active:translate-y-px"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-8 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:translate-y-px"
               >
                 Create resident account
               </Link>
@@ -641,33 +678,52 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             </div>
           </div>
         ) : (
-          <div className="glass-card mt-8 overflow-hidden rounded-3xl">
-            <WizardShell
-              steps={wizardSteps}
-              currentStepIndex={step - 1}
-              footer={
-                <div className="flex w-full flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
-                  <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack} disabled={step <= 1}>
-                    {reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
-                  </Button>
-                  <Button
-                    type="button"
-                    className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
-                    onClick={handleContinue}
-                    disabled={checkoutBusy}
-                  >
-                    {primaryButtonLabel}
-                  </Button>
+          <div
+            className="mt-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+            style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
+          >
+            <div className="border-b border-border pb-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">
+                Step {step} of {RENTAL_WIZARD_STEP_COUNT}
+              </p>
+              <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">{meta.title}</p>
+              <div className="-mx-1 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                <div className="flex min-w-max gap-1 px-1">
+                  {STEP_META.map((s) => {
+                    const reachable = canNavigateToWizardStep(s.n, maxStepReached);
+                    const completed = s.n < step;
+                    return (
+                      <button
+                        key={s.n}
+                        type="button"
+                        disabled={!reachable}
+                        title={s.title}
+                        onClick={() => goToStep(s.n)}
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition ${
+                          s.n === step
+                            ? "bg-primary text-white"
+                            : completed
+                              ? "bg-primary/15 text-primary"
+                              : reachable
+                                ? "bg-slate-100 text-muted hover:bg-slate-200"
+                                : "cursor-not-allowed bg-slate-50 text-slate-300"
+                        }`}
+                      >
+                        {completed ? "✓" : s.n}
+                      </button>
+                    );
+                  })}
                 </div>
-              }
-            >
-              <div className="mb-6 border-b border-border pb-4 sm:mb-8 sm:pb-6">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
-                  Step {step} of {RENTAL_WIZARD_STEP_COUNT}
-                </p>
-                <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">{meta.title}</p>
               </div>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            </div>
 
+            <div className="pt-8">
               <RentalWizardStepBody
                 step={step}
                 form={form}
@@ -687,7 +743,21 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 goToStep={goToStep}
                 editFromReview={editFromReview}
               />
-            </WizardShell>
+            </div>
+
+            <div className="mt-10 flex flex-col-reverse gap-3 border-t border-border pt-8 sm:flex-row sm:items-center sm:justify-between">
+              <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack} disabled={step <= 1}>
+                {reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
+              </Button>
+              <Button
+                type="button"
+                className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
+                onClick={handleContinue}
+                disabled={checkoutBusy}
+              >
+                {primaryButtonLabel}
+              </Button>
+            </div>
           </div>
         )
       ) : null}

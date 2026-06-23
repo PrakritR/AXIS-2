@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
-
-export const runtime = "nodejs";
+import { createAxisConnectAccount, ensureConnectAccountTransfersRequested } from "@/lib/stripe-connect";
 
 export async function POST() {
   try {
@@ -25,23 +24,9 @@ export async function POST() {
       let accountId = profile?.stripe_connect_account_id?.trim() ?? null;
 
       if (!accountId) {
-        const account = await stripe.accounts.create({
-          country: "US",
+        const account = await createAxisConnectAccount(stripe, {
           email: user.email ?? undefined,
-          capabilities: {
-            card_payments: { requested: true },
-            transfers: { requested: true },
-          },
-          controller: {
-            fees: { payer: "application" },
-            losses: { payments: "application" },
-            requirement_collection: "stripe",
-            stripe_dashboard: { type: "express" },
-          },
-          metadata: {
-            axis_user_id: user.id,
-            axis_portal: "portal",
-          },
+          axisUserId: user.id,
         });
         accountId = account.id;
         await supabase
@@ -51,6 +36,8 @@ export async function POST() {
             updated_at: new Date().toISOString(),
           })
           .eq("id", user.id);
+      } else {
+        await ensureConnectAccountTransfersRequested(stripe, accountId);
       }
 
       const session = await stripe.accountSessions.create({

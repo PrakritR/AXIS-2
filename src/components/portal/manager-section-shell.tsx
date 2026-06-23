@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PORTAL_TOOLBAR_GROUP, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
@@ -43,10 +43,15 @@ export function PortalPropertyFilterPill({
   applicationValue?: string;
   onApplicationChange?: (axisId: string) => void;
 }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    queueMicrotask(() => setMounted(true));
+  }, []);
+
   const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
   const hasResidentPick = Boolean(residents && residentOptions && residentOptions.length > 0 && onResidentChange);
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
-  if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
+  if (!mounted || (!hasPropertyPick && !hasResidentPick && !hasApplicationPick)) return null;
   return (
     <div className={`${PORTAL_TOOLBAR_GROUP} min-w-0 max-w-full flex-wrap`}>
       <PortalPropertyFilter

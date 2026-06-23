@@ -36,7 +36,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
     },
   ];
 
-  if (portal === "manager" || portal === "owner" || portal === "pro") {
+  if (portal === "manager" || portal === "pro") {
     if (section === "relationships") {
       return [
         {
@@ -48,16 +48,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
       ];
     }
     if (section === "properties") {
-      if (portal === "owner") {
-        return [
-          {
-            label: "View linked inventory",
-            kind: "toast",
-            message: "Only properties your manager linked appear here. Approvals and edits go through your manager.",
-          },
-          ...common,
-        ];
-      }
       return [
         { label: "Create listing", kind: "toast", message: "Opening listing editor…" },
         {
@@ -69,21 +59,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
       ];
     }
     if (section === "applicants" || section === "applications") {
-      if (portal === "owner") {
-        return [
-          {
-            label: "Approve applicant",
-            kind: "toast",
-            message: "Applicant approved.",
-          },
-          {
-            label: "Request docs",
-            kind: "modal",
-            message: "Messaging will route through Inbox once connected.",
-          },
-          ...common,
-        ];
-      }
       return [
         {
           label: "Approve applicant",
@@ -118,16 +93,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
         ...common,
       ];
     if (section === "work-orders") {
-      if (portal === "owner") {
-        return [
-          {
-            label: "Request work order",
-            kind: "toast",
-            message: "Requests route to your property manager for triage.",
-          },
-          ...common,
-        ];
-      }
       return [
         {
           label: "Create work order",
@@ -297,18 +262,16 @@ export function buildPortalWorkspaceModel(
   section: string,
   tabId: string,
 ): WorkspaceModel {
-  const eyebrow = `${portal === "pro" ? "Axis Pro" : portal === "manager" ? "Manager" : portal === "owner" ? "Owner" : portal === "resident" ? "Resident" : "Admin"} workspace`;
+  const eyebrow = `${portal === "pro" ? "Axis Pro" : portal === "manager" ? "Manager" : portal === "resident" ? "Resident" : "Admin"} workspace`;
 
   if (section === "dashboard") {
     return {
       eyebrow,
       title: "Dashboard",
       subtitle:
-        portal === "owner"
+        portal === "admin" || portal === "resident"
           ? ""
-          : portal === "admin" || portal === "resident"
-            ? ""
-            : "Snapshot of operations. Numbers are illustrative until integrations are enabled.",
+          : "Snapshot of operations. Numbers are illustrative until integrations are enabled.",
       kpis:
         portal === "resident"
           ? [
@@ -350,15 +313,12 @@ export function buildPortalWorkspaceModel(
                 {
                   label: "Active listings",
                   value: "14",
-                  hint:
-                    portal === "owner"
-                      ? "Linked properties your manager assigned"
-                      : "Across your portfolio",
+                  hint: "Across your portfolio",
                 },
                 {
                   label: "Applicants (new)",
                   value: "5",
-                  hint: portal === "owner" ? "Visible for your units (read-only where restricted)" : "Needs first review",
+                  hint: "Needs first review",
                 },
                 {
                   label: "Late payments",

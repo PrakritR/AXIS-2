@@ -9,6 +9,13 @@ import {
   isCalendarDayBeforeToday,
   localDateAtSlotStart,
 } from "@/lib/demo-admin-scheduling";
+import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import {
+  PARTNER_MEETING_STEP_FIELD_ORDER,
+  scrollToFirstWizardFieldError,
+  wizardFieldErrorClass,
+  wizardSectionErrorClass,
+} from "@/lib/wizard-field-errors";
 
 type Step = 1 | 2;
 type AdminAvailabilityHost = { adminUserId: string; adminLabel: string };
@@ -55,6 +62,7 @@ function ChevronRightIcon() {
 
 export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) => void }) {
   const [step, setStep] = useState<Step>(1);
+  const [maxStepReached, setMaxStepReached] = useState<Step>(1);
   const [tick, setTick] = useState(0);
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
@@ -67,6 +75,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const bump = useCallback(() => setTick((t) => t + 1), []);
 
@@ -143,8 +152,13 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   const submit = () => {
     const n = name.trim();
     const em = email.trim();
-    if (!n || !em) {
-      showToast("Please enter your name and email.");
+    const errs: Record<string, string> = {};
+    if (!n) errs.name = "Name is required.";
+    if (!em) errs.email = "Email is required.";
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      showToast("Please fix the highlighted fields before continuing.");
+      queueMicrotask(() => scrollToFirstWizardFieldError(PARTNER_MEETING_STEP_FIELD_ORDER[2] ?? [], errs));
       return;
     }
     if (selectedWindows.length === 0) {
@@ -176,10 +190,12 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
     });
     showToast("Request sent. Your proposed windows are now in the Axis calendar.");
     setStep(1);
+    setMaxStepReached(1);
     setName("");
     setEmail("");
     setPhone("");
     setNotes("");
+    setFieldErrors({});
     resetPickers();
     bump();
   };
@@ -187,6 +203,12 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   const toggleSlot = (dateStr: string, slotIndex: number) => {
     const key = `${dateStr}:${slotIndex}`;
     const hosts = slotHosts[key] ?? [];
+    setFieldErrors((prev) => {
+      if (!prev.tourSlots) return prev;
+      const next = { ...prev };
+      delete next.tourSlots;
+      return next;
+    });
     setSelectedSlotKeys((current) => {
       if (current.includes(key)) {
         setSelectedHostBySlot((prev) => {
@@ -209,32 +231,35 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   ];
 
   return (
-    <div className="glass-card mt-4 rounded-3xl p-6 sm:p-7">
+    <div className="mt-4 rounded-3xl border border-border bg-white p-6 shadow-sm sm:p-7">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        {steps.map((s, i) => (
+        {steps.map((s, i) => {
+          const reachable = canNavigateToWizardStep(s.n, maxStepReached);
+          return (
           <div key={s.n} className="flex items-center gap-2">
-            {i > 0 ? <div className="h-px w-4 bg-border sm:w-6" /> : null}
+            {i > 0 ? <div className="h-px w-4 bg-slate-200 sm:w-6" /> : null}
             <button
               type="button"
+              disabled={!reachable}
               onClick={() => {
-                if (s.n === 1) setStep(1);
-                if (s.n === 2 && canContinue) setStep(2);
+                if (reachable) setStep(s.n);
               }}
-              className="flex items-center gap-2"
+              className={`flex items-center gap-2 ${reachable ? "" : "cursor-not-allowed opacity-45"}`}
             >
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                  step === s.n ? "bg-primary text-white" : s.n < step ? "bg-primary/20 text-primary" : "border border-border bg-card text-muted"
+                  step === s.n ? "bg-primary text-white" : s.n < step ? "bg-primary/20 text-primary" : "bg-slate-100 text-muted/70"
                 }`}
               >
                 {s.n}
               </span>
-              <span className={`hidden text-sm sm:inline ${step === s.n ? "font-semibold text-foreground" : "text-muted"}`}>
+              <span className={`hidden sm:inline text-sm ${step === s.n ? "font-semibold text-foreground" : "text-muted/70"}`}>
                 {s.label}
               </span>
             </button>
           </div>
-        ))}
+        );
+        })}
       </div>
 
       <div className="mt-6">
@@ -259,6 +284,10 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
               </p>
             )}
 
+            <div
+              data-wizard-field="tourSlots"
+              className={wizardSectionErrorClass(Boolean(fieldErrors.tourSlots), "space-y-6")}
+            >
             <div>
               <div className="mb-3 flex items-center justify-between">
                 <button
@@ -270,7 +299,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                     } else setCalMonth((m) => m - 1);
                     resetPickers();
                   }}
-                  className="rounded-full p-1.5 text-muted hover:bg-accent/50"
+                  className="rounded-full p-1.5 text-muted hover:bg-slate-100"
                   aria-label="Previous month"
                 >
                   <ChevronLeftIcon />
@@ -287,7 +316,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                     } else setCalMonth((m) => m + 1);
                     resetPickers();
                   }}
-                  className="rounded-full p-1.5 text-muted hover:bg-accent/50"
+                  className="rounded-full p-1.5 text-muted hover:bg-slate-100"
                   aria-label="Next month"
                 >
                   <ChevronRightIcon />
@@ -296,7 +325,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
 
               <div className="grid grid-cols-7 gap-1">
                 {DAYS.map((d) => (
-                  <div key={d} className="py-1 text-center text-[11px] font-semibold uppercase text-muted">
+                  <div key={d} className="py-1 text-center text-[11px] font-semibold uppercase text-muted/70">
                     {d}
                   </div>
                 ))}
@@ -321,8 +350,8 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                         isSelected
                           ? "bg-primary text-white shadow-sm"
                           : open && !isPast
-                            ? "border border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
-                            : "cursor-not-allowed text-muted/40"
+                            ? "bg-white text-foreground hover:bg-primary/[0.08] hover:text-primary"
+                            : "cursor-not-allowed text-slate-300"
                       }`}
                     >
                       {day}
@@ -352,7 +381,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                         className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
                           isSelected
                             ? "border-primary bg-primary text-white"
-                            : "border-border bg-card text-foreground hover:border-primary hover:text-primary"
+                            : "border-slate-200 bg-white text-foreground hover:border-primary hover:text-primary"
                         }`}
                       >
                         {formatAvailabilitySlotLabel(slotIndex)}
@@ -365,7 +394,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             ) : null}
 
             {selectedWindows.length > 0 ? (
-              <div className="glass-card rounded-2xl px-4 py-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-foreground">
                     {selectedWindows.length} requested {selectedWindows.length === 1 ? "window" : "windows"}
@@ -384,7 +413,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                       <button
                         type="button"
                         onClick={() => toggleSlot(window.dateStr, window.slotIndex)}
-                        className="rounded-full bg-card px-3 py-1.5 text-xs font-semibold text-primary shadow-sm"
+                        className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-primary shadow-sm"
                       >
                         {window.start.toLocaleDateString(undefined, {
                           weekday: "short",
@@ -397,7 +426,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                         <label className="mt-3 block text-xs font-semibold text-muted">
                           Choose admin
                           <select
-                            className="mt-1 w-full rounded-xl border border-border bg-[var(--glass-fill)] px-3 py-2 text-xs text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                             value={window.selectedAdminUserId}
                             onChange={(e) => setSelectedHostBySlot((prev) => ({ ...prev, [window.key]: e.target.value }))}
                           >
@@ -422,11 +451,15 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                 ) : null}
               </div>
             ) : null}
+            {fieldErrors.tourSlots ? (
+              <p className="text-xs font-medium text-red-600">{fieldErrors.tourSlots}</p>
+            ) : null}
+            </div>
           </div>
         ) : (
           <div className="space-y-5">
             {selectedWindows.length > 0 ? (
-              <div className="glass-card rounded-2xl px-4 py-3 text-sm">
+              <div className="rounded-2xl border border-border bg-slate-50 px-4 py-3 text-sm">
                 <p className="font-semibold text-foreground">Requested windows</p>
                 <div className="mt-2 space-y-1 text-muted">
                   {selectedWindows.map((window) => (
@@ -448,26 +481,42 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             ) : null}
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Name *">
+              <Field label="Name *" fieldKey="name" error={fieldErrors.name}>
                 <input
                   type="text"
                   placeholder="Jane Smith"
-                  className={inputCls}
+                  className={wizardFieldErrorClass(Boolean(fieldErrors.name), inputCls)}
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setFieldErrors((prev) => {
+                      if (!prev.name) return prev;
+                      const next = { ...prev };
+                      delete next.name;
+                      return next;
+                    });
+                    setName(e.target.value);
+                  }}
                 />
               </Field>
-              <Field label="Email *">
+              <Field label="Email *" fieldKey="email" error={fieldErrors.email}>
                 <input
                   type="email"
                   placeholder="jane@email.com"
-                  className={inputCls}
+                  className={wizardFieldErrorClass(Boolean(fieldErrors.email), inputCls)}
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setFieldErrors((prev) => {
+                      if (!prev.email) return prev;
+                      const next = { ...prev };
+                      delete next.email;
+                      return next;
+                    });
+                    setEmail(e.target.value);
+                  }}
                 />
               </Field>
             </div>
-            <Field label="Phone">
+            <Field label="Phone" fieldKey="phone">
               <input type="tel" placeholder="(206) 555-0100" className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} />
             </Field>
             <Field label="Notes (optional)">
@@ -483,7 +532,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             <button
               type="button"
               onClick={submit}
-              className="btn-cobalt w-full rounded-2xl py-3.5 text-sm font-semibold transition-all duration-150 active:scale-[0.98]"
+              className="w-full rounded-2xl bg-[#0d1f4e] py-3.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#162d6e] active:scale-[0.98]"
             >
               Request meeting
             </button>
@@ -496,7 +545,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
           <button
             type="button"
             onClick={() => setStep(1)}
-            className="btn-metallic rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground"
+            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-muted hover:bg-slate-50"
           >
             Back
           </button>
@@ -504,9 +553,24 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
         {step < 2 ? (
           <button
             type="button"
-            disabled={!canContinue}
-            onClick={() => setStep(2)}
-            className="btn-cobalt rounded-full px-7 py-2 text-sm font-semibold shadow-sm transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => {
+              const errs: Record<string, string> = {};
+              if (selectedWindows.length === 0) {
+                errs.tourSlots = "Select at least one meeting time.";
+              } else if (!canContinue) {
+                errs.tourSlots = "Pick an admin for each selected time with multiple admins available.";
+              }
+              if (Object.keys(errs).length > 0) {
+                setFieldErrors(errs);
+                showToast("Please fix the highlighted fields before continuing.");
+                queueMicrotask(() => scrollToFirstWizardFieldError(PARTNER_MEETING_STEP_FIELD_ORDER[1] ?? [], errs));
+                return;
+              }
+              setFieldErrors({});
+              setStep(2);
+              setMaxStepReached((m) => nextWizardMaxReached(m, 2) as Step);
+            }}
+            className="rounded-full bg-primary px-7 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-105"
           >
             Continue
           </button>
@@ -516,14 +580,25 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  fieldKey,
+  error,
+}: {
+  label: string;
+  children: React.ReactNode;
+  fieldKey?: string;
+  error?: string;
+}) {
   return (
-    <div>
+    <div data-wizard-field={fieldKey}>
       <p className="mb-1.5 text-xs font-semibold text-muted">{label}</p>
       {children}
+      {error ? <p className="mt-1 text-xs font-medium text-red-600">{error}</p> : null}
     </div>
   );
 }
 
 const inputCls =
-  "w-full rounded-xl border border-border/60 bg-[var(--glass-fill)] px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted/60 focus:border-primary/30 focus:bg-card focus:ring-2 focus:ring-primary/25 hover:bg-card/80";
+  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-primary/15 hover:border-slate-300";

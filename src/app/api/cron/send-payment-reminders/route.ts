@@ -224,7 +224,7 @@ export async function GET(req: Request) {
   const now = new Date();
   const todayKey = now.toISOString().slice(0, 10);
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.RESEND_FROM?.trim() || "Axis Housing <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
 
   const { data: records, error } = await db
     .from("portal_household_charge_records")

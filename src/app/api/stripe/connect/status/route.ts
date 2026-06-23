@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
+import {
+  connectAccountReadyForAchPayouts,
+  connectAccountTransfersActive,
+  ensureConnectAccountTransfersRequested,
+} from "@/lib/stripe-connect";
 
 export const runtime = "nodejs";
 
@@ -33,18 +38,25 @@ export async function GET() {
         accountId: null,
         chargesEnabled: false,
         payoutsEnabled: false,
+        transfersEnabled: false,
+        paymentReady: false,
         detailsSubmitted: false,
       });
     }
 
     try {
       const stripe = getStripe();
-      const acct = await stripe.accounts.retrieve(accountId);
+      const acct = await ensureConnectAccountTransfersRequested(stripe, accountId);
+      const transfersEnabled = connectAccountTransfersActive(acct);
+      const paymentReady = connectAccountReadyForAchPayouts(acct);
       return NextResponse.json({
         connected: true,
         accountId: acct.id,
         chargesEnabled: Boolean(acct.charges_enabled),
         payoutsEnabled: Boolean(acct.payouts_enabled),
+        transfersEnabled,
+        paymentReady,
+        transfersStatus: acct.capabilities?.transfers ?? null,
         detailsSubmitted: Boolean(acct.details_submitted),
       });
     } catch (e) {
@@ -56,6 +68,8 @@ export async function GET() {
           accountId,
           chargesEnabled: false,
           payoutsEnabled: false,
+          transfersEnabled: false,
+          paymentReady: false,
           detailsSubmitted: false,
           message:
             "Stripe is not configured on the server; cannot refresh Connect status. Keys present = live status.",
@@ -66,6 +80,8 @@ export async function GET() {
         accountId,
         chargesEnabled: false,
         payoutsEnabled: false,
+        transfersEnabled: false,
+        paymentReady: false,
         detailsSubmitted: false,
         stripeError: msg,
       });

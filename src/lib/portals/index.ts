@@ -6,7 +6,6 @@ import { getResidentPortalDefinition } from "./resident";
 const portalsByKind: Record<Exclude<PortalKind, "resident">, PortalDefinition> = {
   pro: proPortal,
   manager: proPortal,
-  owner: proPortal,
   admin: adminPortal,
 };
 

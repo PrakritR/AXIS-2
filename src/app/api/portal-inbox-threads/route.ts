@@ -19,15 +19,30 @@ const route = createJsonRecordRoute({
     id: String(row.id ?? "").trim(),
     email: String(row.email ?? row.participantEmail ?? row.participant_email ?? "").trim().toLowerCase(),
   }),
-  buildUpsert: (row, user) => ({
-    id: row.id,
-    scope: row.scope ?? "portal",
-    owner_user_id: row.scope === "admin" ? null : (row.ownerUserId ?? row.owner_user_id ?? user.id),
-    participant_email: row.email ?? row.participantEmail ?? null,
-    thread_type: row.threadType ?? row.thread_type ?? null,
-    row_data: row,
-    updated_at: new Date().toISOString(),
-  }),
+  buildUpsert: (row, user) => {
+    const folder = String(row.folder ?? "");
+    // row.email is the counterparty in thread JSON (recipient on Sent, sender on Inbox) — not the mailbox owner.
+    const participantEmail =
+      folder === "sent"
+        ? null
+        : String(row.participantEmail ?? row.participant_email ?? user.email ?? "")
+            .trim()
+            .toLowerCase() || null;
+    return {
+      id: row.id,
+      scope: row.scope ?? "portal",
+      owner_user_id:
+        row.scope === "admin"
+          ? null
+          : folder === "sent"
+            ? (row.ownerUserId ?? row.owner_user_id ?? user.id)
+            : (row.ownerUserId ?? row.owner_user_id ?? null),
+      participant_email: participantEmail,
+      thread_type: row.threadType ?? row.thread_type ?? null,
+      row_data: row,
+      updated_at: new Date().toISOString(),
+    };
+  },
   assignOwnership: (record, user) =>
     user.role === "admin" ? record : { ...record, owner_user_id: user.id },
 });

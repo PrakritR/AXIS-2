@@ -14,7 +14,7 @@ export const getAdminPreviewFromCookies = cache(async (): Promise<{ targetUserId
   const portalRaw = c.get(PREVIEW_PORTAL_COOKIE)?.value?.trim();
   const portal = portalRaw as PreviewPortal | undefined;
   if (!uid || !portal) return null;
-  if (portal !== "manager" && portal !== "resident" && portal !== "owner") return null;
+  if (portal !== "manager" && portal !== "resident") return null;
   return { targetUserId: uid, portal };
 });
 

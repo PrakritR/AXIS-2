@@ -101,7 +101,7 @@ export async function POST(req: Request) {
         );
       }
 
-      const from = process.env.RESEND_FROM?.trim() || "Axis Housing <onboarding@resend.dev>";
+      const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
 
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -138,7 +138,7 @@ export async function POST(req: Request) {
       const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
       const ts = Date.now();
       const rand = Math.random().toString(36).slice(2, 6);
-      const senderName = user.email ?? "Axis Housing";
+      const senderName = user.email ?? "Axis";
       const senderLower = normalizeEmail(user.email) || "manager@example.com";
       const preview = text.slice(0, 100).replace(/\n/g, " ");
 

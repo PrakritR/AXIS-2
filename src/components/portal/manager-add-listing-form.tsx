@@ -3,7 +3,6 @@
 import type { DragEvent, ReactNode } from "react";
 import { Children, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { createPortal } from "react-dom";
-import Image from "next/image";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
@@ -24,8 +23,15 @@ import {
 } from "@/lib/manager-access";
 import {
   applyListingBedroomSlots,
+  applyEntireHomeListingPricing,
+  applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
+  LISTING_SERVICE_QUICK_ADDS,
+  entireHomeMonthlyRentAmount,
+  formatLeaseTermsBodyFromAllowed,
+  isEntireHomeListing,
   normalizeManagerListingSubmissionV1,
+  resolveAllowedLeaseTerms,
   duplicateRoomEntry,
   emptyBathroom,
   emptyBundleRow,
@@ -57,6 +63,11 @@ import {
   ROOM_FURNITURE_PRESETS,
   ROOM_FURNISHING_OPTIONS,
   SHARED_SPACE_AMENITY_PRESETS,
+  SHARED_SPACE_KIND_OPTIONS,
+  normalizeSharedSpaceKind,
+  sharedSpaceAmenityPresetsForKind,
+  pruneSharedSpaceAmenitiesForKind,
+  type SharedSpaceKind,
   mergeFurnitureToggle,
   mergeToggleLine,
   parseFurnitureSet,
@@ -64,6 +75,35 @@ import {
   splitLineList,
 } from "@/data/manager-listing-presets";
 import { loadListingPresetConfig, type ListingPresetConfig } from "@/lib/site-content";
+import {
+  parseOptionalSanitizedMoneyNumber,
+  parseSanitizedInteger,
+  parseSanitizedMoneyNumber,
+  sanitizeBuildingNameInput,
+  sanitizeFloorLabelInput,
+  sanitizeMoneyInput,
+  sanitizeNeighborhoodInput,
+  sanitizePaymentContactInput,
+  sanitizePlaceNameInput,
+  sanitizeStreetAddressInput,
+  sanitizeZipInput,
+} from "@/lib/listing-form-inputs";
+import { canNavigateToWizardStep } from "@/lib/wizard-step-nav";
+import {
+  buildListingStepFieldOrder,
+  firstInvalidListingStep,
+  listingBathroomNameKey,
+  listingRoomNameKey,
+  listingRoomRentKey,
+  listingSharedSpaceNameKey,
+  validateListingWizardStep,
+} from "@/lib/listing-wizard-validation";
+import {
+  scrollToFirstWizardFieldError,
+  wizardFieldErrorClass,
+  wizardSectionErrorClass,
+} from "@/lib/wizard-field-errors";
+import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
 import { Modal } from "@/components/ui/modal";
 
 const selectInputCls =
@@ -178,10 +218,10 @@ const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
 
 function FormSection({ id, title, description, children, accent }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode; accent?: string }) {
   return (
-    <section id={id} className="glass-card mb-5 overflow-hidden rounded-2xl">
-      <div className={`border-b border-border px-5 py-4 sm:px-6 ${accent ?? "bg-primary/5"}`}>
-        <h3 className="text-[15px] font-bold tracking-tight text-foreground">{title}</h3>
-        {description ? <div className="mt-1 max-w-3xl text-[13px] leading-relaxed text-muted">{description}</div> : null}
+    <section id={id} className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_6px_rgba(15,23,42,0.06)]">
+      <div className={`border-b border-slate-100 px-5 py-4 sm:px-6 ${accent ?? "bg-sky-50/60"}`}>
+        <h3 className="text-[15px] font-bold tracking-tight text-slate-900">{title}</h3>
+        {description ? <div className="mt-1 max-w-3xl text-[13px] leading-relaxed text-slate-500">{description}</div> : null}
       </div>
       <div className="p-5 sm:p-6">{children}</div>
     </section>
@@ -205,44 +245,247 @@ const MAX_HOUSE_PHOTOS = 12;
 const IMG_MAX_WIDTH = 1280;
 const IMG_QUALITY = 0.75;
 
+function isImageUploadFile(file: File): boolean {
+  if (file.type.startsWith("image/")) return true;
+  return /\.(jpe?g|png|gif|webp|heic|heif|avif)$/i.test(file.name);
+}
+
+function isVideoUploadFile(file: File): boolean {
+  if (file.type.startsWith("video/")) return true;
+  return /\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(file.name);
+}
+
 function mediaDropZoneClass(active: boolean) {
   return `rounded-xl border border-dashed p-4 transition ${
     active
       ? "border-primary/50 bg-primary/[0.06] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.18)]"
-      : "border-border bg-card hover:border-primary/30 hover:bg-primary/[0.03]"
+      : "border-slate-200/90 bg-white hover:border-primary/30 hover:bg-primary/[0.03]"
   }`;
+}
+
+const MEDIA_PICK_BTN_CLASS =
+  "inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-60";
+
+/** Programmatic file picker — avoids label/htmlFor inside overflow-hidden modals blanking the UI. */
+function MediaPickTrigger({
+  accept,
+  multiple,
+  disabled,
+  className,
+  onFiles,
+  children,
+}: {
+  accept: string;
+  multiple?: boolean;
+  disabled?: boolean;
+  className?: string;
+  onFiles: (files: FileList | null) => void;
+  children: ReactNode;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        multiple={multiple}
+        disabled={disabled}
+        tabIndex={-1}
+        aria-hidden="true"
+        className="pointer-events-none fixed -left-[9999px] top-0 h-px w-px opacity-0"
+        onChange={(e) => {
+          onFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        className={className ?? MEDIA_PICK_BTN_CLASS}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          inputRef.current?.click();
+        }}
+      >
+        {children}
+      </button>
+    </>
+  );
+}
+
+function PlaceCategoryPicker({
+  value,
+  onSelect,
+  hasError,
+  errorMsg,
+}: {
+  value: string | undefined;
+  onSelect: (id: string) => void;
+  hasError?: boolean;
+  errorMsg?: string;
+}) {
+  return (
+    <div
+      data-wizard-field="listingPlaceCategoryId"
+      className={wizardSectionErrorClass(Boolean(hasError), "rounded-2xl border border-sky-100/90 bg-sky-50/50 px-4 py-4 sm:px-5")}
+    >
+      <p className="text-sm font-semibold text-slate-900">How is this property rented?</p>
+      <p className="mt-1 text-xs leading-relaxed text-slate-600">
+        Choose one model — we’ll tailor rent, utilities, and proration fields below.
+      </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {LISTING_PLACE_CATEGORY_OPTIONS.map((opt) => {
+          const on = value === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onSelect(opt.id)}
+              className={`rounded-2xl border px-4 py-3.5 text-left transition ${
+                on
+                  ? "border-primary bg-white shadow-[0_8px_28px_-18px_rgba(37,99,235,0.45)] ring-2 ring-primary/25"
+                  : "border-slate-200/90 bg-white hover:border-slate-300"
+              }`}
+            >
+              <span className="text-sm font-semibold text-slate-900">{opt.label}</span>
+              <span className="mt-0.5 block text-xs text-slate-500">{opt.hint}</span>
+            </button>
+          );
+        })}
+      </div>
+      <StepFieldError msg={errorMsg} />
+    </div>
+  );
+}
+
+function ProrationMethodFields({
+  prorateMethod,
+  monthlyRent,
+  dailyRentRate,
+  dailyUtilitiesRate,
+  utilitiesLabel,
+  onMethod,
+  onDailyRent,
+  onDailyUtilities,
+}: {
+  prorateMethod: "auto" | "daily_rate";
+  monthlyRent: number;
+  dailyRentRate?: number;
+  dailyUtilitiesRate?: number;
+  utilitiesLabel?: string;
+  onMethod: (m: "auto" | "daily_rate") => void;
+  onDailyRent: (n: number | undefined) => void;
+  onDailyUtilities: (n: number | undefined) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <FieldLabel hint="How first-month rent and utilities are prorated when someone moves in mid-month.">
+        Proration method
+      </FieldLabel>
+      <div className="flex gap-3">
+        {(["auto", "daily_rate"] as const).map((method) => {
+          const active = prorateMethod === method;
+          return (
+            <button
+              key={method}
+              type="button"
+              onClick={() => onMethod(method)}
+              className={`flex-1 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${active ? "border-primary bg-primary/5 font-medium text-primary" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}
+            >
+              <span className="block font-semibold">
+                {method === "auto" ? "Auto (÷ days in month)" : "Manual daily rate"}
+              </span>
+              <span className="mt-0.5 block text-xs text-slate-500">
+                {method === "auto"
+                  ? "Remaining days ÷ days in month × monthly rate"
+                  : "Remaining days × your set daily rate"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {prorateMethod === "auto" && monthlyRent > 0 ? (
+        <p className="text-xs text-slate-500">
+          Example: move-in May 14 → 18/31 × ${monthlyRent} ={" "}
+          <span className="font-semibold text-slate-700">${((18 / 31) * monthlyRent).toFixed(2)}</span> prorated rent
+        </p>
+      ) : null}
+      {prorateMethod === "daily_rate" ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <GridField>
+            <FieldLabel>Daily rent rate</FieldLabel>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+              <Input
+                inputMode="decimal"
+                className="pl-8"
+                value={dailyRentRate ?? ""}
+                onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
+                placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
+              />
+            </div>
+          </GridField>
+          <GridField>
+            <FieldLabel>{utilitiesLabel ?? "Daily utilities rate"}</FieldLabel>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+              <Input
+                inputMode="decimal"
+                className="pl-8"
+                value={dailyUtilitiesRate ?? ""}
+                onChange={(e) => onDailyUtilities(parseOptionalSanitizedMoneyNumber(e.target.value))}
+                placeholder="6"
+              />
+            </div>
+          </GridField>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 const SHARED_SPACE_TEMPLATES = [
   {
     label: "Kitchen & dining",
+    kind: "kitchen" as const,
     detail: "",
     amenities: ["Refrigerator", "Microwave", "Oven / range", "Dishwasher"],
   },
   {
     label: "Living room / lounge",
+    kind: "living" as const,
     detail: "",
     amenities: ["Living / lounge seating", "Couch / sofa", "TV in common area"],
   },
   {
     label: "Laundry",
+    kind: "laundry" as const,
     detail: "",
     amenities: ["Washer / dryer", "Laundry sink"],
   },
   {
     label: "Outdoor / yard",
+    kind: "outdoor" as const,
     detail: "",
-    amenities: [],
+    amenities: ["Patio / deck seating", "BBQ grill", "Yard / lawn"],
+  },
+  {
+    label: "Workspace",
+    kind: "workspace" as const,
+    detail: "",
+    amenities: ["Desk / workspace", "Office chair"],
   },
 ] as const;
 
 const LISTING_FORM_STEPS = [
-  { id: "home",      label: "Home & layout",  icon: "🏠" },
+  { id: "home",      label: "Home",           icon: "🏠" },
   { id: "rooms",     label: "Rooms",          icon: "🛏" },
   { id: "bathrooms", label: "Bathrooms",      icon: "🚿" },
   { id: "spaces",    label: "Shared spaces",  icon: "🪑" },
-  { id: "lease",     label: "Lease & pricing",icon: "💰" },
-  { id: "media",     label: "Media",          icon: "📷" },
+  { id: "lease",     label: "Pricing",        icon: "💰" },
+  { id: "move",      label: "Move info",      icon: "📦" },
   { id: "services",  label: "Services",       icon: "🛎" },
   { id: "finish",    label: "Submit",         icon: "✅" },
 ] as const;
@@ -250,14 +493,14 @@ const LISTING_FORM_STEPS = [
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
-  home:      "Property type, address, floors, baths, and how many bedrooms you’ll list.",
-  rooms:     "Each rentable bedroom: name, floor, rent, move-in instructions, furnishing, photos, and video.",
-  bathrooms: "Bath rows, bathroom amenities, and optional bathroom photos/video for listing details.",
-  spaces:    "Kitchen, laundry, lounge, outdoor — location, amenities, room access, plus optional photos/video.",
-  lease:     "Lease terms, bundles (whole-house or custom packages), deposits, fees, and payment options.",
-  media:     "Hero images and optional full-house walkthrough video at the top of your public listing.",
-  services:  "Add services residents can choose directly from their portal requests tab — cleaning, linens, and more.",
-  finish:    "Sidebar quick facts, building amenities, and final submit.",
+  home:      "Property type, address, layout, building amenities, house details, and full-house photos.",
+  rooms:     "Bedroom names, floor, furnishing, and amenities — pricing is set on Pricing.",
+  bathrooms: "Bathroom name, location, and amenities for the public listing.",
+  spaces:    "Shared areas — name, location, and amenities (kitchen, laundry, lounge, outdoor).",
+  lease:     "How the home is rented (by room or entire place), rent, utilities, proration, deposits, and fees.",
+  move:      "Move-in access instructions for residents.",
+  services:  "Optional paid or free services residents can request from their portal.",
+  finish:    "Sidebar quick facts and final submit.",
 };
 
 /** Reads a file and returns a compressed JPEG data URL. Falls back to raw data URL for non-image files. */
@@ -465,13 +708,21 @@ async function uploadVideoFile(file: File): Promise<string> {
   return uploadToBucket(file);
 }
 
-function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
+function FieldLabel({ children, hint, required }: { children: React.ReactNode; hint?: string; required?: boolean }) {
   return (
     <div className="mb-1.5">
-      <p className="text-xs font-semibold text-foreground">{children}</p>
-      {hint ? <p className="mt-0.5 text-[11px] text-muted">{hint}</p> : null}
+      <p className="text-xs font-semibold text-slate-800">
+        {children}
+        {required ? <span className="text-red-600"> *</span> : null}
+      </p>
+      {hint ? <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p> : null}
     </div>
   );
+}
+
+function StepFieldError({ msg }: { msg?: string }) {
+  if (!msg) return null;
+  return <p className="mt-1 text-xs font-medium text-red-600">{msg}</p>;
 }
 
 /** In CSS grid rows, bottom-aligns the control with siblings when label/hint blocks differ in height. */
@@ -500,10 +751,10 @@ function ListingSubsection({
   children: React.ReactNode;
 }) {
   return (
-    <div id={id} className="rounded-xl border border-border bg-accent/30 p-4 sm:p-5">
-      <div className="border-b border-border pb-3">
-        <h4 className="text-sm font-bold text-foreground">{title}</h4>
-        {description ? <div className="mt-1 text-xs leading-relaxed text-muted">{description}</div> : null}
+    <div id={id} className="rounded-xl border border-slate-200/90 bg-slate-50/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] sm:p-5">
+      <div className="border-b border-slate-200/70 pb-3">
+        <h4 className="text-sm font-bold text-slate-900">{title}</h4>
+        {description ? <div className="mt-1 text-xs leading-relaxed text-slate-600">{description}</div> : null}
       </div>
       <div className="mt-4 space-y-4">{children}</div>
     </div>
@@ -528,7 +779,8 @@ function bundleRoomsLine(roomIds: string[], rooms: ManagerRoomSubmission[]) {
   return names.length === rooms.length ? `Whole house - ${names.length} rooms` : names.join(", ");
 }
 
-function bundleRentLabel(roomIds: string[], rooms: ManagerRoomSubmission[]) {
+function bundleRentLabel(roomIds: string[], rooms: ManagerRoomSubmission[], entireHomeRent = 0) {
+  if (entireHomeRent > 0) return `$${entireHomeRent}/mo`;
   const total = roomIds
     .map((id) => rooms.find((room) => room.id === id)?.monthlyRent ?? 0)
     .filter((rent) => Number.isFinite(rent) && rent > 0)
@@ -576,14 +828,19 @@ export function ManagerAddListingForm({
   });
   const [busy, setBusy] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [stepFieldErrors, setStepFieldErrors] = useState<Record<string, string>>({});
+  const [maxStepReached, setMaxStepReached] = useState(() =>
+    (editPendingId ?? editListingId ?? editRequestChangeId) ? LISTING_STEP_COUNT - 1 : 0,
+  );
   // Portal to document.body once mounted, so this modal can't get visually trapped by an
   // ancestor that creates a containing block for fixed-position descendants (e.g. transform/filter).
   const mounted = useIsClient();
   const [listingPresets, setListingPresets] = useState<ListingPresetConfig>(DEFAULT_LISTING_PRESETS);
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
-  const [serviceOffers, setServiceOffers] = useState<ManagerListingServiceOption[]>(
-    () => normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission()).serviceRequestOptions ?? [],
-  );
+  const [serviceOffers, setServiceOffers] = useState<ManagerListingServiceOption[]>(() => {
+    const normalized = normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission());
+    return normalized.serviceRequestOptions ?? [];
+  });
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<ManagerListingServiceOption | null>(null);
   const [serviceForm, setServiceForm] = useState({ name: "", description: "", price: "", deposit: "" });
@@ -643,6 +900,24 @@ export function ManagerAddListingForm({
     setServiceForm({ name: "", description: "", price: "", deposit: "" });
   };
 
+  const addQuickService = (preset: { name: string; description: string }) => {
+    setServiceOffers((prev) => {
+      if (prev.some((o) => o.name.trim().toLowerCase() === preset.name.toLowerCase())) return prev;
+      return [
+        ...prev,
+        {
+          id: `offer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: preset.name,
+          description: preset.description,
+          price: "",
+          deposit: "",
+          available: true,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    });
+  };
+
   /** Set or replace the preview object URL for a video key, revoking the old one. */
   const setVideoPreview = (key: string, file: File) => {
     setVideoPreviewUrls((prev) => {
@@ -671,6 +946,11 @@ export function ManagerAddListingForm({
   }, [stepIndex]);
 
   useEffect(() => {
+    if (stepIndex !== 2) return;
+    queueMicrotask(() => setSub((s) => (s.bathrooms.length > 0 ? s : { ...s, bathrooms: [emptyBathroom(0)] })));
+  }, [stepIndex]);
+
+  useEffect(() => {
     let cancelled = false;
     loadListingPresetConfig()
       .then((presets) => {
@@ -682,47 +962,32 @@ export function ManagerAddListingForm({
     };
   }, []);
 
-  const canContinueFromStep = (i: number): boolean => {
-    if (i === 0) {
-      if (!sub.buildingName.trim() || !sub.address.trim() || !sub.zip.trim() || !sub.neighborhood.trim()) {
-        showToast("Fill in building name, address, ZIP, and neighborhood to continue.");
-        return false;
-      }
-      const strictBasics = !isEditMode;
-      if (strictBasics) {
-        if (!sub.listingPropertyTypeId?.trim()) {
-          showToast("Choose a property type.");
-          return false;
-        }
-        if (!sub.listingPlaceCategoryId?.trim()) {
-          showToast("Select what kind of listing this is.");
-          return false;
-        }
-        if (!sub.listingStoriesId?.trim()) {
-          showToast("Select how many floors or levels the home has.");
-          return false;
-        }
-        if (!sub.listingTotalBathroomsId?.trim()) {
-          showToast("Select how many bathrooms the home has.");
-          return false;
-        }
-        if (!sub.listingBedroomSlots || sub.listingBedroomSlots < 1) {
-          showToast("Select how many bedrooms you will list for rent.");
-          return false;
-        }
-      }
-    }
-    if (i === 1) {
-      if (!sub.rooms.some((r) => r.name.trim())) {
-        showToast("Add at least one room with a name before continuing.");
-        return false;
-      }
-    }
-    return true;
+  const isEntireHome = isEntireHomeListing(sub);
+  const entireHomeRent = entireHomeMonthlyRentAmount(sub);
+
+  const clearListingFieldError = (key: string) => {
+    setStepFieldErrors((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
+  const validateListingStep = (i: number): Record<string, string> =>
+    validateListingWizardStep(i, sub, { isEditMode, entireHomeRent });
+
   const goNext = () => {
-    if (!canContinueFromStep(stepIndex)) return;
+    const errs = validateListingStep(stepIndex);
+    if (Object.keys(errs).length > 0) {
+      setStepFieldErrors(errs);
+      showToast("Please fix the highlighted fields before continuing.");
+      queueMicrotask(() =>
+        scrollToFirstWizardFieldError(buildListingStepFieldOrder(stepIndex, sub), errs, scrollRef.current),
+      );
+      return;
+    }
+    setStepFieldErrors({});
     if (stepIndex === 0) {
       const slots = sub.listingBedroomSlots ?? sub.rooms.length;
       const applied = applyListingBedroomSlots(sub, slots);
@@ -739,9 +1004,13 @@ export function ManagerAddListingForm({
       }
     }
     setStepIndex((s) => Math.min(s + 1, lastStepIndex));
+    setMaxStepReached((m) => Math.max(m, stepIndex + 1));
   };
 
-  const goPrev = () => setStepIndex((s) => Math.max(0, s - 1));
+  const goPrev = () => {
+    setStepFieldErrors({});
+    setStepIndex((s) => Math.max(0, s - 1));
+  };
 
   const setRoom = (i: number, patch: Partial<ManagerRoomSubmission>) => {
     setSub((s) => {
@@ -862,10 +1131,17 @@ export function ManagerAddListingForm({
 
   const addBathroom = () => {
     if (sub.bathrooms.length >= 12) return;
-    setSub((s) => ({ ...s, bathrooms: [...s.bathrooms, emptyBathroom(s.bathrooms.length)] }));
+    setSub((s) => {
+      const next = emptyBathroom(s.bathrooms.length);
+      if (s.bathrooms.length === 0) return { ...s, bathrooms: [next] };
+      // New bathrooms stack directly under the first row, above the add button.
+      return { ...s, bathrooms: [s.bathrooms[0]!, next, ...s.bathrooms.slice(1)] };
+    });
   };
 
   const removeBathroom = (i: number) => {
+    const bathId = sub.bathrooms[i]?.id;
+    if (bathId) clearVideoPreview(`bath-${bathId}`);
     setSub((s) => ({ ...s, bathrooms: s.bathrooms.filter((_, j) => j !== i) }));
   };
 
@@ -880,6 +1156,7 @@ export function ManagerAddListingForm({
       const row = {
         ...emptySharedSpace(s.sharedSpaces.length),
         name: template.label,
+        spaceKind: template.kind,
         detail: template.detail,
         amenitiesText: template.amenities.join("\n"),
         roomAccessIds: s.rooms.map((room) => room.id),
@@ -889,6 +1166,8 @@ export function ManagerAddListingForm({
   };
 
   const removeSharedSpace = (i: number) => {
+    const spaceId = sub.sharedSpaces[i]?.id;
+    if (spaceId) clearVideoPreview(`space-${spaceId}`);
     setSub((s) => ({ ...s, sharedSpaces: s.sharedSpaces.filter((_, j) => j !== i) }));
   };
 
@@ -927,7 +1206,7 @@ export function ManagerAddListingForm({
         ...cur,
         includedRoomIds,
         roomsLine: cur.roomsLine.trim() ? cur.roomsLine : bundleRoomsLine(includedRoomIds, s.rooms),
-        price: cur.price.trim() ? cur.price : bundleRentLabel(includedRoomIds, s.rooms),
+        price: cur.price.trim() ? cur.price : bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
       };
       return { ...s, bundles };
     });
@@ -947,20 +1226,21 @@ export function ManagerAddListingForm({
 
   const addGeneratedBundle = (kind: "whole_house" | "multi_room") => {
     setSub((s) => {
-      const eligibleRooms = s.rooms.filter((room) => room.name.trim());
-      if (eligibleRooms.length === 0) return s;
+      if (s.rooms.length === 0) return s;
+      const namedRooms = s.rooms.filter((room) => room.name.trim());
       const includedRoomIds =
         kind === "whole_house"
-          ? eligibleRooms.map((room) => room.id)
-          : eligibleRooms.slice(0, Math.min(2, eligibleRooms.length)).map((room) => room.id);
+          ? s.rooms.map((room) => room.id)
+          : namedRooms.slice(0, Math.min(2, namedRooms.length)).map((room) => room.id);
+      if (kind === "multi_room" && includedRoomIds.length < 2) return s;
       const row: ManagerBundleRow = {
         ...emptyBundleRow(),
-        label: kind === "whole_house" ? "Whole house lease" : "Multi-room lease bundle",
-        price: bundleRentLabel(includedRoomIds, s.rooms),
+        label: kind === "whole_house" ? "Whole house lease" : "Group lease bundle",
+        price: bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
         strikethrough: "",
         promo:
           kind === "whole_house"
-            ? "Rent the full home as one lease."
+            ? "Rent the full home as one lease — all rooms included."
             : "Select any rooms that can be rented together.",
         roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
         includedRoomIds,
@@ -982,12 +1262,12 @@ export function ManagerAddListingForm({
       const cur = bundles[bundleIndex];
       if (!cur) return s;
       const named = s.rooms.filter((r) => r.name.trim());
-      const includedRoomIds = mode === "all_named" ? named.map((r) => r.id) : [];
+      const includedRoomIds = mode === "all_named" ? s.rooms.map((r) => r.id) : [];
       bundles[bundleIndex] = {
         ...cur,
         includedRoomIds,
         roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
-        price: bundleRentLabel(includedRoomIds, s.rooms),
+        price: bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
       };
       return { ...s, bundles };
     });
@@ -1073,7 +1353,7 @@ export function ManagerAddListingForm({
     });
   };
 
-  const onPickBathroomPhotos = async (bathIndex: number, files: FileList | null) => {
+  const onPickBathroomPhotos = async (bathId: string, files: FileList | null) => {
     if (!files?.length) return;
     const fileArray = Array.from(files);
     try {
@@ -1081,7 +1361,7 @@ export function ManagerAddListingForm({
     for (let i = 0; i < Math.min(fileArray.length, 6); i++) {
       await yieldToMain();
       const f = fileArray[i]!;
-      if (!f.type.startsWith("image/")) {
+      if (!isImageUploadFile(f)) {
         showToast("Images only for bathroom photos.");
         return;
       }
@@ -1094,6 +1374,8 @@ export function ManagerAddListingForm({
     }
     startTransition(() => {
     setSub((s) => {
+      const bathIndex = s.bathrooms.findIndex((b) => b.id === bathId);
+      if (bathIndex < 0) return s;
       const bathrooms = [...s.bathrooms];
       const cur = bathrooms[bathIndex];
       if (!cur) return s;
@@ -1104,17 +1386,21 @@ export function ManagerAddListingForm({
     } catch { showToast("Could not process image. Please try a different file."); }
   };
 
-  const onPickBathroomVideo = async (bathIndex: number, file: File | null) => {
+  const onPickBathroomVideo = async (bathId: string, file: File | null) => {
     if (!file) return;
-    if (!file.type.startsWith("video/")) { showToast("Please choose a video file."); return; }
-    const bathId = sub.bathrooms[bathIndex]?.id;
-    if (!bathId) return;
+    if (!isVideoUploadFile(file)) { showToast("Please choose a video file."); return; }
     const key = `bath-${bathId}`;
     setVideoPreview(key, file);
     setVideoUploadingKeys((s) => new Set([...s, key]));
     try {
       const url = await uploadVideoFile(file);
-      setBath(bathIndex, { videoDataUrl: url });
+      setSub((s) => {
+        const bathIndex = s.bathrooms.findIndex((b) => b.id === bathId);
+        if (bathIndex < 0) return s;
+        const bathrooms = [...s.bathrooms];
+        bathrooms[bathIndex] = { ...bathrooms[bathIndex]!, videoDataUrl: url };
+        return { ...s, bathrooms };
+      });
     } catch {
       showToast("Could not upload video. Check your connection and try again.");
       clearVideoPreview(key);
@@ -1123,8 +1409,10 @@ export function ManagerAddListingForm({
     }
   };
 
-  const removeBathroomPhoto = (bathIndex: number, photoIndex: number) => {
+  const removeBathroomPhoto = (bathId: string, photoIndex: number) => {
     setSub((s) => {
+      const bathIndex = s.bathrooms.findIndex((b) => b.id === bathId);
+      if (bathIndex < 0) return s;
       const bathrooms = [...s.bathrooms];
       const cur = bathrooms[bathIndex];
       if (!cur) return s;
@@ -1136,13 +1424,18 @@ export function ManagerAddListingForm({
     });
   };
 
-  const clearBathroomVideo = (bathIndex: number) => {
-    const bathId = sub.bathrooms[bathIndex]?.id;
-    if (bathId) clearVideoPreview(`bath-${bathId}`);
-    setBath(bathIndex, { videoDataUrl: null });
+  const clearBathroomVideo = (bathId: string) => {
+    clearVideoPreview(`bath-${bathId}`);
+    setSub((s) => {
+      const bathIndex = s.bathrooms.findIndex((b) => b.id === bathId);
+      if (bathIndex < 0) return s;
+      const bathrooms = [...s.bathrooms];
+      bathrooms[bathIndex] = { ...bathrooms[bathIndex]!, videoDataUrl: null };
+      return { ...s, bathrooms };
+    });
   };
 
-  const onPickSharedSpacePhotos = async (spaceIndex: number, files: FileList | null) => {
+  const onPickSharedSpacePhotos = async (spaceId: string, files: FileList | null) => {
     if (!files?.length) return;
     const fileArray = Array.from(files);
     try {
@@ -1150,7 +1443,7 @@ export function ManagerAddListingForm({
     for (let i = 0; i < Math.min(fileArray.length, 6); i++) {
       await yieldToMain();
       const f = fileArray[i]!;
-      if (!f.type.startsWith("image/")) {
+      if (!isImageUploadFile(f)) {
         showToast("Images only for shared-space photos.");
         return;
       }
@@ -1163,6 +1456,8 @@ export function ManagerAddListingForm({
     }
     startTransition(() => {
     setSub((s) => {
+      const spaceIndex = s.sharedSpaces.findIndex((ss) => ss.id === spaceId);
+      if (spaceIndex < 0) return s;
       const sharedSpaces = [...s.sharedSpaces];
       const cur = sharedSpaces[spaceIndex];
       if (!cur) return s;
@@ -1173,17 +1468,21 @@ export function ManagerAddListingForm({
     } catch { showToast("Could not process image. Please try a different file."); }
   };
 
-  const onPickSharedSpaceVideo = async (spaceIndex: number, file: File | null) => {
+  const onPickSharedSpaceVideo = async (spaceId: string, file: File | null) => {
     if (!file) return;
-    if (!file.type.startsWith("video/")) { showToast("Please choose a video file."); return; }
-    const spaceId = sub.sharedSpaces[spaceIndex]?.id;
-    if (!spaceId) return;
+    if (!isVideoUploadFile(file)) { showToast("Please choose a video file."); return; }
     const key = `space-${spaceId}`;
     setVideoPreview(key, file);
     setVideoUploadingKeys((s) => new Set([...s, key]));
     try {
       const url = await uploadVideoFile(file);
-      setSharedSpace(spaceIndex, { videoDataUrl: url });
+      setSub((s) => {
+        const spaceIndex = s.sharedSpaces.findIndex((ss) => ss.id === spaceId);
+        if (spaceIndex < 0) return s;
+        const sharedSpaces = [...s.sharedSpaces];
+        sharedSpaces[spaceIndex] = { ...sharedSpaces[spaceIndex]!, videoDataUrl: url };
+        return { ...s, sharedSpaces };
+      });
     } catch {
       showToast("Could not upload video. Check your connection and try again.");
       clearVideoPreview(key);
@@ -1192,8 +1491,10 @@ export function ManagerAddListingForm({
     }
   };
 
-  const removeSharedSpacePhoto = (spaceIndex: number, photoIndex: number) => {
+  const removeSharedSpacePhoto = (spaceId: string, photoIndex: number) => {
     setSub((s) => {
+      const spaceIndex = s.sharedSpaces.findIndex((ss) => ss.id === spaceId);
+      if (spaceIndex < 0) return s;
       const sharedSpaces = [...s.sharedSpaces];
       const cur = sharedSpaces[spaceIndex];
       if (!cur) return s;
@@ -1205,10 +1506,15 @@ export function ManagerAddListingForm({
     });
   };
 
-  const clearSharedSpaceVideo = (spaceIndex: number) => {
-    const spaceId = sub.sharedSpaces[spaceIndex]?.id;
-    if (spaceId) clearVideoPreview(`space-${spaceId}`);
-    setSharedSpace(spaceIndex, { videoDataUrl: null });
+  const clearSharedSpaceVideo = (spaceId: string) => {
+    clearVideoPreview(`space-${spaceId}`);
+    setSub((s) => {
+      const spaceIndex = s.sharedSpaces.findIndex((ss) => ss.id === spaceId);
+      if (spaceIndex < 0) return s;
+      const sharedSpaces = [...s.sharedSpaces];
+      sharedSpaces[spaceIndex] = { ...sharedSpaces[spaceIndex]!, videoDataUrl: null };
+      return { ...s, sharedSpaces };
+    });
   };
 
   const onPickHousePhotos = async (files: FileList | null) => {
@@ -1326,35 +1632,51 @@ export function ManagerAddListingForm({
     void onPickRoomVideo(roomIndex, event.dataTransfer.files?.[0] ?? null);
   };
 
-  const onDropBathroomPhotos = (bathIndex: number, bathId: string, event: DragEvent<HTMLElement>) => {
+  const onDropBathroomPhotos = (bathId: string, event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone(`bath-photos-${bathId}`);
-    void onPickBathroomPhotos(bathIndex, event.dataTransfer.files);
+    void onPickBathroomPhotos(bathId, event.dataTransfer.files);
   };
 
-  const onDropBathroomVideo = (bathIndex: number, bathId: string, event: DragEvent<HTMLElement>) => {
+  const onDropBathroomVideo = (bathId: string, event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone(`bath-video-${bathId}`);
-    void onPickBathroomVideo(bathIndex, event.dataTransfer.files?.[0] ?? null);
+    void onPickBathroomVideo(bathId, event.dataTransfer.files?.[0] ?? null);
   };
 
-  const onDropSharedSpacePhotos = (spaceIndex: number, spaceId: string, event: DragEvent<HTMLElement>) => {
+  const onDropSharedSpacePhotos = (spaceId: string, event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone(`shared-photos-${spaceId}`);
-    void onPickSharedSpacePhotos(spaceIndex, event.dataTransfer.files);
+    void onPickSharedSpacePhotos(spaceId, event.dataTransfer.files);
   };
 
-  const onDropSharedSpaceVideo = (spaceIndex: number, spaceId: string, event: DragEvent<HTMLElement>) => {
+  const onDropSharedSpaceVideo = (spaceId: string, event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone(`shared-video-${spaceId}`);
-    void onPickSharedSpaceVideo(spaceIndex, event.dataTransfer.files?.[0] ?? null);
+    void onPickSharedSpaceVideo(spaceId, event.dataTransfer.files?.[0] ?? null);
   };
 
   const submitListing = async () => {
+    const invalid = firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 4);
+    if (invalid) {
+      setStepIndex(invalid.stepIndex);
+      setMaxStepReached((m) => Math.max(m, invalid.stepIndex));
+      setStepFieldErrors(invalid.errors);
+      showToast("Please fix the highlighted fields before submitting.");
+      queueMicrotask(() =>
+        scrollToFirstWizardFieldError(
+          buildListingStepFieldOrder(invalid.stepIndex, sub),
+          invalid.errors,
+          scrollRef.current,
+        ),
+      );
+      return;
+    }
+
     const submission: ManagerListingSubmissionV1 = {
       ...sub,
       serviceRequestOptions: serviceOffers,
@@ -1363,13 +1685,19 @@ export function ManagerAddListingForm({
         roomAmenitiesText: sanitizeRoomAmenityText(room.roomAmenitiesText),
       })),
     };
-    const roomsOk = submission.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
-    if (!submission.buildingName.trim() || !submission.address.trim() || !submission.zip.trim() || !submission.neighborhood.trim()) {
-      showToast("Fill in building name, address, ZIP, and neighborhood.");
+    const roomsOk = isEntireHomeListing(submission)
+      ? entireHomeMonthlyRentAmount(submission) > 0 && submission.rooms.some((r) => r.name.trim())
+      : submission.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
+    if (!submission.address.trim() || !submission.zip.trim()) {
+      showToast("Fill in address and ZIP.");
       return;
     }
     if (!roomsOk) {
-      showToast("Add at least one room with a name and monthly rent.");
+      showToast(
+        isEntireHomeListing(submission)
+          ? "Add at least one bedroom and the monthly rent for the entire home."
+          : "Add at least one room with a name and monthly rent.",
+      );
       return;
     }
     if (submission.bathrooms.length > 0 && submission.bathrooms.every((b) => !b.name.trim())) {
@@ -1451,88 +1779,96 @@ export function ManagerAddListingForm({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-foreground/40 px-2 py-2 backdrop-blur-sm sm:px-4 sm:py-3 lg:px-6 lg:py-4"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-slate-900/50 px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <form
         id="manager-add-listing-form"
         onSubmit={(e) => e.preventDefault()}
-        className="glass-card relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
+        onClick={(e) => e.stopPropagation()}
+        className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
       >
         {/* ── Header ── */}
-        <div className="shrink-0 border-b border-border bg-card/80 px-5 pt-5 pb-6 backdrop-blur-xl sm:px-6">
+        <div className="shrink-0 border-b border-slate-100 bg-white px-5 pt-5 pb-6 sm:px-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                 Step {stepIndex + 1} of {LISTING_STEP_COUNT}
               </p>
-              <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
+              <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
                 {isEditMode ? "Edit listing" : "New listing"} · {LISTING_FORM_STEPS[stepIndex]?.label}
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-muted hover:bg-accent/80 hover:text-foreground"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
               aria-label="Close"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
             </button>
           </div>
 
-          {/* Step pills — click any completed step (or any step you can continue past) to jump directly to it */}
+          {/* Step pills — jump only to steps already reached via Continue */}
           <div className="-mx-0 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
             <div className="flex min-w-max gap-1.5">
-              {LISTING_FORM_STEPS.map((step, i) => (
+              {LISTING_FORM_STEPS.map((step, i) => {
+                const reachable = canNavigateToWizardStep(i, maxStepReached);
+                const completed = i < stepIndex;
+                return (
                 <button
                   key={step.id}
                   type="button"
-                  onClick={() => { if (i < stepIndex || canContinueFromStep(stepIndex)) setStepIndex(i); }}
+                  disabled={!reachable}
+                  onClick={() => { if (reachable) { setStepFieldErrors({}); setStepIndex(i); } }}
                   className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     i === stepIndex
-                      ? "bg-primary/10 text-primary ring-1 ring-primary/20"
-                      : i < stepIndex
-                        ? "text-muted hover:bg-accent/50"
-                        : "text-muted/70 hover:bg-accent/50"
+                      ? "bg-primary/10 text-primary"
+                      : completed
+                        ? "text-slate-600 hover:bg-slate-50"
+                        : reachable
+                          ? "text-slate-600 hover:bg-slate-50"
+                          : "cursor-not-allowed text-slate-300"
                   }`}
                 >
                   <span className={`inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
-                    i < stepIndex ? "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]" : i === stepIndex ? "bg-primary text-primary-foreground shadow-[0_4px_12px_-4px_rgba(47,107,255,0.6)]" : "border border-border bg-card text-muted"
+                    completed ? "bg-emerald-100 text-emerald-700" : i === stepIndex ? "bg-primary/10 text-primary" : reachable ? "bg-slate-100 text-slate-400" : "bg-slate-50 text-slate-300"
                   }`}>
-                    {i < stepIndex ? "✓" : i + 1}
+                    {completed ? "✓" : i + 1}
                   </span>
                   {step.label}
                 </button>
-              ))}
+              );
+              })}
             </div>
           </div>
 
           {/* Progress bar */}
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-border/60">
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full rounded-full transition-[width] duration-300 ease-out"
-              style={{
-                width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%`,
-                background: "linear-gradient(90deg, var(--primary) 0%, var(--sky) 100%)",
-              }}
+              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+              style={{ width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%` }}
             />
           </div>
 
           {/* Step blurb */}
-          <p className="mt-3 text-[12px] leading-relaxed text-muted">
+          <p className="mt-3 text-[12px] leading-relaxed text-slate-500">
             {LISTING_STEP_BLURBS[LISTING_FORM_STEPS[stepIndex]!.id]}
           </p>
         </div>
 
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-24 sm:px-6">
-          {/* ── Step 0: Home & layout ── */}
+          {/* ── Step 0: Home ── */}
           {stepIndex === 0 ? (
           <FormSection
             id="edit-building"
             title="Tell us about your place"
             description="Pick the property type and basics, then we’ll match room slots on the next step. Everything here can be changed later."
           >
-            <div className="mb-6 rounded-2xl border border-sky-100/90 bg-sky-50/50 px-4 py-4 sm:px-5">
+            <div
+              data-wizard-field="listingPropertyTypeId"
+              className={`mb-6 rounded-2xl border px-4 py-4 sm:px-5 ${wizardSectionErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId), "border-sky-100/90 bg-sky-50/50")}`}
+            >
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Step 1 · Basics</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">What kind of place is this?</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -1542,7 +1878,10 @@ export function ManagerAddListingForm({
                     <button
                       key={opt.id}
                       type="button"
-                      onClick={() => setSub((s) => ({ ...s, listingPropertyTypeId: opt.id }))}
+                      onClick={() => {
+                        clearListingFieldError("listingPropertyTypeId");
+                        setSub((s) => ({ ...s, listingPropertyTypeId: opt.id }));
+                      }}
                       className={`rounded-2xl border px-3 py-3 text-left transition ${
                         on
                           ? "border-primary bg-white shadow-[0_8px_28px_-18px_rgba(37,99,235,0.45)] ring-2 ring-primary/25"
@@ -1555,55 +1894,86 @@ export function ManagerAddListingForm({
                   );
                 })}
               </div>
-              <p className="mt-5 text-sm font-semibold text-slate-900">What are you listing?</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {LISTING_PLACE_CATEGORY_OPTIONS.map((opt) => {
-                  const on = sub.listingPlaceCategoryId === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setSub((s) => ({ ...s, listingPlaceCategoryId: opt.id }))}
-                      className={`rounded-2xl border px-4 py-3.5 text-left transition ${
-                        on
-                          ? "border-primary bg-white shadow-[0_8px_28px_-18px_rgba(37,99,235,0.45)] ring-2 ring-primary/25"
-                          : "border-slate-200/90 bg-white hover:border-slate-300"
-                      }`}
-                    >
-                      <span className="text-sm font-semibold text-slate-900">{opt.label}</span>
-                      <span className="mt-0.5 block text-xs text-slate-500">{opt.hint}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <StepFieldError msg={stepFieldErrors.listingPropertyTypeId} />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <FieldLabel>Building name *</FieldLabel>
-                <Input value={sub.buildingName} onChange={(e) => setSub((s) => ({ ...s, buildingName: e.target.value }))} placeholder="e.g. Pioneer Collective" />
+              <div className="sm:col-span-2" data-wizard-field="buildingName">
+                <FieldLabel>Building name</FieldLabel>
+                <Input
+                  value={sub.buildingName}
+                  onChange={(e) => {
+                    clearListingFieldError("buildingName");
+                    setSub((s) => ({ ...s, buildingName: sanitizeBuildingNameInput(e.target.value) }));
+                  }}
+                  className={wizardFieldErrorClass(Boolean(stepFieldErrors.buildingName))}
+                  placeholder="e.g. Pioneer Collective"
+                />
+                <StepFieldError msg={stepFieldErrors.buildingName} />
               </div>
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2" data-wizard-field="address">
                 <FieldLabel>Street address *</FieldLabel>
-                <Input value={sub.address} onChange={(e) => setSub((s) => ({ ...s, address: e.target.value }))} placeholder="Street, unit if any" />
+                <Input
+                  value={sub.address}
+                  onChange={(e) => {
+                    clearListingFieldError("address");
+                    setSub((s) => ({ ...s, address: sanitizeStreetAddressInput(e.target.value) }));
+                  }}
+                  className={wizardFieldErrorClass(Boolean(stepFieldErrors.address))}
+                  placeholder="Street, unit if any"
+                />
+                <StepFieldError msg={stepFieldErrors.address} />
               </div>
               <GridField>
-                <FieldLabel>ZIP *</FieldLabel>
-                <Input value={sub.zip} onChange={(e) => setSub((s) => ({ ...s, zip: e.target.value }))} maxLength={10} inputMode="numeric" />
+                <div data-wizard-field="zip">
+                  <FieldLabel>ZIP *</FieldLabel>
+                </div>
+                <div>
+                  <Input
+                    value={sub.zip}
+                    onChange={(e) => {
+                      clearListingFieldError("zip");
+                      setSub((s) => ({ ...s, zip: sanitizeZipInput(e.target.value) }));
+                    }}
+                    className={wizardFieldErrorClass(Boolean(stepFieldErrors.zip))}
+                    maxLength={10}
+                    inputMode="numeric"
+                  />
+                  <StepFieldError msg={stepFieldErrors.zip} />
+                </div>
               </GridField>
               <GridField>
-                <FieldLabel>Neighborhood *</FieldLabel>
-                <Input value={sub.neighborhood} onChange={(e) => setSub((s) => ({ ...s, neighborhood: e.target.value }))} placeholder="e.g. Capitol Hill" />
+                <div data-wizard-field="neighborhood">
+                  <FieldLabel>Neighborhood</FieldLabel>
+                </div>
+                <div>
+                  <Input
+                    value={sub.neighborhood}
+                    onChange={(e) => {
+                      clearListingFieldError("neighborhood");
+                      setSub((s) => ({ ...s, neighborhood: sanitizeNeighborhoodInput(e.target.value) }));
+                    }}
+                    className={wizardFieldErrorClass(Boolean(stepFieldErrors.neighborhood))}
+                    placeholder="e.g. Capitol Hill"
+                  />
+                  <StepFieldError msg={stepFieldErrors.neighborhood} />
+                </div>
               </GridField>
 
               <GridField>
-                <FieldLabel>Floors / levels in the home *</FieldLabel>
-                <div className="relative">
-                  <Select
-                    aria-label="Number of floors"
-                    className={`${selectInputCls} appearance-none pr-10`}
-                    value={sub.listingStoriesId ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, listingStoriesId: e.target.value }))}
+                <div data-wizard-field="listingStoriesId">
+                  <FieldLabel>Floors / levels in the home *</FieldLabel>
+                </div>
+                <div>
+                  <div className="relative">
+                    <Select
+                      aria-label="Number of floors"
+                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingStoriesId), selectInputCls)} appearance-none pr-10`}
+                      value={sub.listingStoriesId ?? ""}
+                      onChange={(e) => {
+                        clearListingFieldError("listingStoriesId");
+                        setSub((s) => ({ ...s, listingStoriesId: e.target.value }));
+                      }}
                   >
                     <option value="">Select</option>
                     {LISTING_STORIES_OPTIONS.map((o) => (
@@ -1616,15 +1986,23 @@ export function ManagerAddListingForm({
                     <ChevronDownTiny />
                   </span>
                 </div>
+                  <StepFieldError msg={stepFieldErrors.listingStoriesId} />
+                </div>
               </GridField>
               <GridField>
-                <FieldLabel>Bathrooms in the home *</FieldLabel>
-                <div className="relative">
-                  <Select
-                    aria-label="Total bathrooms"
-                    className={`${selectInputCls} appearance-none pr-10`}
-                    value={sub.listingTotalBathroomsId ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, listingTotalBathroomsId: e.target.value }))}
+                <div data-wizard-field="listingTotalBathroomsId">
+                  <FieldLabel>Bathrooms in the home *</FieldLabel>
+                </div>
+                <div>
+                  <div className="relative">
+                    <Select
+                      aria-label="Total bathrooms"
+                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingTotalBathroomsId), selectInputCls)} appearance-none pr-10`}
+                      value={sub.listingTotalBathroomsId ?? ""}
+                      onChange={(e) => {
+                        clearListingFieldError("listingTotalBathroomsId");
+                        setSub((s) => ({ ...s, listingTotalBathroomsId: e.target.value }));
+                      }}
                   >
                     <option value="">Select</option>
                     {LISTING_TOTAL_BATH_OPTIONS.map((o) => (
@@ -1637,17 +2015,25 @@ export function ManagerAddListingForm({
                     <ChevronDownTiny />
                   </span>
                 </div>
+                  <StepFieldError msg={stepFieldErrors.listingTotalBathroomsId} />
+                </div>
               </GridField>
               <GridField className="sm:col-span-2">
-                <FieldLabel hint="We’ll open that many room cards on the next step. You can still add or remove rows later.">
-                  Bedrooms you’ll list for rent *
-                </FieldLabel>
-                <div className="relative max-w-md">
-                  <Select
-                    aria-label="Bedrooms for rent"
-                    className={`${selectInputCls} appearance-none pr-10`}
-                    value={String(sub.listingBedroomSlots ?? sub.rooms.length)}
-                    onChange={(e) => setSub((s) => ({ ...s, listingBedroomSlots: Math.max(1, Math.min(20, Number(e.target.value) || 1)) }))}
+                <div data-wizard-field="listingBedroomSlots">
+                  <FieldLabel hint="We’ll open that many room cards on the next step. You can still add or remove rows later.">
+                    Bedrooms in the home *
+                  </FieldLabel>
+                </div>
+                <div>
+                  <div className="relative max-w-md">
+                    <Select
+                      aria-label="Bedrooms for rent"
+                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingBedroomSlots), selectInputCls)} appearance-none pr-10`}
+                      value={String(sub.listingBedroomSlots ?? sub.rooms.length)}
+                      onChange={(e) => {
+                        clearListingFieldError("listingBedroomSlots");
+                        setSub((s) => ({ ...s, listingBedroomSlots: Math.max(1, Math.min(20, Number(e.target.value) || 1)) }));
+                      }}
                   >
                     {LISTING_BEDROOM_SLOT_OPTIONS.map((n) => (
                       <option key={n} value={n}>
@@ -1658,6 +2044,8 @@ export function ManagerAddListingForm({
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
                     <ChevronDownTiny />
                   </span>
+                </div>
+                  <StepFieldError msg={stepFieldErrors.listingBedroomSlots} />
                 </div>
               </GridField>
 
@@ -1697,23 +2085,324 @@ export function ManagerAddListingForm({
                 </label>
               </div>
             </div>
+
+            <div className="mt-6">
+            <ListingSubsection
+              title="Full-house photos & video"
+              description="Hero gallery at the top of your public listing — exterior, kitchen, living areas, and common spaces. Up to 12 photos."
+            >
+              <div
+                className={`mt-2 ${mediaDropZoneClass(activeDropZone === "house-photos")}`}
+                onDragOver={(e) => handleDragOver(e, "house-photos")}
+                onDragEnter={(e) => handleDragOver(e, "house-photos")}
+                onDragLeave={(e) => handleDragLeave(e, "house-photos")}
+                onDrop={onDropHousePhotos}
+              >
+                <MediaPickTrigger accept="image/*" multiple onFiles={(files) => { void onPickHousePhotos(files); }}>
+                  Add house photos
+                </MediaPickTrigger>
+                <p className="mt-3 text-sm text-slate-600">Drag and drop photos here, or use the button above.</p>
+                {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
+                      <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" className="h-full w-full object-cover" />
+                        <button type="button" className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70" onClick={() => removeHousePhoto(pi)} aria-label="Remove photo">×</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[11px] text-slate-500">Optional for draft — recommended before you go live.</p>
+                )}
+              </div>
+              <div
+                className={`mt-4 ${mediaDropZoneClass(activeDropZone === "house-video")}`}
+                onDragOver={(e) => handleDragOver(e, "house-video")}
+                onDragEnter={(e) => handleDragOver(e, "house-video")}
+                onDragLeave={(e) => handleDragLeave(e, "house-video")}
+                onDrop={onDropHouseVideo}
+              >
+                <FieldLabel hint="Optional walkthrough (~14 MB max).">Full-house video</FieldLabel>
+                <MediaPickTrigger accept="video/*" disabled={videoUploadingKeys.has("house")} onFiles={(files) => { void onPickHouseVideo(files?.[0] ?? null); }}>
+                  {videoUploadingKeys.has("house") ? "Uploading…" : sub.houseVideoDataUrl ? "Replace video" : "Add house video"}
+                </MediaPickTrigger>
+                {sub.houseVideoDataUrl ? (
+                  <div className="mt-3 space-y-2">
+                    <video src={videoPreviewUrls.house ?? sub.houseVideoDataUrl} controls className="max-h-48 w-full rounded-xl border border-slate-200 bg-black object-contain" />
+                    <button type="button" onClick={clearHouseVideo} className="text-xs font-medium text-rose-600 hover:text-rose-800">Remove video</button>
+                  </div>
+                ) : null}
+              </div>
+            </ListingSubsection>
+
+            <ListingSubsection
+              title="Building & neighborhood amenities"
+              description="What shows in the main amenities table on the listing. Kitchen gear, shared desks, and TV belong under Shared spaces; bathroom finishes under Bathrooms."
+            >
+              <div>
+                <FieldLabel hint="Tap all that apply.">Common amenities</FieldLabel>
+                <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {dedupedPresets.houseWide.map((p) => {
+                    const on = splitLineList(sub.amenitiesText).includes(p.label);
+                    return (
+                      <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={on}
+                          onChange={(e) =>
+                            setSub((s) => ({
+                              ...s,
+                              amenitiesText: mergeToggleLine(s.amenitiesText, p.label, e.target.checked),
+                            }))
+                          }
+                        />
+                        <span className="font-medium text-slate-800">{p.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <Textarea
+                  className="mt-2"
+                  rows={2}
+                  value={sub.amenitiesText}
+                  onChange={(e) => setSub((s) => ({ ...s, amenitiesText: e.target.value }))}
+                  placeholder="Add custom amenities not listed above (one per line)."
+                />
+              </div>
+            </ListingSubsection>
+
+            <ListingSubsection
+              title="House details"
+              description="House rules and general info appear in the resident portal. House description is for your internal notes only."
+            >
+              <div>
+                <div className="mb-0.5 flex items-center gap-2">
+                  <FieldLabel>House description</FieldLabel>
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">Manager only</span>
+                </div>
+                <Textarea
+                  rows={4}
+                  value={sub.houseDescription ?? ""}
+                  onChange={(e) => setSub((s) => ({ ...s, houseDescription: e.target.value }))}
+                  placeholder="Internal notes about the house…"
+                />
+              </div>
+              <div>
+                <div className="mb-0.5 flex items-center gap-2">
+                  <FieldLabel>House rules</FieldLabel>
+                  <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700">Residents only</span>
+                </div>
+                <p className="mb-1.5 text-[11px] text-slate-500">Shown to residents in their Move-in portal after approval.</p>
+                <Textarea
+                  rows={3}
+                  value={sub.houseRulesText}
+                  onChange={(e) => setSub((s) => ({ ...s, houseRulesText: e.target.value }))}
+                  placeholder="Quiet hours, guests, smoking, pets…"
+                />
+              </div>
+              <div>
+                <div className="mb-0.5 flex items-center gap-2">
+                  <FieldLabel>General house info</FieldLabel>
+                  <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700">Residents only</span>
+                </div>
+                <p className="mb-1.5 text-[11px] text-slate-500">Shown to residents in their Move-in portal after approval.</p>
+                <Textarea
+                  rows={4}
+                  value={sub.generalHouseInfo ?? ""}
+                  onChange={(e) => setSub((s) => ({ ...s, generalHouseInfo: e.target.value }))}
+                  placeholder="Wi-Fi network & password, gate/door codes, laundry tips, trash schedule…"
+                />
+              </div>
+            </ListingSubsection>
+            </div>
           </FormSection>
           ) : null}
 
-          {/* ── Step 4: Lease, fees & costs ── */}
+          {/* ── Step 4: Pricing ── */}
           {stepIndex === 4 ? (
           <FormSection
             id="edit-lease"
-            title="Lease, fees & costs"
+            title="Pricing"
             description={
-              <>Leave money fields blank or $0 to hide them on the public listing.</>
+              <>Set how the home is rented, monthly amounts, and move-in fees. Leave optional fields blank to hide them on the public listing.</>
             }
           >
             <div className="space-y-5">
+              <PlaceCategoryPicker
+                hasError={Boolean(stepFieldErrors.listingPlaceCategoryId)}
+                errorMsg={stepFieldErrors.listingPlaceCategoryId}
+                value={sub.listingPlaceCategoryId}
+                onSelect={(id) => {
+                  clearListingFieldError("listingPlaceCategoryId");
+                  setSub((s) => {
+                    if (id === "entire_home") {
+                      const sum = s.rooms.reduce((acc, room) => acc + (room.monthlyRent > 0 ? room.monthlyRent : 0), 0);
+                      const rent =
+                        (s.entireHomeMonthlyRent ?? 0) > 0 ? s.entireHomeMonthlyRent! : sum > 0 ? sum : s.rooms[0]?.monthlyRent ?? 0;
+                      return applyEntireHomeListingPricing({ ...s, listingPlaceCategoryId: id }, { entireHomeMonthlyRent: rent });
+                    }
+                    return { ...s, listingPlaceCategoryId: id, entireHomeMonthlyRent: undefined, entireHomeUtilitiesEstimate: undefined, entireHomeProrateMethod: undefined, entireHomeDailyRentRate: undefined, entireHomeDailyUtilitiesRate: undefined };
+                  });
+                }}
+              />
+
+              <ListingSubsection
+                title={isEntireHome ? "Entire-home rent & utilities" : "Per-room rent & utilities"}
+                description={
+                  isEntireHome
+                    ? "One monthly lease for the full unit — utilities and proration apply to the whole home."
+                    : "Set rent, utilities estimate, and proration for each bedroom you are listing."
+                }
+              >
+                {isEntireHome ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <GridField>
+                      <div data-wizard-field="monthlyRent">
+                        <FieldLabel>Monthly rent for entire home *</FieldLabel>
+                      </div>
+                      <div>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                          <Input
+                            inputMode="decimal"
+                            className={wizardFieldErrorClass(Boolean(stepFieldErrors.monthlyRent), "pl-8")}
+                            value={entireHomeRent || ""}
+                            onChange={(e) => {
+                              clearListingFieldError("monthlyRent");
+                              setSub((s) => applyEntireHomeListingPricing(s, { entireHomeMonthlyRent: parseSanitizedMoneyNumber(e.target.value) }));
+                            }}
+                            placeholder="4500"
+                          />
+                        </div>
+                        <StepFieldError msg={stepFieldErrors.monthlyRent} />
+                      </div>
+                    </GridField>
+                    <GridField>
+                      <FieldLabel hint="Monthly estimate used in signing totals.">Utilities estimate (whole home)</FieldLabel>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                        <Input
+                          inputMode="decimal"
+                          className="pl-8"
+                          value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                          onChange={(e) =>
+                            setSub((s) => applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }))
+                          }
+                          placeholder="175"
+                        />
+                      </div>
+                    </GridField>
+                    <div className="sm:col-span-2">
+                      <ProrationMethodFields
+                        prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
+                        monthlyRent={entireHomeRent}
+                        dailyRentRate={sub.entireHomeDailyRentRate}
+                        dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
+                        utilitiesLabel="Daily utilities rate (whole home)"
+                        onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
+                        onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
+                        onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4" data-wizard-field="monthlyRent">
+                    {stepFieldErrors.monthlyRent ? (
+                      <p className="text-xs font-medium text-red-600">{stepFieldErrors.monthlyRent}</p>
+                    ) : null}
+                    {sub.rooms.map((room, i) => {
+                      const roomRentKey = listingRoomRentKey(room.id);
+                      const roomRentErr = stepFieldErrors[roomRentKey];
+                      return (
+                      <div
+                        key={room.id}
+                        className={`rounded-xl border bg-white p-4 ${wizardSectionErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "border-slate-200")}`}
+                      >
+                        <p className="text-sm font-semibold text-slate-900">{room.name.trim() || `Room ${i + 1}`}</p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <GridField>
+                            <FieldLabel>Monthly rent *</FieldLabel>
+                            <div className="relative" data-wizard-field={roomRentKey}>
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                              <Input
+                                inputMode="decimal"
+                                className={wizardFieldErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "pl-8")}
+                                value={room.monthlyRent || ""}
+                                onChange={(e) => {
+                                  clearListingFieldError("monthlyRent");
+                                  clearListingFieldError(roomRentKey);
+                                  setRoom(i, { monthlyRent: parseSanitizedMoneyNumber(e.target.value) });
+                                }}
+                                placeholder="800"
+                              />
+                              <StepFieldError msg={roomRentErr} />
+                            </div>
+                          </GridField>
+                          <GridField>
+                            <FieldLabel>Utilities estimate</FieldLabel>
+                            <div className="relative">
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                              <Input inputMode="decimal" className="pl-8" value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()} onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })} placeholder="175" />
+                            </div>
+                          </GridField>
+                          <div className="sm:col-span-2">
+                            <ProrationMethodFields
+                              prorateMethod={room.prorateMethod ?? "auto"}
+                              monthlyRent={room.monthlyRent}
+                              dailyRentRate={room.dailyRentRate}
+                              dailyUtilitiesRate={room.dailyUtilitiesRate}
+                              onMethod={(m) => setRoom(i, { prorateMethod: m })}
+                              onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
+                              onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </ListingSubsection>
+
               <ListingSubsection title="Lease terms">
-                <div>
-                  <FieldLabel hint="Lease lengths and terms shown on your listing.">Lease terms</FieldLabel>
-                  <Textarea className="" value={sub.leaseTermsBody} onChange={(e) => setSub((s) => ({ ...s, leaseTermsBody: e.target.value }))} />
+                <div data-wizard-field="allowedLeaseTerms" className={wizardSectionErrorClass(Boolean(stepFieldErrors.allowedLeaseTerms))}>
+                  <FieldLabel required>Lease terms offered</FieldLabel>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {LEASE_TERM_OPTIONS.map((term) => {
+                      const selected = resolveAllowedLeaseTerms(sub).includes(term);
+                      return (
+                        <label
+                          key={term}
+                          className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300"
+                            checked={selected}
+                            onChange={(e) => {
+                              clearListingFieldError("allowedLeaseTerms");
+                              const on = e.target.checked;
+                              setSub((s) => {
+                                const current = resolveAllowedLeaseTerms(s);
+                                const next = on
+                                  ? [...new Set([...current, term])]
+                                  : current.filter((t) => t !== term);
+                                return {
+                                  ...s,
+                                  allowedLeaseTerms: next,
+                                  leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
+                                };
+                              });
+                            }}
+                          />
+                          <span className="font-medium text-slate-800">{term}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <StepFieldError msg={stepFieldErrors.allowedLeaseTerms} />
                 </div>
               </ListingSubsection>
 
@@ -1740,7 +2429,7 @@ export function ManagerAddListingForm({
                           className="pl-8"
                           inputMode="decimal"
                           value={(sub.shortTermDailyCost ?? "").replace(/^\$/, "").trim()}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermDailyCost: e.target.value }))}
+                          onChange={(e) => setSub((s) => ({ ...s, shortTermDailyCost: sanitizeMoneyInput(e.target.value) }))}
                           placeholder="40"
                         />
                       </div>
@@ -1753,7 +2442,7 @@ export function ManagerAddListingForm({
                           className="pl-8"
                           inputMode="decimal"
                           value={(sub.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermDeposit: e.target.value }))}
+                          onChange={(e) => setSub((s) => ({ ...s, shortTermDeposit: sanitizeMoneyInput(e.target.value) }))}
                           placeholder="100"
                         />
                       </div>
@@ -1766,7 +2455,7 @@ export function ManagerAddListingForm({
                           className="pl-8"
                           inputMode="decimal"
                           value={(sub.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermMoveInFee: e.target.value }))}
+                          onChange={(e) => setSub((s) => ({ ...s, shortTermMoveInFee: sanitizeMoneyInput(e.target.value) }))}
                           placeholder="50"
                         />
                       </div>
@@ -1788,8 +2477,13 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 title="Lease bundles"
-                description="Optional packages on the public listing — whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
+                description={
+                  isEntireHome
+                    ? "Optional — the public listing already shows one rent for the entire home. Add a bundle only if you want promo pricing or extra copy."
+                    : "Optional packages on the public listing — whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
+                }
               >
+                {!isEntireHome ? (
                 <div className="rounded-2xl border border-sky-200/80 bg-sky-50/60 p-4 sm:p-5">
                   <p className="text-sm font-semibold text-sky-950">Build from your rooms</p>
                   <p className="mt-1 text-xs leading-5 text-sky-900/80">
@@ -1801,7 +2495,7 @@ export function ManagerAddListingForm({
                       variant="outline"
                       className="rounded-full border-sky-200 bg-white text-xs"
                       onClick={() => addGeneratedBundle("whole_house")}
-                      disabled={!sub.rooms.some((room) => room.name.trim())}
+                      disabled={sub.rooms.length === 0}
                     >
                       Whole house
                     </Button>
@@ -1812,17 +2506,20 @@ export function ManagerAddListingForm({
                       onClick={() => addGeneratedBundle("multi_room")}
                       disabled={sub.rooms.filter((room) => room.name.trim()).length < 2}
                     >
-                      Pair / group
+                      Group
                     </Button>
                     <Button type="button" variant="primary" className="rounded-full text-xs" onClick={addBundle}>
                       Custom (blank)
                     </Button>
                   </div>
                 </div>
+                ) : null}
 
                 {(sub.bundles ?? []).length === 0 ? (
                   <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm text-slate-600">
-                    No bundles yet — renters will still see per-room pricing from the Rooms step. Add a bundle when you want to advertise a combined lease.
+                    {isEntireHome
+                      ? "No extra bundles — the listing uses your entire-home rent from Lease & pricing."
+                      : "No bundles yet — renters will still see per-room pricing from Lease & pricing. Add a bundle when you want to advertise a combined lease."}
                   </p>
                 ) : (
                   <div className="mt-4 space-y-4">
@@ -1887,7 +2584,7 @@ export function ManagerAddListingForm({
                               <FieldLabel>Bundle name</FieldLabel>
                               <Input
                                 value={bundle.label}
-                                onChange={(e) => setBundle(i, { label: e.target.value })}
+                                onChange={(e) => setBundle(i, { label: sanitizePlaceNameInput(e.target.value) })}
                                 placeholder="Whole house lease, Rooms A+B"
                               />
                             </GridField>
@@ -1899,7 +2596,7 @@ export function ManagerAddListingForm({
                                   inputMode="decimal"
                                   className="pl-8"
                                   value={bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                                  onChange={(e) => setBundle(i, { price: e.target.value })}
+                                  onChange={(e) => setBundle(i, { price: sanitizeMoneyInput(e.target.value) })}
                                   placeholder={rentSum > 0 ? String(rentSum) : "4500"}
                                 />
                               </div>
@@ -1912,7 +2609,7 @@ export function ManagerAddListingForm({
                                   inputMode="decimal"
                                   className="pl-8"
                                   value={bundle.strikethrough.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                                  onChange={(e) => setBundle(i, { strikethrough: e.target.value })}
+                                  onChange={(e) => setBundle(i, { strikethrough: sanitizeMoneyInput(e.target.value) })}
                                   placeholder="4800"
                                 />
                               </div>
@@ -1956,55 +2653,39 @@ export function ManagerAddListingForm({
 
               <ListingSubsection title="Fees">
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <GridField>
-                    <FieldLabel hint="Enter amount or 'Waived'">Application fee</FieldLabel>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                      <Input className="pl-8" value={sub.applicationFee.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, applicationFee: e.target.value }))} placeholder="50" />
-                    </div>
-                  </GridField>
-                  <GridField>
-                    <FieldLabel>Security deposit</FieldLabel>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                      <Input className="pl-8" inputMode="decimal" value={sub.securityDeposit.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, securityDeposit: e.target.value }))} placeholder="500" />
-                    </div>
-                  </GridField>
-                  <GridField>
-                    <FieldLabel>Move-in fee</FieldLabel>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                      <Input className="pl-8" inputMode="decimal" value={sub.moveInFee.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, moveInFee: e.target.value }))} placeholder="200" />
-                    </div>
-                  </GridField>
-                  <GridField>
-                    <FieldLabel hint="Leave blank or 0 to hide.">Parking (monthly)</FieldLabel>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                      <Input className="pl-8" inputMode="decimal" value={sub.parkingMonthly.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, parkingMonthly: e.target.value }))} placeholder="150" />
-                    </div>
-                  </GridField>
-                  <GridField>
-                    <FieldLabel hint="Leave blank or 0 to hide.">HOA / community</FieldLabel>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                      <Input className="pl-8" inputMode="decimal" value={sub.hoaMonthly.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, hoaMonthly: e.target.value }))} placeholder="0" />
-                    </div>
-                  </GridField>
-                  <GridField>
-                    <FieldLabel>Other monthly fees</FieldLabel>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                      <Input className="pl-8" inputMode="decimal" value={sub.otherMonthlyFees.replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, otherMonthlyFees: e.target.value }))} placeholder="0" />
-                    </div>
-                  </GridField>
-                  <GridField>
-                    <FieldLabel hint="Added to monthly rent for month-to-month tenants. Leave blank if none.">Month-to-month surcharge</FieldLabel>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                      <Input className="pl-8" inputMode="decimal" value={(sub.monthToMonthSurcharge ?? "").replace(/^\$/, "").trim()} onChange={(e) => setSub((s) => ({ ...s, monthToMonthSurcharge: e.target.value }))} placeholder="25" />
-                    </div>
-                  </GridField>
+                  {(
+                    [
+                      ["applicationFee", "Application fee", sub.applicationFee.replace(/^\$/, "").trim()],
+                      ["securityDeposit", "Security deposit", sub.securityDeposit.replace(/^\$/, "").trim()],
+                      ["moveInFee", "Move-in fee", sub.moveInFee.replace(/^\$/, "").trim()],
+                      ["parkingMonthly", "Parking (monthly)", sub.parkingMonthly.replace(/^\$/, "").trim()],
+                      ["hoaMonthly", "HOA / community", sub.hoaMonthly.replace(/^\$/, "").trim()],
+                      ["otherMonthlyFees", "Other monthly fees", sub.otherMonthlyFees.replace(/^\$/, "").trim()],
+                      ["monthToMonthSurcharge", "Month-to-month surcharge", (sub.monthToMonthSurcharge ?? "").replace(/^\$/, "").trim()],
+                    ] as const
+                  ).map(([key, label, value]) => (
+                    <GridField key={key}>
+                      <div data-wizard-field={key}>
+                        <FieldLabel required>{label}</FieldLabel>
+                      </div>
+                      <div>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
+                          <Input
+                            className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
+                            inputMode="decimal"
+                            value={value}
+                            onChange={(e) => {
+                              clearListingFieldError(key);
+                              setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
+                            }}
+                            placeholder="0"
+                          />
+                        </div>
+                        <StepFieldError msg={stepFieldErrors[key]} />
+                      </div>
+                    </GridField>
+                  ))}
                 </div>
                 <div className="mt-3">
                   <FieldLabel hint="Explain all recurring and one-time housing costs (shown on your listing).">Cost summary</FieldLabel>
@@ -2039,73 +2720,93 @@ export function ManagerAddListingForm({
               <ListingSubsection
                 id="edit-zelle"
                 title="Resident payment methods"
-                description="When Axis payments (ACH) is enabled, applicants and residents pay application fees, rent, utilities, and other charges by bank transfer. Zelle and Venmo remain manual options."
+                description="How residents pay rent, utilities, and ongoing charges."
               >
-                <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
                   <label className="flex cursor-pointer items-center gap-3">
                     <input
                       type="checkbox"
                       className="h-4 w-4 rounded border-slate-300"
                       checked={sub.axisPaymentsEnabled !== false}
-                      onChange={(e) => setSub((s) => ({ ...s, axisPaymentsEnabled: e.target.checked }))}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          axisPaymentsEnabled: e.target.checked,
+                          applicationFeeStripeEnabled: e.target.checked ? true : s.applicationFeeStripeEnabled,
+                        }))
+                      }
                     />
                     <span className="text-sm font-medium text-slate-800">
                       Axis payments (ACH) — low {0.8}% processing fee
                     </span>
                   </label>
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-slate-300"
-                      checked={Boolean(sub.zellePaymentsEnabled)}
-                      onChange={(e) => {
-                        const on = e.target.checked;
-                        setSub((s) => ({
-                          ...s,
-                          zellePaymentsEnabled: on,
-                          applicationFeeZelleEnabled: on,
-                        }));
-                      }}
-                    />
-                    <span className="text-sm font-medium text-slate-800">Zelle (no platform fee)</span>
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-slate-300"
-                      checked={Boolean(sub.venmoPaymentsEnabled)}
-                      onChange={(e) => {
-                        const on = e.target.checked;
-                        setSub((s) => ({
-                          ...s,
-                          venmoPaymentsEnabled: on,
-                          applicationFeeVenmoEnabled: on,
-                        }));
-                      }}
-                    />
-                    <span className="text-sm font-medium text-slate-800">Venmo (no platform fee)</span>
-                  </label>
+                  <div className="border-t border-slate-100 pt-3">
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={Boolean(sub.zellePaymentsEnabled)}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setSub((s) => ({
+                            ...s,
+                            zellePaymentsEnabled: on,
+                            applicationFeeZelleEnabled: on,
+                          }));
+                        }}
+                      />
+                      <span className="text-sm font-medium text-slate-800">Zelle</span>
+                    </label>
+                    {sub.zellePaymentsEnabled ? (
+                      <div className="mt-2 pl-7" data-wizard-field="zelleContact">
+                        <FieldLabel required>Zelle phone or email</FieldLabel>
+                        <Input
+                          value={sub.zelleContact ?? ""}
+                          onChange={(e) => {
+                            clearListingFieldError("zelleContact");
+                            setSub((s) => ({ ...s, zelleContact: sanitizePaymentContactInput(e.target.value) }));
+                          }}
+                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.zelleContact))}
+                          placeholder="+1 555 010 8899 or name@email.com"
+                        />
+                        <StepFieldError msg={stepFieldErrors.zelleContact} />
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="border-t border-slate-100 pt-3">
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={Boolean(sub.venmoPaymentsEnabled)}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setSub((s) => ({
+                            ...s,
+                            venmoPaymentsEnabled: on,
+                            applicationFeeVenmoEnabled: on,
+                          }));
+                        }}
+                      />
+                      <span className="text-sm font-medium text-slate-800">Venmo</span>
+                    </label>
+                    {sub.venmoPaymentsEnabled ? (
+                      <div className="mt-2 pl-7" data-wizard-field="venmoContact">
+                        <FieldLabel required>Venmo username, phone, or email</FieldLabel>
+                        <Input
+                          value={sub.venmoContact ?? ""}
+                          onChange={(e) => {
+                            clearListingFieldError("venmoContact");
+                            setSub((s) => ({ ...s, venmoContact: sanitizePaymentContactInput(e.target.value) }));
+                          }}
+                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.venmoContact))}
+                          placeholder="@username, +1 555 010 8899, or name@email.com"
+                        />
+                        <StepFieldError msg={stepFieldErrors.venmoContact} />
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                {sub.zellePaymentsEnabled ? (
-                  <div className="mt-3">
-                    <FieldLabel hint="Shown to residents when they pay via Zelle.">Zelle phone or email</FieldLabel>
-                    <Input
-                      value={sub.zelleContact ?? ""}
-                      onChange={(e) => setSub((s) => ({ ...s, zelleContact: e.target.value }))}
-                      placeholder="+1 555 010 8899 or name@email.com"
-                    />
-                  </div>
-                ) : null}
-                {sub.venmoPaymentsEnabled ? (
-                  <div className="mt-3">
-                    <FieldLabel hint="Shown to residents when they pay via Venmo.">Venmo username, phone, or email</FieldLabel>
-                    <Input
-                      value={sub.venmoContact ?? ""}
-                      onChange={(e) => setSub((s) => ({ ...s, venmoContact: e.target.value }))}
-                      placeholder="@username, +1 555 010 8899, or name@email.com"
-                    />
-                  </div>
-                ) : null}
               </ListingSubsection>
 
               <ListingSubsection
@@ -2131,14 +2832,14 @@ export function ManagerAddListingForm({
                   <GridField>
                     <FieldLabel hint="Days after the due date before a late fee is added automatically.">Late fee grace period (days)</FieldLabel>
                     <Input
-                      type="number"
+                      inputMode="numeric"
                       min={0}
                       max={30}
                       value={String(sub.lateFeeGraceDays ?? 5)}
                       onChange={(e) =>
                         setSub((s) => ({
                           ...s,
-                          lateFeeGraceDays: Math.max(0, Math.min(30, Math.round(Number(e.target.value) || 0))),
+                          lateFeeGraceDays: Math.max(0, Math.min(30, parseSanitizedInteger(e.target.value, 5))),
                         }))
                       }
                     />
@@ -2151,7 +2852,7 @@ export function ManagerAddListingForm({
                         className="pl-8"
                         inputMode="decimal"
                         value={(sub.lateFeeAmount ?? "50").replace(/^\$/, "").trim()}
-                        onChange={(e) => setSub((s) => ({ ...s, lateFeeAmount: e.target.value }))}
+                        onChange={(e) => setSub((s) => ({ ...s, lateFeeAmount: sanitizeMoneyInput(e.target.value) }))}
                         placeholder="50"
                       />
                     </div>
@@ -2173,21 +2874,129 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 title="Application fee payment methods"
-                description="Choose how applicants can pay the application fee."
+                description="Choose which resident payment methods applicants can use for the application fee."
               >
-                <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                <div
+                  data-wizard-field="applicationFeeMethods"
+                  className={`space-y-4 rounded-xl border bg-white p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.applicationFeeMethods), "border-slate-200")}`}
+                >
+                  <StepFieldError msg={stepFieldErrors.applicationFeeMethods} />
                   <label className="flex cursor-pointer items-center gap-3">
                     <input
                       type="checkbox"
                       className="h-4 w-4 rounded border-slate-300"
                       checked={sub.applicationFeeStripeEnabled !== false}
-                      onChange={(e) => setSub((s) => ({ ...s, applicationFeeStripeEnabled: e.target.checked }))}
+                      disabled={sub.axisPaymentsEnabled === false}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          applicationFeeStripeEnabled: e.target.checked,
+                        }))
+                      }
                     />
-                    <span className="text-sm font-medium text-slate-800">Stripe (card)</span>
+                    <span className="text-sm font-medium text-slate-800">Axis payments (ACH)</span>
                   </label>
+                  {sub.zellePaymentsEnabled ? (
+                    <div className="border-t border-slate-100 pt-3">
+                      <label className="flex cursor-pointer items-center gap-3">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={sub.applicationFeeZelleEnabled !== false}
+                          onChange={(e) => setSub((s) => ({ ...s, applicationFeeZelleEnabled: e.target.checked }))}
+                        />
+                        <span className="text-sm font-medium text-slate-800">Zelle</span>
+                      </label>
+                    </div>
+                  ) : null}
+                  {sub.venmoPaymentsEnabled ? (
+                    <div className="border-t border-slate-100 pt-3">
+                      <label className="flex cursor-pointer items-center gap-3">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={sub.applicationFeeVenmoEnabled !== false}
+                          onChange={(e) => setSub((s) => ({ ...s, applicationFeeVenmoEnabled: e.target.checked }))}
+                        />
+                        <span className="text-sm font-medium text-slate-800">Venmo</span>
+                      </label>
+                    </div>
+                  ) : null}
+                  <div className="border-t border-slate-100 pt-3">
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={Boolean(sub.applicationFeeOtherEnabled)}
+                        onChange={(e) => setSub((s) => ({ ...s, applicationFeeOtherEnabled: e.target.checked }))}
+                      />
+                      <span className="text-sm font-medium text-slate-800">Other</span>
+                    </label>
+                    {sub.applicationFeeOtherEnabled ? (
+                      <div className="mt-2 pl-7" data-wizard-field="applicationFeeOtherInstructions">
+                        <FieldLabel hint="Instructions shown to applicants (e.g. check, cash, wire).">Payment instructions</FieldLabel>
+                        <Textarea
+                          rows={2}
+                          value={sub.applicationFeeOtherInstructions ?? ""}
+                          onChange={(e) => {
+                            clearListingFieldError("applicationFeeOtherInstructions");
+                            setSub((s) => ({ ...s, applicationFeeOtherInstructions: e.target.value }));
+                          }}
+                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.applicationFeeOtherInstructions))}
+                          placeholder="e.g. Mail a check to… or pay in person at…"
+                        />
+                        <StepFieldError msg={stepFieldErrors.applicationFeeOtherInstructions} />
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </ListingSubsection>
             </div>
+          </FormSection>
+          ) : null}
+
+          {/* ── Step 5: Move info ── */}
+          {stepIndex === 5 ? (
+          <FormSection
+            id="edit-move-info"
+            title="Move info"
+            description={
+              isEntireHome
+                ? "Access instructions for the entire home."
+                : "Set move-in instructions for each bedroom — shown to placed residents."
+            }
+          >
+            {isEntireHome ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
+                <p className="text-sm font-bold text-slate-900">Entire home</p>
+                <div className="mt-3">
+                  <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
+                  <Textarea
+                    rows={4}
+                    value={sub.houseMoveInInstructions ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, houseMoveInInstructions: e.target.value }))}
+                    placeholder="Where to pick up keys, parking spot, gate codes, move-in window…"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {sub.rooms.map((room, i) => (
+                  <div key={room.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
+                    <p className="text-sm font-bold text-slate-900">{room.name.trim() || `Room ${i + 1}`}</p>
+                    <div className="mt-3">
+                      <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
+                      <Textarea
+                        rows={3}
+                        value={room.moveInInstructions}
+                        onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
+                        placeholder="Room-specific access, parking, and move-in details…"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </FormSection>
           ) : null}
 
@@ -2196,20 +3005,40 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-rooms"
             title="Rooms"
-            description="Define each bedroom renters can apply for. Add bathrooms in the next step, then common areas — that order matches how the public page is organized."
+            description={
+              isEntireHome
+                ? "List each bedroom — name, floor, furnishing, and amenities. Rent and utilities are set on Pricing."
+                : "Name, floor, furnishing, and amenities for each bedroom. Rent is set on Pricing."
+            }
           >
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-              <p className="text-sm text-slate-500">Photos and one optional video per room.</p>
+              <p className="text-sm text-slate-500">
+                Layout details only — add optional photos per room if helpful.
+              </p>
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addRoom}>
                 + Add room
               </Button>
             </div>
-            <div className="space-y-6">
+            <div
+              className={`space-y-6 ${wizardSectionErrorClass(Boolean(stepFieldErrors.rooms))}`}
+              data-wizard-field="rooms"
+            >
+              {stepFieldErrors.rooms ? (
+                <p className="text-xs font-medium text-red-600">{stepFieldErrors.rooms}</p>
+              ) : null}
               {sub.rooms.map((room, i) => {
                 const isUnfurnished = room.furnishing.trim().toLowerCase() === "unfurnished";
                 const checkedFurniture = parseFurnitureSet(room.furnishing);
+                const roomNameKey = listingRoomNameKey(room.id);
+                const roomRentKey = listingRoomRentKey(room.id);
+                const roomNameErr = stepFieldErrors[roomNameKey];
+                const roomRentErr = stepFieldErrors[roomRentKey];
+                const roomHasErr = Boolean(roomNameErr || roomRentErr);
                 return (
-                  <div key={room.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
+                  <div
+                    key={room.id}
+                    className={`rounded-2xl border p-4 sm:p-5 ${wizardSectionErrorClass(roomHasErr, "border-slate-200 bg-slate-50/50")}`}
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-bold text-slate-900">Room {i + 1}</p>
                       <div className="flex flex-wrap items-center gap-2">
@@ -2226,7 +3055,19 @@ export function ManagerAddListingForm({
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <GridField>
                         <FieldLabel>Room name *</FieldLabel>
-                        <Input value={room.name} onChange={(e) => setRoom(i, { name: e.target.value })} placeholder="Room 12A" />
+                        <div data-wizard-field={roomNameKey}>
+                          <Input
+                            value={room.name}
+                            className={wizardFieldErrorClass(Boolean(roomNameErr))}
+                            onChange={(e) => {
+                              clearListingFieldError(roomNameKey);
+                              clearListingFieldError("rooms");
+                              setRoom(i, { name: sanitizePlaceNameInput(e.target.value) });
+                            }}
+                            placeholder="Room 12A"
+                          />
+                          <StepFieldError msg={roomNameErr} />
+                        </div>
                       </GridField>
                       <GridField>
                         <FieldLabel hint="Preset or custom wording.">Floor / level</FieldLabel>
@@ -2263,192 +3104,15 @@ export function ManagerAddListingForm({
                           {roomFloorSelectValueFromOptions(room.floor, roomFloorOptions) === ROOM_FLOOR_LEVEL_CUSTOM ? (
                             <Input
                               value={room.floor}
-                              onChange={(e) => setRoom(i, { floor: e.target.value })}
+                              onChange={(e) => setRoom(i, { floor: sanitizeFloorLabelInput(e.target.value) })}
                               placeholder="e.g. Garden level, half-basement"
                               aria-label="Custom floor"
                             />
                           ) : null}
                         </div>
                       </GridField>
-                      <GridField>
-                        <FieldLabel>Monthly rent *</FieldLabel>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                          <Input
-                            inputMode="decimal"
-                            className="pl-8"
-                            value={room.monthlyRent || ""}
-                            onChange={(e) => setRoom(i, { monthlyRent: Number(e.target.value) || 0 })}
-                            placeholder="800"
-                          />
-                        </div>
-                      </GridField>
-                      <GridField>
-                        <FieldLabel hint="Monthly estimate used in signing totals.">Utilities estimate</FieldLabel>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                          <Input
-                            inputMode="decimal"
-                            className="pl-8"
-                            value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                            onChange={(e) => setRoom(i, { utilitiesEstimate: e.target.value })}
-                            placeholder="175"
-                          />
-                        </div>
-                      </GridField>
-
-                      {/* Proration method */}
-                      <GridField className="sm:col-span-2">
-                        <FieldLabel hint="How first-month rent and utilities are prorated when a resident moves in mid-month.">
-                          Proration method
-                        </FieldLabel>
-                        <div className="mt-2 flex gap-3">
-                          {(["auto", "daily_rate"] as const).map((method) => {
-                            const active = (room.prorateMethod ?? "auto") === method;
-                            return (
-                              <button
-                                key={method}
-                                type="button"
-                                onClick={() => setRoom(i, { prorateMethod: method })}
-                                className={`flex-1 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${active ? "border-primary bg-primary/5 font-medium text-primary" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}
-                              >
-                                <span className="block font-semibold">
-                                  {method === "auto" ? "Auto (÷ days in month)" : "Manual daily rate"}
-                                </span>
-                                <span className="mt-0.5 block text-xs text-slate-500">
-                                  {method === "auto"
-                                    ? "Remaining days ÷ days in month × monthly rate"
-                                    : "Remaining days × your set daily rate"}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {(room.prorateMethod ?? "auto") === "auto" && room.monthlyRent > 0 && (
-                          <p className="mt-2 text-xs text-slate-500">
-                            Example: move-in May 14 → 18 days remaining → 18/31 × ${room.monthlyRent} ={" "}
-                            <span className="font-semibold text-slate-700">
-                              ${((18 / 31) * room.monthlyRent).toFixed(2)}
-                            </span>{" "}
-                            prorated rent
-                          </p>
-                        )}
-                      </GridField>
-
-                      {(room.prorateMethod ?? "auto") === "daily_rate" && (
-                        <>
-                          <GridField>
-                            <FieldLabel hint="Charged per day of occupancy in the move-in month.">Daily rent rate</FieldLabel>
-                            <div className="relative">
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                              <Input
-                                inputMode="decimal"
-                                className="pl-8"
-                                value={room.dailyRentRate ?? ""}
-                                onChange={(e) => setRoom(i, { dailyRentRate: Number(e.target.value) || undefined })}
-                                placeholder={room.monthlyRent > 0 ? String(Math.ceil(room.monthlyRent / 30)) : "28"}
-                              />
-                            </div>
-                            {room.dailyRentRate && room.dailyRentRate > 0 && (
-                              <p className="mt-1 text-xs text-slate-500">
-                                Example: move-in May 14 (18 days) → 18 × ${room.dailyRentRate} ={" "}
-                                <span className="font-semibold text-slate-700">${(18 * room.dailyRentRate).toFixed(2)}</span>
-                              </p>
-                            )}
-                          </GridField>
-                          <GridField>
-                            <FieldLabel hint="Charged per day for utilities in the move-in month.">Daily utilities rate</FieldLabel>
-                            <div className="relative">
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">$</span>
-                              <Input
-                                inputMode="decimal"
-                                className="pl-8"
-                                value={room.dailyUtilitiesRate ?? ""}
-                                onChange={(e) => setRoom(i, { dailyUtilitiesRate: Number(e.target.value) || undefined })}
-                                placeholder="6"
-                              />
-                            </div>
-                            {room.dailyUtilitiesRate && room.dailyUtilitiesRate > 0 && (
-                              <p className="mt-1 text-xs text-slate-500">
-                                Example: move-in May 14 (18 days) → 18 × ${room.dailyUtilitiesRate} ={" "}
-                                <span className="font-semibold text-slate-700">${(18 * room.dailyUtilitiesRate).toFixed(2)}</span>
-                              </p>
-                            )}
-                          </GridField>
-                        </>
-                      )}
-
-                      <GridField className="sm:col-span-2">
-                        <FieldLabel hint="Applicants cannot choose lease dates that overlap these inclusive spans. Approved placements for this room are also blocked automatically.">
-                          Blocked date ranges (optional)
-                        </FieldLabel>
-                        <div className="mt-2 space-y-3">
-                          {(room.manualUnavailableRanges ?? []).map((range, ri) => (
-                            <div
-                              key={range.id}
-                              className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/90 bg-slate-50/40 p-3 sm:items-center"
-                            >
-                              <div className="min-w-[10rem] flex-1">
-                                <span className="mb-1 block text-[11px] font-semibold text-slate-500">From</span>
-                                <Input
-                                  type="date"
-                                  value={range.start}
-                                  onChange={(e) => {
-                                    const next = [...(room.manualUnavailableRanges ?? [])];
-                                    next[ri] = { ...range, start: e.target.value };
-                                    setRoom(i, { manualUnavailableRanges: next });
-                                  }}
-                                  aria-label={`Blocked range start ${ri + 1}`}
-                                />
-                              </div>
-                              <div className="min-w-[10rem] flex-1">
-                                <span className="mb-1 block text-[11px] font-semibold text-slate-500">Through</span>
-                                <Input
-                                  type="date"
-                                  value={range.end}
-                                  onChange={(e) => {
-                                    const next = [...(room.manualUnavailableRanges ?? [])];
-                                    next[ri] = { ...range, end: e.target.value };
-                                    setRoom(i, { manualUnavailableRanges: next });
-                                  }}
-                                  aria-label={`Blocked range end ${ri + 1}`}
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                className="shrink-0 pb-2 text-xs font-semibold text-rose-600 hover:underline sm:pb-0"
-                                onClick={() => {
-                                  const next = (room.manualUnavailableRanges ?? []).filter((_, j) => j !== ri);
-                                  setRoom(i, { manualUnavailableRanges: next });
-                                }}
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          ))}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded-full text-xs"
-                            onClick={() =>
-                              setRoom(i, {
-                                manualUnavailableRanges: [
-                                  ...(room.manualUnavailableRanges ?? []),
-                                  {
-                                    id: `unavail-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                                    start: "",
-                                    end: "",
-                                  },
-                                ],
-                              })
-                            }
-                          >
-                            + Add blocked range
-                          </Button>
-                        </div>
-                      </GridField>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Toggle specific items included in this room.">Furnishing &amp; furniture</FieldLabel>
+                        <FieldLabel hint="Toggle items included, or add custom lines below.">Furnishing &amp; furniture</FieldLabel>
                         <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
                           <label className="mb-2 flex cursor-pointer items-center gap-2 border-b border-slate-100 pb-2 text-sm">
                             <input
@@ -2476,10 +3140,11 @@ export function ManagerAddListingForm({
                               );
                             })}
                           </div>
+                          <Textarea className="mt-2" rows={2} value={room.detail} onChange={(e) => setRoom(i, { detail: e.target.value })} placeholder="Other furnishing or layout notes (optional)" />
                         </div>
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Room features only (not furniture or bathroom — those are configured separately).">Room amenities</FieldLabel>
+                        <FieldLabel>Room amenities</FieldLabel>
                         <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
                           {dedupedPresets.room.map((p) => {
                             const on = splitLineList(room.roomAmenitiesText).includes(p.label);
@@ -2500,14 +3165,19 @@ export function ManagerAddListingForm({
                             );
                           })}
                         </div>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Notes for listing card (closet size, light, layout).">Room details</FieldLabel>
-                        <Textarea className="" value={room.detail} onChange={(e) => setRoom(i, { detail: e.target.value })} />
+                        <Textarea
+                          className="mt-2"
+                          rows={2}
+                          value={room.roomAmenitiesText}
+                          onChange={(e) => setRoom(i, { roomAmenitiesText: e.target.value })}
+                          placeholder="Add custom amenities not listed above (one per line)."
+                        />
                       </div>
 
+                      {!isEntireHome ? (
+                      <>
                       <div className="sm:col-span-2">
-                        <FieldLabel>Photos</FieldLabel>
+                        <FieldLabel>Photos (optional)</FieldLabel>
                         <div
                           className={`mt-2 ${mediaDropZoneClass(activeDropZone === `room-photos-${room.id}`)}`}
                           onDragOver={(e) => handleDragOver(e, `room-photos-${room.id}`)}
@@ -2515,30 +3185,20 @@ export function ManagerAddListingForm({
                           onDragLeave={(e) => handleDragLeave(e, `room-photos-${room.id}`)}
                           onDrop={(e) => onDropRoomPhotos(i, room.id, e)}
                         >
-                          <input
-                            key={`room-photos-in-${room.id}`}
-                            id={`room-photos-${room.id}`}
-                            type="file"
+                          <MediaPickTrigger
                             accept="image/*"
                             multiple
-                            className="sr-only"
-                            onChange={(e) => {
-                              void onPickRoomPhotos(i, e.target.files);
-                              e.target.value = "";
-                            }}
-                          />
-                          <label
-                            htmlFor={`room-photos-${room.id}`}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                            onFiles={(files) => { void onPickRoomPhotos(i, files); }}
                           >
                             Add photos
-                          </label>
+                          </MediaPickTrigger>
                           <p className="mt-3 text-sm text-slate-600">Drag and drop room photos here, or use the button above.</p>
                           {room.photoDataUrls.length > 0 ? (
                             <div className="mt-3 flex flex-wrap gap-2">
                               {room.photoDataUrls.map((url, pi) => (
                                 <div key={`${room.id}-p-${pi}`} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                                  <Image src={url} alt="" width={80} height={80} className="h-full w-full object-cover" unoptimized />
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={url} alt="" className="h-full w-full object-cover" />
                                   <button
                                     type="button"
                                     className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70"
@@ -2565,23 +3225,13 @@ export function ManagerAddListingForm({
                           onDragLeave={(e) => handleDragLeave(e, `room-video-${room.id}`)}
                           onDrop={(e) => onDropRoomVideo(i, room.id, e)}
                         >
-                          <input
-                            key={`room-video-in-${room.id}`}
-                            id={`room-video-${room.id}`}
-                            type="file"
+                          <MediaPickTrigger
                             accept="video/*"
-                            className="sr-only"
-                            onChange={(e) => {
-                              void onPickRoomVideo(i, e.target.files?.[0] ?? null);
-                              e.target.value = "";
-                            }}
-                          />
-                          <label
-                            htmlFor={`room-video-${room.id}`}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                            disabled={videoUploadingKeys.has(`room-${room.id}`)}
+                            onFiles={(files) => { void onPickRoomVideo(i, files?.[0] ?? null); }}
                           >
                             {videoUploadingKeys.has(`room-${room.id}`) ? "Uploading…" : room.videoDataUrl ? "Replace video" : "Add video"}
-                          </label>
+                          </MediaPickTrigger>
                           {videoUploadingKeys.has(`room-${room.id}`) ? (
                             <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                           ) : (
@@ -2608,6 +3258,8 @@ export function ManagerAddListingForm({
                           )}
                         </div>
                       </div>
+                      </>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -2620,33 +3272,46 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-bath"
             title="Bathrooms"
-            description={'Group the public listing by bathroom: assign each bedroom to the bath row it uses. A room can use a private suite bath and still share a whole-house hall bath — use "Whole-house" for the common one. Add finishes (dual vanities, walk-in shower, etc.) under Bathroom amenities.'}
+            description="Name, location, and amenities for each bathroom on the public listing."
           >
-              <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-                <p className="text-sm text-slate-500">Shown in the Bathrooms section on the public listing.</p>
-                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addBathroom}>
-                  + Add bathroom
-                </Button>
-              </div>
-              {sub.bathrooms.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center text-sm text-slate-600">
-                  No bathrooms yet. Click <span className="font-semibold">Add bathroom</span> when you are ready — or leave empty and the public page
-                  will show a placeholder until you add details.
-                </p>
-              ) : (
-              <div className="space-y-6">
-                {sub.bathrooms.map((b, i) => (
-                  <div key={b.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="mb-4 text-sm text-slate-500">Shown in the Bathrooms section on the public listing.</p>
+              <div
+                className={`space-y-6 ${wizardSectionErrorClass(Boolean(stepFieldErrors.bathrooms))}`}
+                data-wizard-field="bathrooms"
+              >
+                {stepFieldErrors.bathrooms ? (
+                  <p className="text-xs font-medium text-red-600">{stepFieldErrors.bathrooms}</p>
+                ) : null}
+                {sub.bathrooms.map((b, i) => {
+                  const bathNameKey = listingBathroomNameKey(b.id);
+                  const bathNameErr = stepFieldErrors[bathNameKey];
+                  return (
+                  <div
+                    key={b.id}
+                    className={`rounded-2xl border bg-white p-4 ${wizardSectionErrorClass(Boolean(bathNameErr), "border-slate-200")}`}
+                  >
                     <div className="flex justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900">Bathroom {i + 1}</p>
-                      <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBathroom(i)}>
-                        Remove
-                      </button>
+                      {sub.bathrooms.length > 1 ? (
+                        <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBathroom(i)}>
+                          Remove
+                        </button>
+                      ) : null}
                     </div>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <div className="sm:col-span-2">
+                      <div className="sm:col-span-2" data-wizard-field={bathNameKey}>
                         <FieldLabel>Name *</FieldLabel>
-                        <Input value={b.name} onChange={(e) => setBath(i, { name: e.target.value })} placeholder="Full bath (hall)" />
+                        <Input
+                          value={b.name}
+                          className={wizardFieldErrorClass(Boolean(bathNameErr))}
+                          onChange={(e) => {
+                            clearListingFieldError(bathNameKey);
+                            clearListingFieldError("bathrooms");
+                            setBath(i, { name: sanitizePlaceNameInput(e.target.value) });
+                          }}
+                          placeholder="Full bath (hall)"
+                        />
+                        <StepFieldError msg={bathNameErr} />
                       </div>
                       <div className="sm:col-span-2">
                         <FieldLabel>Location in building</FieldLabel>
@@ -2807,37 +3472,26 @@ export function ManagerAddListingForm({
                           onDragOver={(e) => handleDragOver(e, `bath-photos-${b.id}`)}
                           onDragEnter={(e) => handleDragOver(e, `bath-photos-${b.id}`)}
                           onDragLeave={(e) => handleDragLeave(e, `bath-photos-${b.id}`)}
-                          onDrop={(e) => onDropBathroomPhotos(i, b.id, e)}
+                          onDrop={(e) => onDropBathroomPhotos(b.id, e)}
                         >
-                          <input
-                            key={`bath-photos-in-${b.id}`}
-                            id={`bath-photos-${b.id}`}
-                            type="file"
+                          <MediaPickTrigger
                             accept="image/*"
                             multiple
-                            className="sr-only"
-                            onChange={(e) => {
-                              void onPickBathroomPhotos(i, e.target.files);
-                              e.target.value = "";
-                            }}
-                          />
-                          <label
-                            htmlFor={`bath-photos-${b.id}`}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                            onFiles={(files) => { void onPickBathroomPhotos(b.id, files); }}
                           >
                             Add photos
-                          </label>
+                          </MediaPickTrigger>
                           <p className="mt-3 text-sm text-slate-600">Drag and drop bathroom photos here, or use the button above.</p>
                           {(b.photoDataUrls?.length ?? 0) > 0 ? (
                             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                               {b.photoDataUrls.map((src, pi) => (
-                                <div key={`${src.slice(0, 32)}-${pi}`} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                <div key={`${b.id}-p-${pi}`} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={src} alt="Bathroom" className="h-28 w-full object-cover" />
                                   <button
                                     type="button"
                                     className="absolute right-1 top-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-rose-600 shadow-sm opacity-0 transition group-hover:opacity-100"
-                                    onClick={() => removeBathroomPhoto(i, pi)}
+                                    onClick={() => removeBathroomPhoto(b.id, pi)}
                                   >
                                     Remove
                                   </button>
@@ -2845,7 +3499,7 @@ export function ManagerAddListingForm({
                               ))}
                             </div>
                           ) : (
-                            <p className="mt-2 text-[11px] text-slate-500">No photos yet.</p>
+                            <p className="mt-3 text-[11px] text-slate-500">No photos yet — up to 8 images. Images are auto-compressed.</p>
                           )}
                         </div>
                       </div>
@@ -2856,25 +3510,15 @@ export function ManagerAddListingForm({
                           onDragOver={(e) => handleDragOver(e, `bath-video-${b.id}`)}
                           onDragEnter={(e) => handleDragOver(e, `bath-video-${b.id}`)}
                           onDragLeave={(e) => handleDragLeave(e, `bath-video-${b.id}`)}
-                          onDrop={(e) => onDropBathroomVideo(i, b.id, e)}
+                          onDrop={(e) => onDropBathroomVideo(b.id, e)}
                         >
-                          <input
-                            key={`bath-video-in-${b.id}`}
-                            id={`bath-video-${b.id}`}
-                            type="file"
+                          <MediaPickTrigger
                             accept="video/*"
-                            className="sr-only"
-                            onChange={(e) => {
-                              void onPickBathroomVideo(i, e.target.files?.[0] ?? null);
-                              e.target.value = "";
-                            }}
-                          />
-                          <label
-                            htmlFor={`bath-video-${b.id}`}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                            disabled={videoUploadingKeys.has(`bath-${b.id}`)}
+                            onFiles={(files) => { void onPickBathroomVideo(b.id, files?.[0] ?? null); }}
                           >
                             {videoUploadingKeys.has(`bath-${b.id}`) ? "Uploading…" : b.videoDataUrl ? "Replace video" : "Add video"}
-                          </label>
+                          </MediaPickTrigger>
                           {videoUploadingKeys.has(`bath-${b.id}`) ? (
                             <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                           ) : (
@@ -2891,7 +3535,7 @@ export function ManagerAddListingForm({
                               <button
                                 type="button"
                                 className="text-xs font-semibold text-rose-600 hover:underline"
-                                onClick={() => clearBathroomVideo(i)}
+                                onClick={() => clearBathroomVideo(b.id)}
                               >
                                 Remove video
                               </button>
@@ -2903,9 +3547,20 @@ export function ManagerAddListingForm({
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
+                <div className="flex justify-center pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full text-xs"
+                    onClick={addBathroom}
+                    disabled={sub.bathrooms.length >= 12}
+                  >
+                    + Add bathroom
+                  </Button>
+                </div>
               </div>
-              )}
           </FormSection>
           ) : null}
 
@@ -2940,9 +3595,30 @@ export function ManagerAddListingForm({
                   <p className="text-sm font-semibold text-slate-800">No shared spaces added yet.</p>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {sub.sharedSpaces.map((sp, i) => (
-                    <div key={sp.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div
+                  className={`space-y-6 ${wizardSectionErrorClass(Boolean(stepFieldErrors.sharedSpaces))}`}
+                  data-wizard-field="sharedSpaces"
+                >
+                  {stepFieldErrors.sharedSpaces ? (
+                    <p className="text-xs font-medium text-red-600">{stepFieldErrors.sharedSpaces}</p>
+                  ) : null}
+                  {sub.sharedSpaces.map((sp, i) => {
+                    const spaceNameKey = listingSharedSpaceNameKey(sp.id);
+                    const spaceNameErr = stepFieldErrors[spaceNameKey];
+                    const spaceKind = normalizeSharedSpaceKind(sp.spaceKind, sp.name);
+                    const kindPresets = sharedSpaceAmenityPresetsForKind(spaceKind, dedupedPresets.sharedSpace);
+                    const kindPresetLabels = new Set(kindPresets.map((p) => p.label));
+                    const customAmenitiesText = splitLineList(sp.amenitiesText ?? "")
+                      .filter((line) => !kindPresetLabels.has(line))
+                      .join("\n");
+                    const spaceKindLabel =
+                      SHARED_SPACE_KIND_OPTIONS.find((opt) => opt.id === spaceKind)?.label ?? "Shared space";
+
+                    return (
+                    <div
+                      key={sp.id}
+                      className={`overflow-hidden rounded-3xl border bg-white shadow-sm ${wizardSectionErrorClass(Boolean(spaceNameErr), "border-slate-200")}`}
+                    >
                       <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                         <div>
                           <p className="text-sm font-bold text-slate-950">Shared space {i + 1}</p>
@@ -2961,15 +3637,47 @@ export function ManagerAddListingForm({
                         </div>
                       </div>
                       <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
-                        <div>
+                        <div data-wizard-field={spaceNameKey}>
                           <FieldLabel>Name *</FieldLabel>
                           <Input
                             value={sp.name}
-                            onChange={(e) => setSharedSpace(i, { name: e.target.value })}
+                            className={wizardFieldErrorClass(Boolean(spaceNameErr))}
+                            onChange={(e) => {
+                              clearListingFieldError(spaceNameKey);
+                              clearListingFieldError("sharedSpaces");
+                              setSharedSpace(i, { name: sanitizePlaceNameInput(e.target.value) });
+                            }}
                             placeholder="e.g. Kitchen & dining, Laundry, Backyard"
                           />
+                          <StepFieldError msg={spaceNameErr} />
                         </div>
                         <div>
+                          <FieldLabel hint="Controls which amenity checkboxes appear for this space.">Space type</FieldLabel>
+                          <div className="relative">
+                            <Select
+                              aria-label={`Shared space ${i + 1} type`}
+                              className={`${selectInputCls} appearance-none pr-10`}
+                              value={sp.spaceKind ?? "other"}
+                              onChange={(e) => {
+                                const kind = e.target.value as SharedSpaceKind;
+                                setSharedSpace(i, {
+                                  spaceKind: kind,
+                                  amenitiesText: pruneSharedSpaceAmenitiesForKind(sp.amenitiesText ?? "", kind, dedupedPresets.sharedSpace),
+                                });
+                              }}
+                            >
+                              {SHARED_SPACE_KIND_OPTIONS.map((opt) => (
+                                <option key={opt.id} value={opt.id}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </Select>
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                              <ChevronDownTiny />
+                            </span>
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2">
                           <FieldLabel>Location / level</FieldLabel>
                           <div className="space-y-2">
                             <div className="relative">
@@ -3013,15 +3721,17 @@ export function ManagerAddListingForm({
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel>Amenities</FieldLabel>
-                          <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-3">
-                            {dedupedPresets.sharedSpace.map((p) => {
+                          <FieldLabel hint={`Common amenities for ${spaceKindLabel.toLowerCase()} — check all that apply.`}>
+                            Amenities
+                          </FieldLabel>
+                          <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {kindPresets.map((p) => {
                               const on = splitLineList(sp.amenitiesText ?? "").includes(p.label);
                               return (
-                                <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                                <label key={p.id} className="flex cursor-pointer items-center gap-2.5 text-sm">
                                   <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-slate-300"
+                                    className="h-4 w-4 shrink-0 rounded border-slate-300 text-primary focus:ring-primary/30"
                                     checked={on}
                                     onChange={(e) =>
                                       setSharedSpace(i, {
@@ -3034,82 +3744,79 @@ export function ManagerAddListingForm({
                               );
                             })}
                           </div>
+                          <Textarea
+                            className="mt-2"
+                            rows={2}
+                            value={customAmenitiesText}
+                            onChange={(e) => {
+                              const presetLines = splitLineList(sp.amenitiesText ?? "").filter((line) =>
+                                kindPresetLabels.has(line),
+                              );
+                              const customLines = splitLineList(e.target.value);
+                              setSharedSpace(i, { amenitiesText: [...presetLines, ...customLines].join("\n") });
+                            }}
+                            placeholder="Other amenities not listed above (one per line)."
+                          />
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel>Photos</FieldLabel>
+                          <FieldLabel hint="Upload up to 8 shared-space photos.">Photos</FieldLabel>
                           <div
                             className={`mt-2 ${mediaDropZoneClass(activeDropZone === `shared-photos-${sp.id}`)}`}
                             onDragOver={(e) => handleDragOver(e, `shared-photos-${sp.id}`)}
                             onDragEnter={(e) => handleDragOver(e, `shared-photos-${sp.id}`)}
                             onDragLeave={(e) => handleDragLeave(e, `shared-photos-${sp.id}`)}
-                            onDrop={(e) => onDropSharedSpacePhotos(i, sp.id, e)}
+                            onDrop={(e) => onDropSharedSpacePhotos(sp.id, e)}
                           >
-                            <input
-                              key={`shared-photos-in-${sp.id}`}
-                              id={`shared-photos-${sp.id}`}
-                              type="file"
+                            <MediaPickTrigger
                               accept="image/*"
                               multiple
-                              className="sr-only"
-                              onChange={(e) => {
-                                void onPickSharedSpacePhotos(i, e.target.files);
-                                e.target.value = "";
-                              }}
-                            />
-                            <label
-                              htmlFor={`shared-photos-${sp.id}`}
-                              className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                              onFiles={(files) => { void onPickSharedSpacePhotos(sp.id, files); }}
                             >
                               Add photos
-                            </label>
+                            </MediaPickTrigger>
+                            <p className="mt-3 text-sm text-slate-600">Drag and drop photos here, or use the button above.</p>
                             {(sp.photoDataUrls?.length ?? 0) > 0 ? (
                               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                                 {sp.photoDataUrls.map((src, pi) => (
-                                  <div key={`${src.slice(0, 32)}-${pi}`} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                  <div key={`${sp.id}-p-${pi}`} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img src={src} alt="Shared space" className="h-28 w-full object-cover" />
                                     <button
                                       type="button"
                                       className="absolute right-1 top-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-rose-600 shadow-sm opacity-0 transition group-hover:opacity-100"
-                                      onClick={() => removeSharedSpacePhoto(i, pi)}
+                                      onClick={() => removeSharedSpacePhoto(sp.id, pi)}
                                     >
                                       Remove
                                     </button>
                                   </div>
                                 ))}
                               </div>
-                            ) : null}
+                            ) : (
+                              <p className="mt-3 text-[11px] text-slate-500">No photos yet — up to 8 images. Images are auto-compressed.</p>
+                            )}
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel>Video</FieldLabel>
+                          <FieldLabel hint="One short clip per shared space (~14 MB max).">Video</FieldLabel>
                           <div
                             className={`mt-2 ${mediaDropZoneClass(activeDropZone === `shared-video-${sp.id}`)}`}
                             onDragOver={(e) => handleDragOver(e, `shared-video-${sp.id}`)}
                             onDragEnter={(e) => handleDragOver(e, `shared-video-${sp.id}`)}
                             onDragLeave={(e) => handleDragLeave(e, `shared-video-${sp.id}`)}
-                            onDrop={(e) => onDropSharedSpaceVideo(i, sp.id, e)}
+                            onDrop={(e) => onDropSharedSpaceVideo(sp.id, e)}
                           >
-                            <input
-                              key={`shared-video-in-${sp.id}`}
-                              id={`shared-video-${sp.id}`}
-                              type="file"
+                            <MediaPickTrigger
                               accept="video/*"
-                              className="sr-only"
-                              onChange={(e) => {
-                                void onPickSharedSpaceVideo(i, e.target.files?.[0] ?? null);
-                                e.target.value = "";
-                              }}
-                            />
-                            <label
-                              htmlFor={`shared-video-${sp.id}`}
-                              className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
+                              disabled={videoUploadingKeys.has(`space-${sp.id}`)}
+                              onFiles={(files) => { void onPickSharedSpaceVideo(sp.id, files?.[0] ?? null); }}
                             >
                               {videoUploadingKeys.has(`space-${sp.id}`) ? "Uploading…" : sp.videoDataUrl ? "Replace video" : "Add video"}
-                            </label>
+                            </MediaPickTrigger>
                             {videoUploadingKeys.has(`space-${sp.id}`) ? (
                               <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
-                            ) : null}
+                            ) : (
+                              <p className="mt-3 text-sm text-slate-600">Drag and drop one video here, or use the button above.</p>
+                            )}
                             {sp.videoDataUrl ? (
                               <div className="mt-4 space-y-2">
                                 <video
@@ -3121,7 +3828,7 @@ export function ManagerAddListingForm({
                                 <button
                                   type="button"
                                   className="text-xs font-semibold text-rose-600 hover:underline"
-                                  onClick={() => clearSharedSpaceVideo(i)}
+                                  onClick={() => clearSharedSpaceVideo(sp.id)}
                                 >
                                   Remove video
                                 </button>
@@ -3147,122 +3854,10 @@ export function ManagerAddListingForm({
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               )}
-          </FormSection>
-          ) : null}
-
-          {stepIndex === 5 ? (
-          <FormSection
-            id="edit-house-photos"
-            title="House media"
-            description="Hero gallery and optional walkthrough video at the top of your public listing — exterior, kitchen, living areas, and other common spaces."
-          >
-            <ListingSubsection
-              title="Photos"
-              description="Up to 12 images; we compress for fast loading."
-            >
-              <div
-                className={`mt-2 ${mediaDropZoneClass(activeDropZone === "house-photos")}`}
-                onDragOver={(e) => handleDragOver(e, "house-photos")}
-                onDragEnter={(e) => handleDragOver(e, "house-photos")}
-                onDragLeave={(e) => handleDragLeave(e, "house-photos")}
-                onDrop={onDropHousePhotos}
-              >
-                <input
-                  id="house-photos-input"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="sr-only"
-                  onChange={(e) => {
-                    void onPickHousePhotos(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
-                <label
-                  htmlFor="house-photos-input"
-                  className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
-                >
-                  Add house photos
-                </label>
-                <p className="mt-3 text-sm text-slate-600">Drag and drop photos here, or use the button above.</p>
-                {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
-                      <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                        <Image src={url} alt="" width={96} height={96} className="h-full w-full object-cover" unoptimized />
-                        <button
-                          type="button"
-                          className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70"
-                          onClick={() => removeHousePhoto(pi)}
-                          aria-label="Remove photo"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-[11px] text-slate-500">No photos yet — optional for draft, recommended before you go live.</p>
-                )}
-              </div>
-            </ListingSubsection>
-
-            <ListingSubsection
-              title="Full-house video"
-              description="One walkthrough video of the whole property (~14 MB max). Shown prominently on your public listing."
-            >
-              <div
-                className={`mt-2 ${mediaDropZoneClass(activeDropZone === "house-video")}`}
-                onDragOver={(e) => handleDragOver(e, "house-video")}
-                onDragEnter={(e) => handleDragOver(e, "house-video")}
-                onDragLeave={(e) => handleDragLeave(e, "house-video")}
-                onDrop={onDropHouseVideo}
-              >
-                <input
-                  key={`house-video-in`}
-                  id="house-video-input"
-                  type="file"
-                  accept="video/*"
-                  className="sr-only"
-                  onChange={(e) => {
-                    void onPickHouseVideo(e.target.files?.[0] ?? null);
-                    e.target.value = "";
-                  }}
-                />
-                <label
-                  htmlFor="house-video-input"
-                  className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06]"
-                >
-                  {videoUploadingKeys.has("house") ? "Uploading…" : sub.houseVideoDataUrl ? "Replace video" : "Add house video"}
-                </label>
-                {videoUploadingKeys.has("house") ? (
-                  <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
-                ) : (
-                <p className="mt-3 text-sm text-slate-600">Drag and drop a video here, or use the button above.</p>
-                )}
-                {sub.houseVideoDataUrl ? (
-                  <div className="mt-3 space-y-2">
-                    <video
-                      src={videoPreviewUrls.house ?? sub.houseVideoDataUrl}
-                      controls
-                      className="max-h-48 w-full rounded-xl border border-slate-200 bg-black object-contain"
-                    />
-                    <button
-                      type="button"
-                      onClick={clearHouseVideo}
-                      className="text-xs font-medium text-rose-600 hover:text-rose-800"
-                    >
-                      Remove video
-                    </button>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-[11px] text-slate-500">No video yet — optional.</p>
-                )}
-              </div>
-            </ListingSubsection>
           </FormSection>
           ) : null}
 
@@ -3270,8 +3865,8 @@ export function ManagerAddListingForm({
           {stepIndex === 6 ? (
           <FormSection
             id="edit-services"
-            title="Services"
-            description="Add request options residents can choose directly from their portal — cleaning, linen sets, parking, and more. You can edit these any time from the property inline editor."
+            title="Resident services"
+            description="Optional services residents can request from their portal."
           >
             <div className="space-y-4">
               {serviceOffers.length > 0 ? (
@@ -3302,14 +3897,34 @@ export function ManagerAddListingForm({
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-12 text-center">
-                  <p className="text-sm font-medium text-slate-600">No request options yet</p>
-                  <p className="mt-1 max-w-xs text-xs text-slate-400">Add optional paid or free request options residents can choose — like weekly cleaning, linen sets, parking, or storage.</p>
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-10 text-center">
+                  <p className="text-sm font-medium text-slate-600">No services yet</p>
+                  <p className="mt-1 text-xs text-slate-500">Add a preset below or create a custom service.</p>
                 </div>
               )}
-              <div>
-                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => { setEditingOffer(null); setServiceForm({ name: "", description: "", price: "", deposit: "" }); setServiceModalOpen(true); }}>
-                  + Add request
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick add</p>
+                <div className="flex flex-wrap gap-2">
+                  {LISTING_SERVICE_QUICK_ADDS.map((preset) => {
+                    const added = serviceOffers.some(
+                      (o) => o.name.trim().toLowerCase() === preset.name.toLowerCase(),
+                    );
+                    return (
+                      <Button
+                        key={preset.name}
+                        type="button"
+                        variant="outline"
+                        className="rounded-full text-xs"
+                        disabled={added}
+                        onClick={() => addQuickService(preset)}
+                      >
+                        {added ? `${preset.name} added` : `+ ${preset.name}`}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button type="button" variant="primary" className="rounded-full text-xs" onClick={() => { setEditingOffer(null); setServiceForm({ name: "", description: "", price: "", deposit: "" }); setServiceModalOpen(true); }}>
+                  + Custom service
                 </Button>
               </div>
             </div>
@@ -3321,7 +3936,7 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-highlights"
             title="Highlights & submit"
-            description="Fine-tune the sidebar and building amenity grid, then submit for review."
+            description="Fine-tune the sidebar quick facts, then submit for review."
           >
             <div className="space-y-8">
               <ListingSubsection
@@ -3333,7 +3948,7 @@ export function ManagerAddListingForm({
                     <div key={qf.id} className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
                       <div>
                         <FieldLabel>Label</FieldLabel>
-                        <Input value={qf.label} onChange={(e) => setQuickFact(i, { label: e.target.value })} placeholder="e.g. Neighborhood" />
+                        <Input value={qf.label} onChange={(e) => setQuickFact(i, { label: sanitizePlaceNameInput(e.target.value) })} placeholder="e.g. Neighborhood" />
                       </div>
                       <div>
                         <FieldLabel>Value</FieldLabel>
@@ -3347,75 +3962,6 @@ export function ManagerAddListingForm({
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addQuickFact}>
                     + Add quick fact
                   </Button>
-                </div>
-              </ListingSubsection>
-
-              <ListingSubsection
-                title="Building & neighborhood amenities"
-                description="What shows in the main amenities table on the listing. Kitchen gear, shared desks, and TV belong under Shared spaces; bathroom finishes under Bathrooms."
-              >
-                <div>
-                  <FieldLabel hint="Tap all that apply.">Common amenities</FieldLabel>
-                  <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {dedupedPresets.houseWide.map((p) => {
-                      const on = splitLineList(sub.amenitiesText).includes(p.label);
-                      return (
-                        <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-slate-300"
-                            checked={on}
-                            onChange={(e) =>
-                              setSub((s) => ({
-                                ...s,
-                                amenitiesText: mergeToggleLine(s.amenitiesText, p.label, e.target.checked),
-                              }))
-                            }
-                          />
-                          <span className="font-medium text-slate-800">{p.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              </ListingSubsection>
-
-              <ListingSubsection
-                title="House details"
-                description="Internal notes and resident-facing house info. Not shown on the public listing card."
-              >
-                <div>
-                  <div className="mb-0.5 flex items-center gap-2">
-                    <FieldLabel>House description</FieldLabel>
-                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">Manager only</span>
-                  </div>
-                  <Textarea
-                    rows={4}
-                    value={sub.houseDescription ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, houseDescription: e.target.value }))}
-                    placeholder="Internal notes about the house…"
-                  />
-                </div>
-                <div>
-                  <FieldLabel>House rules</FieldLabel>
-                  <Textarea
-                    rows={3}
-                    value={sub.houseRulesText}
-                    onChange={(e) => setSub((s) => ({ ...s, houseRulesText: e.target.value }))}
-                    placeholder="Quiet hours, guests, smoking, pets…"
-                  />
-                </div>
-                <div>
-                  <div className="mb-0.5 flex items-center gap-2">
-                    <FieldLabel>General house info</FieldLabel>
-                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">Residents only</span>
-                  </div>
-                  <Textarea
-                    rows={4}
-                    value={sub.generalHouseInfo ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, generalHouseInfo: e.target.value }))}
-                    placeholder="Wi-Fi network & password, gate/door codes, laundry tips, trash schedule…"
-                  />
                 </div>
               </ListingSubsection>
 
@@ -3464,12 +4010,13 @@ export function ManagerAddListingForm({
         open={serviceModalOpen}
         title={editingOffer ? "Edit request option" : "Add request option"}
         onClose={() => setServiceModalOpen(false)}
+        stackClassName="fixed inset-0 z-[10050] overflow-y-auto"
         panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
       >
         <div className="grid gap-3">
           <div>
             <p className="mb-1 text-[11px] font-medium text-slate-600">Request name *</p>
-            <Input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Weekly cleaning, Linen set" className="bg-white" />
+            <Input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: sanitizePlaceNameInput(e.target.value) }))} placeholder="e.g. Weekly cleaning, Linen set" className="bg-white" />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -3478,7 +4025,7 @@ export function ManagerAddListingForm({
             </div>
             <div>
               <p className="mb-1 text-[11px] font-medium text-slate-600">Deposit (optional)</p>
-              <Input value={serviceForm.deposit} onChange={(e) => setServiceForm((f) => ({ ...f, deposit: e.target.value }))} placeholder="e.g. $50" className="bg-white" />
+              <Input value={serviceForm.deposit} onChange={(e) => setServiceForm((f) => ({ ...f, deposit: sanitizeMoneyInput(e.target.value) }))} placeholder="e.g. $50" className="bg-white" />
             </div>
           </div>
           <div>

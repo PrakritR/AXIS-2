@@ -5,7 +5,7 @@
       <stop offset="100%" stop-color="#2f6bff"/>
     </linearGradient>
   </defs>
-  <!-- Matches header tile: rounded square, A + gradient X (Axis Housing mark) -->
+  <!-- Matches header tile: rounded square, A + gradient X (Axis mark) -->
   <rect width="32" height="32" rx="9" fill="#ffffff"/>
   <path d="M8.5 23.5L11.8 8.5L15.1 23.5" fill="none" stroke="#0f172a" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M10.2 17H13.4" fill="none" stroke="#0f172a" stroke-width="2.15" stroke-linecap="round"/>

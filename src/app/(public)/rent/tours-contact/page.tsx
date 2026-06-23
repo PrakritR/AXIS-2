@@ -18,14 +18,18 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import Link from "next/link";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
-import { Button } from "@/components/ui/button";
-import { Input, Select, Textarea } from "@/components/ui/input";
-import { WizardShell } from "@/components/ui/wizard-shell";
 import {
   PropertySearchPicker,
   buildingGroupsToSearchOptions,
   type PropertySearchOption,
 } from "@/components/marketing/property-search-picker";
+import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import {
+  TOUR_STEP_FIELD_ORDER,
+  scrollToFirstWizardFieldError,
+  wizardFieldErrorClass,
+  wizardSectionErrorClass,
+} from "@/lib/wizard-field-errors";
 
 type Tab = "tour" | "message";
 type TourStep = 1 | 2 | 3;
@@ -148,7 +152,7 @@ export default function ToursContactPage() {
   return (
     <div className="min-h-screen px-4 py-12 sm:py-16">
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+        <h1 className="text-3xl font-bold tracking-tight text-[#0d1f4e]">
           {tab === "tour" ? "Schedule tour" : "Message Axis"}
         </h1>
 
@@ -191,6 +195,7 @@ function TourFlow({
 }) {
   const { showToast } = useAppUi();
   const [step, setStep] = useState<TourStep>(1);
+  const [maxStepReached, setMaxStepReached] = useState<TourStep>(1);
   const [submitted, setSubmitted] = useState(false);
   const [tick, setTick] = useState(0);
   const [selectedProperty, setSelectedProperty] = useState<MockProperty | null>(null);
@@ -208,6 +213,7 @@ function TourFlow({
   const [slotHosts, setSlotHosts] = useState<Record<string, PropertyManagerEntry[]>>({});
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [bookingTour, setBookingTour] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const buildings = useMemo(() => groupByBuilding(properties), [properties]);
 
   const propertyFromInitialId = useMemo(() => {
@@ -278,40 +284,19 @@ function TourFlow({
     return slotManagerMap.get(`${dateStr}:${selectedSlotIndex}`) ?? [];
   }, [selectedDay, selectedSlotIndex, calYear, calMonth, slotManagerMap]);
 
-  const canContinue1 = selectedProperty !== null && selectedRoomKey !== null;
-  const canContinue2 =
-    selectedDay !== null &&
-    selectedSlotIndex !== null &&
-    managersAtSelectedSlot.length > 0;
-
-  const tourWizardSteps = [
-    { id: "property", label: "Property & room" },
-    { id: "datetime", label: "Date & time" },
-    { id: "details", label: "Your details" },
+  const steps = [
+    { n: 1, label: "Property & room" },
+    { n: 2, label: "Date & time" },
+    { n: 3, label: "Your details" },
   ];
-
-  const handleTourBack = () => {
-    if (step === 2) {
-      setStep(1);
-      if (selectedProperty) {
-        setStep1Phase("room");
-        setSelectedBuildingId(selectedProperty.buildingId);
-      } else {
-        setStep1Phase("property");
-        setSelectedBuildingId(null);
-      }
-      return;
-    }
-    setStep((s) => (s - 1) as TourStep);
-  };
 
   if (submitted) {
     return (
-      <div className="glass-card mt-4 overflow-hidden rounded-3xl p-7">
-        <div className="rounded-2xl border border-[var(--status-confirmed-bg)] bg-[var(--status-confirmed-bg)] px-5 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--status-confirmed-fg)]">Tour request sent</p>
+      <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-white p-7 shadow-sm">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-5">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Tour request sent</p>
           <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Your tour request is in</h2>
-          <p className="mt-3 text-sm leading-relaxed text-muted">
+          <p className="mt-3 text-sm leading-relaxed text-foreground">
             We sent your tour request to the Axis team. Check your email for tour confirmation, the meeting link if needed,
             and next steps.
           </p>
@@ -326,12 +311,12 @@ function TourFlow({
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <Button
+          <button
             type="button"
-            variant="outline"
             onClick={() => {
               setSubmitted(false);
               setStep(1);
+              setMaxStepReached(1);
               setStep1Phase("property");
               setSelectedBuildingId(null);
               setSelectedProperty(null);
@@ -339,10 +324,14 @@ function TourFlow({
               setSelectedDay(null);
               setSelectedSlotIndex(null);
             }}
+            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-foreground hover:bg-slate-50"
           >
             Request another tour
-          </Button>
-          <Link href="/rent/listings" className="btn-cobalt inline-flex items-center rounded-full px-5 py-2 text-sm font-semibold">
+          </button>
+          <Link
+            href="/rent/listings"
+            className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
+          >
             Back to listings
           </Link>
         </div>
@@ -351,43 +340,67 @@ function TourFlow({
   }
 
   return (
-    <div className="glass-card mt-4 overflow-hidden rounded-3xl">
-      <WizardShell
-        steps={tourWizardSteps}
-        currentStepIndex={step - 1}
-        footer={
-          <div className={`flex w-full ${step > 1 ? "justify-between" : "justify-end"}`}>
-            {step > 1 ? (
-              <Button type="button" variant="outline" onClick={handleTourBack}>
-                Back
-              </Button>
-            ) : (
-              <span />
-            )}
-            {step < 3 ? (
-              <Button
-                type="button"
-                disabled={step === 1 ? !canContinue1 : !canContinue2}
-                onClick={() => setStep((s) => (s + 1) as TourStep)}
-              >
-                Continue
-              </Button>
-            ) : null}
+    <div className="mt-4 rounded-3xl border border-border bg-white p-7 shadow-sm">
+      {/* Step indicator */}
+      <div className="flex items-center gap-2 text-sm">
+        {steps.map((s, i) => {
+          const reachable = canNavigateToWizardStep(s.n, maxStepReached);
+          return (
+          <div key={s.n} className="flex items-center gap-2">
+            {i > 0 && <div className="h-px w-6 bg-slate-200" />}
+            <button
+              type="button"
+              disabled={!reachable}
+              onClick={() => {
+                if (!reachable) return;
+                if (s.n === 1) {
+                  setStep(1);
+                  if (selectedProperty) {
+                    setStep1Phase("room");
+                    setSelectedBuildingId(selectedProperty.buildingId);
+                  } else {
+                    setStep1Phase("property");
+                    setSelectedBuildingId(null);
+                  }
+                } else {
+                  setStep(s.n as TourStep);
+                }
+              }}
+              className={`flex items-center gap-2 ${reachable ? "" : "cursor-not-allowed opacity-45"}`}
+            >
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                step === s.n
+                  ? "bg-primary text-white"
+                  : s.n < step
+                  ? "bg-primary/20 text-primary"
+                  : "bg-slate-100 text-muted/70"
+              }`}>
+                {s.n < step ? <CheckSmIcon /> : s.n}
+              </span>
+              <span className={`hidden sm:inline text-sm ${
+                step === s.n ? "font-semibold text-foreground" : "text-muted/70"
+              }`}>
+                {s.label}
+              </span>
+            </button>
           </div>
-        }
-      >
-        <div className="mb-6 border-b border-border pb-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Step {step} of 3</p>
-          <p className="mt-1 text-lg font-bold tracking-tight text-foreground">{tourWizardSteps[step - 1]?.label}</p>
-        </div>
+        );
+        })}
+      </div>
 
-        <div>
+      <div className="mt-6">
         {step === 1 && (
           <Step1
             buildings={buildings}
             phase={step1Phase}
             selectedBuildingId={selectedBuildingId}
+            fieldErrors={fieldErrors}
             onSelectBuilding={(id) => {
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                delete next.property;
+                return next;
+              });
               setSelectedBuildingId(id);
               setSelectedProperty(null);
               setSelectedRoomKey(null);
@@ -414,6 +427,12 @@ function TourFlow({
                 setSelectedSlotIndex(null);
                 return;
               }
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                delete next.property;
+                delete next.room;
+                return next;
+              });
               setSelectedProperty(p);
               setSelectedBuildingId(p.buildingId);
               setSelectedRoomKey(roomKey);
@@ -429,6 +448,7 @@ function TourFlow({
           <Step2
             property={selectedProperty}
             availability={selectedAvailability}
+            fieldErrors={fieldErrors}
             calMonth={calMonth}
             calYear={calYear}
             onPrevMonth={() => {
@@ -445,11 +465,23 @@ function TourFlow({
             }}
             selectedDay={selectedDay}
             onSelectDay={(day) => {
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                delete next.tourSlot;
+                return next;
+              });
               setSelectedDay(day);
               setSelectedSlotIndex(null);
             }}
             selectedSlotIndex={selectedSlotIndex}
-            onSelectSlotIndex={setSelectedSlotIndex}
+            onSelectSlotIndex={(slot) => {
+              setFieldErrors((prev) => {
+                const next = { ...prev };
+                delete next.tourSlot;
+                return next;
+              });
+              setSelectedSlotIndex(slot);
+            }}
             managersAtSelectedSlot={managersAtSelectedSlot}
             availabilityLoading={availabilityLoading}
           />
@@ -463,10 +495,24 @@ function TourFlow({
             month={calMonth}
             year={calYear}
             submitting={bookingTour}
+            fieldErrors={fieldErrors}
+            onFieldChange={(key) =>
+              setFieldErrors((prev) => {
+                if (!(key in prev)) return prev;
+                const next = { ...prev };
+                delete next[key];
+                return next;
+              })
+            }
             onSubmit={async ({ name, email, phone, notes }) => {
               if (bookingTour) return;
-              if (!name.trim() || !email.trim()) {
-                showToast("Please enter your name and email.");
+              const errs: Record<string, string> = {};
+              if (!name.trim()) errs.name = "Name is required.";
+              if (!email.trim()) errs.email = "Email is required.";
+              if (Object.keys(errs).length > 0) {
+                setFieldErrors(errs);
+                showToast("Please fix the highlighted fields before continuing.");
+                queueMicrotask(() => scrollToFirstWizardFieldError(TOUR_STEP_FIELD_ORDER[3] ?? [], errs));
                 return;
               }
               if (!selectedProperty || selectedDay == null || selectedSlotIndex == null) return;
@@ -539,8 +585,63 @@ function TourFlow({
             }}
           />
         )}
-        </div>
-      </WizardShell>
+      </div>
+
+      {/* Footer nav */}
+      <div className={`mt-6 flex ${step > 1 ? "justify-between" : "justify-end"}`}>
+        {step > 1 && (
+          <button
+            type="button"
+            onClick={() => {
+              if (step === 2) {
+                setStep(1);
+                if (selectedProperty) {
+                  setStep1Phase("room");
+                  setSelectedBuildingId(selectedProperty.buildingId);
+                } else {
+                  setStep1Phase("property");
+                  setSelectedBuildingId(null);
+                }
+                return;
+              }
+              setStep((s) => (s - 1) as TourStep);
+            }}
+            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-muted hover:bg-slate-50"
+          >
+            Back
+          </button>
+        )}
+        {step < 3 && (
+          <button
+            type="button"
+            onClick={() => {
+              const errs: Record<string, string> = {};
+              if (step === 1) {
+                if (!selectedProperty) errs.property = "Choose a property to tour.";
+                if (!selectedRoomKey) errs.room = "Choose a room to tour.";
+              }
+              if (step === 2) {
+                if (selectedDay === null || selectedSlotIndex === null || managersAtSelectedSlot.length === 0) {
+                  errs.tourSlot = "Select a date and time for your tour.";
+                }
+              }
+              if (Object.keys(errs).length > 0) {
+                setFieldErrors(errs);
+                showToast("Please fix the highlighted fields before continuing.");
+                queueMicrotask(() => scrollToFirstWizardFieldError(TOUR_STEP_FIELD_ORDER[step] ?? [], errs));
+                return;
+              }
+              setFieldErrors({});
+              const next = (step + 1) as TourStep;
+              setStep(next);
+              setMaxStepReached((m) => nextWizardMaxReached(m, next) as TourStep);
+            }}
+            className="rounded-full bg-primary px-7 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-105"
+          >
+            Continue
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -553,6 +654,7 @@ function Step1({
   onBackToProperties,
   onSelectRoom,
   selectedRoomKey,
+  fieldErrors,
 }: {
   buildings: BuildingGroup[];
   phase: "property" | "room";
@@ -561,6 +663,7 @@ function Step1({
   onBackToProperties: () => void;
   onSelectRoom: (p: MockProperty | null, roomKey: string | null) => void;
   selectedRoomKey: string | null;
+  fieldErrors: Record<string, string>;
 }) {
   const buildingOptions = useMemo(() => buildingGroupsToSearchOptions(buildings), [buildings]);
 
@@ -568,17 +671,20 @@ function Step1({
     return (
       <div className="space-y-3">
         <p className="text-sm text-muted">Choose a property to tour. You&apos;ll pick a specific room next.</p>
-        <PropertySearchPicker
-          options={buildingOptions}
-          value={selectedBuildingId}
-          onChange={(id) => {
-            if (id) onSelectBuilding(id);
-          }}
-          placeholder="Search by address, neighborhood, or property name…"
-          listEmptyMessage="No listed housing is available for tours right now."
-          emptyMessage="No properties match your search. Try an address or neighborhood."
-          ariaLabel="Search properties to tour"
-        />
+        <div data-wizard-field="property" className={wizardSectionErrorClass(Boolean(fieldErrors.property))}>
+          <PropertySearchPicker
+            options={buildingOptions}
+            value={selectedBuildingId}
+            onChange={(id) => {
+              if (id) onSelectBuilding(id);
+            }}
+            placeholder="Search by address, neighborhood, or property name…"
+            listEmptyMessage="No listed housing is available for tours right now."
+            emptyMessage="No properties match your search. Try an address or neighborhood."
+            ariaLabel="Search properties to tour"
+          />
+          {fieldErrors.property ? <p className="mt-2 text-xs font-medium text-red-600">{fieldErrors.property}</p> : null}
+        </div>
       </div>
     );
   }
@@ -612,24 +718,27 @@ function Step1({
           ← All properties
         </button>
       </div>
-      <PropertySearchPicker
-        options={roomOptions}
-        value={selectedRoomKey}
-        onChange={(roomKey) => {
-          if (!roomKey) {
-            onSelectRoom(null, null);
-            return;
-          }
-          const hit = building.units
-            .flatMap((p) => roomOptionsForProperty(p).map((o) => ({ ...o, property: p })))
-            .find((o) => o.key === roomKey);
-          if (hit) onSelectRoom(hit.property, roomKey);
-        }}
-        placeholder="Search rooms by name, floor, or rent…"
-        emptyMessage="No rooms match your search."
-        listEmptyMessage="No rooms listed for this property."
-        ariaLabel="Search rooms to tour"
-      />
+      <div data-wizard-field="room" className={wizardSectionErrorClass(Boolean(fieldErrors.room))}>
+        <PropertySearchPicker
+          options={roomOptions}
+          value={selectedRoomKey}
+          onChange={(roomKey) => {
+            if (!roomKey) {
+              onSelectRoom(null, null);
+              return;
+            }
+            const hit = building.units
+              .flatMap((p) => roomOptionsForProperty(p).map((o) => ({ ...o, property: p })))
+              .find((o) => o.key === roomKey);
+            if (hit) onSelectRoom(hit.property, roomKey);
+          }}
+          placeholder="Search rooms by name, floor, or rent…"
+          emptyMessage="No rooms match your search."
+          listEmptyMessage="No rooms listed for this property."
+          ariaLabel="Search rooms to tour"
+        />
+        {fieldErrors.room ? <p className="mt-2 text-xs font-medium text-red-600">{fieldErrors.room}</p> : null}
+      </div>
     </div>
   );
 }
@@ -637,6 +746,7 @@ function Step1({
 function Step2({
   property,
   availability,
+  fieldErrors,
   calMonth, calYear, onPrevMonth, onNextMonth,
   selectedDay, onSelectDay, selectedSlotIndex, onSelectSlotIndex,
   managersAtSelectedSlot,
@@ -644,6 +754,7 @@ function Step2({
 }: {
   property: MockProperty | null;
   availability: Set<string>;
+  fieldErrors: Record<string, string>;
   calMonth: number; calYear: number;
   onPrevMonth: () => void; onNextMonth: () => void;
   selectedDay: number | null; onSelectDay: (d: number) => void;
@@ -677,13 +788,17 @@ function Step2({
         </p>
       )}
       {/* Calendar */}
+      <div
+        data-wizard-field="tourSlot"
+        className={wizardSectionErrorClass(Boolean(fieldErrors.tourSlot), "space-y-6 rounded-2xl")}
+      >
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <button type="button" onClick={onPrevMonth} className="rounded-full p-1.5 hover:bg-accent">
+          <button type="button" onClick={onPrevMonth} className="rounded-full p-1.5 hover:bg-slate-100">
             <ChevronLeftIcon />
           </button>
           <p className="text-sm font-semibold text-foreground">{MONTHS[calMonth]} {calYear}</p>
-          <button type="button" onClick={onNextMonth} className="rounded-full p-1.5 hover:bg-accent">
+          <button type="button" onClick={onNextMonth} className="rounded-full p-1.5 hover:bg-slate-100">
             <ChevronRightIcon />
           </button>
         </div>
@@ -710,8 +825,8 @@ function Step2({
                   isSelected
                     ? "bg-primary text-white shadow-sm"
                     : isAvailable && !isPast
-                    ? "bg-card text-foreground hover:bg-primary/[0.08] hover:text-primary"
-                    : "cursor-not-allowed text-muted/40"
+                    ? "bg-white text-foreground hover:bg-primary/[0.08] hover:text-primary"
+                    : "cursor-not-allowed text-slate-300"
                 }`}
               >
                 {day}
@@ -724,11 +839,11 @@ function Step2({
       {/* Time slots */}
       {selectedDay && (
         <div>
-          <p className="mb-3 text-sm font-semibold text-muted">
+          <p className="mb-3 text-sm font-semibold text-foreground">
             Available times — {MONTHS[calMonth]} {selectedDay}
           </p>
           {openSlots.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-border bg-accent/30 px-4 py-3 text-sm text-muted">
+            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-muted">
               No published tour windows for this day.
             </p>
           ) : (
@@ -741,7 +856,7 @@ function Step2({
                   className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
                     selectedSlotIndex === slotIndex
                       ? "border-primary bg-primary text-white"
-                      : "border-border bg-card text-muted hover:border-primary hover:text-primary"
+                      : "border-slate-200 bg-white text-foreground hover:border-primary hover:text-primary"
                   }`}
                 >
                   {formatAvailabilitySlotLabel(slotIndex)}
@@ -754,23 +869,27 @@ function Step2({
 
       {selectedSlotIndex != null && managersAtSelectedSlot.length > 1 && (
         <div>
-          <p className="mb-3 text-sm font-semibold text-muted">Multiple managers are available</p>
+          <p className="mb-3 text-sm font-semibold text-foreground">Multiple managers are available</p>
           <p className="mb-3 text-xs text-muted">
             We&apos;ll send this request to every available manager for this house. The first manager to approve gets the tour.
           </p>
         </div>
       )}
+      {fieldErrors.tourSlot ? <p className="text-xs font-medium text-red-600">{fieldErrors.tourSlot}</p> : null}
+      </div>
     </div>
   );
 }
 
 function Step3({
-  property, roomLabel, day, slotIndex, month, year, submitting, onSubmit,
+  property, roomLabel, day, slotIndex, month, year, submitting, onSubmit, fieldErrors, onFieldChange,
 }: {
   property: MockProperty | null; roomLabel: string; day: number | null; slotIndex: number | null;
   month: number;
   year: number;
   submitting: boolean;
+  fieldErrors: Record<string, string>;
+  onFieldChange: (key: string) => void;
   onSubmit: (payload: { name: string; email: string; phone: string; notes: string }) => void | Promise<void>;
 }) {
   const [name, setName] = useState("");
@@ -781,7 +900,7 @@ function Step3({
   return (
     <div className="space-y-5">
       {/* Summary */}
-      <div className="rounded-2xl border border-border/60 bg-accent/30 px-4 py-3 text-sm">
+      <div className="rounded-2xl border border-border bg-slate-50 px-4 py-3 text-sm">
         <p className="font-semibold text-foreground">{roomLabel || property?.title}</p>
         <p className="mt-0.5 text-muted">
           {MONTHS[month]} {day}, {year} · {slotIndex != null ? formatAvailabilitySlotLabel(slotIndex) : ""}
@@ -789,25 +908,45 @@ function Step3({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Name *">
-          <Input id="tour-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Smith" />
+        <Field label="Name *" fieldKey="name" error={fieldErrors.name}>
+          <input
+            id="tour-name"
+            type="text"
+            value={name}
+            onChange={(e) => {
+              onFieldChange("name");
+              setName(e.target.value);
+            }}
+            placeholder="Jane Smith"
+            className={wizardFieldErrorClass(Boolean(fieldErrors.name), inputCls)}
+          />
         </Field>
-        <Field label="Email *">
-          <Input id="tour-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@email.com" />
+        <Field label="Email *" fieldKey="email" error={fieldErrors.email}>
+          <input
+            id="tour-email"
+            type="email"
+            value={email}
+            onChange={(e) => {
+              onFieldChange("email");
+              setEmail(e.target.value);
+            }}
+            placeholder="jane@email.com"
+            className={wizardFieldErrorClass(Boolean(fieldErrors.email), inputCls)}
+          />
         </Field>
       </div>
-      <Field label="Phone">
-        <Input id="tour-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(206) 555-0100" />
+      <Field label="Phone" fieldKey="phone">
+        <input id="tour-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(206) 555-0100" className={inputCls} />
       </Field>
       <Field label="Notes (optional)">
-        <Textarea id="tour-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything we should prepare in advance?" />
+        <textarea id="tour-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything we should prepare in advance?" className={`${inputCls} resize-none`} />
       </Field>
 
       <button
         type="button"
         disabled={submitting}
         onClick={() => onSubmit({ name, email, phone, notes })}
-        className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(47,107,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
       >
         {submitting ? "Booking..." : "Book tour"}
@@ -846,7 +985,7 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
   return (
     <div className="mt-4 space-y-3">
       {/* Topic */}
-      <div className="glass-card rounded-3xl p-6">
+      <div className="rounded-3xl border border-border bg-white p-6 shadow-sm">
         <h2 className="text-base font-bold text-foreground">Topic</h2>
         <p className="mt-1 text-sm leading-relaxed text-muted">
           For rent, payments, maintenance, or portal login issues, use the{" "}
@@ -857,14 +996,14 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
         </p>
         <p className="mt-4 text-xs font-semibold text-muted">What do you need help with? *</p>
         <div className="relative mt-2">
-          <Select
+          <select
             value={topic}
             onChange={(e) => {
               const v = e.target.value;
               setTopic(v);
               if (v !== "Other") setOtherTopicDetail("");
             }}
-            className="appearance-none pr-8"
+            className={`${inputCls} appearance-none pr-8`}
           >
             <option value="">Select a topic</option>
             {TOPICS.map((t) => (
@@ -872,7 +1011,7 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
                 {t}
               </option>
             ))}
-          </Select>
+          </select>
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted/70">
             <ChevronDownIcon />
           </span>
@@ -880,11 +1019,12 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
         {isOther ? (
           <div className="mt-4">
             <Field label="Describe your topic *">
-              <Input
+              <input
                 type="text"
                 value={otherTopicDetail}
                 onChange={(e) => setOtherTopicDetail(e.target.value)}
                 placeholder="Type what you need help with"
+                className={inputCls}
               />
             </Field>
           </div>
@@ -892,7 +1032,7 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
       </div>
 
       {/* Property context */}
-      <div className="glass-card rounded-3xl p-6">
+      <div className="rounded-3xl border border-border bg-white p-6 shadow-sm">
         <h2 className="text-base font-bold text-foreground">Property context</h2>
         <p className="mt-1 text-sm text-muted">Optional — helps us answer about a specific listing.</p>
 
@@ -973,44 +1113,71 @@ function MessageFlow({ properties, onSuccess }: { properties: MockProperty[]; on
       </div>
 
       {/* Contact & message */}
-      <div className="glass-card rounded-3xl p-6">
+      <div className="rounded-3xl border border-border bg-white p-6 shadow-sm">
         <h2 className="text-base font-bold text-foreground">Your contact & message</h2>
         <p className="mt-1 text-sm text-muted">We will reply to the email you provide</p>
         <div className="mt-5 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name *">
-              <Input type="text" placeholder="Jane Smith" />
+              <input type="text" placeholder="Jane Smith" className={inputCls} />
             </Field>
             <Field label="Email *">
-              <Input type="email" placeholder="jane@email.com" />
+              <input type="email" placeholder="jane@email.com" className={inputCls} />
             </Field>
           </div>
           <Field label="Phone">
-            <Input type="tel" placeholder="(206) 555-0100" />
+            <input type="tel" placeholder="(206) 555-0100" className={inputCls} />
           </Field>
           <Field label="Message *">
-            <Textarea rows={4} placeholder="Tell us more so we can help…" />
+            <textarea rows={4} placeholder="Tell us more so we can help…" className={`${inputCls} resize-none`} />
           </Field>
         </div>
       </div>
 
-      <Button type="button" className="btn-cobalt w-full rounded-2xl py-3.5" onClick={handleSend}>
+      <button
+        type="button"
+        onClick={handleSend}
+        className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98]"
+        style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
+      >
         Send message
-      </Button>
+      </button>
     </div>
   );
 }
 
 /* ── Shared UI primitives ── */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  fieldKey,
+  error,
+}: {
+  label: string;
+  children: React.ReactNode;
+  fieldKey?: string;
+  error?: string;
+}) {
   return (
-    <div>
+    <div data-wizard-field={fieldKey}>
       <p className="mb-1.5 text-xs font-semibold text-muted">{label}</p>
       {children}
+      {error ? <p className="mt-1 text-xs font-medium text-red-600">{error}</p> : null}
     </div>
   );
 }
 
+
+const inputCls =
+  "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted/70 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15 hover:border-slate-300";
+
+function CheckSmIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
 function ChevronLeftIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -41,7 +41,7 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
         syncScheduleRecordsFromServer(),
         syncLeasePipelineFromServer(null),
       ]).then(() => bump());
-    } else if (kind === "manager" || kind === "pro" || kind === "owner") {
+    } else if (kind === "manager" || kind === "pro") {
       void Promise.allSettled([
         syncManagerApplicationsFromServer(),
         syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
@@ -66,7 +66,7 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
 
   return useMemo(() => {
     void tick;
-    if (!ready && (kind === "manager" || kind === "pro" || kind === "owner" || kind === "resident")) {
+    if (!ready && (kind === "manager" || kind === "pro" || kind === "resident")) {
       return {};
     }
 
@@ -84,7 +84,7 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       };
     }
 
-    if ((kind === "manager" || kind === "pro" || kind === "owner") && userId) {
+    if ((kind === "manager" || kind === "pro") && userId) {
       const [pendingProps] = adminKpiCounts(userId);
       const pendingApps = readManagerApplicationRows().filter(
         (a) => applicationVisibleToPortalUser(a, userId) && a.bucket === "pending",

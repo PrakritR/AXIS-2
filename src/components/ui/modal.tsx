@@ -11,6 +11,7 @@ export function Modal({
   onClose,
   children,
   panelClassName,
+  stackClassName,
 }: {
   open: boolean;
   title: string;
@@ -18,6 +19,8 @@ export function Modal({
   children: ReactNode;
   /** Override default panel width (e.g. wide onboarding / payouts). */
   panelClassName?: string;
+  /** Override z-index stacking for nested modals (e.g. inside listing form overlay). */
+  stackClassName?: string;
 }) {
   const isClient = useIsClient();
 
@@ -33,7 +36,7 @@ export function Modal({
   if (!open || !isClient) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] overflow-y-auto">
+    <div className={stackClassName ?? "fixed inset-0 z-[70] overflow-y-auto"}>
       <button
         type="button"
         aria-label="Close"

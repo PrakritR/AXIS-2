@@ -40,7 +40,7 @@ export function buildMoveInReminderText(params: {
     "",
     "See you soon!",
     "",
-    "— Axis Housing",
+    "— Axis",
   );
 
   return lines.join("\n");
@@ -88,7 +88,7 @@ export function buildMoveInReminderHtml(params: {
 <p style="margin:0 0 12px 0">Your move-in at <strong>${escapeHtml(params.propertyLabel)}</strong> is tomorrow, <strong>${escapeHtml(params.moveInDateLabel)}</strong>.</p>
 ${addressRow}${instructionsSection}${houseInfoSection}${ctaButton}
 <p style="margin:0 0 12px 0">Visit your resident portal to review your lease, charges, and any additional details.</p>
-<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">See you soon! — Axis Housing</p>
+<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">See you soon! — Axis</p>
 </div>
 </body>
 </html>`;

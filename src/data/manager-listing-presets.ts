@@ -21,6 +21,10 @@ export const HOUSE_WIDE_AMENITY_PRESETS = [
   { id: "walkable", label: "Walkable neighborhood" },
   { id: "transit", label: "Near public transit" },
   { id: "parking-available", label: "Parking available" },
+  { id: "pet-friendly", label: "Pet-friendly building" },
+  { id: "package-room", label: "Package room / lockers" },
+  { id: "doorman", label: "Doorman" },
+  { id: "on-site-mgmt", label: "On-site management" },
 ] as const;
 
 /**
@@ -38,22 +42,36 @@ export const SHARED_SPACE_AMENITY_PRESETS = [
   { id: "toaster-oven", label: "Toaster / toaster oven" },
   { id: "island", label: "Kitchen island" },
   { id: "pantry", label: "Pantry storage" },
+  { id: "range-hood", label: "Range hood / vent" },
+  { id: "garbage-disposal", label: "Garbage disposal" },
+  { id: "bar-stools", label: "Bar / counter seating" },
   // Dining & living
   { id: "dining-table", label: "Dining table & chairs" },
   { id: "sofa", label: "Couch / sofa" },
   { id: "smart-tv", label: "Smart TV" },
   { id: "coffee-table", label: "Coffee table" },
+  { id: "hardwood-floors", label: "Hardwood / tile floors" },
+  { id: "bookshelf-living", label: "Bookshelves" },
   // Laundry
   { id: "washer-dryer", label: "Washer / dryer" },
   { id: "laundry-sink", label: "Laundry sink" },
+  { id: "drying-rack", label: "Drying rack" },
+  { id: "iron-board", label: "Iron / ironing board" },
+  { id: "detergent-storage", label: "Detergent / supply storage" },
   // Work
   { id: "desk", label: "Desk / workspace" },
   { id: "office-chair", label: "Office chair" },
   { id: "printer", label: "Shared printer" },
+  { id: "whiteboard", label: "Whiteboard" },
+  { id: "monitor", label: "Monitor / display" },
+  { id: "quiet-space", label: "Quiet / sound-dampened" },
   // Outdoor
   { id: "patio-seating", label: "Patio / deck seating" },
   { id: "bbq-grill", label: "BBQ grill" },
   { id: "fire-pit", label: "Fire pit" },
+  { id: "yard-lawn", label: "Yard / lawn" },
+  { id: "garden", label: "Garden / planters" },
+  { id: "shade-umbrella", label: "Umbrella / shade" },
   // Storage & extras
   { id: "storage-locker", label: "Personal storage locker" },
   { id: "bike-storage", label: "Bike storage" },
@@ -62,7 +80,102 @@ export const SHARED_SPACE_AMENITY_PRESETS = [
   { id: "hot-tub", label: "Hot tub / jacuzzi" },
   { id: "pool-table", label: "Pool / billiards table" },
   { id: "parking-spot", label: "Parking spot" },
+  { id: "lounge-seating", label: "Living / lounge seating" },
+  { id: "tv-common", label: "TV in common area" },
 ] as const;
+
+export type SharedSpaceKind = "kitchen" | "living" | "laundry" | "outdoor" | "workspace" | "other";
+
+export const SHARED_SPACE_KIND_OPTIONS: readonly { id: SharedSpaceKind; label: string }[] = [
+  { id: "kitchen", label: "Kitchen & dining" },
+  { id: "living", label: "Living / lounge" },
+  { id: "laundry", label: "Laundry" },
+  { id: "outdoor", label: "Outdoor / yard" },
+  { id: "workspace", label: "Workspace" },
+  { id: "other", label: "Other (show all amenities)" },
+] as const;
+
+const SHARED_SPACE_AMENITY_IDS_BY_KIND: Record<SharedSpaceKind, readonly string[]> = {
+  kitchen: [
+    "fridge",
+    "freezer",
+    "oven-range",
+    "microwave",
+    "dishwasher",
+    "coffee-station",
+    "toaster-oven",
+    "island",
+    "pantry",
+    "dining-table",
+    "range-hood",
+    "garbage-disposal",
+    "bar-stools",
+  ],
+  living: [
+    "dining-table",
+    "sofa",
+    "smart-tv",
+    "coffee-table",
+    "lounge-seating",
+    "tv-common",
+    "pool-table",
+    "hardwood-floors",
+    "bookshelf-living",
+  ],
+  laundry: ["washer-dryer", "laundry-sink", "drying-rack", "iron-board", "detergent-storage"],
+  outdoor: [
+    "patio-seating",
+    "bbq-grill",
+    "fire-pit",
+    "pool",
+    "hot-tub",
+    "parking-spot",
+    "yard-lawn",
+    "garden",
+    "shade-umbrella",
+    "bike-storage",
+  ],
+  workspace: ["desk", "office-chair", "printer", "whiteboard", "monitor", "quiet-space"],
+  other: SHARED_SPACE_AMENITY_PRESETS.map((p) => p.id),
+};
+
+export function inferSharedSpaceKind(name: string): SharedSpaceKind | undefined {
+  const n = name.trim().toLowerCase();
+  if (!n) return undefined;
+  if (n.includes("kitchen") || n.includes("dining")) return "kitchen";
+  if (n.includes("laundry")) return "laundry";
+  if (n.includes("outdoor") || n.includes("yard") || n.includes("patio") || n.includes("deck")) return "outdoor";
+  if (n.includes("living") || n.includes("lounge")) return "living";
+  if (n.includes("office") || n.includes("workspace")) return "workspace";
+  return undefined;
+}
+
+export function normalizeSharedSpaceKind(raw: unknown, name: string): SharedSpaceKind {
+  const allowed = new Set(SHARED_SPACE_KIND_OPTIONS.map((o) => o.id));
+  if (typeof raw === "string" && allowed.has(raw as SharedSpaceKind)) return raw as SharedSpaceKind;
+  return inferSharedSpaceKind(name) ?? "other";
+}
+
+export function sharedSpaceAmenityPresetsForKind(
+  kind: SharedSpaceKind | undefined,
+  presets: readonly { id: string; label: string }[] = SHARED_SPACE_AMENITY_PRESETS,
+): { id: string; label: string }[] {
+  const allowed = new Set(SHARED_SPACE_AMENITY_IDS_BY_KIND[kind ?? "other"]);
+  return presets.filter((p) => allowed.has(p.id));
+}
+
+/** Drop preset amenity lines that don't apply to the selected shared-space type; keep custom lines. */
+export function pruneSharedSpaceAmenitiesForKind(
+  amenitiesText: string,
+  kind: SharedSpaceKind | undefined,
+  presets: readonly { id: string; label: string }[] = SHARED_SPACE_AMENITY_PRESETS,
+): string {
+  const allowedPresets = new Set(sharedSpaceAmenityPresetsForKind(kind, presets).map((p) => p.label));
+  const allPresetLabels = new Set(presets.map((p) => p.label));
+  return splitLineList(amenitiesText)
+    .filter((line) => !allPresetLabels.has(line) || allowedPresets.has(line))
+    .join("\n");
+}
 
 /** Fixtures & finishes specific to a bathroom row. */
 export const BATHROOM_EXTRA_AMENITY_PRESETS = [
@@ -90,14 +203,22 @@ export const LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS = new Set([
 ]);
 
 export const ROOM_AMENITY_PRESETS = [
+  { id: "heating", label: "Heating" },
+  { id: "ac", label: "Air conditioning" },
   { id: "closet", label: "Walk-in closet" },
   { id: "blackout", label: "Blackout curtains" },
   { id: "usb", label: "USB outlets" },
   { id: "fan", label: "Ceiling fan" },
   { id: "mini-fridge", label: "Mini fridge" },
   { id: "sink", label: "Private sink / vanity" },
+  { id: "ensuite", label: "Ensuite bathroom" },
+  { id: "ethernet", label: "Ethernet / wired internet" },
   { id: "balcony", label: "Balcony / bay window" },
   { id: "hardwood", label: "Hardwood floors" },
+  { id: "carpet", label: "Carpet" },
+  { id: "laminate", label: "Laminate / vinyl flooring" },
+  { id: "smoke-detector", label: "Smoke detector" },
+  { id: "co-detector", label: "Carbon monoxide detector" },
   { id: "keypad", label: "Keypad lock" },
 ] as const;
 

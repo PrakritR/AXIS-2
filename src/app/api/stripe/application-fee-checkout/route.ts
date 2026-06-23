@@ -3,13 +3,13 @@ import { resolveAppOrigin } from "@/lib/app-url";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { axisPaymentsEnabledOnListing } from "@/lib/payment-policy";
+import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
 import {
   APPLICATION_FEE_CHECKOUT_PURPOSE,
   createAxisAchCheckoutSession,
   stripeNotConfiguredError,
 } from "@/lib/stripe-axis-ach-checkout";
-import { resolveManagerConnectAccountId } from "@/lib/stripe-application-fee";
+import { resolveAndValidateManagerConnectForPayments } from "@/lib/stripe-connect";
 
 export const runtime = "nodejs";
 
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     const listing = listingFromPropertyData(propertyRow?.property_data);
-    if (!axisPaymentsEnabledOnListing(listing)) {
+    if (!listingApplicationFeeChannels(listing ?? undefined).ach) {
       return NextResponse.json(
         {
           code: "AXIS_PAYMENTS_DISABLED",
@@ -76,20 +76,19 @@ export async function POST(req: Request) {
       );
     }
 
-    const destination = await resolveManagerConnectAccountId(db, managerUserId);
-    if (!destination) {
+    const stripe = getStripe();
+    const connect = await resolveAndValidateManagerConnectForPayments(stripe, db, managerUserId);
+    if (!connect.ok) {
       return NextResponse.json(
         {
-          code: "MANAGER_NO_CONNECT_ACCOUNT",
-          error:
-            "This property manager has not connected Stripe payouts yet. Use Zelle or Venmo for the application fee if the listing offers it.",
+          code: connect.code === "NO_ACCOUNT" ? "MANAGER_NO_CONNECT_ACCOUNT" : "MANAGER_CONNECT_TRANSFERS_NOT_READY",
+          error: connect.error,
         },
         { status: 422 },
       );
     }
 
     const appUrl = resolveAppOrigin(req);
-    const stripe = getStripe();
 
     const metadata: Record<string, string> = {
       purpose: APPLICATION_FEE_CHECKOUT_PURPOSE,
@@ -106,7 +105,7 @@ export async function POST(req: Request) {
       productDescription: `Listing ${propertyId.slice(0, 120)}`,
       metadata,
       mode: "hosted",
-      destinationAccountId: destination,
+      destinationAccountId: connect.accountId,
       successUrl: `${appUrl}/rent/apply?fee_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${appUrl}/rent/apply?fee_checkout=cancel`,
     });

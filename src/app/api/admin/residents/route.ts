@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import { removePortalAccess } from "@/lib/auth/remove-portal-access";
+import { deleteResidentAccount } from "@/lib/auth/delete-portal-account";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -85,7 +85,10 @@ export async function DELETE(req: Request) {
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const supabase = createSupabaseServiceRoleClient();
-    const result = await removePortalAccess(supabase, id, "resident");
+    const result = await deleteResidentAccount(supabase, { userId: id, purgeData: true });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 409 });
+    }
     return NextResponse.json({ ok: true, mode: result.mode });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

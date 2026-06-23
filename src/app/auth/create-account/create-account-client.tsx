@@ -1,7 +1,6 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { parseAuthRole, type AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -16,13 +15,6 @@ function Req() {
   return <span className="text-danger"> *</span>;
 }
 
-function makeBrowserAxisId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `AXIS-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-  }
-  return `AXIS-${Date.now().toString(36).toUpperCase()}`;
-}
-
 type ManagerCheckoutPreview = {
   managerId: string;
   email: string;
@@ -35,30 +27,32 @@ type ExistingEmailStatus = {
   roles: string[];
 };
 
+type CreateAccountRole = "resident" | "manager";
+
+function parseCreateAccountRole(value: string | null): CreateAccountRole {
+  return value === "manager" ? "manager" : "resident";
+}
+
 export default function CreateAccountClient() {
   const { showToast } = useAppUi();
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionIdFromUrl = useMemo(() => searchParams.get("session_id")?.trim() ?? "", [searchParams]);
-  const roleFromUrl = useMemo(() => parseAuthRole(searchParams.get("role")), [searchParams]);
+  const roleFromUrl = useMemo(() => parseCreateAccountRole(searchParams.get("role")), [searchParams]);
   const axisIdFromUrl = useMemo(
     () => searchParams.get("axis_id")?.trim() || "",
     [searchParams],
   );
-  const slotFromUrl = useMemo(() => searchParams.get("slot") ?? "", [searchParams]);
-  const urlDerivedRole: AuthRole = axisIdFromUrl
+  const urlDerivedRole: CreateAccountRole = axisIdFromUrl
     ? "resident"
     : sessionIdFromUrl
       ? "manager"
       : roleFromUrl;
 
-  const [role, setRole] = useState<AuthRole>(urlDerivedRole);
-  const [ownerInviteRef, setOwnerInviteRef] = useState(slotFromUrl);
-  const [adminKey, setAdminKey] = useState("");
+  const [role, setRole] = useState<CreateAccountRole>(urlDerivedRole);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [axisId, setAxisId] = useState(axisIdFromUrl);
   const [busy, setBusy] = useState(false);
   const [checkoutPreview, setCheckoutPreview] = useState<ManagerCheckoutPreview | null>(null);
@@ -68,18 +62,12 @@ export default function CreateAccountClient() {
   const [emailStatus, setEmailStatus] = useState<ExistingEmailStatus | null>(null);
   const [emailStatusLoading, setEmailStatusLoading] = useState(false);
   const [prevRoleFromUrl, setPrevRoleFromUrl] = useState(roleFromUrl);
-  const [prevSlotFromUrl, setPrevSlotFromUrl] = useState(slotFromUrl);
 
   if (sessionIdFromUrl || axisIdFromUrl) {
     if (role !== urlDerivedRole) setRole(urlDerivedRole);
   } else if (roleFromUrl !== prevRoleFromUrl) {
     setPrevRoleFromUrl(roleFromUrl);
     if (role !== roleFromUrl) setRole(roleFromUrl);
-  }
-
-  if (slotFromUrl !== prevSlotFromUrl) {
-    setPrevSlotFromUrl(slotFromUrl);
-    if (ownerInviteRef !== slotFromUrl) setOwnerInviteRef(slotFromUrl);
   }
 
   if (axisIdFromUrl && axisId !== axisIdFromUrl) {
@@ -185,10 +173,7 @@ export default function CreateAccountClient() {
     return displayedEmailStatus.roles.filter((r) => r !== role);
   }, [displayedEmailStatus, role]);
   const reusingExistingAccount = Boolean(displayedEmailStatus?.exists);
-  const passwordLabel =
-    reusingExistingAccount && (role === "resident" || role === "owner" || role === "admin" || role === "manager")
-      ? "Password"
-      : "Create password";
+  const passwordLabel = reusingExistingAccount ? "Password" : "Create password";
   const existingAccountHint =
     role === "resident" && reusingExistingAccount
       ? "This email already has an Axis login. Your Axis ID and email match your application — you can use a new password below to sign in as a resident."
@@ -271,133 +256,52 @@ export default function CreateAccountClient() {
       return;
     }
 
-    if (role === "admin") {
-      if (!adminKey.trim()) {
-        showToast("Admin registration key is required.");
-        return;
-      }
-      setBusy(true);
-      try {
-        const res = await fetch("/api/auth/register-admin", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: email.trim(),
-            password,
-            adminKey,
-            fullName: fullName.trim() || undefined,
-          }),
-        });
-        const body = (await res.json()) as { error?: string };
-        if (!res.ok) {
-          showToast(body.error ?? "Could not create admin.");
-          return;
-        }
-        showToast("Admin created. Sign in with your email.");
-        router.push("/auth/sign-in");
-      } finally {
-        setBusy(false);
-      }
+    if (role !== "resident") {
+      showToast("Manager signup starts from Partner pricing.");
       return;
     }
 
-    if (role === "resident" && !axisId.trim()) {
+    if (!axisId.trim()) {
       showToast("Axis ID is required.");
-      return;
-    }
-
-    if (role === "owner" && !ownerInviteRef.trim()) {
-      showToast("Invite reference is required to create an owner account.");
       return;
     }
 
     setBusy(true);
     try {
-      if (role === "resident") {
-        const res = await fetch("/api/auth/register-resident", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: email.trim(),
-            password,
-            axisId: axisId.trim(),
-          }),
-        });
-        const body = (await res.json()) as { error?: string; reusedExistingAuthUser?: boolean; axisId?: string };
-        if (!res.ok) {
-          showToast(body.error ?? "Could not create resident account.");
-          return;
-        }
-        const supabase = createSupabaseBrowserClient();
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+      const res = await fetch("/api/auth/register-resident", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           email: email.trim(),
           password,
-        });
-        if (signInError) {
-          showToast(
-            body.reusedExistingAuthUser
-              ? "Resident access updated. Sign in with the email and password you just set."
-              : "Resident account created. Sign in with your email.",
-          );
-          router.push("/auth/sign-in");
-          return;
-        }
-        showToast(
-          body.reusedExistingAuthUser
-            ? "Resident access updated. You are signed in."
-            : "Resident account created. You are signed in.",
-        );
-        router.push("/resident/dashboard");
+          axisId: axisId.trim(),
+        }),
+      });
+      const body = (await res.json()) as { error?: string; reusedExistingAuthUser?: boolean; axisId?: string };
+      if (!res.ok) {
+        showToast(body.error ?? "Could not create resident account.");
         return;
       }
-
       const supabase = createSupabaseBrowserClient();
-      const generatedAxisId = makeBrowserAxisId();
-      const { data, error } = await supabase.auth.signUp({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
-        options: {
-          data: {
-            axis_id: generatedAxisId,
-            invite_ref: ownerInviteRef.trim(),
-          },
-        },
       });
-      if (error) {
-        showToast(error.message);
-        return;
-      }
-      const uid = data.user?.id;
-      if (!uid) {
-        showToast("Check your email to confirm your account, then sign in.");
+      if (signInError) {
+        showToast(
+          body.reusedExistingAuthUser
+            ? "Resident access updated. Sign in with the email and password you just set."
+            : "Resident account created. Sign in with your email.",
+        );
         router.push("/auth/sign-in");
         return;
       }
-
-      const { error: insErr } = await supabase.from("profiles").insert({
-        id: uid,
-        email: email.trim().toLowerCase(),
-        role,
-        manager_id: generatedAxisId,
-        full_name: fullName.trim() || null,
-        application_approved: role === "owner",
-      });
-      if (insErr) {
-        showToast(insErr.message);
-        return;
-      }
-
-      const { error: roleErr } = await supabase.from("profile_roles").upsert(
-        { user_id: uid, role },
-        { onConflict: "user_id,role" },
+      showToast(
+        body.reusedExistingAuthUser
+          ? "Resident access updated. You are signed in."
+          : "Resident account created. You are signed in.",
       );
-      if (roleErr) {
-        showToast(roleErr.message);
-        return;
-      }
-
-      showToast("Account created. You can sign in once email confirmation completes (if enabled).");
-      router.push("/auth/sign-in");
+      router.push("/resident/dashboard");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign up failed";
       showToast(msg);
@@ -406,20 +310,14 @@ export default function CreateAccountClient() {
     }
   };
 
-  const readOnlyInputClass = "mt-1.5 bg-auth-input-bg text-foreground cursor-default";
-
-  const confirmedContextLabel = sessionIdFromUrl
-    ? "Checkout confirmed — finish account setup below."
-    : slotFromUrl
-      ? `Owner invite linked — slot ${slotFromUrl}.`
-      : null;
+  const readOnlyInputClass = "mt-1.5 bg-[#f1f5f9] text-foreground cursor-default";
 
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-semibold tracking-tight text-foreground">Create account</h1>
+      <h1 className="text-center text-[22px] font-bold tracking-tight text-foreground">Create account</h1>
 
       <div className="mt-7">
-        <label className="text-xs font-semibold text-muted" htmlFor="account-type">
+        <label className="text-xs font-semibold text-[#334155]" htmlFor="account-type">
           Portal type
         </label>
         <Select
@@ -427,16 +325,14 @@ export default function CreateAccountClient() {
           className="mt-1.5"
           value={role}
           disabled={!!sessionIdFromUrl}
-          onChange={(e) => setRole(parseAuthRole(e.target.value))}
+          onChange={(e) => setRole(parseCreateAccountRole(e.target.value))}
         >
           <option value="resident">Resident</option>
           <option value="manager">Manager</option>
-          <option value="owner">Owner</option>
-          <option value="admin">Admin</option>
         </Select>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-fill)] p-4 text-sm leading-relaxed text-muted backdrop-blur-[24px]">
+      <div className="mt-6 rounded-2xl border border-[#e0e4ec] bg-[#f8fafc] p-4 text-sm leading-relaxed text-muted">
         {managerPostCheckout ? (
           <>
             {isAxisIntentSignup ? (
@@ -458,7 +354,7 @@ export default function CreateAccountClient() {
             portal access. After signup, your resident portal stays limited until an Axis manager marks your
             application fee paid and approves your application.
           </>
-        ) : role === "manager" ? (
+        ) : (
           <>
             Start from{" "}
             <Link className="font-semibold text-primary hover:opacity-90" href="/partner/pricing">
@@ -467,18 +363,11 @@ export default function CreateAccountClient() {
             : choose <span className="font-semibold text-foreground">Free</span> (no payment) or a paid plan (checkout). You
             will return here with your Axis ID to set your password.
           </>
-        ) : role === "owner" ? (
-          <>
-            Owner signup is invite-only. Use the invite reference from your manager link together with the email they
-            expect for your properties.
-          </>
-        ) : (
-          <>Admin accounts require a registration key from your organization.</>
         )}
       </div>
 
       {role === "manager" && sessionIdFromUrl && effectivePreviewLoading ? (
-        <p className="mt-6 text-center text-sm text-slate-600">Loading checkout details…</p>
+        <p className="mt-6 text-center text-sm text-muted">Loading checkout details…</p>
       ) : null}
 
       {role === "manager" && sessionIdFromUrl && effectivePreviewError ? (
@@ -487,16 +376,6 @@ export default function CreateAccountClient() {
           <Link className="mt-3 inline-block font-semibold text-primary hover:underline" href="/partner/pricing">
             Back to Partner pricing
           </Link>
-        </div>
-      ) : null}
-
-      {confirmedContextLabel ? (
-        <div className="mt-6 flex items-center gap-2.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-fill)] px-4 py-2.5 backdrop-blur-[24px]">
-          <span
-            className="h-2 w-2 shrink-0 rounded-full bg-[var(--status-confirmed-fg)] shadow-[0_0_8px_rgba(31,138,91,0.45)]"
-            aria-hidden
-          />
-          <p className="text-sm font-medium text-foreground">{confirmedContextLabel}</p>
         </div>
       ) : null}
 
@@ -510,7 +389,7 @@ export default function CreateAccountClient() {
         {managerPostCheckout && effectiveCheckoutPreview ? (
           <>
             <div>
-              <label className="text-xs font-semibold text-muted" htmlFor="manager-id">
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="manager-id">
                 Axis ID
               </label>
               <Input
@@ -523,14 +402,14 @@ export default function CreateAccountClient() {
             </div>
             {effectiveCheckoutPreview.fullName ? (
               <div>
-                <label className="text-xs font-semibold text-muted" htmlFor="mgr-name">
+                <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-name">
                   Full name
                 </label>
                 <Input id="mgr-name" readOnly className={readOnlyInputClass} value={effectiveCheckoutPreview.fullName} tabIndex={-1} />
               </div>
             ) : null}
             <div>
-              <label className="text-xs font-semibold text-muted" htmlFor="mgr-email">
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-email">
                 Email
                 <Req />
               </label>
@@ -544,7 +423,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted" htmlFor="mgr-pw">
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw">
                 {passwordLabel}
                 <Req />
               </label>
@@ -558,7 +437,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted" htmlFor="mgr-pw2">
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw2">
                 Confirm password
                 <Req />
               </label>
@@ -574,7 +453,7 @@ export default function CreateAccountClient() {
         ) : managerNeedsPricing ? (
           <>
             <div>
-              <label className="text-xs font-semibold text-muted" htmlFor="mgr-id-input">
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-id-input">
                 Axis ID
               </label>
               <Input
@@ -584,12 +463,12 @@ export default function CreateAccountClient() {
                 value={managerIdInput}
                 onChange={(e) => setManagerIdInput(e.target.value)}
               />
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-muted/70">
                 From your account setup email or the Axis ID confirmation page after checkout.
               </p>
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted" htmlFor="mgr-email-input">
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-email-input">
                 Email <Req />
               </label>
               <Input
@@ -603,7 +482,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted" htmlFor="mgr-pw-activate">
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw-activate">
                 {passwordLabel} <Req />
               </label>
               <PasswordInput
@@ -616,7 +495,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted" htmlFor="mgr-pw2-activate">
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw2-activate">
                 Confirm password <Req />
               </label>
               <PasswordInput
@@ -630,25 +509,9 @@ export default function CreateAccountClient() {
           </>
         ) : (
           <>
-            {role === "admin" ? (
-              <div>
-                <label className="text-xs font-semibold text-muted" htmlFor="admin-key">
-                  Admin registration key
-                  <Req />
-                </label>
-                <PasswordInput
-                  id="admin-key"
-                  className="mt-1.5"
-                  autoComplete="off"
-                  placeholder="Key from your organization"
-                  value={adminKey}
-                  onChange={(e) => setAdminKey(e.target.value)}
-                />
-              </div>
-            ) : null}
             {role === "resident" ? (
               <div>
-                <label className="text-xs font-semibold text-muted" htmlFor="app">
+                <label className="text-xs font-semibold text-[#334155]" htmlFor="app">
                   Axis ID
                   <Req />
                 </label>
@@ -661,37 +524,8 @@ export default function CreateAccountClient() {
                 />
               </div>
             ) : null}
-            {role === "manager" || role === "owner" ? (
-              <div>
-                <label className="text-xs font-semibold text-muted" htmlFor="name">
-                  Full name
-                </label>
-                <Input
-                  id="name"
-                  className="mt-1.5"
-                  placeholder="Your full name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                />
-              </div>
-            ) : null}
-            {role === "owner" ? (
-              <div>
-                <label className="text-xs font-semibold text-muted" htmlFor="invite">
-                  Invite reference
-                  <Req />
-                </label>
-                <Input
-                  id="invite"
-                  className="mt-1.5"
-                  placeholder="From your manager link, e.g. slot id"
-                  value={ownerInviteRef}
-                  onChange={(e) => setOwnerInviteRef(e.target.value)}
-                />
-              </div>
-            ) : null}
             <div>
-              <label className="text-xs font-semibold text-muted" htmlFor="email">
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
                 Email
                 <Req />
               </label>
@@ -706,7 +540,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted" htmlFor="pw">
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="pw">
                 {passwordLabel}
                 <Req />
               </label>
@@ -718,7 +552,7 @@ export default function CreateAccountClient() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              {displayedEmailStatusLoading ? <p className="mt-1 text-xs text-slate-400">Checking for an existing Axis login…</p> : null}
+              {displayedEmailStatusLoading ? <p className="mt-1 text-xs text-muted/70">Checking for an existing Axis login…</p> : null}
             </div>
           </>
         )}

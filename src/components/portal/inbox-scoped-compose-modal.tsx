@@ -36,18 +36,14 @@ type Chip =
   | { key: string; kind: "broadcast"; category: InboxRecipientCategory }
   | { key: string; kind: "contact"; contact: InboxScopedContact };
 
-function categoryHint(portal: "resident" | "manager" | "owner", category: InboxRecipientCategory): string {
-  if (category === "admin") return "Messages to Axis Housing operations.";
+function categoryHint(portal: "resident" | "manager", category: InboxRecipientCategory): string {
+  if (category === "admin") return "Messages to Axis operations.";
   if (portal === "manager") {
     if (category === "management") return "Property owners on your listings.";
     return "Tenants & approved residents.";
   }
-  if (portal === "resident") {
-    if (category === "management") return "Property managers and owners.";
-    return "Household / co-tenants.";
-  }
-  if (category === "management") return "Property managers and staff.";
-  return "Residents at your properties.";
+  if (category === "management") return "Property managers and owners.";
+  return "Household / co-tenants.";
 }
 
 function allLabelForCategory(category: InboxRecipientCategory): string {
@@ -71,7 +67,7 @@ export function ScopedInboxComposeModal({
   open: boolean;
   onClose: () => void;
   onSend: (payload: ScopedInboxSendPayload) => void;
-  portal: "resident" | "manager" | "owner";
+  portal: "resident" | "manager";
   title?: string;
   senderName?: string;
   senderEmail?: string;

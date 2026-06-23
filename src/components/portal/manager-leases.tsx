@@ -6,9 +6,9 @@ import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-p
 import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
-  PORTAL_TOOLBAR_LABEL,
-  PORTAL_TOOLBAR_SELECT,
-  PORTAL_TOOLBAR_GROUP,
+  ManagerPortalFilterRow,
+  PORTAL_HEADER_ACTION_BTN,
+  PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
@@ -45,6 +45,11 @@ export function ManagerLeases() {
   const [propertyFilter, setPropertyFilter] = useState("");
   const [houseSort, setHouseSort] = useState<HouseSort>("house-asc");
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
+  const [clientReady, setClientReady] = useState(false);
+
+  useEffect(() => {
+    queueMicrotask(() => setClientReady(true));
+  }, []);
 
   useEffect(() => {
     if (!authReady || !userId) return;
@@ -67,6 +72,7 @@ export function ManagerLeases() {
   }, [authReady, userId]);
 
   const propertyOptions = useMemo(() => {
+    if (!clientReady) return [];
     void tick;
     void propertyTick;
     const base = buildManagerPropertyFilterOptions(userId);
@@ -79,9 +85,10 @@ export function ManagerLeases() {
     return [...labelById.entries()]
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [userId, tick, propertyTick]);
+  }, [clientReady, userId, tick, propertyTick]);
 
   const rows = useMemo(() => {
+    if (!clientReady) return [];
     void tick;
     const allRows = readLeasePipeline(userId);
     const filtered = !propertyFilter.trim()
@@ -106,7 +113,7 @@ export function ManagerLeases() {
       const bTs = Date.parse(b.updatedAtIso || "");
       return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
     });
-  }, [tick, propertyFilter, houseSort, userId]);
+  }, [clientReady, tick, propertyFilter, houseSort, userId]);
 
   useEffect(() => {
     const emails = [...new Set(rows.map((row) => row.residentEmail.trim().toLowerCase()).filter(Boolean))];
@@ -148,41 +155,39 @@ export function ManagerLeases() {
       title="Leases"
       titleAside={
         <>
-          <div className="hidden min-w-0 sm:block">
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={setPropertyFilter}
-            />
-          </div>
-          <label className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
-            <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>{propertyFilter ? "Sort resident" : "Sort house"}</span>
-            <select
-              value={houseSort}
-              onChange={(e) => setHouseSort(e.target.value as HouseSort)}
-              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
-            >
-              <option value="house-asc">A-Z</option>
-              <option value="house-desc">Z-A</option>
-            </select>
-          </label>
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
+          <PortalToolbarSortSelect
+            label={propertyFilter ? "Sort resident" : "Sort house"}
+            value={houseSort}
+            onChange={setHouseSort}
+            options={[
+              { value: "house-asc", label: "A-Z" },
+              { value: "house-desc", label: "Z-A" },
+            ]}
+          />
           <Button
             type="button"
             variant="outline"
-            className="shrink-0 rounded-full"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => {
               const result = regenerateAllLeaseHtml(userId);
-              // Re-sync charges for all approved applications so payment tabs reflect current lease values
               const approvedRows = readManagerApplicationRows().filter((r) => r.bucket === "approved");
               for (const appRow of approvedRows) {
                 recordApprovedApplicationCharges(appRow, userId ?? null);
               }
               setTick((t) => t + 1);
-              showToast(
-                result.updated > 0
-                  ? `Regenerated ${result.updated} lease${result.updated === 1 ? "" : "s"}.`
-                  : "No leases with application data to regenerate.",
-              );
+              const parts: string[] = [];
+              if (result.snapshotsRefreshed > 0) {
+                parts.push(`refreshed ${result.snapshotsRefreshed} application snapshot${result.snapshotsRefreshed === 1 ? "" : "s"}`);
+              }
+              if (result.updated > 0) {
+                parts.push(`regenerated ${result.updated} lease${result.updated === 1 ? "" : "s"}`);
+              }
+              showToast(parts.length > 0 ? parts.join("; ") + "." : "No leases with application data to regenerate.");
             }}
           >
             Regenerate all
@@ -190,7 +195,7 @@ export function ManagerLeases() {
           <Button
             type="button"
             variant="outline"
-            className="shrink-0 rounded-full"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => {
               if (!userId) return;
               void Promise.all([
@@ -209,16 +214,9 @@ export function ManagerLeases() {
         </>
       }
       filterRow={
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="sm:hidden">
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={setPropertyFilter}
-            />
-          </div>
+        <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerLeaseBucket)} />
-        </div>
+        </ManagerPortalFilterRow>
       }
     >
       <ManagerLeasesPipelinePanel

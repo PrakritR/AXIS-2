@@ -16,18 +16,18 @@ export const MANAGER_TIER_MONTHLY_USD: Record<ManagerSkuTier, number> = {
 };
 
 /**
- * Sections available on Free: property listings, applications, calendar (touring), and leases.
- * Residents tab (work orders, inbox, account links) requires Pro+.
+ * Sections available on Free: listings, applications, calendar, payments.
+ * Residents, leases, services, inbox, and co-managers require Pro+.
  */
 export const FREE_SUBSCRIPTION_SECTIONS = new Set([
   "dashboard",
   "properties",
   "applications",
-  "leases",
   "payments",
   "calendar",
   "profile",
   "plan",
+  "bugs-feedback",
 ]);
 
 /** Normalize DB tier string; unknown/null → treat as legacy full access (not Pro-limited). */
@@ -123,7 +123,7 @@ export function formatManagerMonthlyLabel(tier: string | null | undefined): stri
 export function paidWorkspacePortalTitle(tierRaw: string | null | undefined, stripeSubscriptionId: string | null | undefined): string {
   void tierRaw;
   void stripeSubscriptionId;
-  return "Axis Property Portal";
+  return "Axis";
 }
 
 const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{

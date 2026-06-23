@@ -1,5 +1,20 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
+import {
+  computeLeaseEndDate,
+  normalizeIsoDateInput,
+  resolvePlacementLeaseDates,
+  shouldAutoComputeLeaseEnd,
+} from "@/lib/rental-application/lease-dates";
+import {
+  enrichApplicationForLease,
+  resolveApplicationPersonalFields,
+} from "@/lib/application-personal-fields";
+import {
+  defaultBackgroundCheckStatusForRow,
+  normalizeBackgroundCheckStatus,
+  resolveBackgroundCheckStatus,
+} from "@/lib/application-background-check";
 
 export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
 const MANAGER_APPLICATIONS_SESSION_KEY_PREFIX = "axis:manager-applications:v2";
@@ -43,10 +58,36 @@ export function resolveResidentPortalAxisId(input: {
   return "";
 }
 
+function normalizeApplicationLeaseFields(row: DemoApplicantRow): DemoApplicantRow {
+  if (!row.application) return row;
+  const app = row.application;
+  const leaseTerm = app.leaseTerm?.trim() || "";
+  const leaseStart = normalizeIsoDateInput(app.leaseStart);
+  let leaseEnd = leaseTerm === "Month-to-Month" ? "" : normalizeIsoDateInput(app.leaseEnd);
+  if (!leaseEnd && shouldAutoComputeLeaseEnd(leaseTerm, app.rentalType) && leaseStart) {
+    leaseEnd = computeLeaseEndDate(leaseStart, leaseTerm);
+  }
+  if (leaseStart === (app.leaseStart?.trim() || "") && leaseEnd === (app.leaseEnd?.trim() || "")) return row;
+  return {
+    ...row,
+    application: {
+      ...app,
+      leaseStart,
+      leaseEnd,
+    },
+  };
+}
+
 function normalizeApplicationRow(row: DemoApplicantRow): DemoApplicantRow {
   const nextId = normalizeApplicationAxisId(row.id);
   const next = nextId === row.id ? row : { ...row, id: nextId };
-  return syncSignedRentFields(next);
+  const withRent = syncSignedRentFields(normalizeApplicationLeaseFields(next));
+  const backgroundCheckStatus =
+    normalizeBackgroundCheckStatus(withRent.backgroundCheckStatus) ??
+    defaultBackgroundCheckStatusForRow(withRent);
+  return backgroundCheckStatus === withRent.backgroundCheckStatus
+    ? withRent
+    : { ...withRent, backgroundCheckStatus };
 }
 
 function parseSignedRentValue(value: unknown): number | null {
@@ -121,6 +162,10 @@ function mergeApplicationRow(existing: DemoApplicantRow | undefined, incoming: D
     managerUserId: chooseString(incoming.managerUserId ?? undefined, existing.managerUserId ?? undefined) ?? null,
     moveInInstructions: chooseString(incoming.moveInInstructions, existing.moveInInstructions),
     signedMonthlyRent: chooseNumber(incoming.signedMonthlyRent, existing.signedMonthlyRent),
+    backgroundCheckStatus:
+      normalizeBackgroundCheckStatus(incoming.backgroundCheckStatus) ??
+      normalizeBackgroundCheckStatus(existing.backgroundCheckStatus) ??
+      resolveBackgroundCheckStatus({ ...existing, ...incoming }),
     manuallyAdded: incoming.manuallyAdded ?? existing.manuallyAdded,
     application: incoming.application ?? existing.application,
     manualResidentDetails: incoming.manualResidentDetails ?? existing.manualResidentDetails,
@@ -340,11 +385,24 @@ export function appendManagerApplicationRow(row: DemoApplicantRow): void {
  * Returns the application answers with the manager's final property / room placement
  * applied on top of the original applicant submission.
  */
-export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "application" | "assignedPropertyId" | "assignedRoomChoice" | "signedMonthlyRent">):
+export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "application" | "assignedPropertyId" | "assignedRoomChoice" | "signedMonthlyRent" | "name" | "email">):
   | Partial<RentalWizardFormState>
   | undefined {
   if (!row.application) return undefined;
-  const next: Partial<RentalWizardFormState> = { ...row.application };
+  const dates = resolvePlacementLeaseDates({
+    leaseTerm: row.application.leaseTerm,
+    leaseStart: row.application.leaseStart,
+    leaseEnd: row.application.leaseEnd,
+    rentalType: row.application.rentalType,
+  });
+  const personal = resolveApplicationPersonalFields(row);
+  const next: Partial<RentalWizardFormState> = {
+    ...row.application,
+    ...personal,
+    leaseTerm: dates.leaseTerm || row.application.leaseTerm,
+    leaseStart: dates.leaseStart,
+    leaseEnd: dates.leaseEnd,
+  };
   const propertyId = row.assignedPropertyId?.trim();
   const roomChoice = row.assignedRoomChoice?.trim();
   if (propertyId) next.propertyId = propertyId;
@@ -360,3 +418,5 @@ export function signedRentLabelForRow(row: Pick<DemoApplicantRow, "signedMonthly
   if (!Number.isFinite(row.signedMonthlyRent ?? NaN) || (row.signedMonthlyRent ?? 0) <= 0) return null;
   return `$${Number(row.signedMonthlyRent).toFixed(2)} / month`;
 }
+
+export { enrichApplicationForLease, resolveApplicationPersonalFields } from "@/lib/application-personal-fields";

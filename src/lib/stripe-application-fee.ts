@@ -76,17 +76,3 @@ export async function markApplicationFeePaidFromStripeSession(
   if (upsertErr) return { ok: false };
   return { ok: true, chargeId: match.id as string };
 }
-
-export async function resolveManagerConnectAccountId(
-  db: SupabaseClient,
-  managerUserId: string,
-): Promise<string | null> {
-  const id = managerUserId.trim();
-  if (!id) return null;
-  const { data: profile } = await db
-    .from("profiles")
-    .select("stripe_connect_account_id")
-    .eq("id", id)
-    .maybeSingle();
-  return (profile as { stripe_connect_account_id?: string | null } | null)?.stripe_connect_account_id?.trim() ?? null;
-}

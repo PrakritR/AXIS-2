@@ -3,6 +3,7 @@
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -10,10 +11,9 @@ import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
+  ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_TOOLBAR_LABEL,
-  PORTAL_TOOLBAR_SELECT,
-  PORTAL_TOOLBAR_GROUP,
+  PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
@@ -39,6 +39,7 @@ import {
   effectiveApplicationForRow,
   normalizeApplicationAxisId,
   readManagerApplicationRows,
+  resolveApplicationPersonalFields,
   syncManagerApplicationsFromServer,
   writeManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
@@ -50,6 +51,12 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
+import {
+  computeLeaseEndDate,
+  formatLeaseDateLabel,
+  resolvePlacementLeaseDates,
+  shouldAutoComputeLeaseEnd,
+} from "@/lib/rental-application/lease-dates";
 import {
   recordApprovedApplicationCharges,
   recordSubmittedApplicationFeeCharge,
@@ -66,6 +73,53 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import { deleteServiceRequestsForResident } from "@/lib/service-requests-storage";
 import { loadPersistedInbox, MANAGER_INBOX_STORAGE_KEY, persistInbox } from "@/lib/portal-inbox-storage";
+import {
+  RESIDENT_WELCOME_EMAIL_SUBJECT,
+  buildResidentWelcomeEmailBody,
+  residentAccountCreationUrl,
+} from "@/lib/resident-welcome-email";
+import {
+  APPLICATION_BACKGROUND_CHECK_STATUSES,
+  applicationShowsBackgroundCheck,
+  backgroundCheckStatusClassName,
+  backgroundCheckStatusLabel,
+  resolveBackgroundCheckStatus,
+} from "@/lib/application-background-check";
+
+function ApplicationBackgroundCheckStatusBadge({ row }: { row: DemoApplicantRow }) {
+  if (!applicationShowsBackgroundCheck(row)) return null;
+  const status = resolveBackgroundCheckStatus(row);
+  return (
+    <span
+      className={`mt-2 inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${backgroundCheckStatusClassName(status)}`}
+    >
+      {backgroundCheckStatusLabel(status)}
+    </span>
+  );
+}
+
+function ApplicationBackgroundCheckStatusField({ row }: { row: DemoApplicantRow }) {
+  if (!applicationShowsBackgroundCheck(row)) return null;
+  const status = resolveBackgroundCheckStatus(row);
+  return (
+    <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 sm:p-6">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Background check</p>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+        Screening status for this application. Results appear here automatically once background checks are enabled for your plan.
+      </p>
+      <label className="mt-4 block max-w-md">
+        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Status</span>
+        <Select value={status} disabled aria-readonly>
+          {APPLICATION_BACKGROUND_CHECK_STATUSES.filter((value) => value !== "not_applicable").map((value) => (
+            <option key={value} value={value}>
+              {backgroundCheckStatusLabel(value)}
+            </option>
+          ))}
+        </Select>
+      </label>
+    </div>
+  );
+}
 
 function CosignerSection({ applicationId }: { applicationId: string }) {
   const subs = readCosignerSubmissionsForSignerAppId(applicationId);
@@ -74,7 +128,7 @@ function CosignerSection({ applicationId }: { applicationId: string }) {
     <div className="mt-6 space-y-6">
       {subs.map((cosub, i) => (
         <div key={i}>
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">
             Co-signer on file{subs.length > 1 ? ` (${i + 1} of ${subs.length})` : ""}
           </p>
           <div className="mt-3">
@@ -88,18 +142,18 @@ function CosignerSection({ applicationId }: { applicationId: string }) {
 
 function ApplicantIds({ axisId }: { axisId: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-accent/40 p-5 sm:p-6">
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Axis ID</p>
-      <p className="mt-3 font-mono text-sm font-medium leading-relaxed text-foreground">{axisId}</p>
+    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-5 sm:p-6">
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Axis ID</p>
+      <p className="mt-3 font-mono text-sm font-medium leading-relaxed text-slate-900">{axisId}</p>
     </div>
   );
 }
 
 function ApplicationInfoCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-border bg-card px-5 py-4 shadow-sm sm:py-[1.125rem]">
-      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">{label}</p>
-      <div className="mt-2 text-sm font-semibold leading-snug text-foreground">{value}</div>
+    <div className="rounded-2xl border border-slate-200/80 bg-white px-5 py-4 shadow-sm sm:py-[1.125rem]">
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+      <div className="mt-2 text-sm font-semibold leading-snug text-slate-900">{value}</div>
     </div>
   );
 }
@@ -211,22 +265,39 @@ function ManagerApplicationPlacementEditor({
     otherCostAmount: string,
   ) => void;
 }) {
+  const initialDates = resolvePlacementLeaseDates({
+    leaseTerm: row.application?.leaseTerm,
+    leaseStart: row.application?.leaseStart,
+    leaseEnd: row.application?.leaseEnd,
+    rentalType: row.application?.rentalType,
+  });
   const initialPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const initialRoomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const initialSignedRent = row.signedMonthlyRent && row.signedMonthlyRent > 0 ? String(row.signedMonthlyRent) : "";
-  const initialLeaseTerm = row.application?.rentalType === "short_term" ? SHORT_TERM_LEASE_TERM : row.application?.leaseTerm?.trim() || "";
   const [propertyId, setPropertyId] = useState(initialPropertyId);
   const [roomChoice, setRoomChoice] = useState(initialRoomChoice);
   const [signedRent, setSignedRent] = useState(initialSignedRent);
-  const [leaseTerm, setLeaseTerm] = useState(initialLeaseTerm);
-  const [leaseStart, setLeaseStart] = useState(row.application?.leaseStart?.trim() || "");
-  const [leaseEnd, setLeaseEnd] = useState(row.application?.leaseEnd?.trim() || "");
+  const [leaseTerm, setLeaseTerm] = useState(initialDates.leaseTerm);
+  const [leaseStart, setLeaseStart] = useState(initialDates.leaseStart);
+  const [leaseEnd, setLeaseEnd] = useState(initialDates.leaseEnd);
   const [utilitiesOverride, setUtilitiesOverride] = useState(row.application?.managerUtilitiesOverride?.trim() || "");
   const [securityDepositOverride, setSecurityDepositOverride] = useState(row.application?.managerSecurityDepositOverride?.trim() || "");
   const [moveInFeeOverride, setMoveInFeeOverride] = useState(row.application?.managerMoveInFeeOverride?.trim() || "");
   const [otherCostLabel, setOtherCostLabel] = useState(row.application?.managerOtherCostLabel?.trim() || "");
   const [otherCostAmount, setOtherCostAmount] = useState(row.application?.managerOtherCostAmount?.trim() || "");
   const userEditedRentRef = useRef(false);
+  const userEditedLeaseEndRef = useRef(false);
+
+  useEffect(() => {
+    if (userEditedLeaseEndRef.current) return;
+    if (leaseTerm === "Month-to-Month") {
+      queueMicrotask(() => setLeaseEnd(""));
+      return;
+    }
+    if (!shouldAutoComputeLeaseEnd(leaseTerm, row.application?.rentalType) || !leaseStart) return;
+    const computed = computeLeaseEndDate(leaseStart, leaseTerm);
+    if (computed) queueMicrotask(() => setLeaseEnd(computed));
+  }, [leaseStart, leaseTerm, row.application?.rentalType]);
 
   const roomOptions = useMemo(
     () =>
@@ -273,12 +344,12 @@ function ManagerApplicationPlacementEditor({
   ].filter(Boolean).join(" · ");
 
   return (
-    <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-7">
-      <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+    <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm sm:p-7">
+      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Final placement</p>
-          <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-foreground">House, room, lease dates, and charges</h3>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Final placement</p>
+          <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-slate-950">House, room, lease dates, and charges</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
             Update the final resident setup here. These saved values drive lease details and resident payment charges.
           </p>
         </div>
@@ -298,10 +369,10 @@ function ManagerApplicationPlacementEditor({
 
       <div className="mt-7 space-y-7">
         <section>
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-muted">Placement</p>
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Placement</p>
           <div className="grid gap-4 lg:grid-cols-4">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">House</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">House</span>
             <Select
               value={propertyId}
               onChange={(e) => {
@@ -321,7 +392,7 @@ function ManagerApplicationPlacementEditor({
             </Select>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Room</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Room</span>
             <Select
               value={roomChoice}
               onChange={(e) => {
@@ -343,14 +414,14 @@ function ManagerApplicationPlacementEditor({
             </Select>
           </label>
           <label className="block lg:col-span-2">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Signed monthly rent</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Signed monthly rent</span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={signedRent}
               onChange={(e) => { userEditedRentRef.current = true; setSignedRent(e.target.value); }}
-              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="800"
             />
           </label>
@@ -358,14 +429,15 @@ function ManagerApplicationPlacementEditor({
         </section>
 
         <section>
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-muted">Dates</p>
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Dates</p>
           <div className="grid gap-4 md:grid-cols-3">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Stay type</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Stay type</span>
             <Select
               value={leaseTerm}
               onChange={(e) => {
                 const nextLeaseTerm = e.target.value;
+                userEditedLeaseEndRef.current = false;
                 setLeaseTerm(nextLeaseTerm);
                 if (nextLeaseTerm === "Month-to-Month") {
                   setLeaseEnd("");
@@ -382,87 +454,93 @@ function ManagerApplicationPlacementEditor({
             </Select>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Move-in date</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move-in date</span>
             <input
               type="date"
               value={leaseStart}
-              onChange={(e) => setLeaseStart(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              onChange={(e) => {
+                userEditedLeaseEndRef.current = false;
+                setLeaseStart(e.target.value);
+              }}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
               {leaseTerm === SHORT_TERM_LEASE_TERM ? "Move-out date" : leaseTerm === "Month-to-Month" ? "Move-out date" : "Lease end"}
             </span>
             <input
               type="date"
               value={leaseEnd}
-              onChange={(e) => setLeaseEnd(e.target.value)}
+              onChange={(e) => {
+                userEditedLeaseEndRef.current = true;
+                setLeaseEnd(e.target.value);
+              }}
               disabled={leaseTerm === "Month-to-Month"}
-              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition disabled:bg-accent/40 disabled:text-muted focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-400 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
           </label>
           </div>
         </section>
 
         <section>
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-muted">Charges</p>
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Charges</p>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Utilities</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Utilities</span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={utilitiesOverride}
               onChange={(e) => setUtilitiesOverride(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="175"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Security deposit</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Security deposit</span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={securityDepositOverride}
               onChange={(e) => setSecurityDepositOverride(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="400"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Move-in cost</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move-in cost</span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={moveInFeeOverride}
               onChange={(e) => setMoveInFeeOverride(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="200"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Other cost label</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Other cost label</span>
             <input
               type="text"
               value={otherCostLabel}
               onChange={(e) => setOtherCostLabel(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="Month-to-month fee"
             />
           </label>
           <label className="block sm:col-span-2">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Other cost amount</span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Other cost amount</span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={otherCostAmount}
               onChange={(e) => setOtherCostAmount(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-base text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
               placeholder="25"
             />
           </label>
@@ -470,24 +548,26 @@ function ManagerApplicationPlacementEditor({
         </section>
         </div>
 
-      <div className="mt-5 grid gap-4 rounded-2xl bg-accent/40 p-5 text-sm text-muted lg:grid-cols-3">
+      <div className="mt-5 grid gap-4 rounded-2xl bg-slate-50/90 p-5 text-sm text-slate-600 lg:grid-cols-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Applicant choices</p>
-          <p className="mt-1.5 text-foreground">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Applicant choices</p>
+          <p className="mt-1.5 text-slate-800">
             {applicantChoices.length ? applicantChoices.map((choice) => getRoomChoiceLabel(choice)).filter(Boolean).join(" · ") : "No room choices saved."}
           </p>
         </div>
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Submitted lease timing</p>
-          <p className="mt-1.5 text-foreground">
-            {row.application?.leaseStart?.trim()
-              ? `${row.application.leaseStart}${row.application?.leaseEnd?.trim() ? ` to ${row.application.leaseEnd}` : ""}`
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Submitted lease timing</p>
+          <p className="mt-1.5 text-slate-800">
+            {initialDates.leaseStart
+              ? `${formatLeaseDateLabel(initialDates.leaseStart)}${
+                  initialDates.leaseEnd ? ` to ${formatLeaseDateLabel(initialDates.leaseEnd)}` : ""
+                }`
               : "No lease dates submitted."}
           </p>
         </div>
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Approved charges</p>
-          <p className="mt-1.5 text-foreground">{chargeSummary || "Using the listing defaults."}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Approved charges</p>
+          <p className="mt-1.5 text-slate-800">{chargeSummary || "Using the listing defaults."}</p>
         </div>
       </div>
 
@@ -522,7 +602,7 @@ function ManagerApplicationPlacementEditor({
 
 export function ManagerApplications() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted">Loading applications…</div>}>
+    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading applications…</div>}>
       <ManagerApplicationsContent />
     </Suspense>
   );
@@ -540,6 +620,8 @@ function ManagerApplicationsContent() {
   const [rows, setRows] = useState<DemoApplicantRow[]>([]);
   const [portfolioTick, setPortfolioTick] = useState(0);
   const [roomSortDir, setRoomSortDir] = useState<"asc" | "desc">("asc");
+  const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
+  const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
     sync();
@@ -639,7 +721,7 @@ function ManagerApplicationsContent() {
     showToast("Refreshed.");
   }, [showToast]);
 
-  const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket) => {
+  const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
     const row = rows.find((r) => r.id === id);
     if (!row) return;
     const next = rows.map((r) =>
@@ -675,7 +757,7 @@ function ManagerApplicationsContent() {
     }
 
     let welcomeSent = false;
-    if (nextBucket === "approved" && updatedRow.email?.trim()) {
+    if (nextBucket === "approved" && updatedRow.email?.trim() && !opts?.skipWelcomeEmail) {
       const welcome = await requestResidentWelcomeEmail(updatedRow);
       welcomeSent = welcome.status === "sent";
     }
@@ -684,9 +766,11 @@ function ManagerApplicationsContent() {
     setBucket(nextBucket);
     const msg =
       nextBucket === "approved"
-        ? welcomeSent
-          ? "Application approved. A welcome email with portal setup was sent to the applicant."
-          : "Application approved."
+        ? opts?.skipWelcomeEmail
+          ? "Application approved (no setup email sent)."
+          : welcomeSent
+            ? "Application approved. A welcome email with portal setup was sent to the applicant."
+            : "Application approved."
         : nextBucket === "rejected"
           ? "Application rejected."
           : "Moved to Pending.";
@@ -821,6 +905,7 @@ function ManagerApplicationsContent() {
   };
 
   return (
+    <>
     <ManagerPortalPageShell
       title="Applications"
       titleAside={
@@ -830,27 +915,25 @@ function ManagerApplicationsContent() {
             propertyValue={propertyFilter}
             onPropertyChange={(id) => setPropertyFilter(id)}
           />
-          <label className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
-            <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort room</span>
-            <select
-              value={roomSortDir}
-              onChange={(e) => setRoomSortDir(e.target.value as "asc" | "desc")}
-              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
-            >
-              <option value="asc">A-Z</option>
-              <option value="desc">Z-A</option>
-            </select>
-          </label>
+          <PortalToolbarSortSelect
+            label="Sort room"
+            value={roomSortDir}
+            onChange={setRoomSortDir}
+            options={[
+              { value: "asc", label: "A-Z" },
+              { value: "desc", label: "Z-A" },
+            ]}
+          />
           <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={refreshTable}>
             Refresh
           </Button>
         </>
       }
       filterRow={
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-          {propertyDataLoading ? <p className="text-xs text-muted">Loading properties from backend…</p> : null}
-        </div>
+          {propertyDataLoading ? <p className="text-xs text-slate-500">Loading properties from backend…</p> : null}
+        </ManagerPortalFilterRow>
       }
     >
       <div className={PORTAL_DATA_TABLE_WRAP}>
@@ -867,13 +950,13 @@ function ManagerApplicationsContent() {
             <tbody>
               {!authReady ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
+                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-slate-500">
                     Loading applications…
                   </td>
                 </tr>
               ) : rowsForBucket.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
+                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-slate-500">
                     {scopedRows.length === 0
                       ? "No applications yet for your listings and linked properties."
                       : propertyFilter.trim()
@@ -886,9 +969,10 @@ function ManagerApplicationsContent() {
                   <Fragment key={row.id}>
                     <tr id={`portal-application-${row.id}`} className={PORTAL_TABLE_TR}>
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                        <p className="font-medium leading-snug text-foreground">{row.name}</p>
-                        {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{row.email}</p> : null}
-                        <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-muted">{row.id}</p>
+                        <p className="font-medium leading-snug text-slate-900">{row.name}</p>
+                        {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{row.email}</p> : null}
+                        <ApplicationBackgroundCheckStatusBadge row={row} />
+                        <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-slate-400">{row.id}</p>
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
@@ -910,7 +994,7 @@ function ManagerApplicationsContent() {
                           <PortalTableDetailActions placement="top">
                             {row.bucket === "pending" ? (
                               <>
-                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setRowBucket(row.id, "approved")}>
+                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
                                   Approve
                                 </Button>
                                 <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
@@ -933,7 +1017,7 @@ function ManagerApplicationsContent() {
                           </PortalTableDetailActions>
 
                           {row.application ? (
-                            <div className="glass-card max-h-[min(72vh,600px)] overflow-y-auto overscroll-contain rounded-3xl p-5 sm:p-7">
+                            <div className="max-h-[min(72vh,600px)] overflow-y-auto overscroll-contain rounded-3xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/50 p-5 shadow-[0_2px_20px_-12px_rgba(15,23,42,0.12)] sm:p-7">
                               <ManagerApplicationPlacementEditor
                                 key={[
                                   row.id,
@@ -976,14 +1060,13 @@ function ManagerApplicationsContent() {
                                   )
                                 }
                               />
-                              <div className="mt-8 border-t border-border pt-8">
-                              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Application on file</p>
+                              <div className="mt-8 border-t border-slate-200/80 pt-8">
+                              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">Application on file</p>
                               <div className="mt-4">
                                 <ManagerApplicationReadonlyReview
                                   partial={{
-                                    fullLegalName: row.name || undefined,
-                                    email: row.email || undefined,
                                     ...(effectiveApplicationForRow(row) ?? row.application),
+                                    ...resolveApplicationPersonalFields(row),
                                   }}
                                   assignedPropertyId={row.assignedPropertyId}
                                   assignedRoomChoice={row.assignedRoomChoice}
@@ -994,11 +1077,13 @@ function ManagerApplicationsContent() {
                             </div>
                           ) : null}
 
-                          <div className="space-y-5 rounded-2xl border border-border bg-card/80 p-5 sm:p-6">
+                          <ApplicationBackgroundCheckStatusField row={row} />
+
+                          <div className="space-y-5 rounded-2xl border border-slate-200/70 bg-white/80 p-5 sm:p-6">
                           <ApplicantIds axisId={row.id} />
 
-                          <p className="text-sm leading-relaxed text-muted">
-                            <span className="font-medium text-foreground">Manager notes</span> — {row.detail}
+                          <p className="text-sm leading-relaxed text-slate-600">
+                            <span className="font-medium text-slate-800">Manager notes</span> — {row.detail}
                           </p>
                           </div>
                           </div>
@@ -1013,5 +1098,38 @@ function ManagerApplicationsContent() {
         </div>
       </div>
     </ManagerPortalPageShell>
+      <PortalNotificationPreviewModal
+        open={approvePreviewRow !== null}
+        title="Approve application — account setup email"
+        onClose={() => setApprovePreviewRow(null)}
+        recipient={approvePreviewRow?.email ?? ""}
+        subject={RESIDENT_WELCOME_EMAIL_SUBJECT}
+        body={
+          approvePreviewRow
+            ? buildResidentWelcomeEmailBody({
+                residentName: approvePreviewRow.name || undefined,
+                axisId: approvePreviewRow.id,
+                signupUrl: residentAccountCreationUrl("", approvePreviewRow.id),
+              })
+            : ""
+        }
+        intro={
+          approvePreviewRow
+            ? `Approving ${approvePreviewRow.name || approvePreviewRow.email} will update their application status and can send their Axis resident account setup email.`
+            : undefined
+        }
+        confirmLabel="Approve & send setup email"
+        confirmLabelWithoutMessage="Approve only"
+        confirmBusy={approvePreviewRow !== null && approveBusyId === approvePreviewRow.id}
+        confirmBusyLabel="Approving…"
+        onConfirm={(skipMessage) => {
+          if (!approvePreviewRow) return;
+          const row = approvePreviewRow;
+          setApprovePreviewRow(null);
+          setApproveBusyId(row.id);
+          void setRowBucket(row.id, "approved", { skipWelcomeEmail: skipMessage }).finally(() => setApproveBusyId(null));
+        }}
+      />
+    </>
   );
 }

@@ -1,4 +1,3 @@
-import { PublicNavbar } from "@/components/layout/public-navbar";
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
@@ -13,7 +12,6 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <SurfaceThemeDefault theme="light" />
       <AccountLinksSync />
-      <PublicNavbar />
       <div className="shrink-0">
         <PortalTopBanners
           planHref="/portal/plan"

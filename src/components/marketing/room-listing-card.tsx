@@ -12,11 +12,6 @@ const SLIDE_GRADS = [
   "from-cyan-100 via-sky-200 to-blue-300",
 ] as const;
 
-type Slide =
-  | { kind: "photo"; src: string }
-  | { kind: "video"; src: string }
-  | { kind: "gradient"; className: string };
-
 function slidesForKey(key: string): readonly string[] {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h + key.charCodeAt(i) * (i + 1)) % 997;
@@ -26,13 +21,19 @@ function slidesForKey(key: string): readonly string[] {
   return [a, b, c];
 }
 
+type Slide =
+  | { kind: "photo"; src: string; label: string }
+  | { kind: "video"; src: string; label: string }
+  | { kind: "gradient"; className: string; label: string };
+
 function slidesForRow(row: RoomListingRow): Slide[] {
-  const videos = row.videoUrls.slice(0, 2).map((src) => ({ kind: "video", src } as const));
-  const photos = row.photoUrls.slice(0, 6).map((src) => ({ kind: "photo", src } as const));
-  if (videos.length > 0 || photos.length > 0) {
-    return [...videos, ...photos];
-  }
-  return slidesForKey(row.key).map((className) => ({ kind: "gradient", className }));
+  const media = row.mediaSlides.map((slide) => ({
+    kind: slide.kind,
+    src: slide.src,
+    label: slide.roomName,
+  }));
+  if (media.length > 0) return media;
+  return slidesForKey(row.key).map((className) => ({ kind: "gradient", className, label: "" }));
 }
 
 function BedIcon({ className }: { className?: string }) {
@@ -137,7 +138,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
             <img
               key={`${slide.src.slice(0, 48)}-${i}`}
               src={slide.src}
-              alt={row.roomName}
+              alt={slide.label ? `${slide.label} photo` : row.roomName}
               className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ease-out ${
                 i === slideIdx ? "opacity-100" : "opacity-0"
               }`}
@@ -169,7 +170,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" aria-hidden />
 
         <span className="pointer-events-none absolute left-3 top-3 rounded-md bg-white/95 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-900 shadow-sm ring-1 ring-black/5">
-          Room rental
+          {slides[slideIdx]?.label?.trim() ? slides[slideIdx]!.label : "Room rental"}
         </span>
 
         <div className="pointer-events-none absolute bottom-3 right-3 text-right text-white drop-shadow-md">

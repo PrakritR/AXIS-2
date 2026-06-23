@@ -29,7 +29,7 @@ export async function GET() {
 
     const db = createSupabaseServiceRoleClient();
 
-    async function idsForPortalRole(role: "manager" | "resident" | "owner"): Promise<string[]> {
+    async function idsForPortalRole(role: "manager" | "resident"): Promise<string[]> {
       const { data: pr } = await db.from("profile_roles").select("user_id").eq("role", role);
       const fromRoles = [...new Set((pr ?? []).map((r) => r.user_id))];
       const { data: legacy } = await db.from("profiles").select("id").eq("role", role);
@@ -37,15 +37,14 @@ export async function GET() {
       return [...new Set([...fromRoles, ...fromLegacy])];
     }
 
-    const [mIds, rIds, oIds] = await Promise.all([idsForPortalRole("manager"), idsForPortalRole("resident"), idsForPortalRole("owner")]);
+    const [mIds, rIds] = await Promise.all([idsForPortalRole("manager"), idsForPortalRole("resident")]);
 
-    const allNeeded = [...new Set([...mIds, ...rIds, ...oIds])];
+    const allNeeded = [...new Set([...mIds, ...rIds])];
     if (allNeeded.length === 0) {
       return NextResponse.json({
         managers: [],
         residents: [],
-        owners: [],
-        counts: { managers: 0, residents: 0, owners: 0 },
+        counts: { managers: 0, residents: 0 },
       });
     }
 
@@ -79,28 +78,13 @@ export async function GET() {
         name: r!.full_name?.trim() || r!.email?.trim() || r!.id.slice(0, 8),
         email: r!.email?.trim() || "",
       }));
-    const owners = oIds
-      .map((id) => byId.get(id))
-      .filter(Boolean)
-      .map((r) => ({
-        id: r!.id,
-        label: labelFor(r!),
-        name: r!.full_name?.trim() || r!.email?.trim() || r!.id.slice(0, 8),
-        email: r!.email?.trim() || "",
-      }));
-
-    const managerCount = mIds.length;
-    const residentCount = rIds.length;
-    const ownerCount = oIds.length;
 
     return NextResponse.json({
       managers,
       residents,
-      owners,
       counts: {
-        managers: managerCount,
-        residents: residentCount,
-        owners: ownerCount,
+        managers: mIds.length,
+        residents: rIds.length,
       },
     });
   } catch (e) {

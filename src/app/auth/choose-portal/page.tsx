@@ -20,10 +20,6 @@ const ROLE_META: Record<AuthRole, { label: string; description: string }> = {
     label: "Resident portal",
     description: "Your lease, payments, maintenance, and move-in status.",
   },
-  owner: {
-    label: "Axis Property Portal (ownership)",
-    description: "Portfolio overview and properties linked by your team.",
-  },
 };
 
 function ChoosePortalForm() {
@@ -46,7 +42,9 @@ function ChoosePortalForm() {
           if (!cancelled) setError(body.error ?? "Could not load your account.");
           return;
         }
-        if (!cancelled) setRoles(body.roles ?? []);
+        if (!cancelled) {
+          setRoles((body.roles ?? []).filter((role): role is AuthRole => role in ROLE_META));
+        }
       } catch {
         if (!cancelled) setError("Could not load your account.");
       }

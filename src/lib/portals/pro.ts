@@ -4,12 +4,12 @@ import type { PortalDefinition } from "@/lib/portal-types";
 export const proPortal: PortalDefinition = {
   kind: "pro",
   basePath: "/portal",
-  title: "Axis Property Portal",
+  title: "Axis",
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
-    { section: "calendar", label: "Calendar", tabs: [] },
+    { section: "calendar", label: "Tours", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
     {
       section: "residents",
@@ -47,9 +47,10 @@ export const proPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
+    { section: "bugs-feedback", label: "Feedback", tabs: [] },
     {
       section: "relationships",
-      label: "Account links",
+      label: "Co-managers",
       tabs: [],
     },
     { section: "plan", label: "Plan", tabs: [] },

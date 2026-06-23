@@ -1,4 +1,3 @@
-import { PublicNavbar } from "@/components/layout/public-navbar";
 import { AdminNotificationBanners } from "@/components/portal/admin-notification-banners";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
@@ -13,7 +12,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background" data-surface="admin">
       <SurfaceThemeDefault theme="dark" />
-      <PublicNavbar />
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSidebar definition={adminPortal} />
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
