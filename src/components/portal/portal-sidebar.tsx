@@ -61,13 +61,17 @@ function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_28%_18%,rgba(255,255,255,0.14),transparent_62%)] [html[data-theme=light]_&]:bg-[radial-gradient(ellipse_80%_60%_at_28%_18%,rgba(255,255,255,0.65),transparent_62%)]"
         aria-hidden
       />
-      <div className="relative flex items-start gap-3">
+      <Link
+        href="/"
+        aria-label="Axis home"
+        className={`relative flex gap-3 transition-opacity hover:opacity-90 ${isAdmin || isResident ? "items-start" : "items-center"}`}
+      >
         <PortalBrandLogoTile />
-        <div className="min-w-0 pt-0.5">
+        <div className={`min-w-0 ${isAdmin || isResident ? "pt-0.5" : ""}`}>
           {isAdmin ? (
             <>
-              <p className="text-sm font-semibold tracking-[-0.02em] text-white [html[data-theme=light]_&]:text-foreground">
-                Axis Housing · Admin
+              <p className="text-sm font-semibold tracking-[-0.02em] text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
+                Axis · Admin
               </p>
               <span className="mt-1.5 inline-block rounded-full border border-white/25 bg-white/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/85 [html[data-theme=light]_&]:border-primary/25 [html[data-theme=light]_&]:bg-primary/10 [html[data-theme=light]_&]:text-primary">
                 ADMIN
@@ -75,25 +79,20 @@ function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
             </>
           ) : isResident ? (
             <>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72 [html[data-theme=light]_&]:text-muted">
-                Axis Housing
+              <p className="text-lg font-semibold tracking-[-0.02em] leading-snug text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
+                Axis
               </p>
-              <p className="mt-1.5 text-lg font-semibold tracking-[-0.02em] leading-snug text-white [html[data-theme=light]_&]:text-foreground">
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72 [html[data-theme=light]_&]:text-primary/80">
                 Resident portal
               </p>
             </>
           ) : (
-            <>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72 [html[data-theme=light]_&]:text-muted">
-                Axis Housing
-              </p>
-              <p className="mt-1.5 text-lg font-semibold tracking-[-0.02em] leading-snug text-white [html[data-theme=light]_&]:text-foreground">
-                {brandTitle}
-              </p>
-            </>
+            <p className="text-lg font-semibold tracking-[-0.02em] leading-none text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
+              {brandTitle}
+            </p>
           )}
         </div>
-      </div>
+      </Link>
     </div>
   );
 }
@@ -158,7 +157,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
 
   const mobileBrandTitle =
     definition.kind === "admin"
-      ? "Axis Housing · Admin"
+      ? "Axis · Admin"
       : definition.kind === "resident"
         ? "Resident portal"
         : definition.title.trim().toLowerCase() === "axis"
@@ -219,8 +218,14 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
           <div className="flex items-center gap-2.5 px-3 pt-2 sm:px-4">
             <div className="h-11 w-1 shrink-0 rounded-full bg-primary shadow-[0_0_10px_rgba(47,107,255,0.45)]" aria-hidden />
             <div className="min-w-0 flex-1 py-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Axis Housing</p>
-              <p className="truncate text-sm font-semibold leading-snug text-foreground">{mobileBrandTitle}</p>
+              {mobileBrandTitle === "Axis" ? (
+                <p className="truncate text-sm font-semibold leading-snug text-foreground">Axis</p>
+              ) : (
+                <>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Axis</p>
+                  <p className="truncate text-sm font-semibold leading-snug text-foreground">{mobileBrandTitle}</p>
+                </>
+              )}
             </div>
             {hasSignOut ? (
               <button

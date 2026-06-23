@@ -10,14 +10,20 @@ export function PublicNavbar() {
   const pathname = usePathname();
 
   const rentActive = useMemo(() => pathname === "/" || pathname.startsWith("/rent"), [pathname]);
-  const partnerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
-  const pricingActive = useMemo(() => pathname.startsWith("/pricing"), [pathname]);
+  const pricingActive = useMemo(
+    () => pathname === "/pricing" || pathname.startsWith("/partner/pricing"),
+    [pathname],
+  );
+  const partnerActive = useMemo(
+    () => pathname.startsWith("/partner") && !pathname.startsWith("/partner/pricing"),
+    [pathname],
+  );
 
   const menu: NavbarMenuItem[] = useMemo(
     () => [
       { title: "Rent", url: "/rent/listings", active: rentActive },
       { title: "Partners", url: "/partner", active: partnerActive },
-      { title: "Pricing", url: "/pricing", active: pricingActive },
+      { title: "Pricing", url: "/partner/pricing", active: pricingActive },
     ],
     [rentActive, partnerActive, pricingActive],
   );

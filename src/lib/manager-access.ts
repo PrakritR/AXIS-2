@@ -8,7 +8,7 @@ export const BUSINESS_MAX_PROPERTIES = 20;
 
 export type ManagerSkuTier = "free" | "pro" | "business";
 
-/** Public pricing (monthly); keep in sync with `partner/pricing` TIERS. */
+/** Public pricing (monthly); keep in sync with `manager-plan-tiers` / partner pricing. */
 export const MANAGER_TIER_MONTHLY_USD: Record<ManagerSkuTier, number> = {
   free: 0,
   pro: 20,

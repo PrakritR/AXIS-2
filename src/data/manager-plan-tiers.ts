@@ -1,4 +1,4 @@
-/** Shared copy for manager/owner Plan page — keep amounts aligned with `partner/pricing` and `MANAGER_TIER_MONTHLY_USD`. */
+/** Shared copy for manager Plan page and public partner pricing — keep amounts aligned with `MANAGER_TIER_MONTHLY_USD`. */
 
 export type PlanTierId = "free" | "pro" | "business";
 

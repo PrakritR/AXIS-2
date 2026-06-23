@@ -13,7 +13,6 @@ import {
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
@@ -619,7 +618,6 @@ function ManagerApplicationsContent() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [rows, setRows] = useState<DemoApplicantRow[]>([]);
   const [portfolioTick, setPortfolioTick] = useState(0);
-  const [roomSortDir, setRoomSortDir] = useState<"asc" | "desc">("asc");
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   useEffect(() => {
@@ -687,13 +685,8 @@ function ManagerApplicationsContent() {
     const filtered = !propertyFilter.trim()
       ? inBucket
       : inBucket.filter((r) => (r.assignedPropertyId?.trim() || r.propertyId?.trim() || r.application?.propertyId?.trim()) === propertyFilter);
-    const sorted = sortApplicationRows(filtered, bucket);
-    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-    return [...sorted].sort((a, b) => {
-      const cmp = collator.compare(roomSortKey(a), roomSortKey(b));
-      return roomSortDir === "asc" ? cmp : -cmp;
-    });
-  }, [scopedRows, bucket, propertyFilter, roomSortDir]);
+    return sortApplicationRows(filtered, bucket);
+  }, [scopedRows, bucket, propertyFilter]);
 
   useEffect(() => {
     const raw = (searchParams.get("open") ?? searchParams.get("axisId") ?? "").trim();
@@ -914,15 +907,6 @@ function ManagerApplicationsContent() {
             propertyOptions={propertyOptions}
             propertyValue={propertyFilter}
             onPropertyChange={(id) => setPropertyFilter(id)}
-          />
-          <PortalToolbarSortSelect
-            label="Sort room"
-            value={roomSortDir}
-            onChange={setRoomSortDir}
-            options={[
-              { value: "asc", label: "A-Z" },
-              { value: "desc", label: "Z-A" },
-            ]}
           />
           <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={refreshTable}>
             Refresh

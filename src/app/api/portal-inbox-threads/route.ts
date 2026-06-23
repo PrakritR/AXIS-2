@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { createJsonRecordRoute } from "@/lib/portal-record-api";
+import { buildPortalInboxThreadUpsert } from "@/lib/portal-inbox-thread-upsert";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 
 export const runtime = "nodejs";
@@ -19,30 +20,7 @@ const route = createJsonRecordRoute({
     id: String(row.id ?? "").trim(),
     email: String(row.email ?? row.participantEmail ?? row.participant_email ?? "").trim().toLowerCase(),
   }),
-  buildUpsert: (row, user) => {
-    const folder = String(row.folder ?? "");
-    // row.email is the counterparty in thread JSON (recipient on Sent, sender on Inbox) — not the mailbox owner.
-    const participantEmail =
-      folder === "sent"
-        ? null
-        : String(row.participantEmail ?? row.participant_email ?? user.email ?? "")
-            .trim()
-            .toLowerCase() || null;
-    return {
-      id: row.id,
-      scope: row.scope ?? "portal",
-      owner_user_id:
-        row.scope === "admin"
-          ? null
-          : folder === "sent"
-            ? (row.ownerUserId ?? row.owner_user_id ?? user.id)
-            : (row.ownerUserId ?? row.owner_user_id ?? null),
-      participant_email: participantEmail,
-      thread_type: row.threadType ?? row.thread_type ?? null,
-      row_data: row,
-      updated_at: new Date().toISOString(),
-    };
-  },
+  buildUpsert: (row, user) => buildPortalInboxThreadUpsert(row, user),
   assignOwnership: (record, user) =>
     user.role === "admin" ? record : { ...record, owner_user_id: user.id },
 });

@@ -8,7 +8,6 @@ import {
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseBucket } from "@/data/demo-portal";
@@ -28,8 +27,6 @@ const LEASE_LABELS: { id: ManagerLeaseBucket; label: string }[] = [
   { id: "signed", label: "Manager signature pending / signed" },
 ];
 
-type HouseSort = "house-asc" | "house-desc";
-
 function countBuckets(rows: ReturnType<typeof readLeasePipeline>) {
   const c: Record<ManagerLeaseBucket, number> = { manager: 0, admin: 0, resident: 0, signed: 0 };
   for (const r of rows) c[r.bucket] += 1;
@@ -43,7 +40,6 @@ export function ManagerLeases() {
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
-  const [houseSort, setHouseSort] = useState<HouseSort>("house-asc");
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [clientReady, setClientReady] = useState(false);
 
@@ -98,13 +94,11 @@ export function ManagerLeases() {
     return [...filtered].sort((a, b) => {
       if (propertyFilter) {
         const byResident = a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
-        const residentOrder = houseSort === "house-asc" ? byResident : -byResident;
-        if (residentOrder !== 0) return residentOrder;
+        if (byResident !== 0) return byResident;
       }
 
       const byHouse = a.unit.localeCompare(b.unit, undefined, { sensitivity: "base" });
-      const houseOrder = houseSort === "house-asc" ? byHouse : -byHouse;
-      if (houseOrder !== 0) return houseOrder;
+      if (byHouse !== 0) return byHouse;
 
       const byResident = a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
       if (byResident !== 0) return byResident;
@@ -113,7 +107,7 @@ export function ManagerLeases() {
       const bTs = Date.parse(b.updatedAtIso || "");
       return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
     });
-  }, [clientReady, tick, propertyFilter, houseSort, userId]);
+  }, [clientReady, tick, propertyFilter, userId]);
 
   useEffect(() => {
     const emails = [...new Set(rows.map((row) => row.residentEmail.trim().toLowerCase()).filter(Boolean))];
@@ -159,15 +153,6 @@ export function ManagerLeases() {
             propertyOptions={propertyOptions}
             propertyValue={propertyFilter}
             onPropertyChange={setPropertyFilter}
-          />
-          <PortalToolbarSortSelect
-            label={propertyFilter ? "Sort resident" : "Sort house"}
-            value={houseSort}
-            onChange={setHouseSort}
-            options={[
-              { value: "house-asc", label: "A-Z" },
-              { value: "house-desc", label: "Z-A" },
-            ]}
           />
           <Button
             type="button"

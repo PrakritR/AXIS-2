@@ -2,109 +2,19 @@
 
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import {
   normalizeProMonthlyPromoInput,
   PRO_MONTHLY_FIRST_FREE_PROMO_CODE,
 } from "@/lib/stripe-promos";
+import { loadManagerPlanTiers } from "@/lib/site-content";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type TierId = "free" | "pro" | "business";
-
-type PriceBlock = {
-  headline: string;
-  period: string | null;
-  sub: string;
-};
-
-const TIERS: {
-  id: TierId;
-  label: string;
-  tabLabel: string;
-  ctaVerb: string;
-  monthly: PriceBlock;
-  annual: PriceBlock;
-  features: { text: string; included: boolean }[];
-}[] = [
-  {
-    id: "free",
-    label: "Free Tier",
-    tabLabel: "Free Tier",
-    ctaVerb: "Free",
-    monthly: {
-      headline: "Free",
-      period: null,
-      sub: "List properties, run applications, and schedule tours.",
-    },
-    annual: {
-      headline: "Free",
-      period: null,
-      sub: "List properties, run applications, and schedule tours.",
-    },
-    features: [
-      { text: "1 property listing", included: true },
-      { text: "Application process", included: true },
-      { text: "Touring calendar", included: true },
-      { text: "Residents tab (leases & services)", included: false },
-      { text: "Payment collection", included: true },
-      { text: "Inbox & account links", included: false },
-    ],
-  },
-  {
-    id: "pro",
-    label: "Pro Tier",
-    tabLabel: "Pro Tier",
-    ctaVerb: "Pro",
-    monthly: {
-      headline: "$20",
-      period: "/ month",
-      sub: "Full resident management — leases, work orders, inbox & account links.",
-    },
-    annual: {
-      headline: "$192",
-      period: "/ year",
-      sub: "Full resident management — leases, work orders, inbox & account links. 20% off annual billing.",
-    },
-    features: [
-      { text: "Up to 2 property listings", included: true },
-      { text: "Application process", included: true },
-      { text: "Touring calendar", included: true },
-      { text: "Residents tab: lease generation & services", included: true },
-      { text: "Inbox & account links", included: true },
-      { text: "Payment collection", included: true },
-    ],
-  },
-  {
-    id: "business",
-    label: "Business Tier",
-    tabLabel: "Business Tier",
-    ctaVerb: "Business",
-    monthly: {
-      headline: "$200",
-      period: "/ month",
-      sub: "Everything in Pro — up to 20 properties & admin support.",
-    },
-    annual: {
-      headline: "$1,920",
-      period: "/ year",
-      sub: "Everything in Pro — up to 20 properties & admin support, 20% off annual billing.",
-    },
-    features: [
-      { text: "Property listings", included: true },
-      { text: "Payment collection", included: true },
-      { text: "Application process", included: true },
-      { text: "Lease generation access", included: true },
-      { text: "Work order system", included: true },
-      { text: "Manage up to 20 properties", included: true },
-      { text: "Direct meetings with admins for support", included: true },
-    ],
-  },
-];
-
-function tierById(id: TierId) {
-  return TIERS.find((t) => t.id === id)!;
+function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
+  return tiers.find((t) => t.id === id) ?? tiers[0]!;
 }
 
 export default function PartnerPricingPage() {
@@ -112,7 +22,8 @@ export default function PartnerPricingPage() {
   const { showToast } = useAppUi();
   /** Default monthly so Pro shows $20/mo and optional first-month promo applies. */
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
-  const [selectedTierId, setSelectedTierId] = useState<TierId>("pro");
+  const [selectedTierId, setSelectedTierId] = useState<PlanTierId>("pro");
+  const [planTiers, setPlanTiers] = useState<ManagerPlanTierDefinition[]>(MANAGER_PLAN_TIERS);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -120,7 +31,19 @@ export default function PartnerPricingPage() {
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
 
-  const selected = useMemo(() => tierById(selectedTierId), [selectedTierId]);
+  useEffect(() => {
+    let cancelled = false;
+    loadManagerPlanTiers()
+      .then((tiers) => {
+        if (!cancelled) setPlanTiers(tiers);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selected = useMemo(() => tierById(planTiers, selectedTierId), [planTiers, selectedTierId]);
   const price = billing === "monthly" ? selected.monthly : selected.annual;
   const showAnnualDiscountNote = billing === "annual" && selectedTierId !== "free";
 
@@ -134,7 +57,7 @@ export default function PartnerPricingPage() {
 
   const startManagerSignupIntent = useCallback(
     async (opts: {
-      tier: TierId;
+      tier: PlanTierId;
       billing: "monthly" | "annual";
       promo?: string;
     }): Promise<"redirected" | "needs-checkout" | "error"> => {
@@ -233,26 +156,36 @@ export default function PartnerPricingPage() {
         </div>
       </div>
 
-      <div className="mx-auto mt-10 grid max-w-5xl gap-5 lg:grid-cols-3">
-        {TIERS.map((t) => {
+      <div className="mx-auto mt-10 grid max-w-5xl gap-5 lg:grid-cols-3 lg:items-stretch">
+        {planTiers.map((t) => {
           const pb = billing === "monthly" ? t.monthly : t.annual;
           const isSelected = selectedTierId === t.id;
           const isProFeatured = t.id === "pro";
           const cardInner = (
             <>
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted">{t.label}</p>
+              <div className="min-h-[28px]">
+                {isProFeatured ? (
+                  <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                    Popular
+                  </span>
+                ) : (
+                  <span className="inline-flex rounded-full bg-accent/80 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+                    {t.label}
+                  </span>
+                )}
+              </div>
 
-              <div className="mt-4 flex flex-wrap items-baseline gap-x-1 gap-y-0">
-                <span className="text-5xl font-black tracking-tight text-foreground">{pb.headline}</span>
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-1 gap-y-0">
+                <span className="text-4xl font-black tracking-tight text-foreground sm:text-5xl">{pb.headline}</span>
                 {pb.period ? <span className="text-sm font-medium text-muted">{pb.period}</span> : null}
               </div>
 
-              <p className="mt-2 text-sm text-muted">{pb.sub}</p>
+              <p className="mt-2 min-h-[4.5rem] text-sm leading-snug text-muted">{pb.sub}</p>
 
               <button
                 type="button"
                 onClick={() => setSelectedTierId(t.id)}
-                className={`mt-6 w-full rounded-2xl py-3 text-sm font-semibold transition-all duration-150 active:scale-[0.98] ${
+                className={`mt-5 min-h-[52px] w-full rounded-2xl py-3 text-sm font-semibold transition-all duration-150 active:scale-[0.98] ${
                   isSelected
                     ? isProFeatured
                       ? "btn-cobalt"
@@ -260,15 +193,13 @@ export default function PartnerPricingPage() {
                     : "btn-metallic text-foreground"
                 }`}
               >
-                {isSelected ? "Selected" : `Choose ${t.ctaVerb}`}
+                {isSelected ? "Selected" : `Choose ${t.label}`}
               </button>
 
-              <div className="my-6 border-t border-border/60" />
-
-              <ul className="space-y-3">
+              <ul className="mt-5 space-y-2.5 border-t border-border/60 pt-5">
                 {t.features.map((f) => (
-                  <li key={f.text} className="flex items-center gap-3 text-sm">
-                    <span className={f.included ? "text-primary" : "text-muted/40"} aria-hidden>
+                  <li key={f.text} className="flex items-start gap-2.5 text-sm">
+                    <span className={`mt-0.5 shrink-0 ${f.included ? "text-primary" : "text-muted/40"}`} aria-hidden>
                       <CheckIcon />
                     </span>
                     <span className={f.included ? "text-foreground" : "text-muted/60"}>{f.text}</span>
@@ -312,7 +243,7 @@ export default function PartnerPricingPage() {
       <div className="glass-card mx-auto mt-10 max-w-5xl rounded-3xl p-1 sm:p-2">
         <div className="rounded-[1.35rem] border border-border/60 bg-card p-6 sm:p-8">
           <div className="flex flex-wrap gap-2 border-b border-border/60 pb-5">
-            {TIERS.map((t) => {
+            {planTiers.map((t) => {
               const active = selectedTierId === t.id;
               return (
                 <button
@@ -323,7 +254,7 @@ export default function PartnerPricingPage() {
                     active ? "btn-cobalt shadow-sm" : "border border-border bg-accent/40 text-muted hover:text-foreground"
                   }`}
                 >
-                  {t.tabLabel}
+                  {t.label}
                 </button>
               );
             })}

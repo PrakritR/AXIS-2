@@ -105,17 +105,10 @@ export function AxisLogoMarkSoft({ className = "" }: { className?: string }) {
 
 export function AxisLogoWordmark({ size = "default" }: { size?: AxisLogoSize }) {
   return (
-    <span className="leading-none">
-      <span
-        className={`block font-semibold tracking-[-0.035em] text-foreground ${size === "compact" ? "text-[15px]" : "text-[17px]"}`}
-      >
-        Axis
-      </span>
-      <span
-        className={`mt-0.5 block font-semibold uppercase tracking-[0.22em] text-muted ${size === "compact" ? "text-[9px]" : "text-[10px]"}`}
-      >
-        Housing
-      </span>
+    <span
+      className={`font-semibold tracking-[-0.035em] text-foreground ${size === "compact" ? "text-[15px]" : "text-[17px]"}`}
+    >
+      Axis
     </span>
   );
 }

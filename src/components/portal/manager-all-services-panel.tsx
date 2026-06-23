@@ -44,7 +44,6 @@ import {
 } from "@/components/portal/portal-data-table";
 
 type FilterType = "requests" | "work-orders";
-type SortKey = "newest" | "oldest" | "status";
 
 const STATUS_PILL: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 ring-amber-200",
@@ -82,7 +81,6 @@ export function ManagerAllServicesPanel({
   const [propertyTick, setPropertyTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("all");
-  const [sortKey, setSortKey] = useState<SortKey>("newest");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const typeFilter: FilterType = tabId;
 
@@ -170,17 +168,9 @@ export function ManagerAllServicesPanel({
         items.push({ kind: "work-order", data: w, sortKey: t });
       }
     }
-    if (sortKey === "newest") items.sort((a, b) => b.sortKey - a.sortKey);
-    else if (sortKey === "oldest") items.sort((a, b) => a.sortKey - b.sortKey);
-    else {
-      items.sort((a, b) => {
-        const getStatus = (item: UnifiedItem) =>
-          item.kind === "request" ? item.data.status : item.data.bucket;
-        return getStatus(a).localeCompare(getStatus(b));
-      });
-    }
+    items.sort((a, b) => b.sortKey - a.sortKey);
     return items;
-  }, [filteredRequests, filteredWorkOrders, typeFilter, sortKey]);
+  }, [filteredRequests, filteredWorkOrders, typeFilter]);
 
   const pendingCount = filteredRequests.filter((r) => r.status === "pending").length;
   const openCount = filteredWorkOrders.filter((w) => w.bucket === "open").length;
@@ -240,19 +230,6 @@ export function ManagerAllServicesPanel({
             </div>
           )}
 
-          {/* Sort */}
-          <div className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
-            <label className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort</label>
-            <select
-              value={sortKey}
-              onChange={(e) => setSortKey(e.target.value as SortKey)}
-              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
-            >
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-              <option value="status">By status</option>
-            </select>
-          </div>
         </div>
 
         <div className="mb-4">

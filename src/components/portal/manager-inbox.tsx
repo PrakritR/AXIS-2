@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_HEADER_ACTION_BTN, PortalToolbarSortSelect } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
@@ -139,8 +139,6 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     if (!inboxSynced || !persistInboxRef.current) return;
     persistInbox(MANAGER_INBOX_STORAGE_KEY, local);
   }, [local, inboxSynced]);
-
-  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "sender" | "subject">("newest");
 
   const counts = useMemo(() => countThreads(local), [local]);
   const tabs = useMemo(
@@ -390,17 +388,6 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
             tabs={tabs}
             activeId={tabId}
             onChange={(id) => router.push(`${portalBase}/inbox/${id}`)}
-          />
-          <PortalToolbarSortSelect
-            label="Sort"
-            value={sortBy}
-            onChange={setSortBy}
-            options={[
-              { value: "newest", label: "Newest first" },
-              { value: "oldest", label: "Oldest first" },
-              { value: "sender", label: "Sender A–Z" },
-              { value: "subject", label: "Subject A–Z" },
-            ]}
           />
         </ManagerPortalFilterRow>
       }
