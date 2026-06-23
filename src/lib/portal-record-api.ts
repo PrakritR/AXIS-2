@@ -86,14 +86,15 @@ export function createJsonRecordRoute(config: RecordConfig) {
             ? (Array.isArray((body as { ids?: unknown }).ids) ? (body as { ids: unknown[] }).ids.map(String) : [])
             : [body.id?.trim() ?? ""];
           if (ids.length === 0 || ids.some((id) => !id)) return NextResponse.json({ error: "id required" }, { status: 400 });
+          let deleted = 0;
           for (const id of ids) {
-            let visibleQuery = ctx.db.from(config.table).select("id").eq("id", id).limit(1);
-            if (config.scope) visibleQuery = config.scope(visibleQuery, ctx.user) as typeof visibleQuery;
-            const { data: visible } = await visibleQuery;
-            if (!Array.isArray(visible) || visible.length === 0) continue;
-            await ctx.db.from(config.table).delete().eq("id", id);
+            let deleteQuery = ctx.db.from(config.table).delete().eq("id", id).select("id");
+            if (config.scope) deleteQuery = config.scope(deleteQuery, ctx.user) as typeof deleteQuery;
+            const { data, error } = await deleteQuery;
+            if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+            deleted += Array.isArray(data) ? data.length : 0;
           }
-          return NextResponse.json({ ok: true });
+          return NextResponse.json({ ok: true, deleted });
         }
 
         const rows = body.action === "replace" ? body.rows ?? [] : body.row ? [body.row] : [];

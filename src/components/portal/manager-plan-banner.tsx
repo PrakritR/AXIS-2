@@ -5,12 +5,11 @@ export function ManagerPlanBanner({ planHref = "/portal/plan" }: { planHref?: st
   return (
     <div className="shrink-0 border-b border-amber-300 bg-[#fffbeb] px-[max(1rem,env(safe-area-inset-left,0px))] py-2.5 pe-[max(1rem,env(safe-area-inset-right,0px))] text-center text-sm text-amber-950 lg:px-8">
       <p className="font-medium">
-        <span className="font-semibold">Free</span> plan — 1 property, calendar & inbox, account links (1 manager / 1 owner side), no lease pipeline.
-        Upgrade to{" "}
-        <span className="font-semibold">Pro</span> or <span className="font-semibold">Business</span> for the full portal.{" "}
+        You&apos;re on the <span className="font-semibold">Free</span> plan (1 property).{" "}
         <Link href={planHref} className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950">
-          Plan
-        </Link>
+          Upgrade to Pro or Business
+        </Link>{" "}
+        for residents, leases, inbox, and co-managers.
       </p>
     </div>
   );

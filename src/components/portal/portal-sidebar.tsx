@@ -4,8 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { AdminPortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
+import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
+import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
+import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
+import { usePortalSession } from "@/hooks/use-portal-session";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 function hrefForSection(def: PortalDefinition, section: string) {
@@ -15,17 +18,23 @@ function hrefForSection(def: PortalDefinition, section: string) {
   return `${def.basePath}/${section}/${meta.tabs[0].id}`;
 }
 
+function portalTitleIsBrand(title: string): boolean {
+  return title.trim().toLowerCase() === "axis";
+}
+
 export function PortalSidebar({ definition }: { definition: PortalDefinition }) {
   const pathname = usePathname();
+  const session = usePortalSession();
+  const visibleSections = useCoManagerNavSections(definition, session.userId);
   const [accountOpen, setAccountOpen] = useState(false);
   const navItems = useMemo(
     () =>
-      definition.sections.map((section) => ({
+      visibleSections.map((section) => ({
         section: section.section,
         label: section.label,
         href: hrefForSection(definition, section.section),
       })),
-    [definition],
+    [definition, visibleSections],
   );
 
   const activeSection = useMemo(() => {
@@ -36,7 +45,6 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
   const hasSignOut =
     definition.kind === "resident" ||
     definition.kind === "manager" ||
-    definition.kind === "owner" ||
     definition.kind === "admin" ||
     definition.kind === "pro";
 
@@ -54,7 +62,12 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         ? "bg-slate-900"
         : "bg-[#0a84ff]";
 
-  const adminNavIcons = definition.kind === "admin";
+  const showNavIcons =
+    definition.kind === "admin" ||
+    definition.kind === "pro" ||
+    definition.kind === "resident" ||
+    definition.kind === "manager";
+  const brandOnlyHeader = portalTitleIsBrand(definition.title);
 
   const leavePaymentsSection = (event: MouseEvent<HTMLAnchorElement>, targetSection: string, href: string) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
@@ -75,8 +88,14 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
   const desktopAside = (
     <aside className="relative z-40 hidden h-full min-h-0 w-[17.5rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-slate-200/60 bg-[#fafbfd] lg:flex">
       <div className={`px-6 py-6 text-white ${accentHeader}`}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72">Axis Housing</p>
-        <p className="mt-2 text-lg font-semibold tracking-[-0.02em] leading-snug">{definition.title}</p>
+        {brandOnlyHeader ? (
+          <p className="text-lg font-semibold tracking-[-0.02em] leading-snug">Axis</p>
+        ) : (
+          <>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72">Axis</p>
+            <p className="mt-2 text-lg font-semibold tracking-[-0.02em] leading-snug">{definition.title}</p>
+          </>
+        )}
       </div>
       <nav className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto space-y-1">
@@ -94,9 +113,9 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     : "text-slate-600 hover:bg-white/90 hover:text-slate-950"
                 }`}
               >
-                {adminNavIcons ? (
+                {showNavIcons ? (
                   <span className="shrink-0 opacity-90" aria-hidden>
-                    <AdminPortalNavIcon section={s.section} />
+                    <PortalNavIcon section={s.section} />
                   </span>
                 ) : null}
                 <span className="min-w-0 flex-1">{s.label}</span>
@@ -110,12 +129,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         {hasSignOut ? (
           <div className="mt-auto border-t border-slate-100 pt-3 space-y-0.5">
             <PortalRoleSwitcher currentKind={definition.kind} />
-            <Link
-              href="/auth/sign-in"
-              className="block rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-white hover:text-slate-900"
-            >
-              Sign out
-            </Link>
+            <PortalSignOutButton className="block w-full rounded-2xl px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition hover:bg-white hover:text-slate-900 disabled:opacity-60" />
           </div>
         ) : null}
       </nav>
@@ -126,14 +140,20 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
     <>
       {desktopAside}
 
-      {/* Mobile: persistent portal nav (marketing navbar stays above via layout). */}
+      {/* Mobile: persistent portal nav */}
       <div className="shrink-0 lg:hidden">
         <div className="border-b border-slate-200/55 bg-[#fafbfd] lg:hidden">
           <div className="flex items-center gap-2.5 px-3 pt-2 sm:px-4">
             <div className={`h-11 w-1.5 shrink-0 rounded-full ${accentBar}`} aria-hidden />
             <div className="min-w-0 flex-1 py-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Axis Housing</p>
-              <p className="truncate text-sm font-semibold leading-snug text-slate-900">{definition.title}</p>
+              {brandOnlyHeader ? (
+                <p className="text-sm font-semibold leading-snug text-slate-900">Axis</p>
+              ) : (
+                <>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Axis</p>
+                  <p className="truncate text-sm font-semibold leading-snug text-slate-900">{definition.title}</p>
+                </>
+              )}
             </div>
             {hasSignOut ? (
               <button
@@ -160,9 +180,9 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                       : "bg-slate-200/40 text-slate-700 ring-1 ring-transparent hover:bg-slate-200/65"
                   }`}
                 >
-                  {adminNavIcons ? (
+                  {showNavIcons ? (
                     <span className="shrink-0 opacity-90" aria-hidden>
-                      <AdminPortalNavIcon section={s.section} />
+                      <PortalNavIcon section={s.section} />
                     </span>
                   ) : null}
                   {s.label}
@@ -185,13 +205,10 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Account</p>
               <div className="mt-3 space-y-1 border-t border-slate-100 pt-3">
                 <PortalRoleSwitcher currentKind={definition.kind} />
-                <Link
-                  href="/auth/sign-in"
-                  className="block rounded-2xl px-3 py-3 text-center text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 transition hover:bg-white"
-                  onClick={() => setAccountOpen(false)}
-                >
-                  Sign out
-                </Link>
+                <PortalSignOutButton
+                  className="block w-full rounded-2xl px-3 py-3 text-center text-sm font-semibold text-slate-700 ring-1 ring-slate-200/80 transition hover:bg-white disabled:opacity-60"
+                  onSignedOut={() => setAccountOpen(false)}
+                />
               </div>
             </div>
           </>

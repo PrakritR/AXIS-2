@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
 function isAuthRole(value: unknown): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "owner" || value === "admin";
+  return value === "resident" || value === "manager" || value === "admin";
 }
 
 function safeNext(raw: string | null): string {

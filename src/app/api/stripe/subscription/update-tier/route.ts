@@ -182,6 +182,37 @@ export async function POST(req: Request) {
       });
     }
 
+    const annualToMonthlySameTier =
+      currentPaidTier !== null &&
+      targetPaid === currentPaidTier &&
+      currentBilling === "annual" &&
+      targetBilling === "monthly";
+
+    if (annualToMonthlySameTier) {
+      const periodEnd = stripeSubscriptionPeriodEndSec(sub);
+      const meta = {
+        ...(sub.metadata ?? {}),
+        [META_SCHEDULED_TIER]: targetPaid,
+        [META_SCHEDULED_BILLING]: "monthly",
+      };
+      await stripe.subscriptions.update(stripeSubscriptionId, {
+        metadata: meta,
+        cancel_at_period_end: false,
+      });
+      await reconcileManagerPurchaseWithStripe(user.id);
+      return NextResponse.json({
+        ok: true,
+        stripeManaged: true,
+        scheduledDowngrade: true,
+        scheduledTier: targetPaid,
+        scheduledBilling: "monthly",
+        scheduledBillingChange: true,
+        effectiveAt: periodEnd,
+        message:
+          "Your plan will switch to monthly billing at the end of your current annual period. You'll keep annual billing until then.",
+      });
+    }
+
     if (currentPriceId === newPriceId) {
       const meta = clearScheduleMetadata({ ...(sub.metadata ?? {}) });
       await stripe.subscriptions.update(stripeSubscriptionId, { metadata: meta });

@@ -8,7 +8,7 @@ import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } 
 import { axisPaymentsEnabledOnListing } from "@/lib/payment-policy";
 import { householdChargeAmountCents, HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE } from "@/lib/stripe-household-charge";
 import { createAxisAchCheckoutSession, stripeNotConfiguredError } from "@/lib/stripe-axis-ach-checkout";
-import { resolveManagerConnectAccountId } from "@/lib/stripe-application-fee";
+import { resolveAndValidateManagerConnectForPayments } from "@/lib/stripe-connect";
 
 export const runtime = "nodejs";
 
@@ -95,12 +95,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const destination = await resolveManagerConnectAccountId(db, managerUserId);
-    if (!destination) {
+    const stripe = getStripe();
+    const connect = await resolveAndValidateManagerConnectForPayments(stripe, db, managerUserId);
+    if (!connect.ok) {
       return NextResponse.json(
         {
-          code: "MANAGER_NO_CONNECT_ACCOUNT",
-          error: "Your property manager has not connected Stripe payouts yet. Use Zelle or Venmo instead.",
+          code: connect.code === "NO_ACCOUNT" ? "MANAGER_NO_CONNECT_ACCOUNT" : "MANAGER_CONNECT_TRANSFERS_NOT_READY",
+          error: connect.error,
         },
         { status: 422 },
       );
@@ -112,7 +113,6 @@ export async function POST(req: Request) {
     }
 
     const appUrl = resolveAppOrigin(req);
-    const stripe = getStripe();
     const residentEmail = charge.residentEmail.trim().toLowerCase();
 
     const metadata: Record<string, string> = {
@@ -128,9 +128,9 @@ export async function POST(req: Request) {
       residentEmail,
       amountCents,
       productName: charge.title?.trim() || "Resident payment",
-      productDescription: charge.propertyLabel?.trim() || "Axis Housing",
+      productDescription: charge.propertyLabel?.trim() || "Axis",
       metadata,
-      destinationAccountId: destination,
+      destinationAccountId: connect.accountId,
       mode: useEmbedded ? "embedded" : "hosted",
       returnUrl: `${appUrl}/resident/payments?ach_checkout=return&session_id={CHECKOUT_SESSION_ID}`,
       successUrl: `${appUrl}/resident/payments?ach_checkout=success&session_id={CHECKOUT_SESSION_ID}`,

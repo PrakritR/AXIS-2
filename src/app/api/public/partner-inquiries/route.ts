@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { notifyManagerTourRequest } from "@/lib/tour-notification-delivery.server";
 
 export const runtime = "nodejs";
 
@@ -224,6 +225,14 @@ export async function POST(req: Request) {
       }
       return NextResponse.json({ error: writeError.message }, { status: 500 });
     }
+
+    if (textValue(row.kind) === "tour") {
+      const managerUserId = textValue(row.managerUserId) || textValue(requestedWindows[0]?.adminUserId);
+      if (managerUserId) {
+        void notifyManagerTourRequest(db, req, row, requestedWindows[0]).catch(() => undefined);
+      }
+    }
+
     return NextResponse.json({ ok: true, row });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save inquiry.";

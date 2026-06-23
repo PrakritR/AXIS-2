@@ -3,6 +3,7 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { notifyTenantTourConfirmed } from "@/lib/tour-notification-delivery.server";
 
 export const runtime = "nodejs";
 
@@ -75,11 +76,18 @@ export async function POST(req: Request) {
     } = await auth.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const body = (await req.json()) as { id?: unknown; start?: unknown; end?: unknown; instructions?: unknown };
+    const body = (await req.json()) as {
+      id?: unknown;
+      start?: unknown;
+      end?: unknown;
+      instructions?: unknown;
+      notifyTenant?: unknown;
+    };
     const id = typeof body.id === "string" ? body.id.trim() : "";
     const requestedStart = typeof body.start === "string" ? body.start.trim() : "";
     const requestedEnd = typeof body.end === "string" ? body.end.trim() : "";
     const instructions = typeof body.instructions === "string" ? body.instructions.trim() : "";
+    const notifyTenant = body.notifyTenant === true;
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const admin = await isAdminUser(user.id);
@@ -195,7 +203,28 @@ export async function POST(req: Request) {
       if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, plannedEvent, message: formatRangeLabel(start, end) });
+    let tenantNotification: { ok: boolean; skipped?: boolean; error?: string } | null = null;
+    if (notifyTenant) {
+      tenantNotification = await notifyTenantTourConfirmed(
+        db,
+        req,
+        row,
+        {
+          start,
+          end,
+          managerUserId,
+          adminLabel: selectedWindow.adminLabel,
+        },
+        instructions || undefined,
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      plannedEvent,
+      message: formatRangeLabel(start, end),
+      tenantNotification,
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to approve tour request.";
     return NextResponse.json({ error: message }, { status: 500 });

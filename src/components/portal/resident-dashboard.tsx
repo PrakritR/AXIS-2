@@ -122,8 +122,7 @@ export function ResidentDashboard({
   const initialEmail = residentEmail.trim().toLowerCase();
   const session = usePortalSession({ userId: residentUserId, email: initialEmail || null });
   const email = session.email?.trim().toLowerCase() || initialEmail;
-  const managerIsFree = managerSubscriptionTier === "free";
-  const canUseFullPortal = applicationApproved && !managerIsFree;
+  const canUseFullPortal = applicationApproved;
 
   const [appStatus, setAppStatus] = useState<AppStatus>(applicationApproved ? "approved" : "pending");
   const [appStage, setAppStage] = useState(applicationApproved ? "Approved" : "Submitted");
@@ -133,6 +132,12 @@ export function ResidentDashboard({
 
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
+  /** Avoid reading session/local storage during SSR — prevents hydration mismatches on lease badge, inbox, etc. */
+  const [clientReady, setClientReady] = useState(false);
+
+  useEffect(() => {
+    queueMicrotask(() => setClientReady(true));
+  }, []);
 
   useEffect(() => {
     void Promise.allSettled([
@@ -218,6 +223,19 @@ export function ResidentDashboard({
 
   const data = useMemo(() => {
     void tick;
+    if (!clientReady) {
+      return {
+        leaseRow: null,
+        lease: leaseBadge(null, appStatus === "approved"),
+        openWO: 0,
+        scheduledWO: 0,
+        completedWO: 0,
+        inbox: 0,
+        pendingCharges: [] as ReturnType<typeof readChargesForResident>,
+        pendingTotal: 0,
+      };
+    }
+
     const leaseRow = email ? findLeaseForResidentEmail(email) : null;
     const lease = leaseBadge(leaseRow, appStatus === "approved");
 
@@ -238,7 +256,7 @@ export function ResidentDashboard({
     }, 0);
 
     return { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, pendingCharges, pendingTotal };
-  }, [tick, email, appStatus, residentUserId]);
+  }, [tick, email, appStatus, residentUserId, clientReady]);
 
   const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, pendingCharges, pendingTotal } = data;
 
@@ -251,10 +269,10 @@ export function ResidentDashboard({
   } else if (appStatus === "approved") {
     statusTone = "border-emerald-200/70 bg-emerald-50/80 text-emerald-950";
     statusCopy = appProperty && appRoom
-      ? `Approved for ${appProperty} - ${appRoom}.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`
+      ? `Approved for ${appProperty} - ${appRoom}.`
       : appProperty
-      ? `Approved for ${appProperty}.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`
-      : `Approved and active.${managerIsFree ? " Lease and work orders require an upgraded property plan." : ""}`;
+      ? `Approved for ${appProperty}.`
+      : "Approved and active.";
   } else if (appStatus === "rejected") {
     statusTone = "border-rose-200/70 bg-rose-50/80 text-rose-950";
     statusCopy = "Your most recent application is marked rejected. Contact your manager if you need help or want to reapply.";
@@ -274,7 +292,7 @@ export function ResidentDashboard({
               <NotifBanner tone="violet">
                 <span>Your lease is ready — <span className="font-semibold">signature required</span></span>
                 <Link href={`${BASE}/lease`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Sign now →
+                  Lease →
                 </Link>
               </NotifBanner>
             )}
@@ -286,8 +304,8 @@ export function ResidentDashboard({
                   </span>{" "}
                   outstanding balance — {pendingCharges.length} pending charge{pendingCharges.length === 1 ? "" : "s"}
                 </span>
-                <Link href={`${BASE}/charges`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  View charges →
+                <Link href={`${BASE}/payments`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
+                  Payments →
                 </Link>
               </NotifBanner>
             )}
@@ -297,7 +315,7 @@ export function ResidentDashboard({
                   <span className="font-semibold">{inbox}</span> unread message{inbox === 1 ? "" : "s"} in your inbox
                 </span>
                 <Link href={`${BASE}/inbox/unopened`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Open inbox →
+                  Inbox →
                 </Link>
               </NotifBanner>
             )}
@@ -307,7 +325,7 @@ export function ResidentDashboard({
                   <span className="font-semibold">{openWO}</span> open maintenance request{openWO === 1 ? "" : "s"} awaiting scheduling
                 </span>
                 <Link href={`${BASE}/services/work-orders`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  View →
+                  Work orders →
                 </Link>
               </NotifBanner>
             )}
@@ -329,7 +347,7 @@ export function ResidentDashboard({
                 ) : null}
               </div>
               <Link href={`${BASE}/lease`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                {lease.cta ? "Sign your lease →" : "View lease details →"}
+                Lease →
               </Link>
             </InfoCard>
 
@@ -347,8 +365,8 @@ export function ResidentDashboard({
                   </p>
                 </>
               )}
-              <Link href={`${BASE}/charges`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                View all charges →
+              <Link href={`${BASE}/payments`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
+                Payments →
               </Link>
             </InfoCard>
 
@@ -382,7 +400,7 @@ export function ResidentDashboard({
                   )}
                 </div>
                 <Link href={`${BASE}/services/work-orders`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                  {openWO + scheduledWO > 0 ? "Manage requests →" : "Submit a request →"}
+                  {openWO + scheduledWO > 0 ? "Work orders →" : "Services →"}
                 </Link>
               </InfoCard>
             ) : (
@@ -401,7 +419,7 @@ export function ResidentDashboard({
                 <p className="text-sm text-slate-500">No unread messages.</p>
               )}
               <Link href={`${BASE}/inbox/unopened`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                Open inbox →
+                Inbox →
               </Link>
             </InfoCard>
 
@@ -429,7 +447,7 @@ export function ResidentDashboard({
                 <p className="text-sm text-slate-500">No unread messages.</p>
               )}
               <Link href={`${BASE}/inbox/unopened`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                Open inbox →
+                Inbox →
               </Link>
             </InfoCard>
           </div>

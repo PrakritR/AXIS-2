@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { purgeOrphanedPortalRecords } from "@/lib/auth/purge-orphaned-portal-records";
 import { hasMoveOutDatePassed, isPreviousResidentStage } from "@/lib/current-resident";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -49,6 +50,14 @@ export async function POST(req: Request) {
     const role = String(profile?.role ?? "").toLowerCase();
     if (!canManage(role, admin)) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
+    if (mode === "admin_global") {
+      if (!admin) {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
+      const result = await purgeOrphanedPortalRecords(db);
+      return NextResponse.json({ ok: true, ...result });
     }
 
     // Collect all known resident emails for this manager.

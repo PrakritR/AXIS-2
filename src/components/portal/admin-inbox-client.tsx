@@ -23,6 +23,7 @@ import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
   appendInboxMessage,
   appendThreadReply,
+  emptyAdminInboxTrash,
   markInboxMessageRead,
   moveInboxMessageToTrash,
   permanentlyDeleteInboxMessage,
@@ -54,13 +55,11 @@ function previewSnippet(text: string, max = 100) {
 }
 
 const ADMIN_COMPOSE_MODE_OPTIONS: { value: AdminComposeSendMode; label: string }[] = [
-  { value: "all_portal", label: "Everyone (managers, residents & owners)" },
+  { value: "all_portal", label: "Everyone (managers & residents)" },
   { value: "all_managers", label: "All managers" },
   { value: "all_residents", label: "All residents" },
-  { value: "all_owners", label: "All owners" },
   { value: "pick_managers", label: "Choose managers…" },
   { value: "pick_residents", label: "Choose residents…" },
-  { value: "pick_owners", label: "Choose owners…" },
 ];
 
 type Recipient = { id: string; name: string; email: string };
@@ -74,7 +73,7 @@ function ComposeModal({
   open: boolean;
   onClose: () => void;
   onSent: () => void;
-  recipients: { managers: Recipient[]; residents: Recipient[]; owners: Recipient[] };
+  recipients: { managers: Recipient[]; residents: Recipient[] };
 }) {
   const { showToast } = useAppUi();
   const [mode, setMode] = useState<AdminComposeSendMode>("pick_managers");
@@ -86,7 +85,6 @@ function ComposeModal({
   const pickPool = useMemo(() => {
     if (mode === "pick_managers") return recipients.managers;
     if (mode === "pick_residents") return recipients.residents;
-    if (mode === "pick_owners") return recipients.owners;
     return [] as Recipient[];
   }, [mode, recipients]);
 
@@ -113,7 +111,7 @@ function ComposeModal({
   };
 
   const pickHeading =
-    mode === "pick_managers" ? "Which managers" : mode === "pick_residents" ? "Which residents" : mode === "pick_owners" ? "Which owners" : null;
+    mode === "pick_managers" ? "Which managers" : mode === "pick_residents" ? "Which residents" : null;
 
   const submit = () => {
     setBusy(true);
@@ -133,23 +131,19 @@ function ComposeModal({
 
       let toUserIds: string[] = [];
 
-      if (mode === "all_portal" || mode === "all_managers" || mode === "all_residents" || mode === "all_owners") {
+      if (mode === "all_portal" || mode === "all_managers" || mode === "all_residents") {
         const label =
           mode === "all_portal"
-            ? "All managers, residents & owners"
+            ? "All managers & residents"
             : mode === "all_managers"
               ? "All managers"
-              : mode === "all_residents"
-                ? "All residents"
-                : "All owners";
+              : "All residents";
         const emailStub =
           mode === "all_portal"
             ? "all-portal@axis.local"
             : mode === "all_managers"
               ? "all-managers@axis.local"
-              : mode === "all_residents"
-                ? "all-residents@axis.local"
-                : "all-owners@axis.local";
+              : "all-residents@axis.local";
         appendInboxMessage({
           name: "Broadcast",
           email: emailStub,
@@ -162,25 +156,18 @@ function ComposeModal({
         });
         toUserIds =
           mode === "all_portal"
-            ? [...recipients.managers, ...recipients.residents, ...recipients.owners].map((p) => p.id)
+            ? [...recipients.managers, ...recipients.residents].map((p) => p.id)
             : mode === "all_managers"
               ? recipients.managers.map((p) => p.id)
-              : mode === "all_residents"
-                ? recipients.residents.map((p) => p.id)
-                : recipients.owners.map((p) => p.id);
+              : recipients.residents.map((p) => p.id);
       } else {
-        const pool =
-          mode === "pick_managers"
-            ? recipients.managers
-            : mode === "pick_residents"
-              ? recipients.residents
-              : recipients.owners;
+        const pool = mode === "pick_managers" ? recipients.managers : recipients.residents;
         const picked = pool.filter((p) => selectedIds.has(p.id));
         if (picked.length === 0) {
           showToast("Select at least one recipient.");
           return;
         }
-        const roleLabel = mode === "pick_managers" ? "Manager" : mode === "pick_residents" ? "Resident" : "Owner";
+        const roleLabel = mode === "pick_managers" ? "Manager" : "Resident";
         appendInboxMessage({
           name: picked.length === 1 ? picked[0]!.name : `${picked.length} recipients`,
           email: picked.map((p) => p.email).filter(Boolean).join("; "),
@@ -188,7 +175,7 @@ function ComposeModal({
           body: bodyTrim,
           folder: "sent",
           senderRole: "admin",
-          composeAudience: picked.length > 1 ? "multi" : mode === "pick_managers" ? "manager" : mode === "pick_residents" ? "resident" : "owner",
+          composeAudience: picked.length > 1 ? "multi" : mode === "pick_managers" ? "manager" : "resident",
           composeRecipientLabel:
             picked.length === 1
               ? `${picked[0]!.name} (${roleLabel})`
@@ -204,7 +191,7 @@ function ComposeModal({
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            fromName: "Axis Housing Admin",
+            fromName: "Axis Admin",
             toUserIds,
             subject: topicTrim,
             text: bodyTrim,
@@ -238,7 +225,7 @@ function ComposeModal({
         <h2 id="admin-inbox-compose-title" className="text-lg font-semibold text-slate-900">
           New message
         </h2>
-        <p className="mt-1 text-sm text-slate-500">Broadcast to a group or choose specific managers, residents, or owners.</p>
+        <p className="mt-1 text-sm text-slate-500">Broadcast to a group or choose specific managers or residents.</p>
 
         <div className="mt-4 space-y-3">
           <div>
@@ -254,9 +241,6 @@ function ComposeModal({
                   setSelectedIds(first ? new Set([first]) : new Set());
                 } else if (v === "pick_residents") {
                   const first = recipients.residents[0]?.id;
-                  setSelectedIds(first ? new Set([first]) : new Set());
-                } else if (v === "pick_owners") {
-                  const first = recipients.owners[0]?.id;
                   setSelectedIds(first ? new Set([first]) : new Set());
                 } else {
                   setSelectedIds(new Set());
@@ -341,10 +325,9 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
-  const [recipients, setRecipients] = useState<{ managers: Recipient[]; residents: Recipient[]; owners: Recipient[] }>({
+  const [recipients, setRecipients] = useState<{ managers: Recipient[]; residents: Recipient[] }>({
     managers: [],
     residents: [],
-    owners: [],
   });
 
   const refresh = useCallback(() => {
@@ -376,13 +359,11 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
         const body = (await res.json()) as {
           managers?: Recipient[];
           residents?: Recipient[];
-          owners?: Recipient[];
         };
         if (!res.ok || cancelled) return;
         setRecipients({
           managers: body.managers ?? [],
           residents: body.residents ?? [],
-          owners: body.owners ?? [],
         });
       } catch {
         /* ignore */
@@ -464,6 +445,27 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setComposeOpen(true)}>
             New message
           </Button>
+          {tabId === "trash" && folderCounts.trash > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              onClick={() => {
+                if (!window.confirm(`Delete all ${folderCounts.trash} trash message${folderCounts.trash === 1 ? "" : "s"}? This cannot be undone.`)) return;
+                void emptyAdminInboxTrash().then((ok) => {
+                  if (ok) {
+                    showToast("Trash cleared.");
+                    setExpandedId(null);
+                    setTick((t) => t + 1);
+                  } else {
+                    showToast("Could not clear trash.");
+                  }
+                });
+              }}
+            >
+              Delete all trash
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
             Refresh
           </Button>
@@ -517,8 +519,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                       tabId === "sent" &&
                       (row.composeAudience === "all" ||
                         row.composeAudience === "all_managers" ||
-                        row.composeAudience === "all_residents" ||
-                        row.composeAudience === "all_owners")
+                        row.composeAudience === "all_residents")
                         ? ""
                         : row.email;
                     return (
@@ -550,11 +551,15 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                     variant="outline"
                                     className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-emerald-200 text-emerald-900 hover:bg-emerald-50`}
                                     onClick={() => {
-                                      if (restoreInboxMessageFromTrash(row.id)) {
-                                        showToast("Restored.");
-                                        setExpandedId(null);
-                                        setTick((t) => t + 1);
-                                      }
+                                      void restoreInboxMessageFromTrash(row.id).then((ok) => {
+                                        if (ok) {
+                                          showToast("Restored.");
+                                          setExpandedId(null);
+                                          setTick((t) => t + 1);
+                                        } else {
+                                          showToast("Could not restore message.");
+                                        }
+                                      });
                                     }}
                                   >
                                     Restore
@@ -564,11 +569,15 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                     variant="outline"
                                     className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-rose-200 text-rose-800 hover:bg-rose-50`}
                                     onClick={() => {
-                                      if (permanentlyDeleteInboxMessage(row.id)) {
-                                        showToast("Deleted permanently.");
-                                        setExpandedId(null);
-                                        setTick((t) => t + 1);
-                                      }
+                                      void permanentlyDeleteInboxMessage(row.id).then((ok) => {
+                                        if (ok) {
+                                          showToast("Deleted permanently.");
+                                          setExpandedId(null);
+                                          setTick((t) => t + 1);
+                                        } else {
+                                          showToast("Could not delete message.");
+                                        }
+                                      });
                                     }}
                                   >
                                     Delete forever
@@ -580,11 +589,15 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   variant="outline"
                                   className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
                                   onClick={() => {
-                                    if (moveInboxMessageToTrash(row.id)) {
-                                      showToast("Moved to trash.");
-                                      setExpandedId(null);
-                                      setTick((t) => t + 1);
-                                    }
+                                    void moveInboxMessageToTrash(row.id).then((ok) => {
+                                      if (ok) {
+                                        showToast("Moved to trash.");
+                                        setExpandedId(null);
+                                        setTick((t) => t + 1);
+                                      } else {
+                                        showToast("Could not move message to trash.");
+                                      }
+                                    });
                                   }}
                                 >
                                   Move to trash

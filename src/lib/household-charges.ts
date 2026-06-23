@@ -156,30 +156,44 @@ function persistHouseholdStateToSession() {
   }
 }
 
-function mergeServerAuthoritativeCharges(serverCharges: HouseholdCharge[], localCharges: HouseholdCharge[]): {
+function reconcileChargeWithLocal(serverCharge: HouseholdCharge, local: HouseholdCharge | undefined): HouseholdCharge {
+  if (!local) return serverCharge;
+  // Local mark-paid must win over stale server pending rows (including duplicate ids for the same bill).
+  if (local.status === "paid") {
+    return {
+      ...local,
+      status: "paid",
+      paidAt: local.paidAt ?? serverCharge.paidAt,
+      balanceLabel: "$0.00",
+    };
+  }
+  if (serverCharge.status === "paid") {
+    return { ...local, status: "paid", paidAt: serverCharge.paidAt, balanceLabel: "$0.00" };
+  }
+  return local;
+}
+
+/** Exported for unit tests — merges server rows with in-session manager edits. */
+export function mergeHouseholdChargesWithServer(serverCharges: HouseholdCharge[], localCharges: HouseholdCharge[]): {
   merged: HouseholdCharge[];
   hasUpdated: boolean;
 } {
   const localById = new Map(localCharges.map((c) => [c.id, c]));
+  const localByBusinessKey = new Map(localCharges.map((c) => [chargeBusinessKey(c), c]));
   const serverIds = new Set(serverCharges.map((c) => c.id));
   const serverKeys = new Set(serverCharges.map((c) => chargeBusinessKey(c)));
   let hasUpdated = false;
 
-  // For each server charge, prefer the local version (fresher amounts/titles) but inherit
-  // paid status from the server — the server is the source of truth for payment transitions.
   const reconciled: HouseholdCharge[] = serverCharges.map((sc) => {
-    const local = localById.get(sc.id);
-    if (!local) return sc;
-    if (sc.status === "paid" && local.status !== "paid") {
-      return { ...local, status: "paid" as const, paidAt: sc.paidAt, balanceLabel: "$0.00" };
-    }
-    // If amounts differ, local wins — signal that we need to push the update to the server.
-    if (local.amountLabel !== sc.amountLabel || local.title !== sc.title) hasUpdated = true;
-    return local;
+    const local = localById.get(sc.id) ?? localByBusinessKey.get(chargeBusinessKey(sc));
+    const merged = reconcileChargeWithLocal(sc, local);
+    if (local?.status === "paid" && sc.status !== "paid") hasUpdated = true;
+    if (local && (local.amountLabel !== sc.amountLabel || local.title !== sc.title)) hasUpdated = true;
+    return merged;
   });
 
-  // Append local-only charges (not present on server at all).
   const localOnly = localCharges.filter((c) => !serverIds.has(c.id) && !serverKeys.has(chargeBusinessKey(c)));
+  if (localOnly.some((c) => c.status === "paid")) hasUpdated = true;
   return { merged: dedupeCharges([...reconciled, ...localOnly]), hasUpdated };
 }
 
@@ -199,11 +213,17 @@ function emit() {
 
 function postHouseholdPayload(body: unknown) {
   if (!isBrowser()) return;
-  void fetch("/api/portal-household-charges", {
+  void postHouseholdPayloadAwait(body).catch(() => { /* fire-and-forget */ });
+}
+
+async function postHouseholdPayloadAwait(body: unknown): Promise<boolean> {
+  if (!isBrowser()) return false;
+  const res = await fetch("/api/portal-household-charges", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  }).catch(() => { /* fire-and-forget */ });
+  });
+  return res.ok;
 }
 
 function deleteChargeRowFromServer(id: string) {
@@ -244,7 +264,7 @@ export async function syncHouseholdChargesFromServer(
         // whenever the manager updates charge amounts (e.g. switching proration methods).
         mergedCharges = dedupeCharges(serverCharges);
       } else {
-        const result = mergeServerAuthoritativeCharges(serverCharges, memoryCharges);
+        const result = mergeHouseholdChargesWithServer(serverCharges, memoryCharges);
         mergedCharges = result.merged;
         hasUpdatedCharges = result.hasUpdated;
       }
@@ -1538,8 +1558,15 @@ export function markHouseholdChargePaid(chargeId: string, managerUserId: string 
   if (rows[i]!.status === "paid") return true;
   const now = new Date().toISOString();
   const next = [...rows];
-  next[i] = { ...next[i]!, status: "paid", paidAt: now, balanceLabel: "$0.00" };
+  const updated = { ...next[i]!, status: "paid" as const, paidAt: now, balanceLabel: "$0.00" };
+  next[i] = updated;
   writeAll(next);
+  // Awaitable upsert so a sync right after mark-paid does not resurrect stale pending rows.
+  void postHouseholdPayloadAwait({
+    action: "replace",
+    charges: [updated],
+    rentProfiles: readRentProfiles(),
+  });
   return true;
 }
 
@@ -1551,14 +1578,20 @@ export function markHouseholdChargePending(chargeId: string, managerUserId: stri
   const next = [...rows];
   // Clear dueDateLabel so parseDueDateLabelToDate returns null → isHouseholdChargeOverdue is false
   // → the charge lands in the Pending bucket, not Overdue, regardless of the original due date.
-  next[i] = {
+  const updated = {
     ...next[i]!,
-    status: "pending",
+    status: "pending" as const,
     paidAt: undefined,
     balanceLabel: next[i]!.amountLabel,
     dueDateLabel: undefined,
   };
+  next[i] = updated;
   writeAll(next);
+  void postHouseholdPayloadAwait({
+    action: "replace",
+    charges: [updated],
+    rentProfiles: readRentProfiles(),
+  });
   return true;
 }
 

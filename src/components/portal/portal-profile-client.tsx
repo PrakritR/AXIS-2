@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 function dashToEmpty(v: string) {
@@ -44,7 +45,6 @@ export function PortalProfileClient({
   initialFullName,
   initialEmail,
   initialPhone,
-  initialSmsFromNumber,
   idLabel,
   idValue,
 }: {
@@ -52,7 +52,6 @@ export function PortalProfileClient({
   initialFullName: string;
   initialEmail: string;
   initialPhone: string;
-  initialSmsFromNumber?: string;
   idLabel: string;
   idValue: string;
 }) {
@@ -60,7 +59,6 @@ export function PortalProfileClient({
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(dashToEmpty(initialFullName));
   const [phone, setPhone] = useState(dashToEmpty(initialPhone));
-  const [smsFromNumber, setSmsFromNumber] = useState(dashToEmpty(initialSmsFromNumber ?? ""));
   const [saving, setSaving] = useState(false);
   /** Skip one sync from server props after save so we don't overwrite local state before RSC catches up. */
   const skipNextServerPropsSync = useRef(false);
@@ -80,8 +78,7 @@ export function PortalProfileClient({
     }
     setFullName(dashToEmpty(initialFullName));
     setPhone(dashToEmpty(initialPhone));
-    setSmsFromNumber(dashToEmpty(initialSmsFromNumber ?? ""));
-  }, [initialFullName, initialPhone, initialSmsFromNumber, editing]);
+  }, [initialFullName, initialPhone, editing]);
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -90,7 +87,7 @@ export function PortalProfileClient({
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, phone, smsFromNumber }),
+        body: JSON.stringify({ fullName, phone }),
       });
       const raw = await res.text();
       let body: { error?: string; ok?: boolean } = {};
@@ -113,14 +110,13 @@ export function PortalProfileClient({
     } finally {
       setSaving(false);
     }
-  }, [fullName, phone, smsFromNumber, showToast]);
+  }, [fullName, phone, showToast]);
 
   const cancel = useCallback(() => {
     setFullName(dashToEmpty(initialFullName));
     setPhone(dashToEmpty(initialPhone));
-    setSmsFromNumber(dashToEmpty(initialSmsFromNumber ?? ""));
     setEditing(false);
-  }, [initialFullName, initialPhone, initialSmsFromNumber]);
+  }, [initialFullName, initialPhone]);
 
   const headerActions = editing
     ? [
@@ -170,22 +166,6 @@ export function PortalProfileClient({
               />
             </div>
             <ProfileReadonlyField label={idLabel} value={idValue} mono />
-            {variant === "manager" && (
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-semibold text-slate-800" htmlFor="pf-sms-from">
-                  SMS from number (Twilio)
-                </label>
-                <Input
-                  id="pf-sms-from"
-                  value={smsFromNumber}
-                  onChange={(e) => setSmsFromNumber(e.target.value)}
-                  className="rounded-xl"
-                  inputMode="tel"
-                  placeholder="+15551234567"
-                />
-                <p className="text-xs text-slate-500">Your Twilio phone number. Residents will receive SMS from this number.</p>
-              </div>
-            )}
           </>
         ) : (
           <>
@@ -193,11 +173,6 @@ export function PortalProfileClient({
             <ProfileReadonlyField label="Email" value={initialEmail} />
             <ProfileReadonlyField label="Phone" value={emptyToDash(phone)} />
             <ProfileReadonlyField label={idLabel} value={idValue} mono />
-            {variant === "manager" && (
-              <div className="md:col-span-2">
-                <ProfileReadonlyField label="SMS from number (Twilio)" value={emptyToDash(smsFromNumber)} mono />
-              </div>
-            )}
           </>
         )}
       </div>
@@ -225,7 +200,13 @@ export function PortalProfileClient({
           </div>
         }
       >
-        <Card className="rounded-3xl border border-slate-200/80 p-6 sm:p-8">{inner}</Card>
+        <div className="space-y-4">
+          <Card className="rounded-3xl border border-slate-200/80 p-6 sm:p-8">{inner}</Card>
+          <PortalChangePasswordPanel
+            accountEmail={dashToEmpty(initialEmail) || initialEmail}
+            accountLabel="your property portal account"
+          />
+        </div>
       </ManagerPortalPageShell>
     );
   }
@@ -250,6 +231,12 @@ export function PortalProfileClient({
         </div>
       </div>
       {inner}
+      <div className="mt-6">
+        <PortalChangePasswordPanel
+          accountEmail={dashToEmpty(initialEmail) || initialEmail}
+          accountLabel="your admin account"
+        />
+      </div>
     </div>
   );
 }

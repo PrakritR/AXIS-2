@@ -12,7 +12,6 @@ const LABELS: Record<AuthRole, string> = {
   admin: "Admin portal",
   manager: "Property portal",
   resident: "Resident portal",
-  owner: "Axis Property Portal (ownership)",
 };
 
 function ChoosePortalForm() {
@@ -35,7 +34,9 @@ function ChoosePortalForm() {
           if (!cancelled) setError(body.error ?? "Could not load your account.");
           return;
         }
-        if (!cancelled) setRoles(body.roles ?? []);
+        if (!cancelled) {
+          setRoles((body.roles ?? []).filter((role): role is AuthRole => role in LABELS));
+        }
       } catch {
         if (!cancelled) setError("Could not load your account.");
       }

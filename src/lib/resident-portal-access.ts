@@ -141,7 +141,7 @@ export async function loadResidentPortalAccessState(params: {
     applicationStage: latestApplication.stage,
     applicationProperty: latestApplication.property,
     leaseAccessUnlocked,
-    fullPortalAccess: applicationApproved && managerSubscriptionTier !== "free",
+    fullPortalAccess: applicationApproved,
     managerSubscriptionTier,
   };
 }
@@ -177,5 +177,5 @@ export function residentHasFullPortalAccess(params: {
   managerSubscriptionTier?: ManagerSubscriptionTier;
 }): boolean {
   if (params.role && params.role !== "resident") return false;
-  return params.applicationApproved && params.managerSubscriptionTier !== "free";
+  return params.applicationApproved;
 }

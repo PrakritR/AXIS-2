@@ -17,11 +17,10 @@ export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind })
         if (!res.ok) return;
         const body = (await res.json()) as { roles?: AuthRole[] };
         const roles = body.roles ?? [];
-        if ((currentKind === "manager" || currentKind === "owner" || currentKind === "pro") && roles.includes("resident")) {
+        if ((currentKind === "manager" || currentKind === "pro") && roles.includes("resident")) {
           setOtherRole("resident");
-        } else if (currentKind === "resident") {
-          if (roles.includes("manager")) setOtherRole("manager");
-          else if (roles.includes("owner")) setOtherRole("owner");
+        } else if (currentKind === "resident" && roles.includes("manager")) {
+          setOtherRole("manager");
         }
       })
       .catch(() => {});

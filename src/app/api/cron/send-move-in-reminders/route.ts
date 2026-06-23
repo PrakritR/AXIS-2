@@ -106,7 +106,7 @@ export async function GET(req: Request) {
   }
 
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.RESEND_FROM?.trim() || "Axis Housing <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
   const moveInDateLabel = formatDateLabel(tomorrow);
 
   let sent = 0;
@@ -173,7 +173,7 @@ export async function GET(req: Request) {
           row_data: {
             id: inboxId,
             folder: "inbox",
-            from: "Axis Housing",
+            from: "Axis",
             email: from.match(/<([^>]+)>/)?.[1] ?? from,
             subject: MOVE_IN_REMINDER_SUBJECT,
             preview,

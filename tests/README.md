@@ -1,4 +1,4 @@
-# Axis Housing Test Suite
+# Axis Test Suite
 
 ## Quick start
 

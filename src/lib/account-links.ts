@@ -1,6 +1,9 @@
 /** Shared types for `/api/pro/account-links` (server + client). */
 
-export type AccountLinkTabKind = "owner" | "manager";
+import type { CoManagerPermissions } from "@/lib/co-manager-permissions";
+
+/** @deprecated Owner tab removed — only manager co-manager links are supported. */
+export type AccountLinkTabKind = "manager";
 
 export type AccountLinkInviteStatus = "pending" | "accepted" | "rejected" | "cancelled";
 
@@ -18,6 +21,7 @@ export type AccountLinkInviteDto = {
   linkedDisplayName: string | null;
   assignedPropertyIds: string[];
   payoutPercentForManager: number;
+  coManagerPermissions: CoManagerPermissions;
   createdAt: string;
   respondedAt: string | null;
 };

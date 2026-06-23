@@ -6,6 +6,8 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import type { MockProperty } from "@/data/types";
+import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
+import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
@@ -201,6 +203,7 @@ function ManagerPropertyInlineDetails({
   managerUserId: string | null;
 }) {
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
+  const rich = useMemo(() => (mock ? getListingRichContent(mock) : null), [mock]);
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 
@@ -410,36 +413,41 @@ function ManagerPropertyInlineDetails({
           </Button>
         </>
       ) : null}
+
+      {displaySub && portalSub ? (
+        <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditorOpen(true)}>
+          Edit listing
+        </Button>
+      ) : null}
     </div>
   );
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_14px_38px_-32px_rgba(15,23,42,0.45)] sm:p-5">
-      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Details</p>
-          <h3 className="mt-2 text-base font-semibold text-slate-950">{mock.buildingName || mock.title.replace(/\s*·\s*\d+\s*rooms?\s*$/i, "")}</h3>
-          <p className="mt-1 text-sm text-slate-600">{mock.address}</p>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">{mock.tagline}</p>
-          <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.rentLabel}</span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-              {mock.beds} bd / {mock.baths} ba
-            </span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.available}</span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{mock.neighborhood}</span>
-          </div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">{footer}</div>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Rent with Axis preview</p>
+        {publicHref ? (
+          <Link
+            href={publicHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold text-slate-700 underline-offset-2 hover:underline"
+          >
+            Open public page
+          </Link>
+        ) : (
+          <span className="text-xs text-slate-500">Exact layout renters see once approved</span>
+        )}
       </div>
-
-      {displaySub && portalSub ? (
-        <div className="mt-5">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditorOpen(true)}>
-            Edit listing
-          </Button>
+      {mock && rich ? (
+        <div
+          data-listing-preview-scroll
+          className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/90 bg-white"
+        >
+          <ListingDetailSections property={mock} rich={rich} previewModal />
         </div>
       ) : null}
+      <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-4 sm:px-5">{footer}</div>
 
       {editorOpen && portalSub ? (
         <ManagerAddListingForm

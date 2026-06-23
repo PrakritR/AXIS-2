@@ -589,7 +589,7 @@ export function acceptPartnerInquiry(id: string, opts?: { instructions?: string;
   logDemoOutboundEmail(
     row.email,
     row.kind === "tour" ? "Your Axis tour is scheduled" : "Your Axis partner meeting is scheduled",
-    `Hi ${row.name},\n\nYour ${row.kind === "tour" ? "tour" : "meeting"} is confirmed for:\n${when}.${extra}\n\n— Axis Housing (outbound mail is logged for review).`,
+    `Hi ${row.name},\n\nYour ${row.kind === "tour" ? "tour" : "meeting"} is confirmed for:\n${when}.${extra}\n\n— Axis (outbound mail is logged for review).`,
   );
   return true;
 }
@@ -605,8 +605,8 @@ async function deletePartnerInquiryEventRecords(row: PartnerInquiry): Promise<bo
 
 export async function acceptPartnerInquiryFromServer(
   id: string,
-  opts?: { instructions?: string; start?: string; end?: string },
-): Promise<boolean> {
+  opts?: { instructions?: string; start?: string; end?: string; notifyTenant?: boolean },
+): Promise<{ ok: boolean; error?: string; notificationSkipped?: boolean }> {
   const row = readPartnerInquiries().find((r) => r.id === id);
   if (row?.kind === "tour") {
     const res = await fetch("/api/portal-tour-inquiries/accept", {
@@ -618,28 +618,31 @@ export async function acceptPartnerInquiryFromServer(
         start: opts?.start ?? row.proposedStart,
         end: opts?.end ?? row.proposedEnd,
         instructions: opts?.instructions,
+        notifyTenant: opts?.notifyTenant === true,
       }),
     });
-    if (!res.ok) return false;
-    const start = opts?.start ?? row.proposedStart;
-    const end = opts?.end ?? row.proposedEnd;
-    const when = formatRangeLabel(start, end);
-    const extra = opts?.instructions?.trim() ? `\n\nDetails from the host:\n${opts.instructions.trim()}` : "";
-    logDemoOutboundEmail(
-      row.email,
-      "Your Axis tour is scheduled",
-      `Hi ${row.name},\n\nYour tour is confirmed for:\n${when}.${extra}\n\n— Axis Housing (outbound mail is logged for review).`,
-    );
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      tenantNotification?: { ok?: boolean; skipped?: boolean; error?: string };
+    };
+    if (!res.ok || !data.ok) {
+      return { ok: false, error: data.error ?? "Could not approve tour request." };
+    }
     await syncScheduleRecordsFromServer({ force: true });
-    return true;
+    return {
+      ok: true,
+      notificationSkipped: data.tenantNotification?.skipped === true,
+      error: data.tenantNotification?.error,
+    };
   }
-  if (!row || !acceptPartnerInquiry(id, opts)) return false;
+  if (!row || !acceptPartnerInquiry(id, opts)) return { ok: false, error: "Could not approve request." };
   const [inquiriesOk, plannedOk, eventRecordsOk] = await Promise.all([
     writeJsonToServer(INQ_KEY, readPartnerInquiries()),
     writeJsonToServer(PLANNED_KEY, readPlannedEvents()),
     deletePartnerInquiryEventRecords(row),
   ]);
-  return inquiriesOk && plannedOk && eventRecordsOk;
+  return inquiriesOk && plannedOk && eventRecordsOk ? { ok: true } : { ok: false, error: "Could not sync approval." };
 }
 
 export function declinePartnerInquiry(id: string) {

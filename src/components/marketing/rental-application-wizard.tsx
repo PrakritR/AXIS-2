@@ -32,11 +32,21 @@ import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/l
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
+import {
+  computeLeaseEndDate,
+  normalizeIsoDateInput,
+  shouldAutoComputeLeaseEnd,
+} from "@/lib/rental-application/lease-dates";
 import { RENTAL_WIZARD_STEP_COUNT } from "@/lib/rental-application/types";
 import { maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
+import {
+  RENTAL_WIZARD_STEP_FIELD_ORDER,
+  scrollToFirstWizardFieldError,
+} from "@/lib/wizard-field-errors";
 import { appendManagerApplicationRow, syncPublicApprovedApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { RentalWizardStepBody } from "./rental-wizard-steps";
+import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
 
 const processedApplicationFeeSessions = new Set<string>();
 
@@ -78,6 +88,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const searchParams = useSearchParams();
   const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
   const [step, setStep] = useState(1);
+  const [maxStepReached, setMaxStepReached] = useState(1);
   const [form, setForm] = useState<RentalWizardFormState>(() => {
     const draft = loadRentalWizardDraft();
     return draft ? { ...createInitialRentalWizardState(), ...draft } : createInitialRentalWizardState();
@@ -186,7 +197,22 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   }, [draftReady, listingPrefillKey, searchParams]);
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
-    setForm((f) => ({ ...f, ...p }));
+    setForm((f) => {
+      const merged: RentalWizardFormState = { ...f, ...p };
+      if ("leaseStart" in p) merged.leaseStart = normalizeIsoDateInput(p.leaseStart);
+      if ("leaseEnd" in p) merged.leaseEnd = p.leaseEnd ? normalizeIsoDateInput(p.leaseEnd) : "";
+      if ("leaseTerm" in p && p.leaseTerm === "Month-to-Month") merged.leaseEnd = "";
+      const endExplicit = "leaseEnd" in p;
+      if (
+        !endExplicit &&
+        ("leaseTerm" in p || "leaseStart" in p) &&
+        shouldAutoComputeLeaseEnd(merged.leaseTerm, merged.rentalType)
+      ) {
+        const computed = computeLeaseEndDate(merged.leaseStart, merged.leaseTerm);
+        if (computed) merged.leaseEnd = computed;
+      }
+      return merged;
+    });
     if (Object.keys(p).some((k) => ["propertyId", "roomChoice1", "roomChoice2", "roomChoice3", "rentalType", "leaseTerm", "leaseStart", "leaseEnd"].includes(k))) {
       setShowAvailabilityWarnings(false);
     }
@@ -226,20 +252,22 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   }, []);
 
   const goToStep = useCallback((n: number) => {
+    if (!canNavigateToWizardStep(n, maxStepReached)) return;
     setStep(n);
     setErrors({});
     setReviewReturnStep(null);
     if (n === 3) setShowAvailabilityWarnings(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [maxStepReached]);
 
   const editFromReview = useCallback((n: number) => {
+    if (!canNavigateToWizardStep(n, maxStepReached)) return;
     setStep(n);
     setErrors({});
     setReviewReturnStep(n);
     if (n === 3) setShowAvailabilityWarnings(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [maxStepReached]);
 
   const validateAllPrior = useCallback(() => {
     for (let s = 1; s <= 10; s++) {
@@ -248,6 +276,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         setErrors(e);
         setStep(s);
         showToast("Please review the highlighted fields before submitting.");
+        queueMicrotask(() =>
+          scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[s] ?? [], e),
+        );
         return false;
       }
     }
@@ -291,6 +322,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         managerUserId: listing?.managerUserId ?? feeCharge?.managerUserId ?? prop?.managerUserId ?? null,
         stage: "Submitted",
         bucket: "pending",
+        backgroundCheckStatus: "pending_review",
         detail: `Submitted ${new Date().toLocaleString()}`,
         email: emailTrim,
         application: structuredClone(form),
@@ -320,7 +352,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     if (isAchApplicationFeeChannel(payChannel)) {
       return checkoutBusy ? "Opening bank checkout…" : applicationFeeGate.paid ? "Submit application" : "Pay with bank (ACH)";
     }
-    if (payChannel === "zelle" || payChannel === "venmo") {
+    if (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other") {
       return "Submit application";
     }
     return "Submit application";
@@ -489,25 +521,22 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           return;
         }
 
-        if (needsFee && (payChannel === "zelle" || payChannel === "venmo")) {
+        if (needsFee && (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other")) {
+          const e = validateRentalWizardStep(12, form);
+          if (countValidationErrors(e) > 0) {
+            setErrors(e);
+            showToast("Please confirm your application fee payment before submitting.");
+            queueMicrotask(() =>
+              scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[12] ?? [], e),
+            );
+            return;
+          }
           ensurePendingApplicationFeeCharge({
             residentEmail: form.email,
             residentName: form.fullLegalName,
             residentUserId,
             propertyId: pid,
           });
-          const paymentLabel = payChannel === "venmo" ? "Venmo" : "Zelle";
-          const paymentContact =
-            payChannel === "venmo"
-              ? sub?.venmoContact?.trim() ?? "the manager's Venmo contact"
-              : sub?.zelleContact?.trim() ?? "the manager's Zelle contact";
-          const confirmed =
-            typeof window === "undefined"
-              ? true
-              : window.confirm(`Confirm you already sent the application fee by ${paymentLabel} to ${paymentContact}.`);
-          if (!confirmed) {
-            return;
-          }
           finalizeApplicationSubmit(residentUserId);
           return;
         }
@@ -519,6 +548,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     if (step === 11) {
       if (!validateAllPrior()) return;
       setStep(12);
+      setMaxStepReached((m) => nextWizardMaxReached(m, 12));
       setErrors({});
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -527,6 +557,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     setErrors(e);
     if (countValidationErrors(e) > 0) {
       showToast("Please fix the highlighted fields before continuing.");
+      queueMicrotask(() =>
+        scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[step] ?? [], e),
+      );
       return;
     }
     if (step === 3) {
@@ -547,7 +580,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       setStep(11);
       setReviewReturnStep(null);
     } else {
-      setStep((s) => s + 1);
+      const next = step + 1;
+      setStep(next);
+      setMaxStepReached((m) => nextWizardMaxReached(m, next));
     }
     setErrors({});
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -652,6 +687,34 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 Step {step} of {RENTAL_WIZARD_STEP_COUNT}
               </p>
               <p className="mt-1 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{meta.title}</p>
+              <div className="-mx-1 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                <div className="flex min-w-max gap-1 px-1">
+                  {STEP_META.map((s) => {
+                    const reachable = canNavigateToWizardStep(s.n, maxStepReached);
+                    const completed = s.n < step;
+                    return (
+                      <button
+                        key={s.n}
+                        type="button"
+                        disabled={!reachable}
+                        title={s.title}
+                        onClick={() => goToStep(s.n)}
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition ${
+                          s.n === step
+                            ? "bg-primary text-white"
+                            : completed
+                              ? "bg-primary/15 text-primary"
+                              : reachable
+                                ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                : "cursor-not-allowed bg-slate-50 text-slate-300"
+                        }`}
+                      >
+                        {completed ? "✓" : s.n}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
                 <div
                   className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"

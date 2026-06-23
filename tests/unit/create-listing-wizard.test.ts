@@ -1,0 +1,169 @@
+import { describe, expect, it } from "vitest";
+import {
+  applyListingBedroomSlots,
+  createDefaultListingSubmission,
+  emptyBathroom,
+  emptyRoom,
+  emptySharedSpace,
+  formatListingBasicsSummary,
+  isListingFeeAmountFilled,
+  resolveAllowedLeaseTerms,
+} from "@/lib/manager-listing-submission";
+import {
+  firstInvalidListingStep,
+  listingBathroomNameKey,
+  listingSharedSpaceNameKey,
+  validateListingWizardStep,
+} from "@/lib/listing-wizard-validation";
+
+function filledPricingSubmission() {
+  const sub = createDefaultListingSubmission();
+  sub.address = "123 Main St";
+  sub.zip = "98101";
+  sub.listingPropertyTypeId = "house";
+  sub.listingStoriesId = "2";
+  sub.listingTotalBathroomsId = "2";
+  sub.listingBedroomSlots = 1;
+  sub.rooms = [{ ...emptyRoom(0), id: "r1", name: "Room A", monthlyRent: 900 }];
+  sub.bathrooms = [{ ...emptyBathroom(0), id: "b1", name: "Hall bath" }];
+  sub.allowedLeaseTerms = ["12-Month"];
+  sub.applicationFee = "50";
+  sub.securityDeposit = "900";
+  sub.moveInFee = "0";
+  sub.parkingMonthly = "0";
+  sub.hoaMonthly = "0";
+  sub.otherMonthlyFees = "0";
+  sub.monthToMonthSurcharge = "0";
+  return sub;
+}
+
+describe("create listing wizard", () => {
+  it("requires address and valid zip on home step", () => {
+    const sub = createDefaultListingSubmission();
+    const errs = validateListingWizardStep(0, sub);
+    expect(errs.address).toMatch(/required/i);
+    expect(errs.zip).toMatch(/required/i);
+
+    sub.address = "123 Main St";
+    sub.zip = "9810";
+    const zipErrs = validateListingWizardStep(0, sub);
+    expect(zipErrs.zip).toMatch(/valid/i);
+  });
+
+  it("requires property setup fields on new listing home step", () => {
+    const sub = createDefaultListingSubmission();
+    sub.address = "123 Main St";
+    sub.zip = "98101";
+    const errs = validateListingWizardStep(0, sub);
+    expect(errs.listingPropertyTypeId).toBeTruthy();
+    expect(errs.listingStoriesId).toBeTruthy();
+    expect(errs.listingTotalBathroomsId).toBeTruthy();
+  });
+
+  it("requires bedroom slots when unset on new listing home step", () => {
+    const sub = createDefaultListingSubmission();
+    sub.address = "123 Main St";
+    sub.zip = "98101";
+    sub.listingPropertyTypeId = "house";
+    sub.listingStoriesId = "2";
+    sub.listingTotalBathroomsId = "2";
+    sub.listingBedroomSlots = 0;
+    const errs = validateListingWizardStep(0, sub);
+    expect(errs.listingBedroomSlots).toMatch(/bedroom/i);
+  });
+
+  it("skips property setup validation in edit mode", () => {
+    const sub = createDefaultListingSubmission();
+    sub.address = "123 Main St";
+    sub.zip = "98101";
+    const errs = validateListingWizardStep(0, sub, { isEditMode: true });
+    expect(errs.listingPropertyTypeId).toBeUndefined();
+    expect(errs.listingStoriesId).toBeUndefined();
+  });
+
+  it("flags unnamed bathrooms and shared spaces", () => {
+    const sub = createDefaultListingSubmission();
+    sub.bathrooms = [{ ...emptyBathroom(0), id: "b1", name: "" }];
+    sub.sharedSpaces = [{ ...emptySharedSpace(0), id: "s1", name: "" }];
+
+    const bathErrs = validateListingWizardStep(2, sub);
+    expect(bathErrs[listingBathroomNameKey("b1")]).toMatch(/required/i);
+
+    const spaceErrs = validateListingWizardStep(3, sub);
+    expect(spaceErrs[listingSharedSpaceNameKey("s1")]).toMatch(/required/i);
+  });
+
+  it("requires lease terms and fee fields on pricing step", () => {
+    const sub = filledPricingSubmission();
+    sub.allowedLeaseTerms = [];
+    sub.applicationFee = "";
+    const errs = validateListingWizardStep(4, sub);
+    expect(errs.allowedLeaseTerms).toMatch(/lease term/i);
+    expect(errs.applicationFee).toMatch(/application fee/i);
+  });
+
+  it("requires application fee payment methods when fee is charged", () => {
+    const sub = filledPricingSubmission();
+    sub.applicationFeeStripeEnabled = false;
+    sub.applicationFeeZelleEnabled = false;
+    sub.applicationFeeVenmoEnabled = false;
+    sub.applicationFeeOtherEnabled = false;
+    const errs = validateListingWizardStep(4, sub);
+    expect(errs.applicationFeeMethods).toMatch(/payment method/i);
+  });
+
+  it("finds the first invalid step in order", () => {
+    const sub = createDefaultListingSubmission();
+    const hit = firstInvalidListingStep(sub, {});
+    expect(hit?.stepIndex).toBe(0);
+    expect(hit?.errors.address).toBeTruthy();
+  });
+
+  it("returns null when steps through pricing pass", () => {
+    const sub = filledPricingSubmission();
+    expect(firstInvalidListingStep(sub, {})).toBeNull();
+  });
+
+  it("grows and shrinks bedroom slots when rows are empty", () => {
+    const sub = createDefaultListingSubmission();
+    const grown = applyListingBedroomSlots(sub, 3);
+    expect(grown.ok).toBe(true);
+    if (grown.ok) expect(grown.sub.rooms).toHaveLength(3);
+
+    const shrunk = applyListingBedroomSlots(grown.ok ? grown.sub : sub, 1);
+    expect(shrunk.ok).toBe(true);
+    if (shrunk.ok) expect(shrunk.sub.rooms).toHaveLength(1);
+  });
+
+  it("blocks shrinking bedroom slots when last room has data", () => {
+    const sub = filledPricingSubmission();
+    sub.listingBedroomSlots = 2;
+    sub.rooms = [
+      { ...emptyRoom(0), id: "r1", name: "Room A", monthlyRent: 900 },
+      { ...emptyRoom(1), id: "r2", name: "Room B", monthlyRent: 800 },
+    ];
+    const blocked = applyListingBedroomSlots(sub, 1);
+    expect(blocked.ok).toBe(false);
+  });
+
+  it("summarizes listing basics for review", () => {
+    const sub = filledPricingSubmission();
+    const summary = formatListingBasicsSummary(sub);
+    expect(summary).toContain("House");
+    expect(summary).toContain("1 bedroom for rent");
+  });
+});
+
+describe("listing fee and lease helpers", () => {
+  it("treats zero as a filled fee amount", () => {
+    expect(isListingFeeAmountFilled("0")).toBe(true);
+    expect(isListingFeeAmountFilled("")).toBe(false);
+    expect(isListingFeeAmountFilled("waived")).toBe(false);
+  });
+
+  it("resolves allowed lease terms from submission array", () => {
+    const sub = createDefaultListingSubmission();
+    sub.allowedLeaseTerms = ["12-Month", "Month-to-Month"];
+    expect(resolveAllowedLeaseTerms(sub)).toEqual(["12-Month", "Month-to-Month"]);
+  });
+});

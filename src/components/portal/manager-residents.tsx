@@ -5,15 +5,14 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
+  ManagerPortalStatusPills,
+  ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_TOOLBAR_GROUP,
-  PORTAL_TOOLBAR_LABEL,
-  PORTAL_TOOLBAR_PILL_BUTTON,
-  PORTAL_TOOLBAR_SELECT,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -70,6 +69,10 @@ import {
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 import {
+  buildNewChargeNoticeBody,
+  deliverPortalInboxMessage,
+} from "@/lib/portal-message-delivery";
+import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
   deleteLeasePipelineRowsForResident,
@@ -113,6 +116,7 @@ import {
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
+  invalidatePersistedInboxCache,
   loadPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
   persistInbox,
@@ -147,7 +151,6 @@ type ActiveResident = {
 };
 
 type ResidentsTabId = "current" | "previous";
-type ResidentsSort = "name-asc" | "name-desc";
 
 function shortDateLabel(iso: string): string {
   const parts = iso.trim().split("-").map(Number);
@@ -298,11 +301,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [srTick, setSrTick] = useState(0);
   const [inboxTick, setInboxTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
-  const [residentsSort, setResidentsSort] = useState<ResidentsSort>("name-asc");
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
   const [prevTabId, setPrevTabId] = useState(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addChargeOpen, setAddChargeOpen] = useState(false);
+  const [chargeNoticePreview, setChargeNoticePreview] = useState<{
+    title: string;
+    amount: number;
+    blocksLease: boolean;
+  } | null>(null);
+  const [chargeNoticeBusy, setChargeNoticeBusy] = useState(false);
   const [editChargeId, setEditChargeId] = useState<string | null>(null);
   const [editChargeKind, setEditChargeKind] = useState<HouseholdCharge["kind"] | null>(null);
   const [chargeTitle, setChargeTitle] = useState("");
@@ -327,6 +335,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     subject: string;
     body: string;
   } | null>(null);
+  const [leaseSentPreview, setLeaseSentPreview] = useState<{
+    res: ActiveResident;
+    lease: LeasePipelineRow;
+    recipient: string;
+    subject: string;
+    body: string;
+  } | null>(null);
+  const [leaseSendBusy, setLeaseSendBusy] = useState(false);
   const [signingLease, setSigningLease] = useState<LeasePipelineRow | null>(null);
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
   const [welcomeEmailBusyForResident, setWelcomeEmailBusyForResident] = useState<string | null>(null);
@@ -648,7 +664,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       ? inTab.filter((r) => r.propertyId === propertyFilter)
       : inTab;
 
-    const nameDirection = residentsSort === "name-asc" ? 1 : -1;
     return [...base].sort((a, b) => {
       if (!propertyFilter) {
         const propCmp = a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" });
@@ -656,13 +671,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       }
 
       const nameCmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-      if (nameCmp !== 0) return nameDirection * nameCmp;
+      if (nameCmp !== 0) return nameCmp;
 
       const aNum = parseInt(a.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
       const bNum = parseInt(b.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
       return aNum - bNum;
     });
-  }, [residents, residentsTab, propertyFilter, residentsSort]);
+  }, [residents, residentsTab, propertyFilter]);
 
   const currentResidentsCount = useMemo(() => residents.filter((resident) => !resident.isPrevious).length, [residents]);
   const previousResidentsCount = useMemo(() => residents.filter((resident) => resident.isPrevious).length, [residents]);
@@ -884,22 +899,59 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       }
       return;
     }
-    const result = createManagerCharge({
-      residentEmail: selected.email,
-      residentName: selected.name,
-      propertyId: selected.propertyId || "unknown",
-      propertyLabel: selected.propertyLabel,
-      managerUserId: userId ?? null,
+    setAddChargeOpen(false);
+    setChargeNoticePreview({
       title: chargeTitle.trim(),
       amount,
-      blocksLeaseUntilPaid: chargeBlocksLease,
+      blocksLease: chargeBlocksLease,
     });
-    if (result) {
-      showToast("Charge added.");
+  }
+
+  async function confirmChargeNotice(skipMessage: boolean) {
+    if (!selected || !chargeNoticePreview) return;
+    setChargeNoticeBusy(true);
+    try {
+      const result = createManagerCharge({
+        residentEmail: selected.email,
+        residentName: selected.name,
+        propertyId: selected.propertyId || "unknown",
+        propertyLabel: selected.propertyLabel,
+        managerUserId: userId ?? null,
+        title: chargeNoticePreview.title,
+        amount: chargeNoticePreview.amount,
+        blocksLeaseUntilPaid: chargeNoticePreview.blocksLease,
+      });
+      if (!result) {
+        showToast("Could not add charge.");
+        return;
+      }
       setAddChargeOpen(false);
       setChargeTab("pending");
-    } else {
-      showToast("Could not add charge.");
+      if (skipMessage) {
+        showToast("Charge added (no notification sent).");
+        return;
+      }
+      const amountLabel = `$${chargeNoticePreview.amount.toFixed(2)}`;
+      const subject = `New charge: ${chargeNoticePreview.title}`;
+      const body = buildNewChargeNoticeBody({
+        residentName: selected.name,
+        chargeTitle: chargeNoticePreview.title,
+        amountLabel,
+        propertyLabel: selected.propertyLabel,
+      });
+      const notice = await deliverPortalInboxMessage({
+        toEmails: [selected.email],
+        subject,
+        text: body,
+      });
+      if (notice.ok) {
+        showToast(notice.skipped ? "Charge added. Notice sent to inbox (demo email skipped)." : "Charge added and notice sent via inbox and email.");
+      } else {
+        showToast("Charge added, but notice could not be sent.");
+      }
+    } finally {
+      setChargeNoticeBusy(false);
+      setChargeNoticePreview(null);
     }
   }
 
@@ -911,49 +963,24 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       showToast("Add a subject and message.");
       return;
     }
-    const when = formatPacificDateTime(new Date());
-    // Save to manager's local sent box
-    const next = [
-      {
-        id: `sent_${Date.now()}`,
-        folder: "sent" as const,
-        from: "You",
-        email: selected.email,
-        subject,
-        preview: previewLine(body),
-        body,
-        time: when,
-        unread: false,
-      },
-      ...loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []),
-    ];
-    persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
     setMessageSubject("");
     setMessageBody("");
     setMessageOpen(false);
-    setInboxTick((n) => n + 1);
-    // Deliver to portal inbox (server) AND send real email; then refresh so resident panel shows message
-    try {
-      await fetch("/api/portal/send-inbox-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          fromName: managerEmail ?? "Property Manager",
-          toEmails: [selected.email],
-          subject,
-          text: body,
-          deliverToPortalInbox: true,
-        }),
-      });
-      // Force-refresh inbox from server so the resident panel picks up the new thread
-      const fresh = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
-      persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
-      setInboxTick((n) => n + 1);
-    } catch {
-      /* local save already succeeded; server sync optional */
+    const result = await deliverPortalInboxMessage({
+      fromName: managerEmail ?? "Property Manager",
+      toEmails: [selected.email],
+      subject,
+      text: body,
+    });
+    if (!result.ok) {
+      showToast(result.error ?? "Message could not be sent.");
+      return;
     }
-    showToast("Message sent to resident.");
+    invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
+    const fresh = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
+    persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
+    setInboxTick((n) => n + 1);
+    showToast(result.skipped ? "Message sent to inbox (demo email skipped)." : "Message sent via inbox and email.");
   }
 
   async function sendResidentAccountEmail(res: ActiveResident) {
@@ -1005,7 +1032,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       "",
       "Please log into your resident portal to view details and submit payment.",
       "",
-      "— Axis Housing",
+      "— Axis",
     ].join("\n");
     setReminderPreview({ res, subject, body });
   }
@@ -1090,7 +1117,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       "",
       "If you have any questions before signing, reply in your Axis inbox and we will help.",
       "",
-      "Axis Housing",
+      "Axis",
     ].filter(Boolean).join("\n");
 
     setLeaseReminderPreview({
@@ -1100,6 +1127,79 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       subject,
       body,
     });
+  }
+
+  function leaseSentToResidentBody(res: ActiveResident, lease: LeasePipelineRow): string {
+    const unit = lease.unit.trim() || "your unit";
+    return [
+      `Hi ${lease.residentName || res.name || "there"},`,
+      "",
+      `Your lease for ${unit} is ready to review and sign in your Axis resident portal.`,
+      "",
+      "Sign in to Axis, open Leases in the sidebar, and complete your signature when you're ready.",
+      "",
+      "If you have any questions before signing, reply in your Axis inbox and we will help.",
+      "",
+      "Axis",
+    ].join("\n");
+  }
+
+  function openLeaseSendPreview(res: ActiveResident, lease: LeasePipelineRow) {
+    if (!residentAccountEmails.has(res.email.trim().toLowerCase())) {
+      showToast("Resident must create their account before the lease can be sent.");
+      return;
+    }
+    if (!lease.generatedHtml && !lease.managerUploadedPdf?.dataUrl) {
+      showToast("Generate or upload a lease document first.");
+      return;
+    }
+    const recipient = res.email.trim();
+    const unit = lease.unit.trim() || "your unit";
+    setLeaseSentPreview({
+      res,
+      lease,
+      recipient,
+      subject: `Your lease for ${unit} is ready to sign`,
+      body: leaseSentToResidentBody(res, lease),
+    });
+  }
+
+  async function confirmSendLeaseToResident(skipMessage: boolean) {
+    if (!leaseSentPreview || leaseSendBusy) return;
+    const { res, lease, subject, body } = leaseSentPreview;
+    setLeaseSentPreview(null);
+    setLeaseSendBusy(true);
+    try {
+      const sendResult = await sendLeaseToResident(lease.id, userId);
+      if (!sendResult.ok) {
+        showToast(sendResult.error);
+        return;
+      }
+      appendLeaseThreadMessage(lease.id, "manager", "Sent lease to resident for review and signature.", userId);
+      if (skipMessage) {
+        showToast("Lease sent to resident portal (no notification sent).");
+      } else {
+        const notice = await deliverPortalInboxMessage({
+          fromName: managerEmail ?? "Property Manager",
+          toEmails: [res.email],
+          subject,
+          text: body,
+        });
+        if (notice.ok) {
+          showToast(
+            notice.skipped
+              ? "Lease sent to resident portal (demo inbox only)."
+              : "Lease sent to resident portal with inbox and email notification.",
+          );
+        } else {
+          showToast("Lease sent to resident portal. Notification could not be delivered.");
+        }
+      }
+      await syncLeasePipelineFromServer(userId);
+      setLeaseTick((n) => n + 1);
+    } finally {
+      setLeaseSendBusy(false);
+    }
   }
 
   function saveManualResident() {
@@ -1439,50 +1539,27 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         title="Residents"
         titleAside={
           <>
-            <div className={PORTAL_TOOLBAR_GROUP}>
-              <button
-                type="button"
-                onClick={() => setResidentsTab("current")}
-                className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${
-                  residentsTab === "current"
-                    ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
-                    : "bg-transparent text-slate-600 hover:bg-white"
-                }`}
-              >
-                Current ({currentResidentsCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setResidentsTab("previous")}
-                className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${
-                  residentsTab === "previous"
-                    ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
-                    : "bg-transparent text-slate-600 hover:bg-white"
-                }`}
-              >
-                Previous ({previousResidentsCount})
-              </button>
-            </div>
-            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
-              + Add resident
-            </Button>
             <PortalPropertyFilterPill
               propertyOptions={propertyOptions}
               propertyValue={propertyFilter}
               onPropertyChange={setPropertyFilter}
             />
-            <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
-              <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort resident</span>
-              <select
-                value={residentsSort}
-                onChange={(e) => setResidentsSort(e.target.value as ResidentsSort)}
-                className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
-              >
-                <option value="name-asc">A-Z</option>
-                <option value="name-desc">Z-A</option>
-              </select>
-            </label>
+            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
+              + Add resident
+            </Button>
           </>
+        }
+        filterRow={
+          <ManagerPortalFilterRow>
+            <ManagerPortalStatusPills
+              tabs={[
+                { id: "current", label: "Current", count: currentResidentsCount },
+                { id: "previous", label: "Previous", count: previousResidentsCount },
+              ]}
+              activeId={residentsTab}
+              onChange={(id) => setResidentsTab(id as ResidentsTabId)}
+            />
+          </ManagerPortalFilterRow>
         }
       >
       {filtered.length === 0 ? (
@@ -1780,21 +1857,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         type="button"
                                         variant="outline"
                                         className="rounded-full px-3 py-1 text-xs"
-                                        onClick={() => {
-                                          if (!residentAccountEmails.has(selected.email.trim().toLowerCase())) {
-                                            showToast("Resident must create their account before the lease can be sent.");
-                                            return;
-                                          }
-                                          appendLeaseThreadMessage(residentLease.id, "manager", "Sent lease to resident for review and signature.", userId);
-                                          if (sendLeaseToResident(residentLease.id, userId)) {
-                                            setLeaseTick((n) => n + 1);
-                                            showToast("Lease moved to Resident Signature Pending.");
-                                          } else {
-                                            showToast("Could not send this lease yet. Generate or upload the active lease document first.");
-                                          }
-                                        }}
+                                        disabled={leaseSendBusy}
+                                        onClick={() => openLeaseSendPreview(selected, residentLease)}
                                       >
-                                        Send to resident
+                                        {leaseSendBusy ? "Sending…" : "Send to resident"}
                                       </Button>
                                     ) : residentLease.status === "Resident Signature Pending" ? (
                                       <>
@@ -1812,13 +1878,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           variant="outline"
                                           className="rounded-full px-3 py-1 text-xs"
                                           onClick={() => {
-                                            appendLeaseThreadMessage(residentLease.id, "manager", "Moved lease back to manager review.", userId);
-                                            if (sendLeaseBackToManager(residentLease.id, userId)) {
-                                              setLeaseTick((n) => n + 1);
-                                              showToast("Lease moved to Manager Review.");
-                                            } else {
-                                              showToast("Could not move this lease back right now.");
+                                            const moveResult = sendLeaseBackToManager(residentLease.id, userId);
+                                            if (!moveResult.ok) {
+                                              showToast(moveResult.error);
+                                              return;
                                             }
+                                            appendLeaseThreadMessage(residentLease.id, "manager", "Moved lease back to manager review.", userId);
+                                            setLeaseTick((n) => n + 1);
+                                            showToast("Lease moved to Manager Review.");
                                           }}
                                         >
                                           Move to manager review
@@ -2716,135 +2783,116 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               Cancel
             </Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={submitCharge}>
-              {editChargeId ? "Save changes" : "Add charge"}
+              {editChargeId ? "Save changes" : "Review & add charge"}
             </Button>
           </div>
         </div>
       </Modal>
 
-      <Modal
+      <PortalNotificationPreviewModal
+        open={chargeNoticePreview !== null && selected !== null}
+        title="New charge — notification preview"
+        onClose={() => setChargeNoticePreview(null)}
+        recipient={selected?.email ?? ""}
+        subject={chargeNoticePreview ? `New charge: ${chargeNoticePreview.title}` : ""}
+        body={
+          chargeNoticePreview && selected
+            ? buildNewChargeNoticeBody({
+                residentName: selected.name,
+                chargeTitle: chargeNoticePreview.title,
+                amountLabel: `$${chargeNoticePreview.amount.toFixed(2)}`,
+                propertyLabel: selected.propertyLabel,
+              })
+            : ""
+        }
+        confirmLabel="Add charge & send notice"
+        confirmLabelWithoutMessage="Add charge only"
+        confirmBusy={chargeNoticeBusy}
+        confirmBusyLabel="Adding…"
+        onConfirm={(skipMessage) => void confirmChargeNotice(skipMessage)}
+      />
+
+      <PortalNotificationPreviewModal
         open={welcomePreviewFor !== null}
         title="Email account setup — preview"
         onClose={() => setWelcomePreviewFor(null)}
-      >
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{welcomePreviewFor?.email}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{RESIDENT_WELCOME_EMAIL_SUBJECT}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-              {welcomePreviewContent}
-            </pre>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setWelcomePreviewFor(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={welcomeEmailBusyForResident === welcomePreviewFor?.id}
-              onClick={() => {
-                if (!welcomePreviewFor) return;
-                const res = welcomePreviewFor;
-                setWelcomePreviewFor(null);
-                void sendResidentAccountEmail(res);
-              }}
-            >
-              {welcomeEmailBusyForResident === welcomePreviewFor?.id ? "Sending…" : "Send email"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        recipient={welcomePreviewFor?.email ?? ""}
+        subject={RESIDENT_WELCOME_EMAIL_SUBJECT}
+        body={welcomePreviewContent}
+        confirmLabel="Send email"
+        confirmLabelWithoutMessage="Close without sending"
+        confirmBusy={welcomePreviewFor !== null && welcomeEmailBusyForResident === welcomePreviewFor.id}
+        confirmBusyLabel="Sending…"
+        onConfirm={(skipMessage) => {
+          if (!welcomePreviewFor) return;
+          if (skipMessage) {
+            setWelcomePreviewFor(null);
+            return;
+          }
+          const res = welcomePreviewFor;
+          setWelcomePreviewFor(null);
+          void sendResidentAccountEmail(res);
+        }}
+      />
 
-      <Modal
+      <PortalNotificationPreviewModal
         open={reminderPreview !== null}
         title="Payment reminder — preview"
         onClose={() => setReminderPreview(null)}
-      >
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{reminderPreview?.res.email}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{reminderPreview?.subject}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-              {reminderPreview?.body}
-            </pre>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setReminderPreview(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={reminderBusy}
-              onClick={() => {
-                if (!reminderPreview) return;
-                void doSendPaymentReminder(reminderPreview.res, reminderPreview.subject, reminderPreview.body);
-              }}
-            >
-              {reminderBusy ? "Sending…" : "Send reminder"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        recipient={reminderPreview?.res.email ?? ""}
+        subject={reminderPreview?.subject ?? ""}
+        body={reminderPreview?.body ?? ""}
+        confirmLabel="Send reminder"
+        confirmLabelWithoutMessage="Close without sending"
+        confirmBusy={reminderBusy}
+        confirmBusyLabel="Sending…"
+        onConfirm={(skipMessage) => {
+          if (!reminderPreview) return;
+          if (skipMessage) {
+            setReminderPreview(null);
+            return;
+          }
+          void doSendPaymentReminder(reminderPreview.res, reminderPreview.subject, reminderPreview.body);
+        }}
+      />
 
-      <Modal
+      <PortalNotificationPreviewModal
+        open={leaseSentPreview !== null}
+        title="Send lease to resident — preview"
+        onClose={() => setLeaseSentPreview(null)}
+        recipient={leaseSentPreview?.recipient ?? ""}
+        subject={leaseSentPreview?.subject ?? ""}
+        body={leaseSentPreview?.body ?? ""}
+        footerNote="The lease will be released to the resident portal after you confirm. This message is delivered to Axis inbox and email."
+        confirmLabel="Send lease & notification"
+        confirmLabelWithoutMessage="Send lease only"
+        confirmBusy={leaseSendBusy}
+        confirmBusyLabel="Sending…"
+        onConfirm={(skipMessage) => void confirmSendLeaseToResident(skipMessage)}
+      />
+
+      <PortalNotificationPreviewModal
         open={leaseReminderPreview !== null}
         title="Lease signing reminder — preview"
         onClose={() => setLeaseReminderPreview(null)}
-      >
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-            <p className="text-sm text-slate-900">{leaseReminderPreview?.recipient}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-            <p className="text-sm text-slate-900">{leaseReminderPreview?.subject}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
-            <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-              {leaseReminderPreview?.body}
-            </pre>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setLeaseReminderPreview(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={leaseReminderBusy}
-              onClick={() => {
-                if (!leaseReminderPreview) return;
-                const preview = leaseReminderPreview;
-                setLeaseReminderPreview(null);
-                void sendLeaseSigningReminder(preview.res, preview.leaseId, preview.subject, preview.body);
-              }}
-            >
-              {leaseReminderBusy ? "Sending…" : "Send reminder"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        recipient={leaseReminderPreview?.recipient ?? ""}
+        subject={leaseReminderPreview?.subject ?? ""}
+        body={leaseReminderPreview?.body ?? ""}
+        confirmLabel="Send reminder"
+        confirmLabelWithoutMessage="Close without sending"
+        confirmBusy={leaseReminderBusy}
+        confirmBusyLabel="Sending…"
+        onConfirm={(skipMessage) => {
+          if (!leaseReminderPreview) return;
+          if (skipMessage) {
+            setLeaseReminderPreview(null);
+            return;
+          }
+          const preview = leaseReminderPreview;
+          setLeaseReminderPreview(null);
+          void sendLeaseSigningReminder(preview.res, preview.leaseId, preview.subject, preview.body);
+        }}
+      />
 
       <Modal open={messageOpen} title="Message resident" onClose={() => setMessageOpen(false)}>
         <div className="space-y-3">

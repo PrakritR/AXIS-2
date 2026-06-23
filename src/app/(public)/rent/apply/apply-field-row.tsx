@@ -9,6 +9,7 @@ export function ApplyFieldRow({
   className = "",
   optional = false,
   labelClassName = "text-xs font-semibold text-slate-800",
+  fieldKey,
 }: {
   label: ReactNode;
   hint?: string;
@@ -18,6 +19,7 @@ export function ApplyFieldRow({
   optional?: boolean;
   /** e.g. larger text for long signer questions */
   labelClassName?: string;
+  fieldKey?: string;
 }) {
   return (
     <div
@@ -30,7 +32,7 @@ export function ApplyFieldRow({
         </div>
         {hint ? <p className="mt-1 text-[11px] leading-snug text-slate-400">{hint}</p> : null}
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0" data-wizard-field={fieldKey}>
         {children}
         {error ? (
           <p className="mt-2 flex items-start gap-1.5 text-sm text-red-600">

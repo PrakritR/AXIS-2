@@ -1,4 +1,3 @@
-import { PublicNavbar } from "@/components/layout/public-navbar";
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
@@ -11,7 +10,6 @@ export default async function ManagerLayout({ children }: { children: React.Reac
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <AccountLinksSync />
-      <PublicNavbar />
       <div className="shrink-0">
         <PortalTopBanners
           planHref="/portal/plan"

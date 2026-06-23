@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     const role = String(profile.role ?? "").toLowerCase();
     if (role !== "manager" && role !== "owner") {
       return NextResponse.json(
-        { ok: false, error: "This account is not eligible for linking (must be a manager or owner workspace)." },
+        { ok: false, error: "This account is not eligible for co-manager linking (must be a property portal manager)." },
         { status: 400 },
       );
     }

@@ -6,7 +6,7 @@
 
 import { type ManagerLeaseBucket } from "@/data/demo-portal";
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
-import { effectiveApplicationForRow, readManagerApplicationRows, signedRentLabelForRow } from "@/lib/manager-applications-storage";
+import { effectiveApplicationForRow, enrichApplicationForLease, readManagerApplicationRows, signedRentLabelForRow } from "@/lib/manager-applications-storage";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
@@ -450,11 +450,11 @@ function leaseAgreementKey(row: Pick<LeasePipelineRow, "axisId" | "residentEmail
   return row.axisId?.trim() || `${row.residentEmail.trim().toLowerCase()}::${row.propertyId ?? ""}::${row.roomChoice ?? ""}`;
 }
 
-function findRawLeaseRowIndex(rowId: string): number {
-  const raw = readRaw() ?? [];
+function findRawLeaseRowIndex(rowId: string, managerUserId?: string | null): number {
+  const raw = materializeLeasePipeline(managerUserId);
   const directIdx = raw.findIndex((r) => r.id === rowId);
   if (directIdx !== -1) return directIdx;
-  const logicalRow = readLeasePipeline().find((r) => r.id === rowId);
+  const logicalRow = raw.find((r) => r.id === rowId) ?? readLeasePipeline(managerUserId).find((r) => r.id === rowId);
   if (!logicalRow) return -1;
   const logicalKey = leaseAgreementKey(logicalRow);
   const matches = raw
@@ -472,6 +472,8 @@ function findRawLeaseRowIndex(rowId: string): number {
   return matches[0]!.idx;
 }
 
+export type LeasePipelineActionResult = { ok: true } | { ok: false; error: string };
+
 function persistLeaseRowToServer(row: LeasePipelineRow) {
   if (!canUseStorage()) return;
   void fetch("/api/portal-lease-pipeline", {
@@ -480,6 +482,21 @@ function persistLeaseRowToServer(row: LeasePipelineRow) {
     credentials: "include",
     body: JSON.stringify({ action: "upsert", row }),
   }).catch(() => undefined);
+}
+
+async function persistLeaseRowToServerAwait(row: LeasePipelineRow): Promise<boolean> {
+  if (!canUseStorage()) return false;
+  try {
+    const res = await fetch("/api/portal-lease-pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "upsert", row }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: string | null): LeasePipelineRow[] {
@@ -550,7 +567,7 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       managerUserId: seeded.managerUserId ?? managerUserId ?? current.managerUserId ?? null,
       roomChoice: seeded.roomChoice,
       signedRentLabel: seeded.signedRentLabel,
-      application: effectiveApplicationForRow(app),
+      application: enrichApplicationForLease(app, effectiveApplicationForRow(app), current.application),
     });
     if (JSON.stringify(merged) !== JSON.stringify(current)) {
       next[idx] = merged;
@@ -579,20 +596,34 @@ function enrichFromApplications(rows: LeasePipelineRow[]): LeasePipelineRow[] {
       managerUserId: app.managerUserId ?? r.managerUserId ?? null,
       roomChoice: app.assignedRoomChoice?.trim() || app.application?.roomChoice1?.trim() || r.roomChoice,
       signedRentLabel: signedRentLabelForRow(app) ?? r.signedRentLabel,
-      application: effectiveApplicationForRow(app),
-      residentName: app.name || r.residentName,
+      application: enrichApplicationForLease(app, effectiveApplicationForRow(app), r.application),
+      residentName: app.name?.trim() || r.residentName,
+      residentEmail: app.email?.trim().toLowerCase() || r.residentEmail,
     };
   });
 }
 
+function computeLeasePipelineRows(managerUserId?: string | null): LeasePipelineRow[] {
+  ensureLeasePipelineScope(managerUserId);
+  hydrateLeasePipelineFromSession(managerUserId);
+  const stored = memoryRows.map(normalizeLeasePipelineRow);
+  const rows = enrichFromApplications(stored);
+  const merged = dedupeLeasePipelineRows(syncApprovedApplications(rows, managerUserId));
+  return filterLeasesForManager(merged, managerUserId);
+}
+
+/** Persist application-seeded / merged rows so mutations can update raw storage. */
+function materializeLeasePipeline(managerUserId?: string | null): LeasePipelineRow[] {
+  const merged = computeLeasePipelineRows(managerUserId);
+  if (!leaseRowsChanged(memoryRows, merged)) return merged;
+  memoryRows = merged;
+  persistLeasePipelineToSession(merged, managerUserId ?? activeLeasePipelineScopeUserId);
+  return merged;
+}
+
 export function readLeasePipeline(managerUserId?: string | null): LeasePipelineRow[] {
   try {
-    ensureLeasePipelineScope(managerUserId);
-    let stored = readRaw(managerUserId) ?? [];
-    stored = stored.map(normalizeLeasePipelineRow);
-    const rows = enrichFromApplications(stored);
-    const merged = dedupeLeasePipelineRows(syncApprovedApplications(rows, managerUserId));
-    return filterLeasesForManager(merged, managerUserId);
+    return computeLeasePipelineRows(managerUserId);
   } catch {
     memoryRows = [];
     return [];
@@ -815,8 +846,8 @@ export function updateLeasePipelineRow(id: string, patch: Partial<LeasePipelineR
   });
   nextRow.stageLabel = patch.stageLabel ?? stageLabelForStatus(nextRow.status ?? workflowStatusForRow(nextRow));
   nextRow.currentActorRole = patch.currentActorRole ?? currentActorForStatus(nextRow.status ?? workflowStatusForRow(nextRow));
-  const raw = [...(readRaw(managerUserId) ?? [])];
-  const rawIdx = raw.findIndex((r) => r.id === id);
+  const raw = [...materializeLeasePipeline(managerUserId)];
+  const rawIdx = findRawLeaseRowIndex(id, managerUserId);
   if (rawIdx === -1) return false;
   raw[rawIdx] = nextRow;
   write(raw, managerUserId);
@@ -851,12 +882,20 @@ export function appendLeaseThreadMessage(
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
   };
-  const raw = [...(readRaw(managerUserId) ?? [])];
-  const rawIdx = raw.findIndex((r) => r.id === id);
+  const raw = [...materializeLeasePipeline(managerUserId)];
+  const rawIdx = findRawLeaseRowIndex(id, managerUserId);
   if (rawIdx === -1) return false;
   raw[rawIdx] = nextRow;
   write(raw, managerUserId);
   return true;
+}
+
+function applicationSnapshotForLeaseRow(row: LeasePipelineRow): Partial<RentalWizardFormState> | undefined {
+  if (!row.application || !Object.keys(row.application).length) return undefined;
+  if (!row.axisId) return row.application;
+  const appRow = readManagerApplicationRows().find((a) => a.id === row.axisId);
+  if (!appRow?.application) return row.application;
+  return enrichApplicationForLease(appRow, effectiveApplicationForRow(appRow), row.application);
 }
 
 export function generateLeaseHtmlForRow(
@@ -869,7 +908,7 @@ export function generateLeaseHtmlForRow(
   if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
     return { ok: false, error: "This lease can no longer be regenerated after signatures. Void/restart it first." };
   }
-  const app = row.application;
+  const app = applicationSnapshotForLeaseRow(row);
   if (!app || !Object.keys(app).length) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
@@ -884,6 +923,7 @@ export function generateLeaseHtmlForRow(
   const ok = updateLeasePipelineRow(
     rowId,
     {
+      application: app,
       generatedHtml: html,
       managerUploadedPdf: null,
       generatedAtIso: new Date().toISOString(),
@@ -899,20 +939,80 @@ export function generateLeaseHtmlForRow(
 }
 
 /**
+ * Persist enriched application snapshots (phone, email, DOB, name) from linked application records.
+ */
+export function refreshAllLeaseApplicationSnapshots(managerUserId?: string | null): number {
+  const raw = [...materializeLeasePipeline(managerUserId)];
+  const apps = readManagerApplicationRows();
+  let refreshed = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const row = raw[i]!;
+    if (!row.axisId) continue;
+    const app = apps.find((a) => a.id === row.axisId);
+    if (!app?.application) continue;
+    const enrichedApp = enrichApplicationForLease(app, effectiveApplicationForRow(app), row.application);
+    const nextRow = normalizeLeasePipelineRow({
+      ...row,
+      application: enrichedApp,
+      residentName: app.name?.trim() || row.residentName,
+      residentEmail: app.email?.trim().toLowerCase() || row.residentEmail,
+    });
+    if (JSON.stringify(nextRow.application) === JSON.stringify(row.application) &&
+        nextRow.residentName === row.residentName &&
+        nextRow.residentEmail === row.residentEmail) {
+      continue;
+    }
+    raw[i] = nextRow;
+    refreshed++;
+  }
+  if (refreshed > 0) write(raw, managerUserId);
+  return refreshed;
+}
+
+/**
  * Regenerates lease HTML for every row that has application data.
  * Returns a summary of how many rows were updated vs skipped.
  */
-export function regenerateAllLeaseHtml(managerUserId?: string | null): { updated: number; skipped: number } {
+export function regenerateAllLeaseHtml(managerUserId?: string | null): {
+  updated: number;
+  skipped: number;
+  snapshotsRefreshed: number;
+} {
+  const snapshotsRefreshed = refreshAllLeaseApplicationSnapshots(managerUserId);
   const rows = readLeasePipeline(managerUserId);
   let updated = 0;
   let skipped = 0;
   for (const row of rows) {
-    if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
+    if (row.status === "Voided") {
       skipped++;
       continue;
     }
-    const app = row.application;
+    const app = applicationSnapshotForLeaseRow(row);
     if (!app || !Object.keys(app).length) {
+      skipped++;
+      continue;
+    }
+    const signed = row.status === "Fully Signed" || hasBothLeaseSignatures(row);
+    if (signed) {
+      try {
+        const ctx = leaseContextFromApplication(app as RentalWizardFormState);
+        const html = buildAiGeneratedLeaseHtml(ctx);
+        updateLeasePipelineRow(
+          row.id,
+          {
+            application: app,
+            generatedHtml: html,
+            generatedAtIso: new Date().toISOString(),
+          },
+          managerUserId,
+        );
+        updated++;
+      } catch {
+        skipped++;
+      }
+      continue;
+    }
+    if (hasAnyLeaseSignature(row)) {
       skipped++;
       continue;
     }
@@ -938,7 +1038,7 @@ export function regenerateAllLeaseHtml(managerUserId?: string | null): { updated
       skipped++;
     }
   }
-  return { updated, skipped };
+  return { updated, skipped, snapshotsRefreshed };
 }
 
 export function downloadLeaseFromRow(row: LeasePipelineRow): void {
@@ -992,7 +1092,7 @@ export function managerUploadLeasePdf(
       return;
     }
     const rows = [...(readRaw(managerUserId) ?? readLeasePipeline(managerUserId))];
-    const idx = findRawLeaseRowIndex(rowId);
+    const idx = findRawLeaseRowIndex(rowId, managerUserId);
     const row = idx === -1 ? null : rows[idx]!;
     if (!leaseAccessibleToManager(row, managerUserId) || !String(row.residentEmail ?? "").trim()) {
       resolve({ ok: false, error: "Missing resident email on lease row." });
@@ -1233,16 +1333,26 @@ export function residentSendLeaseToManager(email: string): boolean {
   return true;
 }
 
-export function sendLeaseToResident(rowId: string, managerUserId?: string | null): boolean {
-  const rows = [...(readRaw(managerUserId) ?? readLeasePipeline(managerUserId))];
-  const idx = findRawLeaseRowIndex(rowId);
-  if (idx === -1) return false;
-  const row = rows[idx]!;
-  if (!leaseAccessibleToManager(row, managerUserId)) return false;
-  if (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl) return false;
-  if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) return false;
+export async function sendLeaseToResident(rowId: string, managerUserId?: string | null): Promise<LeasePipelineActionResult> {
+  const logical = readLeasePipeline(managerUserId).find((r) => r.id === rowId);
+  if (!logical || !leaseAccessibleToManager(logical, managerUserId)) {
+    return { ok: false, error: "Lease not found." };
+  }
+  if (!logical.generatedHtml && !logical.managerUploadedPdf?.dataUrl) {
+    return { ok: false, error: "Generate or upload a lease document first." };
+  }
+  if (logical.status === "Fully Signed" || logical.status === "Voided") {
+    return { ok: false, error: "This lease is already finalized." };
+  }
+  if (hasAnyLeaseSignature(logical)) {
+    return { ok: false, error: "This lease already has signatures and cannot be re-sent." };
+  }
+  const raw = [...materializeLeasePipeline(managerUserId)];
+  const idx = findRawLeaseRowIndex(rowId, managerUserId);
+  if (idx === -1) return { ok: false, error: "Lease record could not be saved locally." };
+  const row = raw[idx]!;
   const iso = new Date().toISOString();
-  rows[idx] = normalizeLeasePipelineRow({
+  const updated = normalizeLeasePipelineRow({
     ...row,
     bucket: "resident",
     status: "Resident Signature Pending",
@@ -1255,21 +1365,28 @@ export function sendLeaseToResident(rowId: string, managerUserId?: string | null
     signatureName: null,
     signedAtIso: null,
   });
-  write(rows, managerUserId);
-  return true;
+  raw[idx] = updated;
+  write(raw, managerUserId);
+  const persisted = await persistLeaseRowToServerAwait(updated);
+  if (!persisted) {
+    return { ok: false, error: "Lease could not be saved to the server. Check your connection and try again." };
+  }
+  return { ok: true };
 }
 
-export function sendLeaseToAdminReview(rowId: string, managerUserId?: string | null): boolean {
+export function sendLeaseToAdminReview(rowId: string, managerUserId?: string | null): LeasePipelineActionResult {
   const rows = readLeasePipeline(managerUserId);
   const idx = rows.findIndex((r) => r.id === rowId);
-  if (idx === -1) return false;
+  if (idx === -1) return { ok: false, error: "Lease not found." };
   const row = rows[idx]!;
-  if (!leaseAccessibleToManager(row, managerUserId)) return false;
-  if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) return false;
+  if (!leaseAccessibleToManager(row, managerUserId)) return { ok: false, error: "Lease not found." };
+  if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
+    return { ok: false, error: "This lease can no longer be sent for admin review." };
+  }
   const iso = new Date().toISOString();
-  const raw = [...(readRaw(managerUserId) ?? [])];
-  const rawIdx = raw.findIndex((r) => r.id === rowId);
-  if (rawIdx === -1) return false;
+  const raw = [...materializeLeasePipeline(managerUserId)];
+  const rawIdx = findRawLeaseRowIndex(rowId, managerUserId);
+  if (rawIdx === -1) return { ok: false, error: "Lease record could not be saved locally." };
   raw[rawIdx] = normalizeLeasePipelineRow({
     ...row,
     bucket: "admin",
@@ -1280,20 +1397,22 @@ export function sendLeaseToAdminReview(rowId: string, managerUserId?: string | n
     updated: formatUpdatedLabel(iso),
   });
   write(raw, managerUserId);
-  return true;
+  return { ok: true };
 }
 
-export function sendLeaseBackToManager(rowId: string, managerUserId?: string | null): boolean {
+export function sendLeaseBackToManager(rowId: string, managerUserId?: string | null): LeasePipelineActionResult {
   const rows = readLeasePipeline(managerUserId);
   const idx = rows.findIndex((r) => r.id === rowId);
-  if (idx === -1) return false;
+  if (idx === -1) return { ok: false, error: "Lease not found." };
   const row = rows[idx]!;
-  if (!leaseAccessibleToManager(row, managerUserId)) return false;
-  if (row.status === "Fully Signed" || row.status === "Voided") return false;
+  if (!leaseAccessibleToManager(row, managerUserId)) return { ok: false, error: "Lease not found." };
+  if (row.status === "Fully Signed" || row.status === "Voided") {
+    return { ok: false, error: "This lease is already finalized." };
+  }
   const iso = new Date().toISOString();
-  const raw = [...(readRaw(managerUserId) ?? [])];
-  const rawIdx = raw.findIndex((r) => r.id === rowId);
-  if (rawIdx === -1) return false;
+  const raw = [...materializeLeasePipeline(managerUserId)];
+  const rawIdx = findRawLeaseRowIndex(rowId, managerUserId);
+  if (rawIdx === -1) return { ok: false, error: "Lease record could not be saved locally." };
   raw[rawIdx] = normalizeLeasePipelineRow({
     ...row,
     bucket: "manager",
@@ -1303,5 +1422,5 @@ export function sendLeaseBackToManager(rowId: string, managerUserId?: string | n
     updated: formatUpdatedLabel(iso),
   });
   write(raw, managerUserId);
-  return true;
+  return { ok: true };
 }

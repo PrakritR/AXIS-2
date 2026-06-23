@@ -15,14 +15,6 @@ export default function HomePage() {
 
       <div className="relative px-4 pb-24 pt-14 sm:pb-28 sm:pt-24 md:pt-28">
         <div className="mx-auto max-w-5xl text-center">
-          {/* Eyebrow */}
-          <div className="animate-fade-up mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.07] px-3 py-1.5 sm:mb-6 sm:px-4">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-            <span className="text-xs font-semibold tracking-wide text-primary sm:text-[13px]">
-              Axis · Rooms for rent
-            </span>
-          </div>
-
           {/* Headline */}
           <h1
             className="animate-fade-up mx-auto max-w-3xl text-[2.25rem] font-semibold leading-[1.1] text-slate-950 sm:text-[3.75rem] sm:leading-[1.08] md:text-[4.5rem]"

@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { formatPacificDateTime } from "@/lib/pacific-time";
-import { readInboxMessages } from "@/lib/demo-admin-partner-inbox";
+import { readInboxMessages, syncInboxMessagesFromServer } from "@/lib/demo-admin-partner-inbox";
 import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
-import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
+import { adminKpiCounts, readAdminPropertyRows } from "@/lib/demo-admin-property-inventory";
 import {
   getPartnerInquiryWindows,
   pendingInquiryCount,
@@ -15,10 +15,17 @@ import {
   syncScheduleRecordsFromServer,
 } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
-import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import { LEASE_PIPELINE_EVENT, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
+import { PROPERTY_PIPELINE_EVENT, syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import {
+  LEASE_PIPELINE_EVENT,
+  readLeasePipeline,
+  syncLeasePipelineFromServer,
+} from "@/lib/lease-pipeline-storage";
+import { syncHouseholdChargesFromServer } from "@/lib/household-charges";
+import { readBugFeedbackRows, syncBugFeedbackFromServer } from "@/lib/portal-bug-feedback";
+import { countBugFeedbackTabs } from "@/lib/portal-bug-feedback-utils";
 
-type PortalCounts = { managers: number; residents: number; owners: number };
+type PortalCounts = { managers: number; residents: number };
 
 function fmt(iso: string) {
   const d = new Date(iso);
@@ -73,10 +80,23 @@ function Tile({
   );
 }
 
+function SectionHeader({ title, href, linkLabel }: { title: string; href?: string; linkLabel?: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">{title}</h2>
+      {href && linkLabel ? (
+        <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
+          {linkLabel}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 export function AdminDashboard() {
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
-  const [counts, setCounts] = useState<PortalCounts>({ managers: 0, residents: 0, owners: 0 });
+  const [counts, setCounts] = useState<PortalCounts>({ managers: 0, residents: 0 });
   const [cutoffMs, setCutoffMs] = useState(() => Date.now() - 30 * 60 * 1000);
 
   const loadCounts = useCallback(async () => {
@@ -84,7 +104,9 @@ export function AdminDashboard() {
       const res = await fetch("/api/admin/portal-users");
       const body = (await res.json()) as { counts?: PortalCounts };
       if (res.ok && body.counts) setCounts(body.counts);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   useEffect(() => {
@@ -93,38 +115,54 @@ export function AdminDashboard() {
   }, [loadCounts]);
 
   useEffect(() => {
+    let cancelled = false;
+
     void Promise.allSettled([
       syncScheduleRecordsFromServer(),
       syncLeasePipelineFromServer(null),
+      syncPropertyPipelineFromServer(),
+      syncInboxMessagesFromServer({ force: true }),
+      syncBugFeedbackFromServer({ force: true }),
     ]).then(() => {
+      if (cancelled) return;
       setCutoffMs(Date.now() - 30 * 60 * 1000);
       bump();
     });
+
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
     window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener(ADMIN_UI_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
+      cancelled = true;
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
       window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
       window.removeEventListener(ADMIN_UI_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
-   
   }, []);
 
   const data = useMemo(() => {
     void tick;
-    const [p0, , p2] = adminKpiCounts();
-    const pendingProps = p0;
-    const listedProps = p2;
-    const totalProps = p0 + p2;
+    const [pendingProps, , listedProps] = adminKpiCounts();
+    const totalProps = pendingProps + listedProps;
 
-    const [managerBucket, adminBucket, residentBucket, signedBucket] = adminLeaseKpiCounts();
-    const totalLeases = managerBucket + adminBucket + residentBucket + signedBucket;
+    const [, adminBucket] = adminLeaseKpiCounts();
     const leasesInAdminReview = adminBucket;
+    const adminReviewLeases = readLeasePipeline()
+      .filter((row) => row.bucket === "admin")
+      .slice(0, 5);
 
-    const inboxUnread = readInboxMessages().filter((m) => m.folder === "inbox" && !m.read).length;
+    const pendingPropertyRows = readAdminPropertyRows(0).slice(0, 5);
+
+    const inboxMessages = readInboxMessages();
+    const inboxUnread = inboxMessages.filter((m) => m.folder === "inbox" && !m.read).length;
+    const inboxPreview = inboxMessages.filter((m) => m.folder === "inbox" && !m.read).slice(0, 5);
+
+    const feedbackRows = readBugFeedbackRows();
+    const feedbackCounts = countBugFeedbackTabs(feedbackRows);
+    const openFeedbackAll = feedbackRows.filter((row) => row.status === "open" || row.status === "reviewing");
+    const openFeedback = openFeedbackAll.slice(0, 5);
 
     const pendingMeetings = readPartnerInquiries()
       .filter((r) => r.status === "pending" && r.kind !== "tour")
@@ -152,47 +190,54 @@ export function AdminDashboard() {
       .filter((m) => Number.isFinite(m.startMs) && m.startMs >= cutoffMs)
       .sort((a, b) => a.startMs - b.startMs);
 
-    const pendingTours = readPartnerInquiries()
-      .filter((r) => r.kind === "tour" && r.status === "pending")
-      .length;
+    const pendingMeetingCount = pendingInquiryCount();
+    const totalMeetings = pendingMeetingCount + readPlannedEvents().filter((e) => e.kind !== "tour").length;
 
     return {
       pendingProps,
-      listedProps,
       totalProps,
-      totalLeases,
       leasesInAdminReview,
+      adminReviewLeases,
+      pendingPropertyRows,
       inboxUnread,
+      inboxPreview,
+      feedbackCounts,
+      openFeedback,
+      openFeedbackTotal: openFeedbackAll.length,
       upcomingMeetings,
-      pendingMeetings: pendingMeetings.length,
+      pendingMeetingCount,
+      totalMeetings,
       confirmedMeetings: confirmedMeetings.filter((m) => m.startMs >= cutoffMs).length,
-      pendingTours,
-      totalEvents: pendingInquiryCount() + readPlannedEvents().filter((e) => e.kind !== "tour").length,
     };
   }, [tick, cutoffMs]);
 
   const {
     pendingProps,
     totalProps,
-    totalLeases,
     leasesInAdminReview,
+    adminReviewLeases,
+    pendingPropertyRows,
     inboxUnread,
+    inboxPreview,
+    feedbackCounts,
+    openFeedback,
+    openFeedbackTotal,
     upcomingMeetings,
-    pendingMeetings,
+    pendingMeetingCount,
+    totalMeetings,
     confirmedMeetings,
-    pendingTours,
-    totalEvents,
   } = data;
 
-  const nextMeeting = upcomingMeetings[0] ?? null;
-  const totalUsers = counts.managers + counts.residents + counts.owners;
+  const totalUsers = counts.managers + counts.residents;
+  const openFeedbackCount = openFeedbackTotal;
+  const hasBanners =
+    pendingProps > 0 || leasesInAdminReview > 0 || inboxUnread > 0 || pendingMeetingCount > 0 || openFeedbackCount > 0;
 
   return (
     <div className={`${PORTAL_SECTION_SURFACE} space-y-5`}>
       <h1 className="text-[1.75rem] font-bold tracking-[-0.02em] text-slate-900">Dashboard</h1>
 
-      {/* ── Action-required banners ── */}
-      {(pendingProps > 0 || leasesInAdminReview > 0 || inboxUnread > 0 || pendingMeetings > 0 || pendingTours > 0) && (
+      {hasBanners && (
         <div className="space-y-2">
           {pendingProps > 0 && (
             <NotifBanner tone="amber">
@@ -200,7 +245,7 @@ export function AdminDashboard() {
                 <span className="font-semibold">{pendingProps}</span> propert{pendingProps === 1 ? "y" : "ies"} pending your approval
               </span>
               <Link href="/admin/properties" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Review →
+                Properties →
               </Link>
             </NotifBanner>
           )}
@@ -210,7 +255,7 @@ export function AdminDashboard() {
                 <span className="font-semibold">{leasesInAdminReview}</span> lease{leasesInAdminReview === 1 ? "" : "s"} in admin review
               </span>
               <Link href="/admin/leases" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Review →
+                Leases →
               </Link>
             </NotifBanner>
           )}
@@ -220,34 +265,33 @@ export function AdminDashboard() {
                 <span className="font-semibold">{inboxUnread}</span> unread message{inboxUnread === 1 ? "" : "s"} in admin inbox
               </span>
               <Link href="/admin/inbox/unopened" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Open inbox →
+                Inbox →
               </Link>
             </NotifBanner>
           )}
-          {pendingTours > 0 && (
-            <NotifBanner tone="amber">
-              <span>
-                <span className="font-semibold">{pendingTours}</span> pending tour request{pendingTours === 1 ? "" : "s"} awaiting confirmation
-              </span>
-              <Link href="/admin/events" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                View →
-              </Link>
-            </NotifBanner>
-          )}
-          {pendingMeetings > 0 && (
+          {pendingMeetingCount > 0 && (
             <NotifBanner tone="blue">
               <span>
-                <span className="font-semibold">{pendingMeetings}</span> meeting request{pendingMeetings === 1 ? "" : "s"} need confirmation
+                <span className="font-semibold">{pendingMeetingCount}</span> meeting request{pendingMeetingCount === 1 ? "" : "s"} need confirmation
               </span>
               <Link href="/admin/events" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Confirm →
+                Meetings →
+              </Link>
+            </NotifBanner>
+          )}
+          {openFeedbackCount > 0 && (
+            <NotifBanner tone="rose">
+              <span>
+                <span className="font-semibold">{openFeedbackCount}</span> open bug{openFeedbackCount === 1 ? "" : "s"} or feedback item{openFeedbackCount === 1 ? "" : "s"} to review
+              </span>
+              <Link href="/admin/bugs-feedback/bugs" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
+                Feedback →
               </Link>
             </NotifBanner>
           )}
         </div>
       )}
 
-      {/* ── KPI tiles ── */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Tile
           label="Properties"
@@ -257,46 +301,117 @@ export function AdminDashboard() {
           urgent={pendingProps > 0}
         />
         <Tile
-          label="Leases"
-          value={totalLeases}
-          sub={leasesInAdminReview > 0 ? `${leasesInAdminReview} in admin review` : undefined}
-          href="/admin/leases"
-          urgent={leasesInAdminReview > 0}
-        />
-        <Tile
           label="Total users"
           value={totalUsers}
-          sub={`${counts.managers}M · ${counts.residents}R · ${counts.owners}O`}
+          sub={`${counts.managers} managers · ${counts.residents} residents`}
           href="/admin/axis-users"
         />
         <Tile
-          label="Managers"
-          value={counts.managers}
-          href="/admin/axis-users"
-        />
-        <Tile
-          label="Residents"
-          value={counts.residents}
-          href="/admin/axis-users"
-        />
-        <Tile
-          label="Calendar events"
-          value={totalEvents}
-          sub={`${pendingMeetings} pending · ${confirmedMeetings} confirmed`}
+          label="Meetings"
+          value={totalMeetings}
+          sub={`${pendingMeetingCount} pending · ${confirmedMeetings} confirmed`}
           href="/admin/events"
-          urgent={pendingMeetings > 0}
+          urgent={pendingMeetingCount > 0}
         />
       </div>
 
-      {/* ── Upcoming meetings ── */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <SectionHeader title="Properties pending review" href="/admin/properties" linkLabel="Properties →" />
+          {pendingPropertyRows.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-400">No properties waiting for admin review.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {pendingPropertyRows.map((row) => (
+                <li key={row.adminRefId} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {row.buildingName || row.unitLabel || "Listing"}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">{row.address || row.neighborhood || "Pending submission"}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                    Review
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <SectionHeader title="Leases in admin review" href="/admin/leases" linkLabel="Leases →" />
+          {adminReviewLeases.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-400">No leases waiting for admin review.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {adminReviewLeases.map((row) => (
+                <li key={row.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{row.residentName || row.residentEmail}</p>
+                    <p className="truncate text-xs text-slate-500">
+                      {row.unit || row.stageLabel || "Unit pending"} · {row.signedRentLabel || "Rent pending"}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-violet-100 px-2.5 py-0.5 text-[10px] font-semibold text-violet-800">
+                    Admin review
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <SectionHeader title="Inbox" href="/admin/inbox/unopened" linkLabel="Inbox →" />
+          {inboxUnread === 0 ? (
+            <p className="mt-4 text-sm text-slate-400">No unread messages — inbox is clear.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {inboxPreview.map((message) => (
+                <li key={message.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{message.name || message.email}</p>
+                    <p className="truncate text-xs text-slate-500">{message.topic || message.body.slice(0, 80)}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">
+                    Unread
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <SectionHeader title="Feedback" href="/admin/bugs-feedback/bugs" linkLabel="Feedback →" />
+          {openFeedback.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-400">
+              No open bugs or feedback — {feedbackCounts.bugs} bug{feedbackCounts.bugs === 1 ? "" : "s"} and {feedbackCounts.feedback} feedback item{feedbackCounts.feedback === 1 ? "" : "s"} on file.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {openFeedback.map((row) => (
+                <li key={row.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{row.title || "Untitled report"}</p>
+                    <p className="truncate text-xs text-slate-500">
+                      {row.reporterName || row.reporterEmail} · {row.type === "bug" ? "Bug" : "Feedback"}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">
+                    {row.status === "reviewing" ? "Reviewing" : "Open"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
       {upcomingMeetings.length > 0 && (
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-          <div className="flex items-center justify-between">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Upcoming meetings</h2>
-            <Link href="/admin/events" className="text-xs font-semibold text-primary hover:underline underline-offset-2">
-              View all →
-            </Link>
-          </div>
+          <SectionHeader title="Upcoming meetings" href="/admin/events" linkLabel="Meetings →" />
           <ul className="mt-3 space-y-2">
             {upcomingMeetings.slice(0, 6).map((m) => (
               <li key={m.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
@@ -304,24 +419,18 @@ export function AdminDashboard() {
                   <p className="truncate text-sm font-semibold text-slate-900">{m.label}</p>
                   <p className="text-xs text-slate-500">{fmt(m.start)}</p>
                 </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
-                  m.kind === "pending"
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-emerald-100 text-emerald-800"
-                }`}>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                    m.kind === "pending" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+                  }`}
+                >
                   {m.kind === "pending" ? "Pending" : "Confirmed"}
                 </span>
               </li>
             ))}
           </ul>
-          {nextMeeting && (
-            <p className="mt-3 text-xs text-slate-500">
-              Next: <span className="font-semibold text-slate-700">{nextMeeting.label}</span> at {fmt(nextMeeting.start)}
-            </p>
-          )}
         </div>
       )}
-
     </div>
   );
 }

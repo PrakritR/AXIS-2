@@ -38,7 +38,41 @@
       "Bash(grep -E \"\\\\.\\(sql|ts|js|json\\)$\")",
       "Bash(git show *)",
       "Bash(git merge *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(awk -F= '{print NR\": \"$1}' .env)",
+      "Bash(curl -s -o /dev/null -w \"HTTP status: %{http_code}, time: %{time_total}s\\\\n\" --max-time 8 \"https://qahnczmilgptcedaqype.supabase.co/auth/v1/health\")",
+      "Bash(host qahnczmilgptcedaqype.supabase.co)",
+      "Bash(nslookup qahnczmilgptcedaqype.supabase.co)",
+      "Bash(curl -s -o /dev/null -w 'HTTP status: %{http_code}\\\\n' --max-time 8 -H 'apikey: __TRACKED_VAR__' https://qahnczmilgptcedaqype.supabase.co/auth/v1/health)",
+      "Bash(npx eslint *)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(lsof -iTCP -sTCP:LISTEN -P -n)",
+      "Bash(curl -sf http://localhost:3000 -o /dev/null -w \"port 3000: %{http_code}\\\\n\")",
+      "Bash(node -e \"require.resolve\\('playwright'\\)\")",
+      "Bash(echo \"exit:$?\")",
+      "Bash(npx --yes playwright --version)",
+      "Read(//Users/prakritramachandran/Library/Caches/ms-playwright/**)",
+      "Read(//Users/prakritramachandran/.cache/**)",
+      "Read(//tmp/**)",
+      "Bash(mkdir -p /tmp/npx-pw)",
+      "Bash(node --env-file=.env scripts/ensure-demo-manager-account.mjs verify-wizard@example.com VerifyPass123! \"Wizard Verify\")",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(node verify.mjs)",
+      "Bash(cp -r node_modules /tmp/npx-pw-modules-cache)",
+      "Bash(node verify2.mjs)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx|js\\)$\")",
+      "Bash(node inbox-verify.mjs)",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(ls -t screenshots/debug-compose-open-*.png)",
+      "Bash(git rm *)",
+      "Bash(timeout 180 npm run build)",
+      "Bash(git rev-list *)"
+    ],
+    "additionalDirectories": [
+      "/tmp/npx-pw",
+      "/private/tmp/npx-pw"
     ]
   }
 }

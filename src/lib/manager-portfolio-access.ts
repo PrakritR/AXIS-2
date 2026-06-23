@@ -12,6 +12,7 @@ import {
 } from "@/lib/demo-property-pipeline";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readProRelationships } from "@/lib/pro-relationships";
+import { hasCoManagerPermission } from "@/lib/co-manager-permissions";
 
 /** Property ids from this user's listings plus pending rows and account-link assignments. */
 export function collectAccessiblePropertyIds(userId: string): Set<string> {
@@ -101,7 +102,11 @@ export function readLinkedListingsForUser(userId: string): { listing: MockProper
       const ownerUserId = listing.managerUserId?.trim() ?? "";
       if (!ownerUserId || ownerUserId === userId) continue;
       seen.add(pid);
-      result.push({ listing, canEdit: rel.canEditListing === true, ownerUserId });
+      result.push({
+        listing,
+        canEdit: hasCoManagerPermission(rel.coManagerPermissions, "editListings") || rel.canEditListing === true,
+        ownerUserId,
+      });
     }
   }
   return result;

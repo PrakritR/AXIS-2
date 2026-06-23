@@ -3,6 +3,7 @@
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -10,9 +11,9 @@ import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
+  ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_TOOLBAR_LABEL,
-  PORTAL_TOOLBAR_SELECT,
+  PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
@@ -38,6 +39,7 @@ import {
   effectiveApplicationForRow,
   normalizeApplicationAxisId,
   readManagerApplicationRows,
+  resolveApplicationPersonalFields,
   syncManagerApplicationsFromServer,
   writeManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
@@ -49,6 +51,12 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
+import {
+  computeLeaseEndDate,
+  formatLeaseDateLabel,
+  resolvePlacementLeaseDates,
+  shouldAutoComputeLeaseEnd,
+} from "@/lib/rental-application/lease-dates";
 import {
   recordApprovedApplicationCharges,
   recordSubmittedApplicationFeeCharge,
@@ -65,6 +73,53 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import { deleteServiceRequestsForResident } from "@/lib/service-requests-storage";
 import { loadPersistedInbox, MANAGER_INBOX_STORAGE_KEY, persistInbox } from "@/lib/portal-inbox-storage";
+import {
+  RESIDENT_WELCOME_EMAIL_SUBJECT,
+  buildResidentWelcomeEmailBody,
+  residentAccountCreationUrl,
+} from "@/lib/resident-welcome-email";
+import {
+  APPLICATION_BACKGROUND_CHECK_STATUSES,
+  applicationShowsBackgroundCheck,
+  backgroundCheckStatusClassName,
+  backgroundCheckStatusLabel,
+  resolveBackgroundCheckStatus,
+} from "@/lib/application-background-check";
+
+function ApplicationBackgroundCheckStatusBadge({ row }: { row: DemoApplicantRow }) {
+  if (!applicationShowsBackgroundCheck(row)) return null;
+  const status = resolveBackgroundCheckStatus(row);
+  return (
+    <span
+      className={`mt-2 inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${backgroundCheckStatusClassName(status)}`}
+    >
+      {backgroundCheckStatusLabel(status)}
+    </span>
+  );
+}
+
+function ApplicationBackgroundCheckStatusField({ row }: { row: DemoApplicantRow }) {
+  if (!applicationShowsBackgroundCheck(row)) return null;
+  const status = resolveBackgroundCheckStatus(row);
+  return (
+    <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 sm:p-6">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Background check</p>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+        Screening status for this application. Results appear here automatically once background checks are enabled for your plan.
+      </p>
+      <label className="mt-4 block max-w-md">
+        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Status</span>
+        <Select value={status} disabled aria-readonly>
+          {APPLICATION_BACKGROUND_CHECK_STATUSES.filter((value) => value !== "not_applicable").map((value) => (
+            <option key={value} value={value}>
+              {backgroundCheckStatusLabel(value)}
+            </option>
+          ))}
+        </Select>
+      </label>
+    </div>
+  );
+}
 
 function CosignerSection({ applicationId }: { applicationId: string }) {
   const subs = readCosignerSubmissionsForSignerAppId(applicationId);
@@ -210,22 +265,39 @@ function ManagerApplicationPlacementEditor({
     otherCostAmount: string,
   ) => void;
 }) {
+  const initialDates = resolvePlacementLeaseDates({
+    leaseTerm: row.application?.leaseTerm,
+    leaseStart: row.application?.leaseStart,
+    leaseEnd: row.application?.leaseEnd,
+    rentalType: row.application?.rentalType,
+  });
   const initialPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const initialRoomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const initialSignedRent = row.signedMonthlyRent && row.signedMonthlyRent > 0 ? String(row.signedMonthlyRent) : "";
-  const initialLeaseTerm = row.application?.rentalType === "short_term" ? SHORT_TERM_LEASE_TERM : row.application?.leaseTerm?.trim() || "";
   const [propertyId, setPropertyId] = useState(initialPropertyId);
   const [roomChoice, setRoomChoice] = useState(initialRoomChoice);
   const [signedRent, setSignedRent] = useState(initialSignedRent);
-  const [leaseTerm, setLeaseTerm] = useState(initialLeaseTerm);
-  const [leaseStart, setLeaseStart] = useState(row.application?.leaseStart?.trim() || "");
-  const [leaseEnd, setLeaseEnd] = useState(row.application?.leaseEnd?.trim() || "");
+  const [leaseTerm, setLeaseTerm] = useState(initialDates.leaseTerm);
+  const [leaseStart, setLeaseStart] = useState(initialDates.leaseStart);
+  const [leaseEnd, setLeaseEnd] = useState(initialDates.leaseEnd);
   const [utilitiesOverride, setUtilitiesOverride] = useState(row.application?.managerUtilitiesOverride?.trim() || "");
   const [securityDepositOverride, setSecurityDepositOverride] = useState(row.application?.managerSecurityDepositOverride?.trim() || "");
   const [moveInFeeOverride, setMoveInFeeOverride] = useState(row.application?.managerMoveInFeeOverride?.trim() || "");
   const [otherCostLabel, setOtherCostLabel] = useState(row.application?.managerOtherCostLabel?.trim() || "");
   const [otherCostAmount, setOtherCostAmount] = useState(row.application?.managerOtherCostAmount?.trim() || "");
   const userEditedRentRef = useRef(false);
+  const userEditedLeaseEndRef = useRef(false);
+
+  useEffect(() => {
+    if (userEditedLeaseEndRef.current) return;
+    if (leaseTerm === "Month-to-Month") {
+      queueMicrotask(() => setLeaseEnd(""));
+      return;
+    }
+    if (!shouldAutoComputeLeaseEnd(leaseTerm, row.application?.rentalType) || !leaseStart) return;
+    const computed = computeLeaseEndDate(leaseStart, leaseTerm);
+    if (computed) queueMicrotask(() => setLeaseEnd(computed));
+  }, [leaseStart, leaseTerm, row.application?.rentalType]);
 
   const roomOptions = useMemo(
     () =>
@@ -365,6 +437,7 @@ function ManagerApplicationPlacementEditor({
               value={leaseTerm}
               onChange={(e) => {
                 const nextLeaseTerm = e.target.value;
+                userEditedLeaseEndRef.current = false;
                 setLeaseTerm(nextLeaseTerm);
                 if (nextLeaseTerm === "Month-to-Month") {
                   setLeaseEnd("");
@@ -385,7 +458,10 @@ function ManagerApplicationPlacementEditor({
             <input
               type="date"
               value={leaseStart}
-              onChange={(e) => setLeaseStart(e.target.value)}
+              onChange={(e) => {
+                userEditedLeaseEndRef.current = false;
+                setLeaseStart(e.target.value);
+              }}
               className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
           </label>
@@ -396,7 +472,10 @@ function ManagerApplicationPlacementEditor({
             <input
               type="date"
               value={leaseEnd}
-              onChange={(e) => setLeaseEnd(e.target.value)}
+              onChange={(e) => {
+                userEditedLeaseEndRef.current = true;
+                setLeaseEnd(e.target.value);
+              }}
               disabled={leaseTerm === "Month-to-Month"}
               className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-400 focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             />
@@ -479,8 +558,10 @@ function ManagerApplicationPlacementEditor({
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Submitted lease timing</p>
           <p className="mt-1.5 text-slate-800">
-            {row.application?.leaseStart?.trim()
-              ? `${row.application.leaseStart}${row.application?.leaseEnd?.trim() ? ` to ${row.application.leaseEnd}` : ""}`
+            {initialDates.leaseStart
+              ? `${formatLeaseDateLabel(initialDates.leaseStart)}${
+                  initialDates.leaseEnd ? ` to ${formatLeaseDateLabel(initialDates.leaseEnd)}` : ""
+                }`
               : "No lease dates submitted."}
           </p>
         </div>
@@ -539,6 +620,8 @@ function ManagerApplicationsContent() {
   const [rows, setRows] = useState<DemoApplicantRow[]>([]);
   const [portfolioTick, setPortfolioTick] = useState(0);
   const [roomSortDir, setRoomSortDir] = useState<"asc" | "desc">("asc");
+  const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
+  const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
     sync();
@@ -638,7 +721,7 @@ function ManagerApplicationsContent() {
     showToast("Refreshed.");
   }, [showToast]);
 
-  const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket) => {
+  const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
     const row = rows.find((r) => r.id === id);
     if (!row) return;
     const next = rows.map((r) =>
@@ -674,7 +757,7 @@ function ManagerApplicationsContent() {
     }
 
     let welcomeSent = false;
-    if (nextBucket === "approved" && updatedRow.email?.trim()) {
+    if (nextBucket === "approved" && updatedRow.email?.trim() && !opts?.skipWelcomeEmail) {
       const welcome = await requestResidentWelcomeEmail(updatedRow);
       welcomeSent = welcome.status === "sent";
     }
@@ -683,9 +766,11 @@ function ManagerApplicationsContent() {
     setBucket(nextBucket);
     const msg =
       nextBucket === "approved"
-        ? welcomeSent
-          ? "Application approved. A welcome email with portal setup was sent to the applicant."
-          : "Application approved."
+        ? opts?.skipWelcomeEmail
+          ? "Application approved (no setup email sent)."
+          : welcomeSent
+            ? "Application approved. A welcome email with portal setup was sent to the applicant."
+            : "Application approved."
         : nextBucket === "rejected"
           ? "Application rejected."
           : "Moved to Pending.";
@@ -820,6 +905,7 @@ function ManagerApplicationsContent() {
   };
 
   return (
+    <>
     <ManagerPortalPageShell
       title="Applications"
       titleAside={
@@ -829,27 +915,25 @@ function ManagerApplicationsContent() {
             propertyValue={propertyFilter}
             onPropertyChange={(id) => setPropertyFilter(id)}
           />
-          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
-            <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Sort room</span>
-            <select
-              value={roomSortDir}
-              onChange={(e) => setRoomSortDir(e.target.value as "asc" | "desc")}
-              className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
-            >
-              <option value="asc">A-Z</option>
-              <option value="desc">Z-A</option>
-            </select>
-          </label>
+          <PortalToolbarSortSelect
+            label="Sort room"
+            value={roomSortDir}
+            onChange={setRoomSortDir}
+            options={[
+              { value: "asc", label: "A-Z" },
+              { value: "desc", label: "Z-A" },
+            ]}
+          />
           <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={refreshTable}>
             Refresh
           </Button>
         </>
       }
       filterRow={
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
           {propertyDataLoading ? <p className="text-xs text-slate-500">Loading properties from backend…</p> : null}
-        </div>
+        </ManagerPortalFilterRow>
       }
     >
       <div className={PORTAL_DATA_TABLE_WRAP}>
@@ -887,6 +971,7 @@ function ManagerApplicationsContent() {
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
                         <p className="font-medium leading-snug text-slate-900">{row.name}</p>
                         {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{row.email}</p> : null}
+                        <ApplicationBackgroundCheckStatusBadge row={row} />
                         <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-slate-400">{row.id}</p>
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
@@ -909,7 +994,7 @@ function ManagerApplicationsContent() {
                           <PortalTableDetailActions placement="top">
                             {row.bucket === "pending" ? (
                               <>
-                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setRowBucket(row.id, "approved")}>
+                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
                                   Approve
                                 </Button>
                                 <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
@@ -980,9 +1065,8 @@ function ManagerApplicationsContent() {
                               <div className="mt-4">
                                 <ManagerApplicationReadonlyReview
                                   partial={{
-                                    fullLegalName: row.name || undefined,
-                                    email: row.email || undefined,
                                     ...(effectiveApplicationForRow(row) ?? row.application),
+                                    ...resolveApplicationPersonalFields(row),
                                   }}
                                   assignedPropertyId={row.assignedPropertyId}
                                   assignedRoomChoice={row.assignedRoomChoice}
@@ -992,6 +1076,8 @@ function ManagerApplicationsContent() {
                               </div>
                             </div>
                           ) : null}
+
+                          <ApplicationBackgroundCheckStatusField row={row} />
 
                           <div className="space-y-5 rounded-2xl border border-slate-200/70 bg-white/80 p-5 sm:p-6">
                           <ApplicantIds axisId={row.id} />
@@ -1012,5 +1098,38 @@ function ManagerApplicationsContent() {
         </div>
       </div>
     </ManagerPortalPageShell>
+      <PortalNotificationPreviewModal
+        open={approvePreviewRow !== null}
+        title="Approve application — account setup email"
+        onClose={() => setApprovePreviewRow(null)}
+        recipient={approvePreviewRow?.email ?? ""}
+        subject={RESIDENT_WELCOME_EMAIL_SUBJECT}
+        body={
+          approvePreviewRow
+            ? buildResidentWelcomeEmailBody({
+                residentName: approvePreviewRow.name || undefined,
+                axisId: approvePreviewRow.id,
+                signupUrl: residentAccountCreationUrl("", approvePreviewRow.id),
+              })
+            : ""
+        }
+        intro={
+          approvePreviewRow
+            ? `Approving ${approvePreviewRow.name || approvePreviewRow.email} will update their application status and can send their Axis resident account setup email.`
+            : undefined
+        }
+        confirmLabel="Approve & send setup email"
+        confirmLabelWithoutMessage="Approve only"
+        confirmBusy={approvePreviewRow !== null && approveBusyId === approvePreviewRow.id}
+        confirmBusyLabel="Approving…"
+        onConfirm={(skipMessage) => {
+          if (!approvePreviewRow) return;
+          const row = approvePreviewRow;
+          setApprovePreviewRow(null);
+          setApproveBusyId(row.id);
+          void setRowBucket(row.id, "approved", { skipWelcomeEmail: skipMessage }).finally(() => setApproveBusyId(null));
+        }}
+      />
+    </>
   );
 }

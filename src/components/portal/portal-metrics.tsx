@@ -57,7 +57,7 @@ export function PortalSegmentedControl<T extends string>({
   );
 }
 
-/** Primary page title in portal workspaces (aligned with Axis Property Portal dashboard). */
+/** Primary page title in portal workspaces (aligned with Axis dashboard). */
 export const PORTAL_PAGE_TITLE = "text-[2rem] font-semibold tracking-[-0.03em] text-slate-950";
 
 /** Matches admin Managers / Properties filter row (status + tier pill groups). */
@@ -293,6 +293,44 @@ export const PORTAL_TOOLBAR_SELECT =
 
 /** Shared action button sizing for page header controls. */
 export const PORTAL_HEADER_ACTION_BTN = "h-10 rounded-full px-5 text-sm font-semibold";
+
+/** Shared sort dropdown shell for portal section toolbars. */
+export function PortalToolbarSortSelect<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  ariaLabel,
+}: {
+  label: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: { value: T; label: string }[];
+  ariaLabel?: string;
+}) {
+  return (
+    <label className="inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-slate-100/70 p-1 pr-1.5">
+      <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as T)}
+        aria-label={ariaLabel ?? label}
+        className={PORTAL_TOOLBAR_SELECT}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** Standard filter row wrapper (status pills + optional sort). */
+export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
+  return <div className="flex flex-wrap items-center gap-3">{children}</div>;
+}
 
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */
 export const PORTAL_KPI_CHIP_INACTIVE =
