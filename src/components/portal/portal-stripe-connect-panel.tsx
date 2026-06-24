@@ -142,10 +142,6 @@ export function PortalStripeConnectPanel({
 
   const body = (
     <div className={`space-y-3 text-sm text-muted ${variant === "embedded" ? "" : "max-w-2xl"}`}>
-      <p className="text-sm text-muted">
-        Link your bank account through Stripe. Resident payments transfer to your bank.
-      </p>
-
       {status?.demo ? (
         <p className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
           {status.message ?? "Add Stripe keys to enable bank linking."}
@@ -165,21 +161,13 @@ export function PortalStripeConnectPanel({
         </p>
       ) : null}
 
-      {status && !status.demo ? (
-        <span
-          className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
-            ready ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-border bg-accent/30 text-muted"
-          }`}
-        >
-          {ready ? "Bank linked" : status.connected ? "Finish setup" : "Not connected"}
-        </span>
-      ) : null}
-
       {!status?.demo ? (
         <div className="rounded-2xl border border-border bg-card px-4 py-5">
           {ready ? (
-            <div className="space-y-3">
-              <p className="text-sm text-foreground">Your bank account is connected. Residents can pay you by bank transfer.</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900">
+                Bank linked
+              </span>
               <Button
                 type="button"
                 variant="outline"
@@ -191,19 +179,24 @@ export function PortalStripeConnectPanel({
               </Button>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <p className="text-sm text-foreground">
-                Complete a short Stripe form to link your bank. You&apos;ll return here when finished.
+                Link your bank through Stripe so resident payments deposit to your account.
               </p>
-              <Button
-                type="button"
-                variant="primary"
-                className="rounded-full"
-                disabled={busy}
-                onClick={() => void startConnect()}
-              >
-                {busy ? "Opening…" : "Link bank account"}
-              </Button>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="inline-flex items-center rounded-full border border-border bg-accent/30 px-3 py-1 text-xs font-semibold text-muted">
+                  {status?.connected ? "Finish setup" : "Not connected"}
+                </span>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="rounded-full"
+                  disabled={busy}
+                  onClick={() => void startConnect()}
+                >
+                  {busy ? "Opening…" : "Link bank account"}
+                </Button>
+              </div>
             </div>
           )}
         </div>

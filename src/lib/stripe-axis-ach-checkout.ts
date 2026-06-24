@@ -1,5 +1,10 @@
 import type Stripe from "stripe";
-import { axisAchPlatformFeeCents } from "@/lib/stripe-household-charge";
+import {
+  residentAxisPlatformFeeCents,
+  residentConnectApplicationFeeCents,
+  residentProcessingFeeCents,
+  type ResidentAxisPaymentMethod,
+} from "@/lib/payment-policy";
 
 export const APPLICATION_FEE_CHECKOUT_PURPOSE = "rental_application_fee";
 
@@ -29,11 +34,33 @@ export type AxisAchCheckoutInput = {
   cancelUrl?: string;
   mode: AxisAchCheckoutMode;
   destinationAccountId: string;
+  paymentMethod?: ResidentAxisPaymentMethod;
+  managerTier?: string | null;
 };
 
 export type AxisAchCheckoutResult =
-  | { mode: "embedded"; clientSecret: string; sessionId: string; platformFeeCents: number }
-  | { mode: "hosted"; url: string; sessionId: string; platformFeeCents: number };
+  | {
+      mode: "embedded";
+      clientSecret: string;
+      sessionId: string;
+      subtotalCents: number;
+      processingFeeCents: number;
+      axisFeeCents: number;
+      platformFeeCents: number;
+      totalCents: number;
+      paymentMethod: ResidentAxisPaymentMethod;
+    }
+  | {
+      mode: "hosted";
+      url: string;
+      sessionId: string;
+      subtotalCents: number;
+      processingFeeCents: number;
+      axisFeeCents: number;
+      platformFeeCents: number;
+      totalCents: number;
+      paymentMethod: ResidentAxisPaymentMethod;
+    };
 
 export function axisAchCheckoutPaid(session: Stripe.Checkout.Session): boolean {
   return session.payment_status === "paid" || session.payment_status === "no_payment_required";
@@ -43,16 +70,42 @@ export function axisAchCheckoutProcessing(session: Stripe.Checkout.Session): boo
   return session.status === "complete" && session.payment_status === "unpaid";
 }
 
+function paymentMethodStripeConfig(method: ResidentAxisPaymentMethod): {
+  payment_method_types: ("card" | "link" | "us_bank_account")[];
+  payment_method_options?: {
+    us_bank_account?: {
+      financial_connections: { permissions: ["payment_method"] };
+      verification_method: "automatic";
+    };
+  };
+} {
+  if (method === "ach") {
+    return {
+      payment_method_types: ["us_bank_account"],
+      payment_method_options: {
+        us_bank_account: {
+          financial_connections: { permissions: ["payment_method"] },
+          verification_method: "automatic",
+        },
+      },
+    };
+  }
+  if (method === "link") {
+    return { payment_method_types: ["link", "card"] };
+  }
+  return { payment_method_types: ["card"] };
+}
+
 /**
- * Creates a Stripe Checkout Session for US bank account (ACH) Connect destination charges.
- * Used only for resident portal payments (rent, utilities, application fees) — not manager subscriptions.
- * Property managers must have ACH enabled in their Stripe Dashboard payment method settings.
+ * Creates a Stripe Checkout Session for Connect destination charges.
+ * Used for resident portal payments (rent, utilities, application fees) — not manager subscriptions.
  */
 export async function createAxisAchCheckoutSession(
   stripe: Stripe,
   input: AxisAchCheckoutInput,
 ): Promise<AxisAchCheckoutResult> {
-  const lineItems =
+  const paymentMethod = input.paymentMethod ?? "ach";
+  const chargeLineItems =
     input.lineItems && input.lineItems.length > 0
       ? input.lineItems
       : [
@@ -63,13 +116,15 @@ export async function createAxisAchCheckoutSession(
           },
         ];
 
-  const amountCents = lineItems.reduce((sum, item) => sum + Math.round(item.amountCents), 0);
-  if (amountCents < 100) {
+  const subtotalCents = chargeLineItems.reduce((sum, item) => sum + Math.round(item.amountCents), 0);
+  if (subtotalCents < 100) {
     throw new Error("Amount must be at least $1.00.");
   }
 
-  const applicationFeeAmount = axisAchPlatformFeeCents(amountCents);
-  if (applicationFeeAmount > 0 && applicationFeeAmount >= amountCents) {
+  const processingFeeCents = residentProcessingFeeCents(subtotalCents, paymentMethod);
+  const axisFeeCents = residentAxisPlatformFeeCents(subtotalCents, input.managerTier);
+  const applicationFeeAmount = residentConnectApplicationFeeCents(subtotalCents, paymentMethod, input.managerTier);
+  if (applicationFeeAmount > 0 && applicationFeeAmount >= subtotalCents + processingFeeCents + axisFeeCents) {
     throw new Error("Platform fee configuration prevents this charge.");
   }
 
@@ -80,35 +135,80 @@ export async function createAxisAchCheckoutSession(
     application_fee_amount?: number;
   } = {
     transfer_data: { destination: input.destinationAccountId },
-    metadata: input.metadata,
+    metadata: {
+      ...input.metadata,
+      payment_method: paymentMethod,
+      manager_tier: input.managerTier?.trim().toLowerCase() || "free",
+    },
   };
   if (applicationFeeAmount > 0) {
     paymentIntentData.application_fee_amount = applicationFeeAmount;
   }
 
+  const stripeLineItems: {
+    price_data: {
+      currency: "usd";
+      product_data: { name: string; description?: string };
+      unit_amount: number;
+    };
+    quantity: number;
+  }[] = chargeLineItems.map((item) => ({
+    price_data: {
+      currency: "usd",
+      product_data: {
+        name: item.productName,
+        description: item.productDescription,
+      },
+      unit_amount: Math.round(item.amountCents),
+    },
+    quantity: 1,
+  }));
+
+  if (processingFeeCents + axisFeeCents > 0) {
+    const feeParts: string[] = [residentProcessingFeeLabel(paymentMethod)];
+    if (axisFeeCents > 0) {
+      feeParts.push("Axis service fee");
+    }
+    stripeLineItems.push({
+      price_data: {
+        currency: "usd",
+        product_data: {
+          name: "Payment processing & service fee",
+          description: feeParts.join(" · "),
+        },
+        unit_amount: processingFeeCents + axisFeeCents,
+      },
+      quantity: 1,
+    });
+  }
+
+  const totalCents = subtotalCents + processingFeeCents + axisFeeCents;
+  const { payment_method_types, payment_method_options } = paymentMethodStripeConfig(paymentMethod);
+
   const sessionBase = {
     mode: "payment" as const,
     customer_email: residentEmail,
-    payment_method_types: ["us_bank_account"],
-    payment_method_options: {
-      us_bank_account: {
-        financial_connections: { permissions: ["payment_method"] },
-        verification_method: "automatic" as const,
-      },
+    payment_method_types,
+    ...(payment_method_options ? { payment_method_options } : {}),
+    line_items: stripeLineItems,
+    metadata: {
+      ...input.metadata,
+      payment_method: paymentMethod,
+      manager_tier: input.managerTier?.trim().toLowerCase() || "free",
+      subtotal_cents: String(subtotalCents),
+      processing_fee_cents: String(processingFeeCents),
+      axis_fee_cents: String(axisFeeCents),
     },
-    line_items: lineItems.map((item) => ({
-      price_data: {
-        currency: "usd" as const,
-        product_data: {
-          name: item.productName,
-          description: item.productDescription,
-        },
-        unit_amount: Math.round(item.amountCents),
-      },
-      quantity: 1,
-    })),
-    metadata: input.metadata,
     payment_intent_data: paymentIntentData,
+  };
+
+  const feeResultBase = {
+    subtotalCents,
+    processingFeeCents,
+    axisFeeCents,
+    platformFeeCents: applicationFeeAmount,
+    totalCents,
+    paymentMethod,
   };
 
   if (input.mode === "embedded") {
@@ -123,7 +223,7 @@ export async function createAxisAchCheckoutSession(
       mode: "embedded",
       clientSecret: session.client_secret,
       sessionId: session.id,
-      platformFeeCents: applicationFeeAmount,
+      ...feeResultBase,
     };
   }
 
@@ -140,6 +240,12 @@ export async function createAxisAchCheckoutSession(
     mode: "hosted",
     url: session.url,
     sessionId: session.id,
-    platformFeeCents: applicationFeeAmount,
+    ...feeResultBase,
   };
+}
+
+function residentProcessingFeeLabel(method: ResidentAxisPaymentMethod): string {
+  if (method === "ach") return "Bank processing";
+  if (method === "link") return "Link processing";
+  return "Card processing";
 }

@@ -1,5 +1,6 @@
 import { parseMoneyAmount } from "@/lib/parse-money";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { platformFeeCents } from "@/lib/platform-fees";
 
 export type RentDueDayMode = "first_of_month" | "last_of_month";
 
@@ -21,6 +22,53 @@ export type ManagerPaymentPresetId = (typeof MANAGER_PAYMENT_PRESETS)[number]["i
 
 /** Platform ACH processing fee shown when Axis payments are enabled (low pass-through). */
 export const AXIS_ACH_FEE_PERCENT = 0.8;
+
+export type ResidentAxisPaymentMethod = "ach" | "card" | "link";
+
+const RESIDENT_PROCESSING_FEE_BPS: Record<ResidentAxisPaymentMethod, number> = {
+  ach: 80,
+  card: 290,
+  link: 290,
+};
+
+const RESIDENT_PROCESSING_FEE_FIXED_CENTS: Record<ResidentAxisPaymentMethod, number> = {
+  ach: 0,
+  card: 30,
+  link: 30,
+};
+
+/** Processing pass-through charged to the resident (before Axis tier fee). */
+export function residentProcessingFeeCents(subtotalCents: number, method: ResidentAxisPaymentMethod): number {
+  if (!Number.isFinite(subtotalCents) || subtotalCents <= 0) return 0;
+  const bps = RESIDENT_PROCESSING_FEE_BPS[method];
+  const fixed = RESIDENT_PROCESSING_FEE_FIXED_CENTS[method];
+  return Math.floor((subtotalCents * bps) / 10_000) + fixed;
+}
+
+export function residentAxisPlatformFeeCents(subtotalCents: number, managerTier?: string | null): number {
+  return platformFeeCents(subtotalCents, "rent", managerTier);
+}
+
+/** Total application fee retained by Axis on Connect destination charges. */
+export function residentConnectApplicationFeeCents(
+  subtotalCents: number,
+  method: ResidentAxisPaymentMethod,
+  managerTier?: string | null,
+): number {
+  return residentProcessingFeeCents(subtotalCents, method) + residentAxisPlatformFeeCents(subtotalCents, managerTier);
+}
+
+export function residentProcessingFeeDisplayLabel(method: ResidentAxisPaymentMethod): string {
+  if (method === "ach") return `${AXIS_ACH_FEE_PERCENT}% bank processing`;
+  if (method === "link") return "2.9% + $0.30 Link processing";
+  return "2.9% + $0.30 card processing";
+}
+
+export function residentPaymentMethodLabel(method: ResidentAxisPaymentMethod): string {
+  if (method === "ach") return "Bank (ACH)";
+  if (method === "link") return "Link";
+  return "Credit card";
+}
 
 export function normalizeRentDueDayMode(raw: unknown): RentDueDayMode {
   return raw === "last_of_month" ? "last_of_month" : "first_of_month";
@@ -73,7 +121,9 @@ export function residentPaymentMethodsSummary(
   const methods: string[] = [];
   if (sub.zellePaymentsEnabled && sub.zelleContact?.trim()) methods.push(`Zelle (${sub.zelleContact.trim()})`);
   if (sub.venmoPaymentsEnabled && sub.venmoContact?.trim()) methods.push(`Venmo (${sub.venmoContact.trim()})`);
-  if (axisPaymentsEnabledOnListing(sub)) methods.push(`Axis payments — ${axisAchFeeDisplayLabel()}`);
+  if (axisPaymentsEnabledOnListing(sub)) {
+    methods.push(`Axis payments — bank from ${axisAchFeeDisplayLabel()}, card/Link at higher processing`);
+  }
   if (methods.length === 0) methods.push("Zelle, Venmo, ACH, or cash — your manager marks payments received.");
   return methods;
 }

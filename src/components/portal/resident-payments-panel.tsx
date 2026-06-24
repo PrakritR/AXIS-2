@@ -34,7 +34,11 @@ import {
 import { syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { canPayHouseholdChargeWithAxisAch } from "@/lib/household-charge-payment-eligibility";
-import { axisAchFeeDisplayLabel } from "@/lib/payment-policy";
+import {
+  residentPaymentMethodLabel,
+  residentProcessingFeeDisplayLabel,
+  type ResidentAxisPaymentMethod,
+} from "@/lib/payment-policy";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 
 type PayTab = "pending" | "paid";
@@ -42,10 +46,37 @@ type PayTab = "pending" | "paid";
 type CheckoutState = {
   key: string;
   chargeIds: string[];
+  paymentMethod: ResidentAxisPaymentMethod;
   clientSecret: string | null;
   loading: boolean;
   error: string | null;
+  subtotalCents?: number;
+  processingFeeCents?: number;
+  axisFeeCents?: number;
+  totalCents?: number;
 };
+
+const PAYMENT_METHOD_OPTIONS: {
+  id: ResidentAxisPaymentMethod;
+  title: string;
+  description: string;
+}[] = [
+  {
+    id: "ach",
+    title: "Bank (ACH)",
+    description: "Lowest fee — clears in 3–5 business days",
+  },
+  {
+    id: "link",
+    title: "Link",
+    description: "Pay faster with Stripe Link",
+  },
+  {
+    id: "card",
+    title: "Credit card",
+    description: "Instant card payment",
+  },
+];
 
 function statusClass(label: string) {
   const l = label.toLowerCase();
@@ -58,8 +89,8 @@ function centsFromLabel(label: string): number {
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
-function checkoutKey(chargeIds: string[]): string {
-  return [...chargeIds].sort().join(",");
+function checkoutKey(chargeIds: string[], paymentMethod: ResidentAxisPaymentMethod): string {
+  return `${[...chargeIds].sort().join(",")}:${paymentMethod}`;
 }
 
 function formatUsd(cents: number): string {
@@ -74,6 +105,7 @@ export function ResidentPaymentsPanel() {
   const [tab, setTab] = useState<PayTab>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [paymentMethod, setPaymentMethod] = useState<ResidentAxisPaymentMethod>("ach");
   const [tick, setTick] = useState(0);
   const [checkout, setCheckout] = useState<CheckoutState | null>(null);
   const email = session.email?.trim() ?? null;
@@ -194,34 +226,50 @@ export function ResidentPaymentsPanel() {
   );
 
   const loadCheckout = useCallback(
-    async (chargeIds: string[]) => {
+    async (chargeIds: string[], method: ResidentAxisPaymentMethod) => {
       const ids = [...new Set(chargeIds.map((id) => id.trim()).filter(Boolean))];
       if (ids.length === 0) return;
-      const key = checkoutKey(ids);
-      setCheckout({ key, chargeIds: ids, clientSecret: null, loading: true, error: null });
+      const key = checkoutKey(ids, method);
+      setCheckout({ key, chargeIds: ids, paymentMethod: method, clientSecret: null, loading: true, error: null });
       try {
         const res = await fetch("/api/stripe/household-charge-checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chargeIds: ids, embedded: true }),
+          body: JSON.stringify({ chargeIds: ids, embedded: true, paymentMethod: method }),
         });
         const payload = (await res.json().catch(() => ({}))) as {
           clientSecret?: string;
           url?: string;
           error?: string;
+          subtotalCents?: number;
+          processingFeeCents?: number;
+          axisFeeCents?: number;
+          totalCents?: number;
         };
         if (!res.ok) {
           setCheckout({
             key,
             chargeIds: ids,
+            paymentMethod: method,
             clientSecret: null,
             loading: false,
-            error: typeof payload.error === "string" ? payload.error : "Could not start bank payment.",
+            error: typeof payload.error === "string" ? payload.error : "Could not start payment.",
           });
           return;
         }
         if (payload.clientSecret) {
-          setCheckout({ key, chargeIds: ids, clientSecret: payload.clientSecret, loading: false, error: null });
+          setCheckout({
+            key,
+            chargeIds: ids,
+            paymentMethod: method,
+            clientSecret: payload.clientSecret,
+            loading: false,
+            error: null,
+            subtotalCents: payload.subtotalCents,
+            processingFeeCents: payload.processingFeeCents,
+            axisFeeCents: payload.axisFeeCents,
+            totalCents: payload.totalCents,
+          });
           return;
         }
         if (payload.url && typeof window !== "undefined") {
@@ -231,9 +279,10 @@ export function ResidentPaymentsPanel() {
         setCheckout({
           key,
           chargeIds: ids,
+          paymentMethod: method,
           clientSecret: null,
           loading: false,
-          error: "Could not start bank payment.",
+          error: "Could not start payment.",
         });
       }
     },
@@ -248,10 +297,20 @@ export function ResidentPaymentsPanel() {
     }
     const ids =
       selectedIds.has(expandedId) && selectedIds.size > 1 ? [...selectedIds] : [expandedId];
-    const key = checkoutKey(ids);
+    const key = checkoutKey(ids, paymentMethod);
     if (checkout?.key === key && (checkout.loading || checkout.clientSecret || checkout.error)) return;
-    void loadCheckout(ids);
-  }, [charges, checkout?.key, checkout?.clientSecret, checkout?.error, checkout?.loading, expandedId, loadCheckout, selectedIds]);
+    void loadCheckout(ids, paymentMethod);
+  }, [
+    charges,
+    checkout?.key,
+    checkout?.clientSecret,
+    checkout?.error,
+    checkout?.loading,
+    expandedId,
+    loadCheckout,
+    paymentMethod,
+    selectedIds,
+  ]);
 
   const toggleSelected = (chargeId: string) => {
     setSelectedIds((prev) => {
@@ -273,20 +332,60 @@ export function ResidentPaymentsPanel() {
     checkout && checkout.chargeIds.length > 1 && !showCheckoutInExpandedRow,
   );
 
+  const renderPaymentMethodPicker = () => (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {PAYMENT_METHOD_OPTIONS.map((option) => {
+        const selected = paymentMethod === option.id;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => {
+              setPaymentMethod(option.id);
+              setCheckout(null);
+            }}
+            className={`rounded-xl border px-3 py-3 text-left transition ${
+              selected
+                ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                : "border-border bg-card hover:border-primary/30"
+            }`}
+          >
+            <p className="text-sm font-semibold text-foreground">{option.title}</p>
+            <p className="mt-1 text-xs text-muted">{option.description}</p>
+            <p className="mt-2 text-xs font-medium text-foreground">{residentProcessingFeeDisplayLabel(option.id)}</p>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const renderCheckoutBlock = (label: string) => {
     if (!checkout) return null;
+    const method = checkout.paymentMethod;
     return (
       <div className="space-y-3">
         <p className="text-sm font-semibold text-foreground">{label}</p>
+        {renderPaymentMethodPicker()}
+        {checkout.totalCents != null && checkout.subtotalCents != null ? (
+          <p className="text-xs text-muted">
+            Subtotal {formatUsd(checkout.subtotalCents)}
+            {checkout.processingFeeCents ? ` · Processing ${formatUsd(checkout.processingFeeCents)}` : ""}
+            {checkout.axisFeeCents ? ` · Axis fee ${formatUsd(checkout.axisFeeCents)}` : ""}
+            {" · "}
+            <span className="font-semibold text-foreground">Total {formatUsd(checkout.totalCents)}</span>
+          </p>
+        ) : null}
         {checkout.loading ? (
-          <p className="text-sm text-muted">Loading secure bank checkout…</p>
+          <p className="text-sm text-muted">Loading secure checkout…</p>
         ) : checkout.error ? (
           <p className="rounded-xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-900">{checkout.error}</p>
         ) : checkout.clientSecret ? (
           <StripeEmbeddedCheckout clientSecret={checkout.clientSecret} />
         ) : null}
         <p className="text-xs text-muted">
-          Pay by bank transfer through Stripe — {axisAchFeeDisplayLabel()}. Transfers typically clear in 3–5 business days.
+          Pay with {residentPaymentMethodLabel(method)} through Stripe — {residentProcessingFeeDisplayLabel(method)}
+          {checkout.axisFeeCents ? ` plus a small Axis service fee` : ""}.
+          {method === "ach" ? " Transfers typically clear in 3–5 business days." : " Card and Link payments confirm instantly."}
         </p>
       </div>
     );
@@ -342,7 +441,7 @@ export function ResidentPaymentsPanel() {
                   className="rounded-full text-xs"
                   onClick={() => {
                     setExpandedId(null);
-                    void loadCheckout([...selectedIds]);
+                    void loadCheckout([...selectedIds], paymentMethod);
                   }}
                 >
                   Pay {selectedIds.size} selected ({formatUsd(selectedTotal)})
@@ -357,7 +456,7 @@ export function ResidentPaymentsPanel() {
                     const ids = unpaidAchCharges.map((c) => c.id);
                     setSelectedIds(new Set(ids));
                     setExpandedId(null);
-                    void loadCheckout(ids);
+                    void loadCheckout(ids, paymentMethod);
                   }}
                 >
                   Pay all unpaid (
@@ -383,7 +482,7 @@ export function ResidentPaymentsPanel() {
                         return sum + (charge ? centsFromLabel(charge.balanceLabel) : 0);
                       }, 0),
                     )})`
-                  : "Pay with bank (ACH)",
+                  : `Pay online (${residentPaymentMethodLabel(checkout?.paymentMethod ?? paymentMethod)})`,
               )}
             </div>
           ) : null}
@@ -497,7 +596,7 @@ export function ResidentPaymentsPanel() {
                                     {renderCheckoutBlock(
                                       checkout && checkout.chargeIds.length > 1 && checkout.chargeIds.includes(row.id)
                                         ? `Pay ${checkout.chargeIds.length} selected charges`
-                                        : "Pay with bank (ACH)",
+                                        : `Pay online (${residentPaymentMethodLabel(checkout?.paymentMethod ?? paymentMethod)})`,
                                     )}
                                   </div>
                                 ) : !row.zelleContactSnapshot && !row.venmoContactSnapshot ? (
