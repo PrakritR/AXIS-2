@@ -114,7 +114,7 @@ export async function createAxisAchCheckoutSession(
   if (input.mode === "embedded") {
     if (!input.returnUrl?.trim()) throw new Error("returnUrl is required for embedded checkout.");
     const session = await stripe.checkout.sessions.create({
-      ui_mode: "embedded",
+      ui_mode: "embedded_page",
       ...sessionBase,
       return_url: input.returnUrl,
     } as unknown as Parameters<typeof stripe.checkout.sessions.create>[0]);
