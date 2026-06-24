@@ -33,7 +33,7 @@ export function PortalStripeConnectPanel({
   basePath,
   variant = "page",
 }: {
-  basePath: "/portal";
+  basePath: string;
   variant?: "page" | "embedded";
 }) {
   const { showToast } = useAppUi();
