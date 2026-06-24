@@ -3,6 +3,7 @@ import { resolveAppOrigin } from "@/lib/app-url";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { getManagerPurchaseSku, normalizeManagerSkuTier } from "@/lib/manager-access";
 import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
 import {
   APPLICATION_FEE_CHECKOUT_PURPOSE,
@@ -88,6 +89,9 @@ export async function POST(req: Request) {
       );
     }
 
+    const { tier: managerTierRaw } = await getManagerPurchaseSku(managerUserId);
+    const managerTier = normalizeManagerSkuTier(managerTierRaw) ?? "free";
+
     const appUrl = resolveAppOrigin(req);
 
     const metadata: Record<string, string> = {
@@ -106,6 +110,8 @@ export async function POST(req: Request) {
       metadata,
       mode: "hosted",
       destinationAccountId: connect.accountId,
+      managerTier,
+      paymentMethod: "ach",
       successUrl: `${appUrl}/rent/apply?fee_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${appUrl}/rent/apply?fee_checkout=cancel`,
     });

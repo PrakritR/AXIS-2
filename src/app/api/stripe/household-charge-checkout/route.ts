@@ -8,7 +8,8 @@ import {
   listingFromPropertyData,
   resolveListingForHouseholdCharge,
 } from "@/lib/household-charge-payment-eligibility";
-import { axisPaymentsEnabledOnListing } from "@/lib/payment-policy";
+import { getManagerPurchaseSku, normalizeManagerSkuTier } from "@/lib/manager-access";
+import { axisPaymentsEnabledOnListing, type ResidentAxisPaymentMethod } from "@/lib/payment-policy";
 import { householdChargeAmountCents, HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE } from "@/lib/stripe-household-charge";
 import { createAxisAchCheckoutSession, stripeNotConfiguredError } from "@/lib/stripe-axis-ach-checkout";
 import {
@@ -23,7 +24,13 @@ type Body = {
   chargeId?: string;
   chargeIds?: string[];
   embedded?: boolean;
+  paymentMethod?: ResidentAxisPaymentMethod;
 };
+
+function normalizePaymentMethod(raw: unknown): ResidentAxisPaymentMethod {
+  if (raw === "card" || raw === "link") return raw;
+  return "ach";
+}
 
 function chargeOwnedByUser(charge: HouseholdCharge, userId: string, email: string): boolean {
   const e = email.trim().toLowerCase();
@@ -46,6 +53,7 @@ export async function POST(req: Request) {
 
     const body = (await req.json()) as Body;
     const useEmbedded = body.embedded !== false;
+    const paymentMethod = normalizePaymentMethod(body.paymentMethod);
     const requestedIds = [
       ...(Array.isArray(body.chargeIds) ? body.chargeIds : []),
       ...(typeof body.chargeId === "string" ? [body.chargeId] : []),
@@ -118,6 +126,8 @@ export async function POST(req: Request) {
     }
 
     const managerUserId = managerIds[0]!;
+    const { tier: managerTierRaw } = await getManagerPurchaseSku(managerUserId);
+    const managerTier = normalizeManagerSkuTier(managerTierRaw) ?? "free";
     const stripe = getStripe();
     const connect = await resolveAndValidateManagerConnectForPayments(stripe, db, managerUserId);
     if (!connect.ok) {
@@ -163,6 +173,8 @@ export async function POST(req: Request) {
       metadata,
       destinationAccountId: connect.accountId,
       mode: useEmbedded ? "embedded" : "hosted",
+      paymentMethod,
+      managerTier,
       returnUrl: `${appUrl}/resident/payments?ach_checkout=return&session_id={CHECKOUT_SESSION_ID}`,
       successUrl: `${appUrl}/resident/payments?ach_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${appUrl}/resident/payments?ach_checkout=cancel`,
@@ -173,7 +185,12 @@ export async function POST(req: Request) {
         clientSecret: result.clientSecret,
         sessionId: result.sessionId,
         amountCents,
+        subtotalCents: result.subtotalCents,
+        processingFeeCents: result.processingFeeCents,
+        axisFeeCents: result.axisFeeCents,
         platformFeeCents: result.platformFeeCents,
+        totalCents: result.totalCents,
+        paymentMethod: result.paymentMethod,
         chargeIds: loaded.map((row) => row.id),
       });
     }
@@ -182,7 +199,12 @@ export async function POST(req: Request) {
       url: result.url,
       sessionId: result.sessionId,
       amountCents,
+      subtotalCents: result.subtotalCents,
+      processingFeeCents: result.processingFeeCents,
+      axisFeeCents: result.axisFeeCents,
       platformFeeCents: result.platformFeeCents,
+      totalCents: result.totalCents,
+      paymentMethod: result.paymentMethod,
       chargeIds: loaded.map((row) => row.id),
     });
   } catch (e) {

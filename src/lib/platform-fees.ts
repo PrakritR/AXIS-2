@@ -12,12 +12,12 @@ export type PlatformFeeKind = "application_fee" | "rent";
 
 export const PLATFORM_FEE_BPS_BY_TIER: Record<ManagerSkuTier, Record<PlatformFeeKind, number>> = {
   free: {
-    application_fee: 0,
-    rent: 0,
+    application_fee: 50,
+    rent: 50,
   },
   pro: {
-    application_fee: 0,
-    rent: 0,
+    application_fee: 25,
+    rent: 25,
   },
   business: {
     application_fee: 0,
@@ -45,10 +45,19 @@ export function platformFeeCents(grossAmountCents: number, kind: PlatformFeeKind
   return Math.floor((grossAmountCents * bps) / 10000);
 }
 
-/** Public labels for UI (e.g. 2 and 0.25). */
+/** Public labels for UI (e.g. 0.5 and 0.25). */
 export function platformFeeDisplayPercents(tier?: string | null): { applicationFee: number; rent: number } {
   return {
     applicationFee: platformApplicationFeeBps(tier) / 100,
     rent: platformRentBps(tier) / 100,
   };
+}
+
+/** Short copy for pricing / plan cards. */
+export function axisResidentPaymentFeePlanLine(tier: ManagerSkuTier): string {
+  const pct = platformRentBps(tier) / 100;
+  if (pct <= 0) {
+    return "No Axis fee on resident online payments (residents pay processing only)";
+  }
+  return `${pct}% Axis fee on resident online payments (+ processing)`;
 }

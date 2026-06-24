@@ -1,16 +1,22 @@
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseMoneyAmount } from "@/lib/parse-money";
-import { AXIS_ACH_FEE_PERCENT } from "@/lib/payment-policy";
+import { residentConnectApplicationFeeCents, type ResidentAxisPaymentMethod } from "@/lib/payment-policy";
 import type { HouseholdCharge } from "@/lib/household-charges";
 
 export const HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE = "household_charge";
 
-/** Integer cents retained by Axis on ACH Connect destination charges. */
+/** @deprecated Use residentConnectApplicationFeeCents with explicit payment method. */
 export function axisAchPlatformFeeCents(grossAmountCents: number): number {
-  if (!Number.isFinite(grossAmountCents) || grossAmountCents <= 0) return 0;
-  const bps = Math.round(AXIS_ACH_FEE_PERCENT * 100);
-  return Math.floor((grossAmountCents * bps) / 10_000);
+  return residentConnectApplicationFeeCents(grossAmountCents, "ach");
+}
+
+export function axisConnectPlatformFeeCents(
+  grossAmountCents: number,
+  method: ResidentAxisPaymentMethod,
+  managerTier?: string | null,
+): number {
+  return residentConnectApplicationFeeCents(grossAmountCents, method, managerTier);
 }
 
 export function householdChargeAmountCents(charge: Pick<HouseholdCharge, "balanceLabel" | "amountLabel">): number {
