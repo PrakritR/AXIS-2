@@ -28,18 +28,18 @@ export function BathroomSelect() {
 
   return (
     <div ref={rootRef} className="relative min-w-0">
-      <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+      <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
         Bathroom type
       </label>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="mt-2 flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-primary bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-900 shadow-sm outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-primary/40"
+        className="mt-2 flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-primary bg-card px-3 py-2.5 text-left text-sm font-medium text-foreground shadow-sm outline-none transition hover:bg-accent/30 focus-visible:ring-2 focus-visible:ring-primary/40"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         <span className="truncate">{label}</span>
-        <span className="shrink-0 text-slate-400" aria-hidden>
+        <span className="shrink-0 text-muted" aria-hidden>
           ▾
         </span>
       </button>
@@ -63,7 +63,7 @@ export function BathroomSelect() {
                   className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium transition ${
                     selected
                       ? "bg-primary text-white"
-                      : "text-white/95 hover:bg-white/10"
+                      : "text-white/95 hover:bg-card/10"
                   }`}
                 >
                   {selected ? (

@@ -58,7 +58,7 @@ function StatusPill({ active }: { active: boolean }) {
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-accent/30 px-2.5 py-1 text-xs font-semibold text-muted">
       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />
       Disabled
     </span>
@@ -85,7 +85,7 @@ function TierBadge({ tier }: { tier: string }) {
   const colors: Record<string, string> = {
     pro: "border-blue-200/90 bg-blue-50 text-blue-800",
     business: "border-violet-200/90 bg-violet-50 text-violet-800",
-    free: "border-slate-200/90 bg-slate-100 text-slate-600",
+    free: "border-border bg-accent/30 text-muted",
   };
   const cls = colors[tier.toLowerCase()] ?? colors.free;
   return (
@@ -145,17 +145,17 @@ function ManagerDetailRow({
     }
   };
   return (
-    <tr className="bg-slate-50/60">
+    <tr className="bg-accent/30">
       <td colSpan={5} className="px-5 py-5">
         <div className="flex flex-wrap items-start gap-8">
           <div className="min-w-[160px] space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Account</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
             <div className="flex flex-wrap gap-2 pt-1">
               <TierBadge tier={row.tier} />
               <StatusPill active={row.active} />
             </div>
             {row.joinedAt && (
-              <p className="pt-1 text-xs text-slate-500">
+              <p className="pt-1 text-xs text-muted">
                 Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
               </p>
             )}
@@ -183,7 +183,7 @@ function ManagerDetailRow({
                 </button>
                 <button
                   type="button"
-                  className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+                  className="text-xs font-semibold text-muted hover:text-foreground"
                   onClick={() => setConfirmDelete(false)}
                   disabled={busy}
                 >
@@ -266,16 +266,16 @@ function SimpleAccountDetailRow({
     }
   };
   return (
-    <tr className="bg-slate-50/60">
+    <tr className="bg-accent/30">
       <td colSpan={5} className="px-5 py-5">
         <div className="flex flex-wrap items-start gap-8">
           <div className="min-w-[160px] space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Account</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
             <div className="pt-1">
               <StatusPill active={row.active} />
             </div>
             {row.joinedAt && (
-              <p className="pt-1 text-xs text-slate-500">
+              <p className="pt-1 text-xs text-muted">
                 Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
               </p>
             )}
@@ -307,7 +307,7 @@ function SimpleAccountDetailRow({
                 </button>
                 <button
                   type="button"
-                  className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+                  className="text-xs font-semibold text-muted hover:text-foreground"
                   onClick={() => setConfirmDelete(false)}
                   disabled={busy}
                 >
@@ -452,15 +452,15 @@ export function AdminAxisUsersClient() {
   return (
     <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Axis users</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Axis users</h1>
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => void load()}>
           Refresh
         </Button>
       </div>
 
       <div className="mt-5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Category</p>
-        <div className="mt-1.5 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Category</p>
+        <div className="mt-1.5 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
           {ROLE_TABS.map((tab) => (
             <button
               key={tab.id}
@@ -470,13 +470,13 @@ export function AdminAxisUsersClient() {
                 setExpandedKey(null);
               }}
               className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
-                category === tab.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                category === tab.id ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
               }`}
             >
               {tab.label}
               <span
                 className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                  category === tab.id ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+                  category === tab.id ? "bg-accent/30 text-muted" : "bg-accent/40 text-muted"
                 }`}
               >
                 {tab.count}
@@ -488,8 +488,8 @@ export function AdminAxisUsersClient() {
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Status</p>
-          <div className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Status</p>
+          <div className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
             {STATUS_TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -499,13 +499,13 @@ export function AdminAxisUsersClient() {
                   setExpandedKey(null);
                 }}
                 className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-                  statusTab === tab.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  statusTab === tab.id ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
                 }`}
               >
                 {tab.label}
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                    statusTab === tab.id ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+                    statusTab === tab.id ? "bg-accent/30 text-muted" : "bg-accent/40 text-muted"
                   }`}
                 >
                   {tab.count}
@@ -516,8 +516,8 @@ export function AdminAxisUsersClient() {
         </div>
         {showTierFilter ? (
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Manager plan</p>
-            <div className="mt-1.5 inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Manager plan</p>
+            <div className="mt-1.5 inline-flex flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
               {TIER_OPTIONS.map((opt) => (
                 <button
                   key={opt.id}
@@ -527,7 +527,7 @@ export function AdminAxisUsersClient() {
                     setExpandedKey(null);
                   }}
                   className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-                    tierFilter === opt.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                    tierFilter === opt.id ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
                   }`}
                 >
                   {opt.label}
@@ -538,10 +538,10 @@ export function AdminAxisUsersClient() {
         ) : null}
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white">
+      <div className="mt-5 overflow-hidden rounded-2xl border border-border bg-card">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <p className="text-sm text-slate-400">Loading…</p>
+            <p className="text-sm text-muted">Loading…</p>
           </div>
         ) : loadError ? (
           <div className="px-5 py-10 text-center">
@@ -551,11 +551,11 @@ export function AdminAxisUsersClient() {
             </button>
           </div>
         ) : visible.length === 0 ? (
-          <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
+          <div className="flex flex-col items-center justify-center bg-accent/30/30 px-4 py-16 text-center sm:py-20">
             <AxisHeaderMarkTile>
               <UsersEmptyIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
-            <p className="mt-4 text-sm font-medium text-slate-500">
+            <p className="mt-4 text-sm font-medium text-muted">
               {unified.length === 0 ? "No accounts yet" : "No accounts match these filters"}
             </p>
           </div>
@@ -563,12 +563,12 @@ export function AdminAxisUsersClient() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[min(100%,48rem)] border-collapse text-left">
               <thead>
-                <tr className="border-b border-slate-200/90 bg-white">
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Category</th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Account</th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Plan</th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Status</th>
-                  <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Details</th>
+                <tr className="border-b border-border bg-card">
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Category</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Plan</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Status</th>
+                  <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -577,19 +577,19 @@ export function AdminAxisUsersClient() {
                   const isOpen = expandedKey === rowKey;
                   return (
                     <Fragment key={rowKey}>
-                      <tr className={`border-b border-slate-100 ${isOpen ? "" : "last:border-0"}`}>
+                      <tr className={`border-b border-border ${isOpen ? "" : "last:border-0"}`}>
                         <td className="px-5 py-4 align-middle">
                           <RolePill kind={row.kind} />
                         </td>
                         <td className="px-5 py-4 align-middle">
-                          <p className="font-semibold text-slate-900">{row.fullName || row.email}</p>
-                          <p className="mt-0.5 text-sm text-slate-500">{row.email}</p>
+                          <p className="font-semibold text-foreground">{row.fullName || row.email}</p>
+                          <p className="mt-0.5 text-sm text-muted">{row.email}</p>
                           {row.managerId ? (
-                            <p className="mt-0.5 font-mono text-xs text-slate-400">{row.managerId}</p>
+                            <p className="mt-0.5 font-mono text-xs text-muted">{row.managerId}</p>
                           ) : null}
                         </td>
                         <td className="px-5 py-4 align-middle">
-                          {row.kind === "manager" ? <TierBadge tier={row.tier} /> : <span className="text-sm text-slate-400">—</span>}
+                          {row.kind === "manager" ? <TierBadge tier={row.tier} /> : <span className="text-sm text-muted">—</span>}
                         </td>
                         <td className="px-5 py-4 align-middle">
                           <StatusPill active={row.active} />
@@ -598,7 +598,7 @@ export function AdminAxisUsersClient() {
                           <Button
                             type="button"
                             variant="outline"
-                            className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
+                            className="rounded-full border-border px-4 py-2 text-sm font-medium text-foreground"
                             onClick={() => setExpandedKey(isOpen ? null : rowKey)}
                             aria-expanded={isOpen}
                           >

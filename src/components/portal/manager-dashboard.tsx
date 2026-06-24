@@ -64,11 +64,11 @@ function NotifBanner({
   children: React.ReactNode;
 }) {
   const cls = {
-    amber: "border-amber-200/80 bg-amber-50/80 text-amber-950",
-    blue: "border-blue-200/80 bg-blue-50/80 text-blue-950",
-    yellow: "border-yellow-200/80 bg-yellow-50/80 text-yellow-950",
-    violet: "border-violet-200/80 bg-violet-50/80 text-violet-950",
-    rose: "border-rose-200/80 bg-rose-50/80 text-rose-950",
+    amber: "portal-banner-pending",
+    blue: "portal-banner-info",
+    yellow: "portal-banner-pending",
+    violet: "portal-banner-notice",
+    rose: "portal-banner-danger",
   }[tone];
   return (
     <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
@@ -93,13 +93,13 @@ function Tile({
   return (
     <Link
       href={href}
-      className={`group flex flex-col gap-1 rounded-2xl border bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition hover:shadow-md ${
-        urgent ? "border-amber-300/80 ring-1 ring-amber-200/60" : "border-slate-200/80 hover:border-slate-300"
+      className={`surface-panel group flex flex-col gap-1 rounded-2xl border p-5 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-card)] ${
+        urgent ? "border-[var(--status-pending-bg)] ring-1 ring-[var(--status-pending-bg)]" : "border-border hover:border-primary/25"
       }`}
     >
-      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-slate-900">{value}</p>
-      <p className="text-sm font-medium text-slate-600">{label}</p>
-      {sub ? <p className="text-xs text-slate-400">{sub}</p> : null}
+      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-foreground">{value}</p>
+      <p className="text-sm font-medium text-muted">{label}</p>
+      {sub ? <p className="text-xs text-muted">{sub}</p> : null}
     </Link>
   );
 }
@@ -107,7 +107,7 @@ function Tile({
 function SectionHeader({ title, href, linkLabel }: { title: string; href?: string; linkLabel?: string }) {
   return (
     <div className="flex items-center justify-between">
-      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">{title}</h2>
+      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
       {href && linkLabel ? (
         <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
           {linkLabel}
@@ -361,21 +361,21 @@ export function ManagerDashboard() {
         <div className="grid gap-4 lg:grid-cols-2">
 
           {/* Pending tours */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
             <SectionHeader
               title="Pending tour requests"
               href={`${BASE}/calendar`}
               linkLabel="Tours →"
             />
             {pendingTours.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No pending tour requests right now.</p>
+              <p className="mt-4 text-sm text-muted">No pending tour requests right now.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {pendingTours.slice(0, 5).map((tour) => (
-                  <li key={tour.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                  <li key={tour.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{tour.label}</p>
-                      <p className="truncate text-xs text-slate-500">{tour.propertyTitle || "—"} · {fmt(tour.start)}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{tour.label}</p>
+                      <p className="truncate text-xs text-muted">{tour.propertyTitle || "—"} · {fmt(tour.start)}</p>
                     </div>
                     <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
                       Pending
@@ -387,21 +387,21 @@ export function ManagerDashboard() {
           </div>
 
           {/* Pending applications */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
             <SectionHeader
               title="Pending applications"
               href={`${BASE}/applications`}
               linkLabel="Applications →"
             />
             {pendingApps.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No pending applications — you&apos;re all caught up.</p>
+              <p className="mt-4 text-sm text-muted">No pending applications — you&apos;re all caught up.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {pendingApps.slice(0, 5).map((app: DemoApplicantRow) => (
-                  <li key={app.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                  <li key={app.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{app.name || app.email || "Unknown"}</p>
-                      <p className="truncate text-xs text-slate-500">{app.property || "—"}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{app.name || app.email || "Unknown"}</p>
+                      <p className="truncate text-xs text-muted">{app.property || "—"}</p>
                     </div>
                     <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
                       {app.stage || "Pending"}
@@ -416,21 +416,21 @@ export function ManagerDashboard() {
 
         {/* ── Leases & payments ── */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
             <SectionHeader
               title="Leases pending signature"
               href={`${BASE}/leases`}
               linkLabel="Leases →"
             />
             {pendingLeaseRows.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No leases waiting for a signature.</p>
+              <p className="mt-4 text-sm text-muted">No leases waiting for a signature.</p>
             ) : (
               <ul className="mt-3 max-h-72 space-y-2 overflow-y-auto overscroll-contain pr-1">
                 {pendingLeaseRows.map((lease: LeasePipelineRow) => (
-                  <li key={lease.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                  <li key={lease.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{lease.residentName || lease.residentEmail}</p>
-                      <p className="truncate text-xs text-slate-500">
+                      <p className="truncate text-sm font-semibold text-foreground">{lease.residentName || lease.residentEmail}</p>
+                      <p className="truncate text-xs text-muted">
                         {lease.unit || "—"}{lease.signedRentLabel ? ` · ${lease.signedRentLabel}` : ""}
                       </p>
                     </div>
@@ -449,23 +449,23 @@ export function ManagerDashboard() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
             <SectionHeader
               title="Pending & overdue payments"
               href={`${BASE}/payments`}
               linkLabel="Payments →"
             />
             {pendingCharges.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No pending or overdue payments right now.</p>
+              <p className="mt-4 text-sm text-muted">No pending or overdue payments right now.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {pendingCharges.slice(0, 5).map((charge) => {
                   const overdue = isHouseholdChargeOverdue(charge);
                   return (
-                    <li key={charge.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                    <li key={charge.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-900">{charge.residentName || charge.residentEmail}</p>
-                        <p className="truncate text-xs text-slate-500">
+                        <p className="truncate text-sm font-semibold text-foreground">{charge.residentName || charge.residentEmail}</p>
+                        <p className="truncate text-xs text-muted">
                           {charge.title || "Charge"} · {charge.balanceLabel} · {chargeDueLabel(charge)}
                         </p>
                       </div>
@@ -485,21 +485,21 @@ export function ManagerDashboard() {
         </div>
 
         {/* ── Inbox ── */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
           <SectionHeader
             title="Inbox"
             href={`${BASE}/inbox/unopened`}
             linkLabel="Inbox →"
           />
           {inbox === 0 ? (
-            <p className="mt-4 text-sm text-slate-400">No unread messages — inbox is clear.</p>
+            <p className="mt-4 text-sm text-muted">No unread messages — inbox is clear.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {inboxThreads.map((thread) => (
-                <li key={thread.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50/70 px-3 py-2.5">
+                <li key={thread.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{thread.from || "Unknown sender"}</p>
-                    <p className="truncate text-xs text-slate-500">{thread.subject || thread.preview || "—"}</p>
+                    <p className="truncate text-sm font-semibold text-foreground">{thread.from || "Unknown sender"}</p>
+                    <p className="truncate text-xs text-muted">{thread.subject || thread.preview || "—"}</p>
                   </div>
                   <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">
                     Unread

@@ -8,7 +8,7 @@ import { digitsOnly } from "@/lib/rental-application/masks";
 
 function displayOrDash(v: string | null | undefined) {
   const t = (v ?? "").trim();
-  return t ? t : <span className="text-slate-400">Not provided</span>;
+  return t ? t : <span className="text-muted">Not provided</span>;
 }
 
 function maskSsn(ssn: string) {
@@ -19,9 +19,9 @@ function maskSsn(ssn: string) {
 
 function ReviewSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
-        <h3 className="text-[0.8125rem] font-semibold text-slate-700">{title}</h3>
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="border-b border-border bg-accent/30 px-4 py-3">
+        <h3 className="text-[0.8125rem] font-semibold text-muted">{title}</h3>
       </div>
       <dl className="divide-y divide-slate-100 text-sm">{children}</dl>
     </section>
@@ -31,8 +31,8 @@ function ReviewSection({ title, children }: { title: string; children: ReactNode
 function Row({ k, v }: { k: string; v: ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-start sm:gap-4">
-      <dt className="w-full shrink-0 text-xs font-medium leading-5 text-slate-500 sm:w-32">{k}</dt>
-      <dd className="min-w-0 flex-1 break-words leading-5 text-slate-900">{v}</dd>
+      <dt className="w-full shrink-0 text-xs font-medium leading-5 text-muted sm:w-32">{k}</dt>
+      <dd className="min-w-0 flex-1 break-words leading-5 text-foreground">{v}</dd>
     </div>
   );
 }
@@ -59,8 +59,8 @@ export function ManagerCosignerReadonlyReview({
           >
             Open primary application in Property Portal
           </Link>
-          <p className="mt-1 text-xs leading-relaxed text-slate-600">
-            Jumps to <span className="font-mono text-[11px] text-slate-800">{primaryApplicationAxisId.trim()}</span> on the
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            Jumps to <span className="font-mono text-[11px] text-foreground">{primaryApplicationAxisId.trim()}</span> on the
             Applications page.
           </p>
         </div>

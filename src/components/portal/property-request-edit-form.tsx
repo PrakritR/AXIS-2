@@ -18,7 +18,7 @@ export function PropertyRequestEditForm({
   return (
     <div className="space-y-3 rounded-xl border border-amber-200/80 bg-amber-50/60 p-4">
       <div>
-        <label htmlFor="property-request-edit-note" className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+        <label htmlFor="property-request-edit-note" className="text-xs font-bold uppercase tracking-[0.12em] text-muted">
           Message to {recipientHint}
         </label>
         <Textarea
@@ -27,7 +27,7 @@ export function PropertyRequestEditForm({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Describe what should change (copy, pricing, photos, amenities…)"
-          className="mt-2 min-h-[6.5rem] rounded-xl border-slate-200 bg-white text-sm"
+          className="mt-2 min-h-[6.5rem] rounded-xl border-border bg-card text-sm"
         />
       </div>
       <div className="flex flex-wrap gap-2">

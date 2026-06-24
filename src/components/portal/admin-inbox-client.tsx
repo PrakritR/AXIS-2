@@ -217,19 +217,19 @@ function ComposeModal({
         onClick={onClose}
       />
       <div
-        className="fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] max-h-[min(100%-2rem,90vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
+        className="fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] max-h-[min(100%-2rem,90vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="admin-inbox-compose-title"
       >
-        <h2 id="admin-inbox-compose-title" className="text-lg font-semibold text-slate-900">
+        <h2 id="admin-inbox-compose-title" className="text-lg font-semibold text-foreground">
           New message
         </h2>
-        <p className="mt-1 text-sm text-slate-500">Broadcast to a group or choose specific managers or residents.</p>
+        <p className="mt-1 text-sm text-muted">Broadcast to a group or choose specific managers or residents.</p>
 
         <div className="mt-4 space-y-3">
           <div>
-            <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Send to</label>
+            <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Send to</label>
             <Select
               className="mt-1.5"
               value={mode}
@@ -257,9 +257,9 @@ function ComposeModal({
           </div>
 
           {pickHeading && pickPool.length > 0 ? (
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3">
+            <div className="rounded-xl border border-border bg-accent/30 p-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">{pickHeading}</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{pickHeading}</span>
                 <button
                   type="button"
                   className="text-xs font-semibold text-primary hover:underline"
@@ -271,16 +271,16 @@ function ComposeModal({
               <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto pr-1">
                 {pickPool.map((c) => (
                   <li key={c.id}>
-                    <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-white px-2 py-2 text-sm ring-1 ring-slate-200/80 hover:bg-slate-50">
+                    <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-card px-2 py-2 text-sm ring-1 ring-border hover:bg-accent/30">
                       <input
                         type="checkbox"
-                        className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-border"
                         checked={selectedIds.has(c.id)}
                         onChange={() => toggleId(c.id)}
                       />
                       <span>
-                        <span className="font-medium text-slate-900">{c.name}</span>
-                        <span className="mt-0.5 block text-xs text-slate-500">{c.email}</span>
+                        <span className="font-medium text-foreground">{c.name}</span>
+                        <span className="mt-0.5 block text-xs text-muted">{c.email}</span>
                       </span>
                     </label>
                   </li>
@@ -290,12 +290,12 @@ function ComposeModal({
           ) : null}
 
           <div>
-            <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Subject</label>
+            <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Subject</label>
             <Input className="mt-1.5" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Subject" />
           </div>
 
           <div>
-            <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Message</label>
+            <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Message</label>
             <Textarea
               className="mt-1.5 min-h-[140px]"
               value={body}
@@ -524,16 +524,16 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                         : row.email;
                     return (
                       <Fragment key={row.id}>
-                        <tr className={`${PORTAL_TABLE_TR} ${isOpen ? "bg-slate-50/30" : ""}`}>
+                        <tr className={`${PORTAL_TABLE_TR} ${isOpen ? "bg-accent/30/30" : ""}`}>
                           <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                            <p className="font-medium text-slate-900">{primaryName}</p>
-                            {primaryEmail ? <p className="mt-0.5 text-xs text-slate-500">{primaryEmail}</p> : null}
+                            <p className="font-medium text-foreground">{primaryName}</p>
+                            {primaryEmail ? <p className="mt-0.5 text-xs text-muted">{primaryEmail}</p> : null}
                           </td>
-                          <td className={`${PORTAL_TABLE_TD} align-middle text-slate-800`}>{row.topic}</td>
-                          <td className={`max-w-[220px] ${PORTAL_TABLE_TD} align-middle text-slate-600`}>
+                          <td className={`${PORTAL_TABLE_TD} align-middle text-foreground`}>{row.topic}</td>
+                          <td className={`max-w-[220px] ${PORTAL_TABLE_TD} align-middle text-muted`}>
                             <span className="line-clamp-2">{previewSnippet(row.body)}</span>
                           </td>
-                          <td className={`${PORTAL_TABLE_TD} align-middle text-slate-500`}>{formatWhen(row.createdAt)}</td>
+                          <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{formatWhen(row.createdAt)}</td>
                           <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
                             <div className="flex flex-wrap justify-end gap-1.5">
                               <Button
@@ -611,24 +611,24 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                             <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                               <div className="space-y-3 text-left">
                                 <div>
-                                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Message</p>
-                                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{row.body}</p>
+                                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Message</p>
+                                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted">{row.body}</p>
                                 </div>
 
                                 {row.thread.length > 0 ? (
                                   <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
                                       Thread
                                     </p>
                                     <ul className="mt-2 space-y-2">
                                       {row.thread.map((t) => (
                                         <li
                                           key={t.id}
-                                          className="rounded-lg border border-slate-200/60 bg-white px-3 py-2.5 text-sm"
+                                          className="rounded-lg border border-border bg-card px-3 py-2.5 text-sm"
                                         >
-                                          <p className="font-semibold text-slate-900">{t.authorLabel}</p>
-                                          <p className="mt-0.5 text-xs text-slate-500">{formatWhen(t.createdAt)}</p>
-                                          <p className="mt-2 whitespace-pre-wrap text-slate-700">{t.body}</p>
+                                          <p className="font-semibold text-foreground">{t.authorLabel}</p>
+                                          <p className="mt-0.5 text-xs text-muted">{formatWhen(t.createdAt)}</p>
+                                          <p className="mt-2 whitespace-pre-wrap text-muted">{t.body}</p>
                                         </li>
                                       ))}
                                     </ul>
@@ -639,7 +639,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   <div>
                                     <label
                                       htmlFor={`reply-${row.id}`}
-                                      className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400"
+                                      className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted"
                                     >
                                       Add to thread
                                     </label>

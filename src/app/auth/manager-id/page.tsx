@@ -129,7 +129,7 @@ function ManagerIdContent() {
           <button
             type="button"
             onClick={copy}
-            className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-slate-50 transition-colors"
+            className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent/30 transition-colors"
           >
             {copied ? "Copied!" : "Copy"}
           </button>
@@ -138,7 +138,7 @@ function ManagerIdContent() {
       </div>
 
       {/* Steps */}
-      <div className="mt-7 space-y-3 rounded-2xl border border-border bg-slate-50/50 p-4">
+      <div className="mt-7 space-y-3 rounded-2xl border border-border bg-accent/30 p-4">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted/70 mb-4">Account setup steps</p>
         <Step n={1} label="Reserve your Axis ID" done />
         <Step n={2} label="Set a password to activate your portal" />

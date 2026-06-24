@@ -102,7 +102,7 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
         />
       }
     >
-      <p className="mb-5 text-sm text-slate-500">
+      <p className="mb-5 text-sm text-muted">
         {tabId === "bugs"
           ? "Issues reported from manager and resident portals, grouped by role."
           : "Product feedback from portal users, grouped by role."}
@@ -155,28 +155,28 @@ function FeedbackRoleGroup({
 }) {
   return (
     <details
-      className="group overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm open:shadow-[0_8px_28px_-20px_rgba(15,23,42,0.18)]"
+      className="group overflow-hidden rounded-2xl border border-border bg-card shadow-sm open:shadow-[0_8px_28px_-20px_rgba(15,23,42,0.18)]"
       open
     >
-      <summary className="cursor-pointer list-none border-b border-transparent px-5 py-4 group-open:border-slate-100 [&::-webkit-details-marker]:hidden">
+      <summary className="cursor-pointer list-none border-b border-transparent px-5 py-4 group-open:border-border [&::-webkit-details-marker]:hidden">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-slate-900">{title}</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{subtitle}</p>
+            <p className="text-sm font-semibold text-foreground">{title}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted">{subtitle}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-slate-600">
+            <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-muted">
               {rows.length}
             </span>
             <span className="text-xs font-semibold text-primary group-open:hidden">Open</span>
-            <span className="hidden text-xs font-semibold text-slate-400 group-open:inline">Hide</span>
+            <span className="hidden text-xs font-semibold text-muted group-open:inline">Hide</span>
           </div>
         </div>
       </summary>
 
       <div className="overflow-x-auto">
         {rows.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-slate-500">{emptyLabel}</p>
+          <p className="px-5 py-10 text-center text-sm text-muted">{emptyLabel}</p>
         ) : (
           <table className="w-full min-w-[720px] border-collapse text-left text-sm">
             <thead>
@@ -197,24 +197,24 @@ function FeedbackRoleGroup({
                       className={`${PORTAL_TABLE_TR} ${PORTAL_TABLE_ROW_TOGGLE_CLASS} cursor-pointer`}
                       onClick={() => onToggle(row.id)}
                     >
-                      <td className={`${PORTAL_TABLE_TD} text-slate-400`}>{open ? "▾" : "▸"}</td>
-                      <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-slate-500`}>
+                      <td className={`${PORTAL_TABLE_TD} text-muted`}>{open ? "▾" : "▸"}</td>
+                      <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-muted`}>
                         {formatWhen(row.createdAt)}
                       </td>
                       <td className={PORTAL_TABLE_TD}>
-                        <p className="font-medium text-slate-900">{row.reporterName || row.reporterEmail}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="font-medium text-foreground">{row.reporterName || row.reporterEmail}</p>
+                        <p className="text-xs text-muted">
                           {roleGroupLabelForFeedback(row.reporterRole)} · {row.reporterEmail}
                         </p>
                       </td>
                       <td className={PORTAL_TABLE_TD}>
-                        <p className="font-medium text-slate-900">{row.title}</p>
+                        <p className="font-medium text-foreground">{row.title}</p>
                         {row.severity ? (
-                          <p className="text-xs capitalize text-slate-500">Severity: {row.severity}</p>
+                          <p className="text-xs capitalize text-muted">Severity: {row.severity}</p>
                         ) : null}
                       </td>
                       <td className={PORTAL_TABLE_TD}>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">
+                        <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[11px] font-semibold capitalize text-muted">
                           {row.status}
                         </span>
                       </td>
@@ -222,18 +222,18 @@ function FeedbackRoleGroup({
                     {open ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
                         <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                          <div className="space-y-3 text-sm text-slate-700">
+                          <div className="space-y-3 text-sm text-muted">
                             <p className="whitespace-pre-wrap">{row.description}</p>
                             {row.stepsToReproduce ? (
                               <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                                   Steps to reproduce
                                 </p>
                                 <p className="mt-1 whitespace-pre-wrap">{row.stepsToReproduce}</p>
                               </div>
                             ) : null}
                             {row.pageUrl ? (
-                              <p className="text-xs text-slate-500">
+                              <p className="text-xs text-muted">
                                 Page:{" "}
                                 <a
                                   href={row.pageUrl}
@@ -285,10 +285,10 @@ function AdminRowEditor({
   }, [row.adminNotes, row.status]);
 
   return (
-    <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4 sm:grid-cols-[160px_1fr_auto] sm:items-end">
+    <div className="mt-4 grid gap-3 rounded-xl border border-border bg-accent/30 p-4 sm:grid-cols-[160px_1fr_auto] sm:items-end">
       <div>
-        <p className="mb-1 text-[11px] font-medium text-slate-600">Status</p>
-        <Select value={status} onChange={(e) => setStatus(e.target.value as BugFeedbackStatus)} className="bg-white">
+        <p className="mb-1 text-[11px] font-medium text-muted">Status</p>
+        <Select value={status} onChange={(e) => setStatus(e.target.value as BugFeedbackStatus)} className="bg-card">
           {STATUS_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -297,8 +297,8 @@ function AdminRowEditor({
         </Select>
       </div>
       <div>
-        <p className="mb-1 text-[11px] font-medium text-slate-600">Admin notes (internal)</p>
-        <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-white" placeholder="Triage notes…" />
+        <p className="mb-1 text-[11px] font-medium text-muted">Admin notes (internal)</p>
+        <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-card" placeholder="Triage notes…" />
       </div>
       <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={() => onSave(status, notes)}>
         {busy ? "Saving…" : "Save"}

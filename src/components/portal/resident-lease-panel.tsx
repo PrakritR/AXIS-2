@@ -388,16 +388,16 @@ export function ResidentLeasePanel() {
             </div>
             {pipelineRow.thread?.length ? (
               <>
-                <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">History</p>
+                <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">History</p>
                 <ul className="mt-2 space-y-2">
                   {pipelineRow.thread.map((m) => (
                     <li
                       key={m.id}
-                      className={`rounded-xl px-3 py-2 text-sm ${m.role === "resident" ? "border border-blue-100 bg-blue-50" : "border border-slate-100 bg-slate-50"}`}
+                      className={`rounded-xl px-3 py-2 text-sm ${m.role === "resident" ? "border border-blue-100 bg-blue-50" : "border border-border bg-accent/30"}`}
                     >
-                      <span className="font-semibold text-slate-800">{m.role === "resident" ? "You" : "Manager"}</span>
-                      <span className="ml-1.5 text-xs text-slate-400">{safeFormatDateTime(m.at)}</span>
-                      <p className="mt-1 whitespace-pre-wrap text-slate-700">{m.body}</p>
+                      <span className="font-semibold text-foreground">{m.role === "resident" ? "You" : "Manager"}</span>
+                      <span className="ml-1.5 text-xs text-muted">{safeFormatDateTime(m.at)}</span>
+                      <p className="mt-1 whitespace-pre-wrap text-muted">{m.body}</p>
                     </li>
                   ))}
                 </ul>
@@ -414,26 +414,26 @@ export function ResidentLeasePanel() {
             </p>
             <div className="mt-4 space-y-1 text-sm">
               <div className="flex justify-between gap-3 border-b border-blue-100 pb-2">
-                <span className="text-slate-600">Application fee</span>
+                <span className="text-muted">Application fee</span>
                 <span className="font-medium text-emerald-700">{upgradeBreakdown.applicationFee.label}</span>
               </div>
               <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
-                <span className="text-slate-600">Move-in fee balance</span>
-                <span className="font-semibold text-slate-900">{upgradeBreakdown.moveInFee.label}</span>
+                <span className="text-muted">Move-in fee balance</span>
+                <span className="font-semibold text-foreground">{upgradeBreakdown.moveInFee.label}</span>
               </div>
               <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
-                <span className="text-slate-600">Security deposit balance</span>
-                <span className="font-semibold text-slate-900">{upgradeBreakdown.securityDeposit.label}</span>
+                <span className="text-muted">Security deposit balance</span>
+                <span className="font-semibold text-foreground">{upgradeBreakdown.securityDeposit.label}</span>
               </div>
               {upgradeBreakdownMtm?.monthToMonthSurcharge.label ? (
                 <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
-                  <span className="text-slate-600">Month-to-month option</span>
+                  <span className="text-muted">Month-to-month option</span>
                   <span className="font-medium text-amber-700">+{upgradeBreakdownMtm.monthToMonthSurcharge.label}</span>
                 </div>
               ) : null}
               <div className="flex justify-between gap-3 pt-2">
-                <span className="font-semibold text-slate-800">Total due to upgrade</span>
-                <span className="font-bold text-slate-900">${upgradeBreakdown.totalDue.toFixed(2)}</span>
+                <span className="font-semibold text-foreground">Total due to upgrade</span>
+                <span className="font-bold text-foreground">${upgradeBreakdown.totalDue.toFixed(2)}</span>
               </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -454,7 +454,7 @@ export function ResidentLeasePanel() {
                 Request month-to-month
               </Button>
             </div>
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-muted">
               Payments will update automatically in your Payments tab once the manager processes your upgrade. If you switch to month-to-month, a new lease at the adjusted rate is required.
             </p>
           </Card>

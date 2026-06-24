@@ -90,7 +90,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
 
   return (
     <div className="glass-card flex h-full flex-col overflow-hidden rounded-[18px] transition duration-200 ease-out hover:border-primary/20 hover:shadow-[var(--shadow-card-hover)]">
-      <div className="relative aspect-[16/10] overflow-hidden bg-slate-200">
+      <div className="relative aspect-[16/10] overflow-hidden bg-accent/40">
         <Image src={slideSrc} alt={title} fill sizes="(min-width: 1024px) 33vw, 100vw" className="absolute inset-0 object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
         {sharedHousing ? (
@@ -103,7 +103,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
         <button
           type="button"
           aria-label="Previous photo"
-          className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:bg-white"
+          className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-md transition hover:bg-card"
           onClick={() => go(-1)}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -113,7 +113,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
         <button
           type="button"
           aria-label="Next photo"
-          className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:bg-white"
+          className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-md transition hover:bg-card"
           onClick={() => go(1)}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -126,7 +126,7 @@ export function PropertyCard({ property }: { property: MockProperty }) {
               key={i}
               type="button"
               aria-label={`Photo ${i + 1}`}
-              className={`h-1.5 w-1.5 rounded-full transition ${i === activeSlide ? "bg-white" : "bg-white/40"}`}
+              className={`h-1.5 w-1.5 rounded-full transition ${i === activeSlide ? "bg-card" : "bg-card/40"}`}
               onClick={() => setSlide(i)}
             />
           ))}

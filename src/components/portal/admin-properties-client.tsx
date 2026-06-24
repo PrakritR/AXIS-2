@@ -147,12 +147,12 @@ function AdminPropertyInlineDetails({
   const footer = (
     <div className="flex flex-col gap-2">
       {bucket === 1 && row.editRequestNote?.trim() ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Requested changes</p>
-          <p className="mt-1.5 whitespace-pre-wrap text-slate-700">{row.editRequestNote.trim()}</p>
+        <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Requested changes</p>
+          <p className="mt-1.5 whitespace-pre-wrap text-muted">{row.editRequestNote.trim()}</p>
         </div>
       ) : null}
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Actions</p>
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Actions</p>
       {composeEdit === "pending" && bucket === 0 ? (
         <PropertyRequestEditForm
           recipientHint="manager / owner who submitted this listing"
@@ -339,13 +339,13 @@ function AdminPropertyInlineDetails({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Public listing preview</p>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Public listing preview</p>
         {publicHref ? (
           <Link
             href={publicHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs font-semibold text-slate-700 underline-offset-2 hover:underline"
+            className="text-xs font-semibold text-muted underline-offset-2 hover:underline"
           >
             Open public page
           </Link>
@@ -353,11 +353,11 @@ function AdminPropertyInlineDetails({
       </div>
       <div
         data-listing-preview-scroll
-        className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/90 bg-white"
+        className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card"
       >
         <ListingDetailSections property={mock} rich={rich} previewModal />
       </div>
-      <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 px-4 py-4 sm:px-5">{footer}</div>
+      <div className="rounded-2xl border border-border bg-accent/30 px-4 py-4 sm:px-5">{footer}</div>
     </div>
   );
 }
@@ -406,7 +406,7 @@ export function AdminPropertiesClient() {
         </Button>
       }
     >
-      <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+      <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
         {KPI_LABELS.map((label, i) => (
           <button
             key={label}
@@ -416,13 +416,13 @@ export function AdminPropertiesClient() {
               setExpandedRowKey(null);
             }}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
-              activeKpi === i ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              activeKpi === i ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
             }`}
           >
             {label}
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                activeKpi === i ? "bg-slate-100 text-slate-700" : "bg-slate-200/60 text-slate-500"
+                activeKpi === i ? "bg-accent/30 text-muted" : "bg-accent/40 text-muted"
               }`}
             >
               {kpiValues[i]}
@@ -437,11 +437,11 @@ export function AdminPropertiesClient() {
 
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>
         {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center bg-slate-50/20 px-4 py-14 text-center sm:py-16">
+          <div className="flex flex-col items-center justify-center bg-accent/30/20 px-4 py-14 text-center sm:py-16">
             <AxisHeaderMarkTile>
               <HouseIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
-            <p className="mt-4 max-w-sm text-sm font-medium text-slate-500">{EMPTY_COPY[activeKpi]}</p>
+            <p className="mt-4 max-w-sm text-sm font-medium text-muted">{EMPTY_COPY[activeKpi]}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -462,21 +462,21 @@ export function AdminPropertiesClient() {
                     <Fragment key={rowKey}>
                       <tr className={PORTAL_TABLE_TR}>
                         <td className={PORTAL_TABLE_TD}>
-                          <p className="font-medium text-slate-900">
+                          <p className="font-medium text-foreground">
                             {row.buildingName} · {row.unitLabel}
                           </p>
-                          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                          <p className="mt-0.5 text-xs leading-relaxed text-muted">
                             {row.address}
                             {row.zip ? `, ${row.zip}` : ""}
                           </p>
                         </td>
                         <td className={PORTAL_TABLE_TD}>
-                          <p className="text-xs text-slate-600">
-                            <span className="font-medium text-slate-800">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths} ba ·{" "}
+                          <p className="text-xs text-muted">
+                            <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths} ba ·{" "}
                             {row.neighborhood}
                           </p>
                           {String(row.tagline ?? "").trim() ? (
-                            <p className="mt-1.5 line-clamp-2 text-xs text-slate-500">{row.tagline}</p>
+                            <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p>
                           ) : null}
                         </td>
                         <td className={PORTAL_TABLE_TD}>
@@ -496,7 +496,7 @@ export function AdminPropertiesClient() {
                       </tr>
                       {expanded ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={4} className="bg-slate-50/50 px-4 py-4">
+                          <td colSpan={4} className="bg-accent/30 px-4 py-4">
                             <AdminPropertyInlineDetails
                               key={rowKey}
                               bucket={activeKpi}

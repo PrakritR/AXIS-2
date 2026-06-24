@@ -328,7 +328,7 @@ export function ResidentPaymentsPanel() {
                             );
                           })()}
                           {row.status === "paid" && row.paidAt ? (
-                            <p className="mt-2 text-xs text-slate-500">Marked paid {safeFormatDateTime(row.paidAt)}</p>
+                            <p className="mt-2 text-xs text-muted">Marked paid {safeFormatDateTime(row.paidAt)}</p>
                           ) : null}
                           {row.blocksLeaseUntilPaid && row.status === "pending" ? (
                             <p className="mt-3 text-sm text-amber-900">

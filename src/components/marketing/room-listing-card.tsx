@@ -131,7 +131,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
 
   return (
     <article className="glass-card flex h-full flex-col overflow-hidden rounded-[18px] transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]">
-      <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-slate-200">
+      <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-accent/40">
         {slides.map((slide, i) =>
           slide.kind === "photo" ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -169,7 +169,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
 
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" aria-hidden />
 
-        <span className="pointer-events-none absolute left-3 top-3 rounded-md bg-white/95 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-900 shadow-sm ring-1 ring-black/5">
+        <span className="pointer-events-none absolute left-3 top-3 rounded-md bg-card px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground shadow-sm ring-1 ring-black/5">
           {slides[slideIdx]?.label?.trim() ? slides[slideIdx]!.label : "Room rental"}
         </span>
 
@@ -187,7 +187,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
               key={i}
               type="button"
               aria-label={`Photo ${i + 1} of ${n}`}
-              className={`h-1.5 rounded-full transition-all ${i === slideIdx ? "w-5 bg-white" : "w-1.5 bg-white/50 hover:bg-white/80"}`}
+              className={`h-1.5 rounded-full transition-all ${i === slideIdx ? "w-5 bg-card" : "w-1.5 bg-card hover:bg-card"}`}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -200,7 +200,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
         <button
           type="button"
           aria-label="Previous photo"
-          className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-white/90 text-slate-700 shadow-md backdrop-blur-sm transition hover:bg-white"
+          className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-card text-muted shadow-md backdrop-blur-sm transition hover:bg-card"
           onClick={prev}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -208,7 +208,7 @@ export function RoomListingCard({ row }: { row: RoomListingRow }) {
         <button
           type="button"
           aria-label="Next photo"
-          className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-white/90 text-slate-700 shadow-md backdrop-blur-sm transition hover:bg-white"
+          className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-card text-muted shadow-md backdrop-blur-sm transition hover:bg-card"
           onClick={next}
         >
           <ChevronRight className="h-4 w-4" />

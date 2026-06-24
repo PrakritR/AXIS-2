@@ -76,7 +76,7 @@ export function PortalWorkspaceClient({
         }
       >
         {model.kpis.map((k) => (
-          <Card key={k.label} className="border-slate-200/80 bg-white p-5">
+          <Card key={k.label} className="border-border bg-card p-5">
             <p className={PORTAL_KPI_VALUE}>{k.value}</p>
             <p className={PORTAL_KPI_LABEL}>{k.label}</p>
             {k.hint ? <p className="mt-2 text-sm text-muted">{k.hint}</p> : null}

@@ -53,7 +53,7 @@ function tierTagline(t: ManagerSkuTier): string {
 
 function CheckIcon({ muted }: { muted?: boolean }) {
   return (
-    <svg className={`h-4 w-4 shrink-0 ${muted ? "text-slate-300" : "text-primary"}`} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg className={`h-4 w-4 shrink-0 ${muted ? "text-muted/35" : "text-primary"}`} viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -465,45 +465,45 @@ export function ManagerPlan() {
       <div className="mx-auto max-w-5xl space-y-8">
         {/* Current plan summary */}
         {!sub ? (
-          <div className="h-36 animate-pulse rounded-2xl border border-slate-200 bg-slate-100/80" aria-hidden />
+          <div className="h-36 animate-pulse rounded-2xl border border-border bg-accent/30" aria-hidden />
         ) : (
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/80 shadow-[0_8px_30px_-18px_rgba(15,23,42,0.2)]">
-            <div className="border-b border-slate-100 px-6 py-5 sm:px-8">
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Your plan</p>
+          <section className="surface-panel overflow-hidden rounded-2xl border border-border shadow-[var(--shadow-card)]">
+            <div className="border-b border-border px-6 py-5 sm:px-8">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Your plan</p>
               <div className="mt-2 flex flex-wrap items-center gap-3">
-                <h2 className="text-2xl font-bold tracking-tight text-slate-950">{tierLabel(currentTier)}</h2>
+                <h2 className="text-2xl font-bold tracking-tight text-foreground">{tierLabel(currentTier)}</h2>
                 <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Active</span>
                 {sub.cancelAtPeriodEnd ? (
-                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+                  <span className="rounded-full bg-[var(--status-pending-bg)] px-3 py-1 text-xs font-semibold text-[var(--status-pending-fg)]">
                     Cancelling
                   </span>
                 ) : null}
                 {sub.scheduledDowngrade && !sub.cancelAtPeriodEnd ? (
-                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+                  <span className="rounded-full bg-[var(--status-pending-bg)] px-3 py-1 text-xs font-semibold text-[var(--status-pending-fg)]">
                     Downgrade scheduled
                   </span>
                 ) : null}
               </div>
-              <p className="mt-1.5 text-sm text-slate-600">{tierTagline(currentTier)}</p>
+              <p className="mt-1.5 text-sm text-muted">{tierTagline(currentTier)}</p>
             </div>
 
             <div className="grid gap-5 px-6 py-5 sm:grid-cols-2 sm:px-8">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Billing</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Billing</p>
                 {currentTier === "free" ? (
-                  <p className="mt-1 text-sm font-medium text-slate-800">No subscription</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">No subscription</p>
                 ) : sub.stripeManaged ? (
-                  <p className="mt-1 text-sm font-medium text-slate-800">
+                  <p className="mt-1 text-sm font-medium text-foreground">
                     {currentBilling === "annual" ? "Billed annually" : "Billed monthly"}
                     {renewalLabel ? (
                       <>
                         {" "}
-                        · Renews <span className="text-slate-600">{renewalLabel}</span>
+                        · Renews <span className="text-muted">{renewalLabel}</span>
                       </>
                     ) : null}
                   </p>
                 ) : (
-                  <p className="mt-1 text-sm font-medium text-slate-800">{tierLabel(currentTier)} (not Stripe-managed)</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{tierLabel(currentTier)} (not Stripe-managed)</p>
                 )}
               </div>
 
@@ -523,15 +523,15 @@ export function ManagerPlan() {
             </div>
 
             {sub.stripeManaged && currentTier !== "free" && !sub.cancelAtPeriodEnd ? (
-              <div className="border-t border-slate-100 px-6 py-4 sm:px-8">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Billing cycle</p>
-                <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1">
+              <div className="border-t border-border px-6 py-4 sm:px-8">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Billing cycle</p>
+                <div className="surface-panel inline-flex items-center gap-1 rounded-full border border-border p-1">
                   <button
                     type="button"
                     disabled={billingSyncBusy}
                     onClick={() => void switchBillingInterval("monthly")}
                     className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-                      currentBilling === "monthly" ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900"
+                      currentBilling === "monthly" ? "bg-primary text-primary-foreground" : "text-muted hover:text-foreground"
                     }`}
                   >
                     Monthly
@@ -541,13 +541,13 @@ export function ManagerPlan() {
                     disabled={billingSyncBusy}
                     onClick={() => void switchBillingInterval("annual")}
                     className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-                      currentBilling === "annual" ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900"
+                      currentBilling === "annual" ? "bg-primary text-primary-foreground" : "text-muted hover:text-foreground"
                     }`}
                   >
                     Annual
                   </button>
                 </div>
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-muted">
                   {currentBilling === "annual"
                     ? scheduledBillingChange
                       ? `Monthly billing starts${renewalLabel ? ` on ${renewalLabel}` : " at the end of your annual period"}.`
@@ -558,16 +558,16 @@ export function ManagerPlan() {
             ) : null}
 
             {sub.stripeManaged && (sub.scheduledDowngrade || sub.cancelAtPeriodEnd) ? (
-              <div className="border-t border-amber-100 bg-amber-50/80 px-6 py-4 sm:px-8">
+              <div className="border-t border-[var(--status-pending-bg)] bg-[var(--status-pending-bg)] px-6 py-4 sm:px-8">
                 {sub.cancelAtPeriodEnd ? (
-                  <p className="text-sm text-amber-950">
+                  <p className="text-sm text-[var(--status-pending-fg)]">
                     <span className="font-semibold">Cancellation scheduled.</span>{" "}
                     {renewalLabel
                       ? `Paid access ends ${renewalLabel}.`
                       : "Paid access ends at the close of your billing period."}
                   </p>
                 ) : sub.scheduledDowngrade ? (
-                  <p className="text-sm text-amber-950">
+                  <p className="text-sm text-[var(--status-pending-fg)]">
                     <span className="font-semibold">
                       {scheduledBillingChange ? "Billing change scheduled." : "Downgrade scheduled."}
                     </span>{" "}
@@ -613,15 +613,15 @@ export function ManagerPlan() {
         <section>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Compare plans</h3>
-              <p className="mt-0.5 text-sm text-slate-500">Choose a plan below. Upgrades apply immediately; downgrades and billing changes take effect at renewal.</p>
+              <h3 className="text-lg font-semibold text-foreground">Compare plans</h3>
+              <p className="mt-0.5 text-sm text-muted">Choose a plan below. Upgrades apply immediately; downgrades and billing changes take effect at renewal.</p>
             </div>
-            <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+            <div className="surface-panel inline-flex shrink-0 items-center gap-1 rounded-full border border-border p-1 shadow-sm">
               <button
                 type="button"
                 onClick={() => setPriceView("monthly")}
                 className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-                  priceView === "monthly" ? "bg-primary text-white" : "text-slate-600 hover:text-slate-900"
+                  priceView === "monthly" ? "bg-primary text-white" : "text-muted hover:text-foreground"
                 }`}
               >
                 Monthly
@@ -630,13 +630,13 @@ export function ManagerPlan() {
                 type="button"
                 onClick={() => setPriceView("annual")}
                 className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-                  priceView === "annual" ? "bg-primary text-white" : "text-slate-600 hover:text-slate-900"
+                  priceView === "annual" ? "bg-primary text-white" : "text-muted hover:text-foreground"
                 }`}
               >
                 Annual
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    priceView === "annual" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700"
+                    priceView === "annual" ? "bg-card/20 text-white" : "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]"
                   }`}
                 >
                   −20%
@@ -648,7 +648,7 @@ export function ManagerPlan() {
           {!sub ? (
             <div className="mt-5 grid gap-4 lg:grid-cols-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-80 animate-pulse rounded-2xl border border-slate-200 bg-slate-100/80" aria-hidden />
+                <div key={i} className="h-80 animate-pulse rounded-2xl border border-border bg-accent/30" aria-hidden />
               ))}
             </div>
           ) : (
@@ -665,10 +665,10 @@ export function ManagerPlan() {
                 return (
                   <article
                     key={t.id}
-                    className={`relative flex h-full flex-col rounded-2xl border p-6 transition ${
+                    className={`surface-panel relative flex h-full flex-col rounded-2xl border p-6 transition ${
                       isCurrent
-                        ? "border-2 border-primary bg-primary/[0.04] shadow-[0_4px_24px_-12px_rgba(0,122,255,0.35)]"
-                        : "border-slate-200 bg-white hover:border-slate-300"
+                        ? "border-2 border-primary shadow-[0_4px_24px_-12px_rgba(0,122,255,0.35)] ring-1 ring-primary/15"
+                        : "border-border hover:border-primary/30"
                     }`}
                   >
                     {tierId === "pro" && !isCurrent ? (
@@ -683,21 +683,21 @@ export function ManagerPlan() {
                           Current plan
                         </span>
                       ) : isScheduled ? (
-                        <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+                        <span className="inline-flex rounded-full bg-[var(--status-pending-bg)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--status-pending-fg)]">
                           Starts {renewalLabel ?? "at renewal"}
                         </span>
                       ) : (
-                        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        <span className="inline-flex rounded-full bg-accent/30 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
                           {t.label}
                         </span>
                       )}
                     </div>
 
                     <div className="mt-3 flex items-baseline gap-1">
-                      <span className="text-3xl font-black tracking-tight text-slate-900">{pb.headline}</span>
-                      {pb.period ? <span className="text-sm font-medium text-slate-400">{pb.period}</span> : null}
+                      <span className="text-3xl font-black tracking-tight text-foreground">{pb.headline}</span>
+                      {pb.period ? <span className="text-sm font-medium text-muted">{pb.period}</span> : null}
                     </div>
-                    <p className="mt-2 min-h-[4.5rem] text-sm leading-snug text-slate-500">{pb.sub}</p>
+                    <p className="mt-2 min-h-[4.5rem] text-sm leading-snug text-muted">{pb.sub}</p>
 
                     <div className="mt-5 min-h-[52px]">
                       {isCurrent ? (
@@ -705,7 +705,7 @@ export function ManagerPlan() {
                           You&apos;re on this plan
                         </div>
                       ) : isScheduled ? (
-                        <div className="flex h-[52px] items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-900">
+                        <div className="flex h-[52px] items-center justify-center rounded-xl border border-[var(--status-pending-bg)] bg-[var(--status-pending-bg)] px-4 text-sm font-semibold text-[var(--status-pending-fg)]">
                           Downgrade scheduled
                         </div>
                       ) : (
@@ -721,11 +721,11 @@ export function ManagerPlan() {
                       )}
                     </div>
 
-                    <ul className="mt-5 space-y-2.5 border-t border-slate-100 pt-5">
+                    <ul className="mt-5 space-y-2.5 border-t border-border pt-5">
                       {t.features.map((f) => (
                         <li key={f.text} className="flex items-start gap-2.5 text-sm">
                           <CheckIcon muted={!f.included} />
-                          <span className={f.included ? "text-slate-700" : "text-slate-400"}>{f.text}</span>
+                          <span className={f.included ? "text-muted" : "text-muted"}>{f.text}</span>
                         </li>
                       ))}
                     </ul>
@@ -737,7 +737,7 @@ export function ManagerPlan() {
         </section>
 
         {sub && !sub.stripeManaged && !sub.isFree ? (
-          <p className="text-center text-xs text-slate-500">
+          <p className="text-center text-xs text-muted">
             Subscribe through the buttons above to manage billing in Stripe.
           </p>
         ) : null}
@@ -756,13 +756,13 @@ export function ManagerPlan() {
       >
         {feedbackModal?.kind === "annual_to_monthly" ? (
           <div className="space-y-4">
-            <p className="text-sm leading-6 text-slate-600">
-              You&apos;re currently on <span className="font-semibold text-slate-900">annual billing</span>. Switching to
+            <p className="text-sm leading-6 text-muted">
+              You&apos;re currently on <span className="font-semibold text-foreground">annual billing</span>. Switching to
               monthly will take effect
               {renewalLabel ? (
                 <>
                   {" "}
-                  on <span className="font-semibold text-slate-900">{renewalLabel}</span>
+                  on <span className="font-semibold text-foreground">{renewalLabel}</span>
                 </>
               ) : (
                 " at the end of your current annual period"
@@ -770,7 +770,7 @@ export function ManagerPlan() {
               . You&apos;ll keep annual billing until then.
             </p>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-800" htmlFor="plan-feedback-reason">
+              <label className="text-sm font-semibold text-foreground" htmlFor="plan-feedback-reason">
                 Why are you switching to monthly billing? *
               </label>
               <Textarea
@@ -780,7 +780,7 @@ export function ManagerPlan() {
                 rows={4}
                 placeholder="Tell us what we could do better…"
               />
-              <p className="text-xs text-slate-500">Your response is sent to the Axis team as feedback.</p>
+              <p className="text-xs text-muted">Your response is sent to the Axis team as feedback.</p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closeFeedbackModal}>
@@ -799,13 +799,13 @@ export function ManagerPlan() {
           </div>
         ) : feedbackModal?.kind === "cancel_plan" ? (
           <div className="space-y-4">
-            <p className="text-sm leading-6 text-slate-600">
-              You&apos;ll keep <span className="font-semibold text-slate-900">{tierLabel(feedbackModal.fromTier)}</span>{" "}
+            <p className="text-sm leading-6 text-muted">
+              You&apos;ll keep <span className="font-semibold text-foreground">{tierLabel(feedbackModal.fromTier)}</span>{" "}
               until
               {renewalLabel ? (
                 <>
                   {" "}
-                  <span className="font-semibold text-slate-900">{renewalLabel}</span>
+                  <span className="font-semibold text-foreground">{renewalLabel}</span>
                 </>
               ) : (
                 " the end of your billing period"
@@ -813,7 +813,7 @@ export function ManagerPlan() {
               , then move to Free.
             </p>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-800" htmlFor="plan-cancel-reason">
+              <label className="text-sm font-semibold text-foreground" htmlFor="plan-cancel-reason">
                 Why are you cancelling? *
               </label>
               <Textarea
@@ -823,7 +823,7 @@ export function ManagerPlan() {
                 rows={4}
                 placeholder="Tell us what we could do better…"
               />
-              <p className="text-xs text-slate-500">Your response is sent to the Axis team as feedback.</p>
+              <p className="text-xs text-muted">Your response is sent to the Axis team as feedback.</p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closeFeedbackModal}>

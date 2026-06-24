@@ -331,7 +331,7 @@ export function CosignerApplyFlow({
           <strong className="text-foreground">Property Portal → Applications</strong> on the primary applicant&apos;s record. The
           primary applicant does not need to resubmit.
         </p>
-        <div className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
+        <div className="mt-6 space-y-4 rounded-2xl border border-border bg-card px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Linked primary application</p>
           {displayAxis ? (
             <div>
@@ -384,7 +384,7 @@ export function CosignerApplyFlow({
 
   return (
     <div
-      className="mt-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+      className="mt-8 rounded-3xl border border-border bg-card p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
       style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
     >
       <div className="border-b border-border pb-6">
@@ -410,8 +410,8 @@ export function CosignerApplyFlow({
                       : completed
                         ? "bg-primary/15 text-primary"
                         : reachable
-                          ? "bg-slate-100 text-muted hover:bg-slate-200"
-                          : "cursor-not-allowed bg-slate-50 text-slate-300"
+                          ? "bg-accent/30 text-muted hover:bg-accent/40"
+                          : "cursor-not-allowed bg-accent/30 text-slate-300"
                   }`}
                 >
                   {completed ? "✓" : s.n}
@@ -420,7 +420,7 @@ export function CosignerApplyFlow({
             })}
           </div>
         </div>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-accent/30">
           <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out" style={{ width: `${progress}%` }} />
         </div>
       </div>
@@ -585,7 +585,7 @@ export function CosignerApplyFlow({
                       patchField(setF, "notEmployed", e.target.checked);
                       setFieldErrors({});
                     }}
-                    className="h-4 w-4 rounded border-slate-300 text-primary"
+                    className="h-4 w-4 rounded border-border text-primary"
                   />
                   I am not currently employed
                 </label>
@@ -745,7 +745,7 @@ export function CosignerApplyFlow({
               className={`mt-6 rounded-xl border p-4 ${
                 fieldErrors.consentCredit
                   ? "border-red-500 bg-red-50/50 ring-2 ring-red-100"
-                  : "border-slate-200 bg-slate-50/80"
+                  : "border-border bg-accent/30"
               }`}
             >
               <p className="text-sm font-semibold text-foreground">
@@ -760,7 +760,7 @@ export function CosignerApplyFlow({
                     patchField(setF, "consentCredit", e.target.checked);
                     clearError("consentCredit");
                   }}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+                  className="mt-0.5 h-4 w-4 rounded border-border text-primary"
                 />
                 I consent to a credit and background check.
               </label>

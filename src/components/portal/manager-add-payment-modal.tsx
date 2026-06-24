@@ -189,11 +189,11 @@ export function ManagerAddPaymentModal({
         open={open && noticePreview === null}
         title="Add payment"
         onClose={handleClose}
-        panelClassName="relative z-[71] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:my-4 sm:p-6"
+        panelClassName="relative z-[71] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border bg-card p-4 shadow-2xl sm:my-4 sm:p-6"
       >
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-            <span className="font-medium text-slate-700">Payment type</span>
+            <span className="font-medium text-muted">Payment type</span>
             <Select value={preset} onChange={(e) => onPresetChange(e.target.value as ManagerPaymentPresetId)}>
               {MANAGER_PAYMENT_PRESETS.map((option) => (
                 <option key={option.id} value={option.id}>
@@ -203,19 +203,19 @@ export function ManagerAddPaymentModal({
             </Select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Property</span>
+            <span className="font-medium text-muted">Property</span>
             <Input value={propertyName} onChange={(e) => setPropertyName(e.target.value)} placeholder="Demo Building" autoComplete="off" />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Room / unit</span>
+            <span className="font-medium text-muted">Room / unit</span>
             <Input value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} placeholder="2A" autoComplete="off" />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Resident name</span>
+            <span className="font-medium text-muted">Resident name</span>
             <Input value={residentName} onChange={(e) => setResidentName(e.target.value)} placeholder="Alex Chen" autoComplete="off" />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Resident email</span>
+            <span className="font-medium text-muted">Resident email</span>
             <Input
               type="email"
               value={residentEmail}
@@ -225,11 +225,11 @@ export function ManagerAddPaymentModal({
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Charge title</span>
+            <span className="font-medium text-muted">Charge title</span>
             <Input value={chargeTitle} onChange={(e) => setChargeTitle(e.target.value)} placeholder="April rent" autoComplete="off" />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Amount (USD)</span>
+            <span className="font-medium text-muted">Amount (USD)</span>
             <Input
               type="number"
               inputMode="decimal"
@@ -241,11 +241,11 @@ export function ManagerAddPaymentModal({
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Due date</span>
+            <span className="font-medium text-muted">Due date</span>
             <Input type="date" value={dueIso} onChange={(e) => setDueIso(e.target.value)} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Status</span>
+            <span className="font-medium text-muted">Status</span>
             <Select value={bucket} onChange={(e) => setBucket(e.target.value as ManagerPaymentBucket)}>
               <option value="pending">Pending</option>
               <option value="overdue">Overdue</option>
@@ -275,7 +275,7 @@ export function ManagerAddPaymentModal({
         confirmBusy={noticeBusy}
         confirmBusyLabel="Adding…"
         cancelLabel="Back"
-        panelClassName="relative z-[72] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:my-4 sm:p-6"
+        panelClassName="relative z-[72] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border bg-card p-4 shadow-2xl sm:my-4 sm:p-6"
         onConfirm={(skipMessage) => void confirmPayment(skipMessage)}
       />
     </>

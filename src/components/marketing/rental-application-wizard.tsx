@@ -618,7 +618,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         <h1 className="text-2xl font-bold tracking-tight text-[#0d1f4e] sm:text-3xl md:text-4xl">Residential rental application</h1>
       </div>
 
-      <div className="mt-6 rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:p-6">
+      <div className="mt-6 rounded-3xl border border-border bg-card p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:p-6">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">Choose your form</p>
         <div className="mt-4">
           <SegmentedTwo
@@ -661,14 +661,14 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               <strong>Payments</strong>, <strong>Profile</strong>, and <strong>Inbox</strong> until the manager confirms your
               application fee and approves your application. Stripe payments are marked paid automatically after checkout.
             </p>
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
+            <div className="mt-6 rounded-2xl border border-border bg-card px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted">Application ID</p>
               <p className="mt-2 font-mono text-xl font-bold tracking-tight text-foreground sm:text-2xl">{postSubmit.axisId}</p>
             </div>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Link
                 href={`/auth/create-account?role=resident&axis_id=${encodeURIComponent(postSubmit.axisId)}`}
-                className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-black/[0.1] bg-white/80 px-8 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:translate-y-px"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-black/[0.1] bg-card px-8 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-card hover:shadow-md active:translate-y-px"
               >
                 Create resident account
               </Link>
@@ -679,7 +679,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           </div>
         ) : (
           <div
-            className="mt-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+            className="mt-8 rounded-3xl border border-border bg-card p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
             style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
           >
             <div className="border-b border-border pb-6">
@@ -705,8 +705,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                             : completed
                               ? "bg-primary/15 text-primary"
                               : reachable
-                                ? "bg-slate-100 text-muted hover:bg-slate-200"
-                                : "cursor-not-allowed bg-slate-50 text-slate-300"
+                                ? "bg-accent/30 text-muted hover:bg-accent/40"
+                                : "cursor-not-allowed bg-accent/30 text-slate-300"
                         }`}
                       >
                         {completed ? "✓" : s.n}
@@ -715,7 +715,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                   })}
                 </div>
               </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-accent/30">
                 <div
                   className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
                   style={{ width: `${progressPct}%` }}

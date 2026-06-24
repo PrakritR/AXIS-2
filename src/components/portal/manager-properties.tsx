@@ -152,28 +152,28 @@ export function ManagerProperties() {
 
       {linkedListings.length > 0 ? (
         <div className="mt-8">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-slate-400">Properties from linked accounts</p>
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Properties from linked accounts</p>
           <ul className="mt-3 space-y-3">
             {linkedListings.map(({ listing, canEdit }) => (
               <li
                 key={listing.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-sm"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card px-5 py-4 shadow-sm"
               >
                 <div className="min-w-0">
-                  <p className="font-semibold text-slate-900 leading-snug">
+                  <p className="font-semibold text-foreground leading-snug">
                     {listing.buildingName || listing.address}
                   </p>
                   {listing.unitLabel ? (
-                    <p className="text-xs text-slate-500">{listing.unitLabel}</p>
+                    <p className="text-xs text-muted">{listing.unitLabel}</p>
                   ) : null}
-                  <p className="mt-1 text-xs text-slate-400">{listing.address}</p>
+                  <p className="mt-1 text-xs text-muted">{listing.address}</p>
                 </div>
                 {canEdit ? (
                   <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
                     Editable — find in your listings above
                   </span>
                 ) : (
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-500">
+                  <span className="rounded-full border border-border bg-accent/30 px-3 py-1 text-xs text-muted">
                     View only
                   </span>
                 )}

@@ -52,7 +52,7 @@ export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind })
       type="button"
       onClick={() => void switchPortal()}
       disabled={busy}
-      className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left text-sm font-medium text-slate-500 transition hover:bg-white hover:text-slate-800 disabled:opacity-50"
+      className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left text-sm font-medium text-muted transition hover:bg-card hover:text-foreground disabled:opacity-50"
     >
       <span className="text-base leading-none" aria-hidden>⇄</span>
       {busy ? "Switching…" : label}

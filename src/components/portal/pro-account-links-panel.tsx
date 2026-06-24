@@ -66,7 +66,7 @@ function CoManagerPermissionsEditor({
       {CO_MANAGER_PERMISSION_OPTIONS.map(({ id, label }) => (
         <label
           key={id}
-          className={`flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm ${disabled ? "opacity-60" : "cursor-pointer"}`}
+          className={`flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-sm ${disabled ? "opacity-60" : "cursor-pointer"}`}
         >
           <input
             type="checkbox"
@@ -78,9 +78,9 @@ function CoManagerPermissionsEditor({
               else delete next[id];
               onChange(next);
             }}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+            className="mt-0.5 h-4 w-4 rounded border-border text-primary"
           />
-          <span className="font-medium text-slate-800">{label}</span>
+          <span className="font-medium text-foreground">{label}</span>
         </label>
       ))}
     </div>
@@ -502,14 +502,14 @@ export function ProAccountLinksPanel({
       }
     >
       <div className="mx-auto max-w-3xl space-y-8">
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">
             Account links
           </p>
-          <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900">Link a co-manager</h2>
-          <p className="mt-3 text-sm leading-relaxed text-slate-600">
+          <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground">Link a co-manager</h2>
+          <p className="mt-3 text-sm leading-relaxed text-muted">
             You have full access to your property portal. Link another manager by{" "}
-            <span className="font-semibold text-slate-800">{AXIS_ID_LABEL}</span> and choose which sections they can use on your assigned properties.
+            <span className="font-semibold text-foreground">{AXIS_ID_LABEL}</span> and choose which sections they can use on your assigned properties.
           </p>
           {!useRemote && remoteLoaded ? (
             <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900">
@@ -519,14 +519,14 @@ export function ProAccountLinksPanel({
           {linkCap != null ? (
             <div
               className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
-                atLinkCap ? "border-rose-200 bg-rose-50/90" : "border-slate-200 bg-slate-50"
+                atLinkCap ? "border-rose-200 bg-rose-50/90" : "border-border bg-accent/30"
               }`}
             >
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className={`font-semibold tabular-nums ${atLinkCap ? "text-rose-900" : "text-slate-900"}`}>{linksUsed}/{linkCap}</span>
-                <span className="text-slate-500">links in use</span>
+                <span className={`font-semibold tabular-nums ${atLinkCap ? "text-rose-900" : "text-foreground"}`}>{linksUsed}/{linkCap}</span>
+                <span className="text-muted">links in use</span>
                 {tierShort ? (
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${atLinkCap ? "bg-white/80 text-rose-800" : "bg-white text-slate-600"}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${atLinkCap ? "bg-card text-rose-800" : "bg-card text-muted"}`}>
                     {tierShort}
                   </span>
                 ) : null}
@@ -538,17 +538,17 @@ export function ProAccountLinksPanel({
           ) : null}
         </div>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-6 shadow-sm">
-          <p className="text-sm font-semibold text-slate-900">New link</p>
+        <div className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/80 p-6 shadow-sm">
+          <p className="text-sm font-semibold text-foreground">New link</p>
           <div className="mt-4 flex gap-3 sm:items-end">
-            <label className="block min-w-0 flex-1 text-xs font-semibold text-slate-600">
+            <label className="block min-w-0 flex-1 text-xs font-semibold text-muted">
               {AXIS_ID_LABEL}
               <input
                 type="text"
                 value={axisInput}
                 onChange={(e) => setAxisInput(e.target.value)}
                 placeholder="e.g. AXIS-1A2B3C4D"
-                className="mt-1 h-10 w-full rounded-full border border-slate-200 bg-white px-4 font-mono text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                className="mt-1 h-10 w-full rounded-full border border-border bg-card px-4 font-mono text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
             </label>
             <Button
@@ -571,31 +571,31 @@ export function ProAccountLinksPanel({
           ) : null}
 
           {draftAxisId ? (
-            <div className="mt-6 space-y-5 border-t border-slate-100 pt-6">
-              <p className="text-sm text-slate-700">
-                Verified <span className="font-semibold text-slate-900">{draftName}</span>{" "}
-                <span className="font-mono text-xs text-slate-500">({draftAxisId})</span>
+            <div className="mt-6 space-y-5 border-t border-border pt-6">
+              <p className="text-sm text-muted">
+                Verified <span className="font-semibold text-foreground">{draftName}</span>{" "}
+                <span className="font-mono text-xs text-muted">({draftAxisId})</span>
               </p>
 
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assigned properties</p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Assigned properties</p>
+                <p className="mt-1 text-xs text-muted">
                   Only checked properties are included. The linked workspace only has access to these units — not your other listings.
                 </p>
-                <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3">
+                <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-border bg-card p-3">
                   {propertyOptions.length === 0 ? (
-                    <li className="text-sm text-slate-500">No properties yet — add listings under Properties first.</li>
+                    <li className="text-sm text-muted">No properties yet — add listings under Properties first.</li>
                   ) : (
                     propertyOptions.map((p) => (
                       <li key={p.id}>
-                        <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50">
+                        <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-accent/30">
                           <input
                             type="checkbox"
                             checked={Boolean(selectedProps[p.id])}
                             onChange={() => toggleProp(p.id)}
-                            className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                            className="mt-1 h-4 w-4 rounded border-border text-primary"
                           />
-                          <span className="text-sm text-slate-800">{p.label}</span>
+                          <span className="text-sm text-foreground">{p.label}</span>
                         </label>
                       </li>
                     ))
@@ -605,7 +605,7 @@ export function ProAccountLinksPanel({
 
               <div>
                 <div className="flex items-center justify-between gap-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Split amount</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Split amount</p>
                   <span className="text-sm font-bold tabular-nums text-primary">{payoutDraft}%</span>
                 </div>
                 <input
@@ -617,14 +617,14 @@ export function ProAccountLinksPanel({
                   onChange={(e) => setPayoutDraft(Number(e.target.value))}
                   className="mt-2 w-full accent-primary"
                 />
-                <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                <p className="mt-2 text-xs leading-relaxed text-muted">
                   This is the split amount for this linked workspace. It applies to the selected properties, and you can change it later after the link is active.
                 </p>
               </div>
 
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Co-manager permissions</p>
-                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Co-manager permissions</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
                   Choose what this co-manager can access. You always keep full permissions on your workspace.
                 </p>
                 <div className="mt-3">
@@ -641,18 +641,18 @@ export function ProAccountLinksPanel({
 
         {useRemote && incomingPending.length > 0 ? (
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-slate-900">Pending approvals (incoming)</p>
+            <p className="text-sm font-semibold text-foreground">Pending approvals (incoming)</p>
             <ul className="space-y-3">
               {incomingPending.map((inv) => (
                 <li
                   key={inv.id}
-                  className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm ring-1 ring-slate-100"
+                  className="rounded-2xl border border-border bg-card p-5 shadow-sm ring-1 ring-slate-100"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-slate-900">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
-                      <p className="font-mono text-xs text-slate-500">{inv.linkedAxisId}</p>
-                      <p className="mt-2 text-xs text-slate-500">
+                      <p className="font-semibold text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
+                      <p className="font-mono text-xs text-muted">{inv.linkedAxisId}</p>
+                      <p className="mt-2 text-xs text-muted">
                         {inv.assignedPropertyIds.length} propert{inv.assignedPropertyIds.length === 1 ? "y" : "ies"} · {inv.payoutPercentForManager}% payout
                       </p>
                     </div>
@@ -678,16 +678,16 @@ export function ProAccountLinksPanel({
 
         {useRemote && outgoingPending.length > 0 ? (
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-slate-900">Waiting on them</p>
+            <p className="text-sm font-semibold text-foreground">Waiting on them</p>
             <ul className="space-y-3">
               {outgoingPending.map((inv) => (
                 <li
                   key={inv.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-slate-50/80 px-5 py-4 text-sm text-slate-700"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-accent/30 px-5 py-4 text-sm text-muted"
                 >
                   <div>
-                    <span className="font-semibold text-slate-900">{inv.linkedDisplayName ?? inv.linkedAxisId}</span>
-                    <span className="ml-2 font-mono text-xs text-slate-500">{inv.linkedAxisId}</span>
+                    <span className="font-semibold text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</span>
+                    <span className="ml-2 font-mono text-xs text-muted">{inv.linkedAxisId}</span>
                   </div>
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void cancelInvite(inv.id)}>
                     Withdraw invite
@@ -699,21 +699,21 @@ export function ProAccountLinksPanel({
         ) : null}
 
         <div className="space-y-4">
-          <p className="text-sm font-semibold text-slate-900">Active links</p>
+          <p className="text-sm font-semibold text-foreground">Active links</p>
           {activeCards.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center text-sm text-slate-500">
+            <p className="rounded-2xl border border-dashed border-border bg-accent/30 px-4 py-8 text-center text-sm text-muted">
               No active links yet — send an invite above or approve one in Pending.
             </p>
           ) : useRemote ? (
             activeRemote.map((r) => (
               <div
                 key={r.id}
-                className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm ring-1 ring-slate-100"
+                className="rounded-2xl border border-border bg-card p-5 shadow-sm ring-1 ring-slate-100"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-slate-900">{r.linkedDisplayName ?? r.linkedAxisId}</p>
-                    <p className="font-mono text-xs text-slate-500">{r.linkedAxisId}</p>
+                    <p className="font-semibold text-foreground">{r.linkedDisplayName ?? r.linkedAxisId}</p>
+                    <p className="font-mono text-xs text-muted">{r.linkedAxisId}</p>
                   </div>
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void removeLink(r.id)}>
                     Remove
@@ -721,7 +721,7 @@ export function ProAccountLinksPanel({
                 </div>
 
                 <div className="mt-4">
-                  <p className="text-xs font-semibold text-slate-500">Split amount</p>
+                  <p className="text-xs font-semibold text-muted">Split amount</p>
                   <div className="mt-2 flex flex-wrap items-center gap-4">
                     <input
                       type="range"
@@ -737,10 +737,10 @@ export function ProAccountLinksPanel({
                 </div>
 
                 <div className="mt-4">
-                  <p className="text-xs font-semibold text-slate-500">Properties in this link</p>
+                  <p className="text-xs font-semibold text-muted">Properties in this link</p>
                   <div className="mt-2">
                     {r.assignedPropertyIds.length === 0 ? (
-                      <span className="text-xs text-slate-400">No properties assigned</span>
+                      <span className="text-xs text-muted">No properties assigned</span>
                     ) : r.direction === "incoming" ? (
                       <div className="flex flex-wrap gap-2">
                         {r.assignedPropertyIds.map((pid) => (
@@ -753,22 +753,22 @@ export function ProAccountLinksPanel({
                         ))}
                       </div>
                     ) : (
-                      <ul className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                      <ul className="space-y-2 rounded-xl border border-border bg-accent/30 p-3">
                         {propertyOptions.length === 0 ? (
-                          <li className="text-xs text-slate-500">No properties available to assign.</li>
+                          <li className="text-xs text-muted">No properties available to assign.</li>
                         ) : (
                           propertyOptions.map((p) => {
                             const on = r.assignedPropertyIds.includes(p.id);
                             return (
                               <li key={p.id}>
-                                <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-white/80">
+                                <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-card">
                                   <input
                                     type="checkbox"
                                     checked={on}
                                     onChange={() => void toggleAssignedProp(r.id, p.id)}
-                                    className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                                    className="mt-1 h-4 w-4 rounded border-border text-primary"
                                   />
-                                  <span className="text-sm text-slate-800">{p.label}</span>
+                                  <span className="text-sm text-foreground">{p.label}</span>
                                 </label>
                               </li>
                             );
@@ -781,8 +781,8 @@ export function ProAccountLinksPanel({
 
                 {r.direction !== "incoming" ? (
                   <div className="mt-4">
-                    <p className="text-xs font-semibold text-slate-500">Co-manager permissions</p>
-                    <p className="mt-1 text-xs text-slate-500">Only you can change these — the co-manager sees what you grant here.</p>
+                    <p className="text-xs font-semibold text-muted">Co-manager permissions</p>
+                    <p className="mt-1 text-xs text-muted">Only you can change these — the co-manager sees what you grant here.</p>
                     <div className="mt-2">
                       <CoManagerPermissionsEditor
                         value={normalizeCoManagerPermissions(
@@ -793,9 +793,9 @@ export function ProAccountLinksPanel({
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-                    <p className="text-xs font-semibold text-slate-700">Permissions they granted you</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                  <div className="mt-4 rounded-xl border border-border bg-accent/30 px-4 py-3">
+                    <p className="text-xs font-semibold text-muted">Permissions they granted you</p>
+                    <p className="mt-1 text-xs text-muted">
                       {CO_MANAGER_PERMISSION_OPTIONS.filter(({ id }) => (r as AccountLinkInviteDto).coManagerPermissions?.[id]).map(({ label }) => label).join(" · ") || "No section access granted yet."}
                     </p>
                   </div>
@@ -806,12 +806,12 @@ export function ProAccountLinksPanel({
             localRows.map((r) => (
               <div
                 key={r.id}
-                className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm ring-1 ring-slate-100"
+                className="rounded-2xl border border-border bg-card p-5 shadow-sm ring-1 ring-slate-100"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-slate-900">{r.linkedDisplayName ?? r.linkedAxisId}</p>
-                    <p className="font-mono text-xs text-slate-500">{r.linkedAxisId}</p>
+                    <p className="font-semibold text-foreground">{r.linkedDisplayName ?? r.linkedAxisId}</p>
+                    <p className="font-mono text-xs text-muted">{r.linkedAxisId}</p>
                   </div>
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void removeLink(r.id)}>
                     Remove
@@ -819,7 +819,7 @@ export function ProAccountLinksPanel({
                 </div>
 
                 <div className="mt-4">
-                  <p className="text-xs font-semibold text-slate-500">Split amount</p>
+                  <p className="text-xs font-semibold text-muted">Split amount</p>
                   <div className="mt-2 flex flex-wrap items-center gap-4">
                     <input
                       type="range"
@@ -835,27 +835,27 @@ export function ProAccountLinksPanel({
                 </div>
 
                 <div className="mt-4">
-                  <p className="text-xs font-semibold text-slate-500">Properties in this link</p>
+                  <p className="text-xs font-semibold text-muted">Properties in this link</p>
                   <div className="mt-2">
                     {r.assignedPropertyIds.length === 0 ? (
-                      <span className="text-xs text-slate-400">No properties assigned</span>
+                      <span className="text-xs text-muted">No properties assigned</span>
                     ) : (
-                      <ul className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                      <ul className="space-y-2 rounded-xl border border-border bg-accent/30 p-3">
                         {propertyOptions.length === 0 ? (
-                          <li className="text-xs text-slate-500">No properties available to assign.</li>
+                          <li className="text-xs text-muted">No properties available to assign.</li>
                         ) : (
                           propertyOptions.map((p) => {
                             const on = r.assignedPropertyIds.includes(p.id);
                             return (
                               <li key={p.id}>
-                                <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-white/80">
+                                <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-card">
                                   <input
                                     type="checkbox"
                                     checked={on}
                                     onChange={() => void toggleAssignedProp(r.id, p.id)}
-                                    className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                                    className="mt-1 h-4 w-4 rounded border-border text-primary"
                                   />
-                                  <span className="text-sm text-slate-800">{p.label}</span>
+                                  <span className="text-sm text-foreground">{p.label}</span>
                                 </label>
                               </li>
                             );
@@ -867,7 +867,7 @@ export function ProAccountLinksPanel({
                 </div>
 
                 <div className="mt-4">
-                  <p className="text-xs font-semibold text-slate-500">Co-manager permissions</p>
+                  <p className="text-xs font-semibold text-muted">Co-manager permissions</p>
                   <div className="mt-2">
                     <CoManagerPermissionsEditor
                       value={normalizeCoManagerPermissions(r.coManagerPermissions)}

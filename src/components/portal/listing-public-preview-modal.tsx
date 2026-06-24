@@ -32,17 +32,17 @@ export function ListingPublicPreviewModal({
     <>
       <button type="button" className="fixed inset-0 z-[75] bg-slate-900/45 backdrop-blur-[2px]" aria-label="Close preview" onClick={onClose} />
       <div
-        className="fixed left-1/2 top-3 z-[76] flex max-h-[calc(100vh-1.5rem)] w-[min(100%-1rem,72rem)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-slate-200/90 shadow-[0_24px_80px_-20px_rgba(15,23,42,0.35)]"
+        className="fixed left-1/2 top-3 z-[76] flex max-h-[calc(100vh-1.5rem)] w-[min(100%-1rem,72rem)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-border shadow-[0_24px_80px_-20px_rgba(15,23,42,0.35)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="listing-preview-title"
       >
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/90 bg-white px-4 py-3 sm:px-5">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3 sm:px-5">
           <div className="min-w-0">
-            <p id="listing-preview-title" className="truncate text-sm font-semibold text-slate-900">
+            <p id="listing-preview-title" className="truncate text-sm font-semibold text-foreground">
               {property.buildingName} · {property.unitLabel}
             </p>
-            <p className="text-xs text-slate-500">Public listing preview — matches Rent with Axis</p>
+            <p className="text-xs text-muted">Public listing preview — matches Rent with Axis</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {publicHref ? (
@@ -50,14 +50,14 @@ export function ListingPublicPreviewModal({
                 href={publicHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent/30"
               >
                 Open public page
               </Link>
             ) : null}
             <button
               type="button"
-              className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-200"
+              className="rounded-full bg-accent/30 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent/40"
               onClick={onClose}
             >
               Close
@@ -71,7 +71,7 @@ export function ListingPublicPreviewModal({
           <ListingDetailSections property={property} rich={rich} previewModal />
         </div>
         {footer ? (
-          <div className="shrink-0 border-t border-slate-200/90 bg-white px-4 py-4 sm:px-5">{footer}</div>
+          <div className="shrink-0 border-t border-border bg-card px-4 py-4 sm:px-5">{footer}</div>
         ) : null}
       </div>
     </>

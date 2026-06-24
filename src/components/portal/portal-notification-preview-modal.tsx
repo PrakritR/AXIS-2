@@ -52,19 +52,19 @@ export function PortalNotificationPreviewModal({
   return (
     <Modal open={open} title={title} onClose={onClose} panelClassName={panelClassName}>
       <div className="space-y-3">
-        {intro ? <p className="text-sm text-slate-600">{intro}</p> : null}
+        {intro ? <p className="text-sm text-muted">{intro}</p> : null}
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">To</p>
-          <p className="text-sm text-slate-900">{recipient}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">To</p>
+          <p className="text-sm text-foreground">{recipient}</p>
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subject</p>
-          <p className={`text-sm text-slate-900 ${skipMessage ? "opacity-50" : ""}`}>{subject}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Subject</p>
+          <p className={`text-sm text-foreground ${skipMessage ? "opacity-50" : ""}`}>{subject}</p>
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Message</p>
           <pre
-            className={`mt-1 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700 ${
+            className={`mt-1 whitespace-pre-wrap rounded-xl border border-border bg-accent/30 p-3 text-sm leading-relaxed text-muted ${
               skipMessage ? "opacity-50" : ""
             }`}
           >
@@ -76,13 +76,13 @@ export function PortalNotificationPreviewModal({
             type="checkbox"
             checked={skipMessage}
             onChange={(e) => setSkipMessage(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+            className="mt-0.5 h-4 w-4 rounded border-border text-primary"
           />
-          <span className="text-slate-700">{skipMessageLabel}</span>
+          <span className="text-muted">{skipMessageLabel}</span>
         </label>
-        {footerNote && !skipMessage ? <p className="text-xs text-slate-500">{footerNote}</p> : null}
+        {footerNote && !skipMessage ? <p className="text-xs text-muted">{footerNote}</p> : null}
         {skipMessage ? (
-          <p className="text-xs text-slate-500">The action will complete without sending this message.</p>
+          <p className="text-xs text-muted">The action will complete without sending this message.</p>
         ) : null}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>

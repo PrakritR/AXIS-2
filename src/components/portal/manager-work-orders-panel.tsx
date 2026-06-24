@@ -34,7 +34,7 @@ function priorityClass(p: string) {
   const x = p.toLowerCase();
   if (x === "high") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
   if (x === "medium") return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
-  return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
+  return "bg-accent/30 text-muted ring-1 ring-border";
 }
 
 type BillDraft = { cost: string; email: string; name: string };
@@ -288,13 +288,13 @@ export function ManagerWorkOrdersPanel({
               return (
                 <Fragment key={row.id}>
                   <tr className={PORTAL_TABLE_TR}>
-                    <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>
+                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
                       {row.title}
-                      <p className="mt-0.5 text-[11px] font-normal text-slate-500 line-clamp-1">{row.description}</p>
+                      <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
                     </td>
                     <td className={PORTAL_TABLE_TD}>
-                      <span className="text-slate-800">{row.propertyName}</span>
-                      {row.unit ? <span className="text-slate-400"> · {row.unit}</span> : null}
+                      <span className="text-foreground">{row.propertyName}</span>
+                      {row.unit ? <span className="text-muted"> · {row.unit}</span> : null}
                     </td>
                     <td className={PORTAL_TABLE_TD}>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
@@ -304,11 +304,11 @@ export function ManagerWorkOrdersPanel({
                     <td className={PORTAL_TABLE_TD}>{row.status}</td>
                     <td className={PORTAL_TABLE_TD}>
                       {row.bucket === "open" ? (
-                        <span className="text-slate-400 text-xs">Not scheduled</span>
+                        <span className="text-muted text-xs">Not scheduled</span>
                       ) : row.scheduled && row.scheduled !== "—" ? (
-                        <span className="text-slate-700 text-xs">{row.scheduled}</span>
+                        <span className="text-muted text-xs">{row.scheduled}</span>
                       ) : (
-                        <span className="text-slate-400 text-xs">—</span>
+                        <span className="text-muted text-xs">—</span>
                       )}
                     </td>
                     <td className={PORTAL_TABLE_TD}>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</td>
@@ -356,14 +356,14 @@ export function ManagerWorkOrdersPanel({
                   {isExpanded ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
                       <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
-                        <p className="text-sm leading-relaxed text-slate-600">{row.description}</p>
-                        <p className="mt-1.5 text-xs text-slate-500">
+                        <p className="text-sm leading-relaxed text-muted">{row.description}</p>
+                        <p className="mt-1.5 text-xs text-muted">
                           Resident preferred arrival:{" "}
-                          <span className="font-medium text-slate-700">{row.preferredArrival?.trim() || "Anytime"}</span>
+                          <span className="font-medium text-muted">{row.preferredArrival?.trim() || "Anytime"}</span>
                         </p>
                         {row.photoDataUrls?.length ? (
                           <div className="mt-4">
-                            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Photos</p>
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted">Photos</p>
                             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                               {row.photoDataUrls.map((src, index) => (
                                 <a
@@ -371,7 +371,7 @@ export function ManagerWorkOrdersPanel({
                                   href={src}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+                                  className="block overflow-hidden rounded-xl border border-border bg-accent/30"
                                 >
                                   <Image
                                     src={src}
@@ -389,18 +389,18 @@ export function ManagerWorkOrdersPanel({
 
                         {/* Schedule section */}
                         {row.bucket !== "completed" ? (
-                          <div className="mt-4 rounded-lg border border-slate-200/60 bg-white p-3">
-                            <p className="text-xs font-semibold text-slate-800">
+                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
+                            <p className="text-xs font-semibold text-foreground">
                               {row.bucket === "open" ? "Schedule visit" : "Reschedule visit"}
                             </p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
                               {row.bucket === "open"
                                 ? "Pick a date and time and click Schedule. Billing is optional and can be added after."
                                 : "Update the visit date and time. Billing is managed separately in Payments."}
                             </p>
                             <div className="mt-2 flex flex-wrap items-end gap-2">
                               <div>
-                                <p className="mb-1 text-[11px] font-medium text-slate-600">Visit date &amp; time</p>
+                                <p className="mb-1 text-[11px] font-medium text-muted">Visit date &amp; time</p>
                                 <Input
                                   type="datetime-local"
                                   value={visitAt}
@@ -435,9 +435,9 @@ export function ManagerWorkOrdersPanel({
 
                         {/* Billing section */}
                         {row.bucket !== "completed" ? (
-                          <div className="mt-4 rounded-lg border border-slate-200/60 bg-white p-3">
-                            <p className="text-xs font-semibold text-slate-800">Billing (optional)</p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
+                            <p className="text-xs font-semibold text-foreground">Billing (optional)</p>
+                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
                               Enter a pass-through cost and resident email to create a pending payment line. Leave blank if there is no charge.
                             </p>
                             {pendingCharge ? (
@@ -448,7 +448,7 @@ export function ManagerWorkOrdersPanel({
                             ) : null}
                             <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
                               <div>
-                                <p className="mb-1 text-[11px] font-medium text-slate-600">Cost</p>
+                                <p className="mb-1 text-[11px] font-medium text-muted">Cost</p>
                                 <Input
                                   type="text"
                                   inputMode="decimal"
@@ -465,7 +465,7 @@ export function ManagerWorkOrdersPanel({
                                 />
                               </div>
                               <div className="sm:col-span-2">
-                                <p className="mb-1 text-[11px] font-medium text-slate-600">Resident email</p>
+                                <p className="mb-1 text-[11px] font-medium text-muted">Resident email</p>
                                 <Input
                                   type="email"
                                   autoComplete="email"
@@ -482,7 +482,7 @@ export function ManagerWorkOrdersPanel({
                                 />
                               </div>
                               <div className="sm:col-span-3">
-                                <p className="mb-1 text-[11px] font-medium text-slate-600">Resident name (optional)</p>
+                                <p className="mb-1 text-[11px] font-medium text-muted">Resident name (optional)</p>
                                 <Input
                                   type="text"
                                   autoComplete="name"
@@ -503,7 +503,7 @@ export function ManagerWorkOrdersPanel({
                         ) : null}
 
                         {row.bucket === "completed" ? (
-                          <p className="mt-3 text-xs text-slate-500">
+                          <p className="mt-3 text-xs text-muted">
                             This work order is completed.{row.scheduled && row.scheduled !== "—" ? ` Visit was on ${row.scheduled}.` : ""} Billing history is in Payments.
                           </p>
                         ) : null}

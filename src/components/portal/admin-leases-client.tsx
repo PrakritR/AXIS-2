@@ -110,21 +110,21 @@ function LeasePipelineAdminDetail({
   return (
     <div className="max-h-[min(70vh,520px)] space-y-4 overflow-y-auto pr-1">
       {(row.notes ?? "").trim() ? (
-        <p className="text-sm text-slate-700">
-          <span className="font-semibold text-slate-800">Internal notes: </span>
+        <p className="text-sm text-muted">
+          <span className="font-semibold text-foreground">Internal notes: </span>
           {(row.notes ?? "").trim()}
         </p>
       ) : null}
 
       {(row.thread ?? []).length ? (
-        <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 px-3 py-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">Thread</p>
+        <div className="rounded-2xl border border-border bg-accent/30 px-3 py-2">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Thread</p>
           <ul className="mt-2 max-h-36 space-y-2 overflow-y-auto text-sm">
             {(row.thread ?? []).map((m) => (
-              <li key={m.id} className="rounded-lg bg-white px-2 py-1.5 shadow-sm ring-1 ring-slate-100">
+              <li key={m.id} className="rounded-lg bg-card px-2 py-1.5 shadow-sm ring-1 ring-slate-100">
                 <span className="font-semibold capitalize">{m.role}</span>
-                <span className="text-xs text-slate-400"> · {new Date(m.at).toLocaleString()}</span>
-                <p className="mt-0.5 whitespace-pre-wrap text-slate-700">{m.body}</p>
+                <span className="text-xs text-muted"> · {new Date(m.at).toLocaleString()}</span>
+                <p className="mt-0.5 whitespace-pre-wrap text-muted">{m.body}</p>
               </li>
             ))}
           </ul>
@@ -137,8 +137,8 @@ function LeasePipelineAdminDetail({
       />
 
       {!adminWorkflowEnabled ? (
-        <p className="rounded-2xl border border-slate-200/90 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          <span className="font-semibold text-slate-800">View only.</span> Admin can generate drafts, upload a PDF, send back to the
+        <p className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">
+          <span className="font-semibold text-foreground">View only.</span> Admin can generate drafts, upload a PDF, send back to the
           manager, and reply in the thread only when the lease is in <strong>Admin review</strong> (after the manager requests admin review).
           At other stages, work continues in the manager or resident portal.
         </p>
@@ -205,7 +205,7 @@ function LeasePipelineAdminDetail({
         ) : null}
       </div>
 
-      <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">
+      <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted">
         {adminWorkflowEnabled ? (
           <>
             Residents receive the lease from the property portal. Post notes below if needed, then send the draft back to the property team to
@@ -218,7 +218,7 @@ function LeasePipelineAdminDetail({
 
       {adminWorkflowEnabled ? (
         <div>
-          <label htmlFor={`admin-reply-${row.id}`} className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+          <label htmlFor={`admin-reply-${row.id}`} className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
             Reply to thread
           </label>
           <textarea
@@ -226,7 +226,7 @@ function LeasePipelineAdminDetail({
             value={reply}
             onChange={(e) => setReply(e.target.value)}
             rows={3}
-            className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="mt-2 w-full resize-none rounded-2xl border border-border bg-card px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
             placeholder="Visible to manager and resident on their lease views…"
           />
           <Button
@@ -316,11 +316,11 @@ export function AdminLeasesClient() {
 
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-5`}>
         {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center bg-slate-50/30 px-4 py-16 text-center sm:py-20">
+          <div className="flex flex-col items-center justify-center bg-accent/30/30 px-4 py-16 text-center sm:py-20">
             <AxisHeaderMarkTile>
               <DocIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
-            <p className="mt-4 text-sm font-medium text-slate-500">
+            <p className="mt-4 text-sm font-medium text-muted">
               {adminReviewRows.length === 0 ? "No leases awaiting admin review." : "No leases match this property filter."}
             </p>
           </div>
@@ -328,7 +328,7 @@ export function AdminLeasesClient() {
           <div className={PORTAL_DATA_TABLE_SCROLL}>
             <table className="w-full min-w-[640px] border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200/90 bg-white">
+                <tr className="border-b border-border bg-card">
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Lease</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Rent</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
@@ -342,12 +342,12 @@ export function AdminLeasesClient() {
                   <Fragment key={row.id}>
                     <tr className={PORTAL_TABLE_TR}>
                       <td className="px-5 py-4 align-middle">
-                        <p className="font-semibold text-slate-900">{row.unit || "—"}</p>
-                        <p className="mt-0.5 text-sm text-slate-500">{row.residentName || "—"}</p>
+                        <p className="font-semibold text-foreground">{row.unit || "—"}</p>
+                        <p className="mt-0.5 text-sm text-muted">{row.residentName || "—"}</p>
                       </td>
                       <td className="px-5 py-4 align-middle">
-                        <p className="font-semibold text-slate-900">{rentLabel ?? "—"}</p>
-                        <p className="text-xs text-slate-500">From application / listing</p>
+                        <p className="font-semibold text-foreground">{rentLabel ?? "—"}</p>
+                        <p className="text-xs text-muted">From application / listing</p>
                       </td>
                       <td className="px-5 py-4 align-middle">
                         <StatusPill bucket={bucketToPillIndex(row.bucket)} />
@@ -356,7 +356,7 @@ export function AdminLeasesClient() {
                         <Button
                           type="button"
                           variant="outline"
-                          className="rounded-full border-slate-200 px-4 py-2 text-sm font-medium text-slate-800"
+                          className="rounded-full border-border px-4 py-2 text-sm font-medium text-foreground"
                           onClick={() => setExpandedLeaseId((cur) => (cur === row.id ? null : row.id))}
                         >
                           {visibleExpandedLeaseId === row.id ? "Hide" : "Details"}

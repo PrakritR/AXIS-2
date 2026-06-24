@@ -119,11 +119,11 @@ export function ManagerServicesPanel() {
         <div className="mt-1">
             {propertyOptions.length > 1 && (
               <div className="mb-4 flex items-center gap-2">
-                <label className="text-xs font-semibold text-slate-500">Property</label>
+                <label className="text-xs font-semibold text-muted">Property</label>
                 <select
                   value={resolvedPropertyId}
                   onChange={(e) => setSelectedPropertyId(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  className="rounded-xl border border-border bg-card px-3 py-1.5 text-sm text-foreground outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 >
                   {propertyOptions.map((p) => (
                     <option key={p.id} value={p.id}>{p.label}</option>
@@ -132,11 +132,11 @@ export function ManagerServicesPanel() {
               </div>
             )}
             {!resolvedPropertyId ? (
-              <p className="py-8 text-center text-sm text-slate-400">Select a property to manage its request options.</p>
+              <p className="py-8 text-center text-sm text-muted">Select a property to manage its request options.</p>
             ) : offers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
-                <p className="text-sm font-medium text-slate-600">No request options yet</p>
-                <p className="mt-1 max-w-xs text-xs text-slate-400">
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-accent/30 py-16 text-center">
+                <p className="text-sm font-medium text-muted">No request options yet</p>
+                <p className="mt-1 max-w-xs text-xs text-muted">
                   Add request options — like cleaning, linen sets, parking, or other amenities — that residents can choose directly from their portal.
                 </p>
                 <Button type="button" className="mt-5 rounded-full" onClick={openCreate}>
@@ -148,17 +148,17 @@ export function ManagerServicesPanel() {
                 {offers.map((offer) => (
                   <div
                     key={offer.id}
-                    className={`flex flex-col rounded-2xl border bg-white p-4 shadow-[0_1px_4px_rgba(15,23,42,0.06)] transition ${
-                      offer.available ? "border-slate-200" : "border-slate-200 opacity-60"
+                    className={`flex flex-col rounded-2xl border bg-card p-4 shadow-[0_1px_4px_rgba(15,23,42,0.06)] transition ${
+                      offer.available ? "border-border" : "border-border opacity-60"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-semibold text-slate-900">{offer.name}</p>
+                        <p className="font-semibold text-foreground">{offer.name}</p>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1.5">
                         {offer.price ? (
-                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                          <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-xs font-semibold text-muted">
                             {offer.price}
                           </span>
                         ) : null}
@@ -171,7 +171,7 @@ export function ManagerServicesPanel() {
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
                             offer.available
                               ? "bg-emerald-50 text-emerald-700 ring-emerald-200/80"
-                              : "bg-slate-100 text-slate-500 ring-slate-200/80"
+                              : "bg-accent/30 text-muted ring-border"
                           }`}
                         >
                           {offer.available ? "Available" : "Paused"}
@@ -179,27 +179,27 @@ export function ManagerServicesPanel() {
                       </div>
                     </div>
                     {offer.description ? (
-                      <p className="mt-2 text-xs leading-relaxed text-slate-600">{offer.description}</p>
+                      <p className="mt-2 text-xs leading-relaxed text-muted">{offer.description}</p>
                     ) : null}
-                    <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                    <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
                       <button
                         type="button"
                         onClick={() => openEdit(offer)}
-                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50"
+                        className="rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold text-muted transition hover:bg-accent/30"
                       >
                         Edit
                       </button>
                       <button
                         type="button"
                         onClick={() => handleToggle(offer)}
-                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50"
+                        className="rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold text-muted transition hover:bg-accent/30"
                       >
                         {offer.available ? "Pause" : "Resume"}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(offer)}
-                        className="rounded-full border border-rose-200 bg-white px-3 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-50"
+                        className="rounded-full border border-rose-200 bg-card px-3 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-50"
                       >
                         Remove
                       </button>
@@ -215,50 +215,50 @@ export function ManagerServicesPanel() {
         open={modalOpen}
         title={editingOffer ? "Edit request option" : "Add request option"}
         onClose={() => setModalOpen(false)}
-        panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+        panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-6"
       >
         <div className="grid gap-3">
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Request name</p>
+            <p className="mb-1 text-[11px] font-medium text-muted">Request name</p>
             <Input
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="e.g. Weekly cleaning, Blanket set"
-              className="bg-white"
+              className="bg-card"
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <p className="mb-1 text-[11px] font-medium text-slate-600">Price</p>
+              <p className="mb-1 text-[11px] font-medium text-muted">Price</p>
               <Input
                 value={form.price}
                 onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
                 placeholder="e.g. $25, $80/month, Free"
-                className="bg-white"
+                className="bg-card"
               />
             </div>
             <div>
-              <p className="mb-1 text-[11px] font-medium text-slate-600">Deposit</p>
+              <p className="mb-1 text-[11px] font-medium text-muted">Deposit</p>
               <Input
                 value={form.deposit}
                 onChange={(e) => setForm((f) => ({ ...f, deposit: e.target.value }))}
                 placeholder="e.g. $50"
-                className="bg-white"
+                className="bg-card"
               />
             </div>
           </div>
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Description</p>
+            <p className="mb-1 text-[11px] font-medium text-muted">Description</p>
             <textarea
               rows={3}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               placeholder="What's included, how it works, any conditions…"
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200"
             />
           </div>
         </div>
-        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setModalOpen(false)}>
             Cancel
           </Button>

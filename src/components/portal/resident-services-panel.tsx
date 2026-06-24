@@ -70,7 +70,7 @@ function priorityClass(p: string) {
   const x = p.toLowerCase();
   if (x === "high") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
   if (x === "medium") return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
-  return "bg-slate-100 text-slate-700 ring-1 ring-slate-200/80";
+  return "bg-accent/30 text-muted ring-1 ring-border";
 }
 
 function formatDate(iso: string) {
@@ -166,9 +166,9 @@ function ServiceRequestCard({
       />
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-semibold text-slate-900">{req.offerName}</p>
+          <p className="font-semibold text-foreground">{req.offerName}</p>
           {req.offerDescription ? (
-            <p className="mt-0.5 text-xs text-slate-500">{req.offerDescription}</p>
+            <p className="mt-0.5 text-xs text-muted">{req.offerDescription}</p>
           ) : null}
         </div>
         <ServiceStatusBadge status={req.status} />
@@ -177,7 +177,7 @@ function ServiceRequestCard({
       {/* Price / deposit / return date */}
       <div className="mt-2 flex flex-wrap gap-1.5">
         {req.price ? (
-          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-700">
+          <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-[10px] font-semibold text-muted">
             {req.price}
           </span>
         ) : null}
@@ -187,24 +187,24 @@ function ServiceRequestCard({
           </span>
         ) : null}
         {req.returnByDate ? (
-          <span className="rounded-full bg-slate-50 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200">
+          <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border">
             Return by {formatDate(req.returnByDate)}
           </span>
         ) : null}
       </div>
 
       {req.notes ? (
-        <p className="mt-2 text-xs text-slate-500 italic">&ldquo;{req.notes}&rdquo;</p>
+        <p className="mt-2 text-xs text-muted italic">&ldquo;{req.notes}&rdquo;</p>
       ) : null}
 
       {/* Charges section (approved) */}
       {req.status === "approved" || req.status === "returned" ? (
-        <div className="mt-3 rounded-xl bg-slate-50 p-3">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Charges</p>
+        <div className="mt-3 rounded-xl bg-accent/30 p-3">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Charges</p>
           <div className="space-y-1.5">
             {req.price ? (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-700">Request fee</span>
+                <span className="text-xs text-muted">Request fee</span>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.servicePaid ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
                   {req.servicePaid ? `Paid · ${req.price}` : `Pending · ${req.price}`}
                 </span>
@@ -212,7 +212,7 @@ function ServiceRequestCard({
             ) : null}
             {needsReturn ? (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-700">Deposit (refundable)</span>
+                <span className="text-xs text-muted">Deposit (refundable)</span>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.depositPaid ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
                   {req.depositPaid ? `Paid · ${req.deposit}` : `Pending · ${req.deposit}`}
                 </span>
@@ -247,8 +247,8 @@ function ServiceRequestCard({
       {/* Return photo submitted */}
       {req.status === "returned" && req.returnPhotoDataUrl ? (
         <div className="mt-3">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Return photo</p>
-          <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-32 overflow-hidden rounded-xl border border-slate-200">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Return photo</p>
+          <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-32 overflow-hidden rounded-xl border border-border">
             <Image
               src={req.returnPhotoDataUrl}
               alt="Return photo"
@@ -258,7 +258,7 @@ function ServiceRequestCard({
               unoptimized
             />
           </a>
-          <p className="mt-1.5 text-xs text-slate-500">
+          <p className="mt-1.5 text-xs text-muted">
             {req.depositPaid
               ? "Deposit refunded — return complete."
               : "Awaiting manager review to refund deposit."}
@@ -277,7 +277,7 @@ function ServiceRequestCard({
         </div>
       ) : null}
 
-      <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
+      <div className="mt-3 flex justify-end border-t border-border pt-3">
             <Button
               type="button"
               variant="danger"
@@ -736,7 +736,7 @@ export function ResidentServicesPanel({
                     return (
                       <Fragment key={req.id}>
                         <tr className={PORTAL_TABLE_TR}>
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{req.offerName}</td>
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
                           <td className={PORTAL_TABLE_TD}>
                             <ServiceStatusBadge status={req.status} />
                           </td>
@@ -775,7 +775,7 @@ export function ResidentServicesPanel({
       ) : (
         <div>
           <div className="mb-3 flex items-center gap-3">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Work orders</p>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Work orders</p>
             <div className="flex gap-1">
               {statusTabs.map((tab) => (
                 <button
@@ -784,8 +784,8 @@ export function ResidentServicesPanel({
                   onClick={() => setBucket(tab.id)}
                   className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                     bucket === tab.id
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-accent/30 text-muted hover:bg-accent/40"
                   }`}
                 >
                   {tab.label}
@@ -819,8 +819,8 @@ export function ResidentServicesPanel({
                     {rows.map((row) => (
                       <Fragment key={row.id}>
                         <tr className={PORTAL_TABLE_TR}>
-                          <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-slate-500`}>{row.id}</td>
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-slate-900`}>{row.title}</td>
+                          <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-muted`}>{row.id}</td>
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
                           <td className={PORTAL_TABLE_TD}>{row.status}</td>
                           <td className={`${PORTAL_TABLE_TD} text-right`}>
                             <Button
@@ -835,19 +835,19 @@ export function ResidentServicesPanel({
                         </tr>
                         {expandedId === row.id ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={4} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-slate-600`}>
-                              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Priority</p>
+                            <td colSpan={4} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted">Priority</p>
                               <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>{row.priority}</span>
-                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Preferred arrival</p>
-                              <p className="mt-1 font-medium text-slate-800">{row.preferredArrival ?? "Anytime"}</p>
-                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Details</p>
+                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Preferred arrival</p>
+                              <p className="mt-1 font-medium text-foreground">{row.preferredArrival ?? "Anytime"}</p>
+                              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Details</p>
                               <p className="mt-1.5 whitespace-pre-wrap leading-relaxed">{row.description}</p>
                               {row.photoDataUrls?.length ? (
                                 <>
-                                  <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Photos</p>
+                                  <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Photos</p>
                                   <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                                     {row.photoDataUrls.map((src, i) => (
-                                      <a key={i} href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                                      <a key={i} href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-border bg-accent/30">
                                         <Image src={src} alt={`Photo ${i + 1}`} width={240} height={180} className="h-28 w-full object-cover" unoptimized />
                                       </a>
                                     ))}
@@ -891,16 +891,16 @@ export function ResidentServicesPanel({
         onClose={() => { setModalMode("none"); resetMaintenance(); }}
         panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl glass-card p-5 shadow-[var(--shadow-card)] sm:p-6"
       >
-        <p className="text-xs text-slate-500">Describe the issue — your property manager will be notified.</p>
+        <p className="text-xs text-muted">Describe the issue — your property manager will be notified.</p>
         <div className="mt-4 grid gap-3">
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Title</p>
-            <Input value={mTitle} onChange={(e) => setMTitle(e.target.value)} placeholder="Short summary of the issue" className="bg-white" />
+            <p className="mb-1 text-[11px] font-medium text-muted">Title</p>
+            <Input value={mTitle} onChange={(e) => setMTitle(e.target.value)} placeholder="Short summary of the issue" className="bg-card" />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <p className="mb-1 text-[11px] font-medium text-slate-600">Category</p>
-              <Select value={mCategory} onChange={(e) => setMCategory(e.target.value)} className="bg-white">
+              <p className="mb-1 text-[11px] font-medium text-muted">Category</p>
+              <Select value={mCategory} onChange={(e) => setMCategory(e.target.value)} className="bg-card">
                 <option>Plumbing</option>
                 <option>Electrical</option>
                 <option>HVAC</option>
@@ -910,8 +910,8 @@ export function ResidentServicesPanel({
               </Select>
             </div>
             <div>
-              <p className="mb-1 text-[11px] font-medium text-slate-600">Priority</p>
-              <Select value={mPriority} onChange={(e) => setMPriority(e.target.value)} className="bg-white">
+              <p className="mb-1 text-[11px] font-medium text-muted">Priority</p>
+              <Select value={mPriority} onChange={(e) => setMPriority(e.target.value)} className="bg-card">
                 <option>Low</option>
                 <option>Medium</option>
                 <option>High</option>
@@ -919,11 +919,11 @@ export function ResidentServicesPanel({
             </div>
           </div>
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Preferred arrival time</p>
-            <Input value={mArrival} onChange={(e) => setMArrival(e.target.value)} placeholder='e.g. Weekdays after 5pm — or "anytime"' className="bg-white" />
+            <p className="mb-1 text-[11px] font-medium text-muted">Preferred arrival time</p>
+            <Input value={mArrival} onChange={(e) => setMArrival(e.target.value)} placeholder='e.g. Weekdays after 5pm — or "anytime"' className="bg-card" />
           </div>
           <div>
-            <p className="mb-1 text-[11px] font-medium text-slate-600">Photos (up to 6)</p>
+            <p className="mb-1 text-[11px] font-medium text-muted">Photos (up to 6)</p>
             <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => photoInputRef.current?.click()}>
               Attach photos
             </Button>
@@ -931,7 +931,7 @@ export function ResidentServicesPanel({
           {mPhotos.length ? (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {mPhotos.map((src, i) => (
-                <div key={i} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                <div key={i} className="overflow-hidden rounded-xl border border-border bg-accent/30">
                   <Image src={src} alt={`Photo ${i + 1}`} width={240} height={180} className="h-24 w-full object-cover" unoptimized />
                   <div className="flex justify-end p-2">
                     <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-[11px]" onClick={() => setMPhotos((p) => p.filter((_, j) => j !== i))}>
@@ -943,7 +943,7 @@ export function ResidentServicesPanel({
             </div>
           ) : null}
         </div>
-        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => { setModalMode("none"); resetMaintenance(); }}>Cancel</Button>
           <Button type="button" className="rounded-full" onClick={() => { void submitMaintenance(); }} disabled={maintenanceSubmitting}>
             {maintenanceSubmitting ? "Submitting…" : "Submit"}
@@ -960,12 +960,12 @@ export function ResidentServicesPanel({
       >
         {availableOffers.length === 0 ? (
           <div className="py-8 text-center">
-            <p className="text-sm font-medium text-slate-700">No request options available yet</p>
-            <p className="mt-1 text-xs text-slate-500">Your property manager hasn&apos;t added any request options yet. Check back later.</p>
+            <p className="text-sm font-medium text-muted">No request options available yet</p>
+            <p className="mt-1 text-xs text-muted">Your property manager hasn&apos;t added any request options yet. Check back later.</p>
           </div>
         ) : (
           <>
-            <p className="text-xs text-slate-500">Select a request option from your manager&apos;s catalog. If a deposit is required, you&apos;ll also need to set a return date.</p>
+            <p className="text-xs text-muted">Select a request option from your manager&apos;s catalog. If a deposit is required, you&apos;ll also need to set a return date.</p>
             <div className="mt-4 space-y-2">
               {availableOffers.map((offer) => (
                 <button
@@ -975,17 +975,17 @@ export function ResidentServicesPanel({
                   className={`w-full rounded-xl border px-4 py-3 text-left transition ${
                     selectedOffer?.id === offer.id
                       ? "border-violet-300 bg-violet-50 ring-1 ring-violet-200"
-                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      : "border-border bg-card hover:border-border hover:bg-accent/30"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-semibold text-slate-900">{offer.name}</p>
-                      {offer.description ? <p className="mt-1 text-xs leading-relaxed text-slate-600">{offer.description}</p> : null}
+                      <p className="font-semibold text-foreground">{offer.name}</p>
+                      {offer.description ? <p className="mt-1 text-xs leading-relaxed text-muted">{offer.description}</p> : null}
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
                       {offer.price ? (
-                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{offer.price}</span>
+                        <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-xs font-semibold text-muted">{offer.price}</span>
                       ) : null}
                       {hasDeposit(offer.deposit) ? (
                         <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {offer.deposit}</span>
@@ -1000,7 +1000,7 @@ export function ResidentServicesPanel({
               <div className="mt-4 space-y-3">
                 {hasDeposit(selectedOffer.deposit) ? (
                   <div>
-                    <p className="mb-1 text-[11px] font-medium text-slate-600">
+                    <p className="mb-1 text-[11px] font-medium text-muted">
                       Return by date <span className="text-rose-500">*</span>
                     </p>
                     <Input
@@ -1008,20 +1008,20 @@ export function ResidentServicesPanel({
                       value={sReturnBy}
                       onChange={(e) => setSReturnBy(e.target.value)}
                       min={new Date().toISOString().slice(0, 10)}
-                      className="bg-white"
+                      className="bg-card"
                     />
-                    <p className="mt-1 text-[10px] text-slate-400">Required — your deposit is held until the item is returned.</p>
+                    <p className="mt-1 text-[10px] text-muted">Required — your deposit is held until the item is returned.</p>
                   </div>
                 ) : null}
                 <div>
-                  <p className="mb-1 text-[11px] font-medium text-slate-600">Additional notes (optional)</p>
-                  <Input value={sNotes} onChange={(e) => setSNotes(e.target.value)} placeholder="Preferred timing, special instructions…" className="bg-white" />
+                  <p className="mb-1 text-[11px] font-medium text-muted">Additional notes (optional)</p>
+                  <Input value={sNotes} onChange={(e) => setSNotes(e.target.value)} placeholder="Preferred timing, special instructions…" className="bg-card" />
                 </div>
               </div>
             ) : null}
           </>
         )}
-        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => { setModalMode("none"); resetService(); }}>Cancel</Button>
           {availableOffers.length > 0 ? (
             <Button type="button" className="rounded-full" onClick={() => { void submitService(); }} disabled={!selectedOffer || serviceSubmitting}>

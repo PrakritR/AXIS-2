@@ -59,12 +59,12 @@ function leaseBadge(row: LeasePipelineRow | null, approved: boolean): {
 
 function StatusBadge({ label, tone }: { label: string; tone: string }) {
   const cls: Record<string, string> = {
-    emerald: "bg-emerald-100 text-emerald-800",
-    amber: "bg-amber-100 text-amber-900",
-    sky: "bg-sky-100 text-sky-800",
-    slate: "bg-slate-100 text-slate-700",
-    violet: "bg-violet-100 text-violet-800",
-    rose: "bg-rose-100 text-rose-800",
+    emerald: "portal-badge-success",
+    amber: "portal-badge-pending",
+    sky: "portal-badge-info",
+    slate: "bg-accent/30 text-muted",
+    violet: "portal-badge-notice",
+    rose: "portal-badge-danger",
   };
   return (
     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${cls[tone] ?? cls.slate}`}>
@@ -81,10 +81,10 @@ function NotifBanner({
   children: React.ReactNode;
 }) {
   const cls = {
-    amber: "border-amber-200/80 bg-amber-50/80 text-amber-950",
-    blue: "border-blue-200/80 bg-blue-50/80 text-blue-950",
-    violet: "border-violet-200/80 bg-violet-50/80 text-violet-950",
-    rose: "border-rose-200/80 bg-rose-50/80 text-rose-950",
+    amber: "portal-banner-pending",
+    blue: "portal-banner-info",
+    violet: "portal-banner-notice",
+    rose: "portal-banner-danger",
   }[tone];
   return (
     <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
@@ -95,8 +95,8 @@ function NotifBanner({
 
 function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">{title}</p>
+    <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
+      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{title}</p>
       <div className="mt-3">{children}</div>
     </div>
   );
@@ -261,20 +261,20 @@ export function ResidentDashboard({
   const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, pendingCharges, pendingTotal } = data;
 
   // ── Status banner copy ──
-  let statusTone = "border-amber-200/80 bg-amber-50/80 text-amber-950";
+  let statusTone = "portal-banner-pending";
   let statusCopy = "Application submitted and pending manager review. Your portal will unlock after approval.";
   if (showTestAccessNote) {
-    statusTone = "border-sky-200/80 bg-sky-50/80 text-sky-950";
+    statusTone = "portal-banner-info";
     statusCopy = "Test access active — resident portal is fully unlocked for this email.";
   } else if (appStatus === "approved") {
-    statusTone = "border-emerald-200/70 bg-emerald-50/80 text-emerald-950";
+    statusTone = "portal-banner-success";
     statusCopy = appProperty && appRoom
       ? `Approved for ${appProperty} - ${appRoom}.`
       : appProperty
       ? `Approved for ${appProperty}.`
       : "Approved and active.";
   } else if (appStatus === "rejected") {
-    statusTone = "border-rose-200/70 bg-rose-50/80 text-rose-950";
+    statusTone = "portal-banner-danger";
     statusCopy = "Your most recent application is marked rejected. Contact your manager if you need help or want to reapply.";
   }
 
@@ -340,7 +340,7 @@ export function ResidentDashboard({
               <div className="flex items-center justify-between gap-3">
                 <StatusBadge label={lease.label} tone={lease.tone} />
                 {leaseRow?.application?.leaseStart ? (
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-muted">
                     {leaseRow.application.leaseStart}
                     {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
                   </span>
@@ -354,13 +354,13 @@ export function ResidentDashboard({
             {/* Charges */}
             <InfoCard title="Charges & payments">
               {pendingCharges.length === 0 ? (
-                <p className="text-sm text-slate-500">No outstanding charges.</p>
+                <p className="text-sm text-muted">No outstanding charges.</p>
               ) : (
                 <>
-                  <p className="text-2xl font-bold tracking-tight text-slate-900">
+                  <p className="text-2xl font-bold tracking-tight text-foreground">
                     ${(pendingTotal / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
-                  <p className="mt-0.5 text-xs text-slate-500">
+                  <p className="mt-0.5 text-xs text-muted">
                     {pendingCharges.length} pending charge{pendingCharges.length === 1 ? "" : "s"}
                   </p>
                 </>
@@ -375,25 +375,25 @@ export function ResidentDashboard({
               <InfoCard title="Maintenance">
                 <div className="space-y-1 text-sm">
                   {openWO + scheduledWO === 0 ? (
-                    <p className="text-slate-500">No active requests.</p>
+                    <p className="text-muted">No active requests.</p>
                   ) : (
                     <>
                       {openWO > 0 && (
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-600">Open</span>
+                          <span className="text-muted">Open</span>
                           <span className="font-semibold text-rose-700">{openWO}</span>
                         </div>
                       )}
                       {scheduledWO > 0 && (
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-600">Scheduled</span>
+                          <span className="text-muted">Scheduled</span>
                           <span className="font-semibold text-sky-700">{scheduledWO}</span>
                         </div>
                       )}
                       {completedWO > 0 && (
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-500">Completed</span>
-                          <span className="text-slate-500">{completedWO}</span>
+                          <span className="text-muted">Completed</span>
+                          <span className="text-muted">{completedWO}</span>
                         </div>
                       )}
                     </>
@@ -405,18 +405,18 @@ export function ResidentDashboard({
               </InfoCard>
             ) : (
               <InfoCard title="Maintenance">
-                <p className="text-sm text-slate-500">Available on upgraded property plans.</p>
+                <p className="text-sm text-muted">Available on upgraded property plans.</p>
               </InfoCard>
             )}
 
             {/* Inbox */}
             <InfoCard title="Inbox">
               {inbox > 0 ? (
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-foreground">
                   {inbox} unread message{inbox === 1 ? "" : "s"}
                 </p>
               ) : (
-                <p className="text-sm text-slate-500">No unread messages.</p>
+                <p className="text-sm text-muted">No unread messages.</p>
               )}
               <Link href={`${BASE}/inbox/unopened`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
                 Inbox →
@@ -426,8 +426,8 @@ export function ResidentDashboard({
             {/* Property info */}
             {appProperty && (
               <InfoCard title="Your property">
-                <p className="text-sm font-semibold text-slate-900">{appProperty}</p>
-                {appId && <p className="mt-0.5 text-xs font-mono text-slate-400">{appId}</p>}
+                <p className="text-sm font-semibold text-foreground">{appProperty}</p>
+                {appId && <p className="mt-0.5 text-xs font-mono text-muted">{appId}</p>}
               </InfoCard>
             )}
 
@@ -436,15 +436,15 @@ export function ResidentDashboard({
           /* ── Pre-approval layout ── */
           <div className="grid gap-4 sm:grid-cols-2">
             <InfoCard title="Application">
-              <p className="text-sm font-semibold text-slate-900">{appStage}</p>
-              {appId && <p className="mt-0.5 text-xs font-mono text-slate-400">{appId}</p>}
-              {appProperty && <p className="mt-1 text-xs text-slate-500">{appProperty}</p>}
+              <p className="text-sm font-semibold text-foreground">{appStage}</p>
+              {appId && <p className="mt-0.5 text-xs font-mono text-muted">{appId}</p>}
+              {appProperty && <p className="mt-1 text-xs text-muted">{appProperty}</p>}
             </InfoCard>
             <InfoCard title="Inbox">
               {inbox > 0 ? (
-                <p className="text-sm font-semibold text-slate-900">{inbox} unread message{inbox === 1 ? "" : "s"}</p>
+                <p className="text-sm font-semibold text-foreground">{inbox} unread message{inbox === 1 ? "" : "s"}</p>
               ) : (
-                <p className="text-sm text-slate-500">No unread messages.</p>
+                <p className="text-sm text-muted">No unread messages.</p>
               )}
               <Link href={`${BASE}/inbox/unopened`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
                 Inbox →

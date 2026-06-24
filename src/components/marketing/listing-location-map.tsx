@@ -45,5 +45,5 @@ export function ListingLocationMap({ lat, lng }: { lat: number; lng: number }) {
     };
   }, [lat, lng]);
 
-  return <div ref={containerRef} className="z-0 h-[min(22rem,48vh)] min-h-[220px] w-full rounded-2xl border border-slate-200/90 bg-slate-50" />;
+  return <div ref={containerRef} className="z-0 h-[min(22rem,48vh)] min-h-[220px] w-full rounded-2xl border border-border bg-accent/30" />;
 }
