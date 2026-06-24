@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 
 /**
  * Creates or resumes Stripe Connect onboarding for the signed-in user.
- * Returns an Account Link URL — the client should navigate in the same tab (window.location.assign).
+ * Returns an Account Link URL — the client should open it in a new tab (window.open).
  */
 export async function POST(req: Request) {
   try {

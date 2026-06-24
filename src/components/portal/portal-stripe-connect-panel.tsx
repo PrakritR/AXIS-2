@@ -112,7 +112,12 @@ export function PortalStripeConnectPanel({
         return;
       }
       if (body.url) {
-        window.location.assign(body.url);
+        const popup = window.open(body.url, "_blank", "noopener,noreferrer");
+        if (!popup) {
+          const message = "Could not open a new tab. Allow pop-ups for this site and try again.";
+          setActionError(message);
+          showToast(message);
+        }
         return;
       }
       const message = "Stripe did not return an onboarding URL.";
@@ -140,11 +145,22 @@ export function PortalStripeConnectPanel({
     window.location.protocol === "http:" &&
     (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim().startsWith("pk_live_") ?? false);
 
+  const stripeTestMode =
+    typeof window !== "undefined" &&
+    (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim().startsWith("pk_test_") ?? false);
+
   const body = (
     <div className={`space-y-3 text-sm text-muted ${variant === "embedded" ? "" : "max-w-2xl"}`}>
       {status?.demo ? (
         <p className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
           {status.message ?? "Add Stripe keys to enable bank linking."}
+        </p>
+      ) : null}
+
+      {stripeTestMode && !status?.demo ? (
+        <p className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
+          Stripe test mode is active — onboarding uses sandbox test banks (e.g. code <span className="font-mono">000000</span>).
+          Set live keys (<span className="font-mono">sk_live_</span> / <span className="font-mono">pk_live_</span>) in production to link a real account.
         </p>
       ) : null}
 
