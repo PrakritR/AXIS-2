@@ -24,7 +24,11 @@
     "lockfile:verify": "node scripts/verify-lockfile.mjs",
     "admin:sync-account": "node scripts/ensure-admin-account.mjs",
     "admin:ensure-demo-manager": "node scripts/ensure-demo-manager-account.mjs",
-    "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs"
+    "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs",
+    "stripe:setup-plans": "node --env-file=.env.local scripts/setup-stripe-plan-prices.mjs --write-env",
+    "stripe:listen": "node scripts/stripe-listen.mjs",
+    "stripe:validate": "node --env-file=.env.local scripts/stripe-validate-env.mjs",
+    "stripe:validate-live": "node --env-file=.env.local scripts/stripe-validate-env.mjs --expect-live"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.14",

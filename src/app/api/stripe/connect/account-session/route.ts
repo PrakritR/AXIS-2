@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
-import { createAxisConnectAccount, ensureConnectAccountTransfersRequested } from "@/lib/stripe-connect";
+import { ensureManagerConnectAccountId } from "@/lib/stripe-connect-account";
+import { ensureConnectAccountTransfersRequested } from "@/lib/stripe-connect";
 
 export async function POST() {
   try {
@@ -15,41 +16,45 @@ export async function POST() {
 
     try {
       const stripe = getStripe();
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("stripe_connect_account_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      let accountId = profile?.stripe_connect_account_id?.trim() ?? null;
-
-      if (!accountId) {
-        const account = await createAxisConnectAccount(stripe, {
-          email: user.email ?? undefined,
-          axisUserId: user.id,
-        });
-        accountId = account.id;
-        await supabase
-          .from("profiles")
-          .update({
-            stripe_connect_account_id: accountId,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", user.id);
-      } else {
-        await ensureConnectAccountTransfersRequested(stripe, accountId);
-      }
-
-      const session = await stripe.accountSessions.create({
-        account: accountId,
-        components: {
-          account_onboarding: { enabled: true },
-          account_management: { enabled: true },
-          balances: { enabled: true },
-          payouts: { enabled: true },
-          payouts_list: { enabled: true },
-        },
+      const accountId = await ensureManagerConnectAccountId(stripe, supabase, {
+        userId: user.id,
+        email: user.email ?? undefined,
       });
+      await ensureConnectAccountTransfersRequested(stripe, accountId);
+
+      const sessionComponents = {
+        account_onboarding: {
+          enabled: true,
+          features: {
+            disable_stripe_user_authentication: true,
+          },
+        },
+        account_management: { enabled: true },
+        balances: { enabled: true },
+        payouts: { enabled: true },
+        payouts_list: { enabled: true },
+      } as const;
+
+      let session;
+      try {
+        session = await stripe.accountSessions.create({
+          account: accountId,
+          components: sessionComponents,
+        });
+      } catch (sessionError) {
+        const sessionMsg = sessionError instanceof Error ? sessionError.message : String(sessionError);
+        if (!sessionMsg.includes("disable_stripe_user_authentication")) throw sessionError;
+        session = await stripe.accountSessions.create({
+          account: accountId,
+          components: {
+            account_onboarding: { enabled: true },
+            account_management: { enabled: true },
+            balances: { enabled: true },
+            payouts: { enabled: true },
+            payouts_list: { enabled: true },
+          },
+        });
+      }
 
       return NextResponse.json({
         clientSecret: session.client_secret,

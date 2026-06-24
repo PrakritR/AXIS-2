@@ -94,6 +94,8 @@ export async function POST(req: Request) {
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
+      /** Manager plans bill by card only — ACH is for resident portal payments (Connect). */
+      payment_method_types: ["card"],
       ui_mode: "hosted_page",
       line_items: [{ price, quantity: 1 }],
       customer_email: email,

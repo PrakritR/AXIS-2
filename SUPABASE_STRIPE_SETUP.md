@@ -22,13 +22,22 @@ This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription
 
 1. Create or open your [Stripe Dashboard](https://dashboard.stripe.com).
 2. **Developers → API keys**: copy **Secret key** → `STRIPE_SECRET_KEY`.
-3. **Product catalog**: create **subscription** prices for each tier and billing interval you sell (Free can be a $0/month recurring price so the same checkout code path works). Copy each **Price ID** (`price_...`) into the matching env var in `.env.example`:
+3. **Product catalog**: create **subscription** recurring prices for **Pro** and **Business** (monthly and annual). **Free does not use Stripe** — signup uses `/api/manager/signup-intent` with no card. Copy each **Price ID** (`price_...`) into the matching env var in `.env.example`:
    - `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_ANNUAL`, etc.
+   - Or run `npm run stripe:setup-plans` (requires `STRIPE_SECRET_KEY` in `.env.local`) to create/verify products and write price IDs automatically.
 4. **Developers → Webhooks → Add endpoint**  
    - URL: `{NEXT_PUBLIC_APP_URL}/api/stripe/webhook`  
-   - Events: at minimum `checkout.session.completed`  
+   - Events: at minimum `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.updated`, `customer.subscription.deleted`, and `invoice.paid`  
    - Copy **Signing secret** → `STRIPE_WEBHOOK_SECRET`
-5. Use **Stripe test mode** locally; use **live keys** only in production with live price IDs.
+   - **Local dev:** `npm run stripe:listen` (requires [Stripe CLI](https://stripe.com/docs/stripe-cli)) and paste the printed `whsec_…` into `.env.local`
+5. Use **Stripe test mode** locally; use **live keys** only in production with live price IDs. See [`docs/stripe-go-live.md`](docs/stripe-go-live.md) for the full go-live checklist.
+
+Validate env wiring:
+
+```bash
+npm run stripe:validate        # test or live — checks keys + prices
+npm run stripe:validate-live   # fails unless sk_live_ / pk_live_ are set
+```
 
 ### Promo `FREEFIRST` (first month free, Pro monthly only)
 

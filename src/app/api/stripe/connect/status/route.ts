@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
 import {
+  clearManagerConnectAccountId,
   connectAccountReadyForAchPayouts,
   connectAccountTransfersActive,
   ensureConnectAccountTransfersRequested,
+  isStripeConnectAccountAccessError,
+  retrieveManagerConnectAccountOrNull,
 } from "@/lib/stripe-connect";
 
 export const runtime = "nodejs";
@@ -46,6 +49,22 @@ export async function GET() {
 
     try {
       const stripe = getStripe();
+      const existing = await retrieveManagerConnectAccountOrNull(stripe, accountId);
+      if (!existing) {
+        await clearManagerConnectAccountId(supabase, user.id);
+        return NextResponse.json({
+          connected: false,
+          accountId: null,
+          chargesEnabled: false,
+          payoutsEnabled: false,
+          transfersEnabled: false,
+          paymentReady: false,
+          detailsSubmitted: false,
+          stripeError:
+            "Your saved Stripe payout account is no longer linked to this platform. Connect again below.",
+        });
+      }
+
       const acct = await ensureConnectAccountTransfersRequested(stripe, accountId);
       const transfersEnabled = connectAccountTransfersActive(acct);
       const paymentReady = connectAccountReadyForAchPayouts(acct);
@@ -83,7 +102,9 @@ export async function GET() {
         transfersEnabled: false,
         paymentReady: false,
         detailsSubmitted: false,
-        stripeError: msg,
+        stripeError: isStripeConnectAccountAccessError(msg)
+          ? "Your saved Stripe payout account is no longer linked to this platform. Connect again below."
+          : msg,
       });
     }
   } catch (e) {

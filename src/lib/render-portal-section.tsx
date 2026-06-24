@@ -6,6 +6,7 @@ import { ManagerInbox } from "@/components/portal/manager-inbox";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerPayments } from "@/components/portal/manager-payments";
+import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
 import { AdminCreateResidentClient } from "@/components/portal/admin-create-resident-client";
@@ -249,6 +250,14 @@ export async function renderPortalSection(
       );
     }
     if (section === "payments") {
+      if (tabParts?.length === 1 && tabParts[0] === "payouts") {
+        return subscriptionGated(
+          <PortalStripeConnectPanel basePath={def.basePath} />,
+          kind,
+          "payments",
+          managerOwnerSubscriptionTier,
+        );
+      }
       if (tabParts?.length) {
         redirect(`${def.basePath}/${section}`);
       }
@@ -347,6 +356,14 @@ export async function renderPortalSection(
       );
     }
     if (section === "payments") {
+      if (tabParts?.length === 1 && tabParts[0] === "payouts") {
+        return subscriptionGated(
+          <PortalStripeConnectPanel basePath={def.basePath} />,
+          kind,
+          "payments",
+          managerOwnerSubscriptionTier,
+        );
+      }
       if (tabParts?.length) {
         redirect(`${def.basePath}/${section}`);
       }

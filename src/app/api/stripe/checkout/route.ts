@@ -100,6 +100,8 @@ export async function POST(req: Request) {
 
     const sessionBase = {
       mode: "subscription" as const,
+      /** Manager plans bill by card only — ACH is for resident portal payments (Connect). */
+      payment_method_types: ["card"] as const,
       line_items: [{ price, quantity: 1 }],
       ...(email ? { customer_email: email } : {}),
       metadata,

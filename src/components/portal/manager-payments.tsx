@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -22,6 +23,7 @@ import {
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
+import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
   MANAGER_APPLICATIONS_EVENT,
@@ -293,6 +295,12 @@ export function ManagerPayments() {
             residentValue={activeResidentFilter}
             onResidentChange={setResidentFilter}
           />
+          <Link
+            href={`${portalBase}/payments/payouts`}
+            className={`inline-flex shrink-0 items-center justify-center rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-accent ${PORTAL_HEADER_ACTION_BTN}`}
+          >
+            Payout settings
+          </Link>
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddOpen(true)}>
             Add payment
           </Button>
@@ -336,6 +344,9 @@ export function ManagerPayments() {
       }
       filterRow={filterRow}
     >
+      <div className="mb-8">
+        <PortalStripeConnectPanel basePath="/portal" variant="embedded" />
+      </div>
       <ManagerPaymentsLedgerPanel
         rows={rowsForBucket}
         managerUserId={userId ?? null}
@@ -347,7 +358,6 @@ export function ManagerPayments() {
         onClose={() => setAddOpen(false)}
         managerUserId={userId ?? null}
         onSubmitted={() => {
-          showToast("Payment line added.");
           setAddOpen(false);
           setHcTick((n) => n + 1);
         }}

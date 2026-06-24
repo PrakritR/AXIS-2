@@ -4,27 +4,26 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 import type { HouseholdCharge } from "@/lib/household-charges";
-import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  listingFromPropertyData,
+  resolveListingForHouseholdCharge,
+} from "@/lib/household-charge-payment-eligibility";
 import { axisPaymentsEnabledOnListing } from "@/lib/payment-policy";
 import { householdChargeAmountCents, HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE } from "@/lib/stripe-household-charge";
 import { createAxisAchCheckoutSession, stripeNotConfiguredError } from "@/lib/stripe-axis-ach-checkout";
-import { resolveAndValidateManagerConnectForPayments } from "@/lib/stripe-connect";
+import {
+  isStripeConnectAccountAccessError,
+  managerConnectReconnectMessage,
+  resolveAndValidateManagerConnectForPayments,
+} from "@/lib/stripe-connect";
 
 export const runtime = "nodejs";
 
 type Body = {
   chargeId?: string;
-  /** When true (default), return embedded checkout client secret. When false, return hosted redirect URL. */
+  chargeIds?: string[];
   embedded?: boolean;
 };
-
-function listingFromPropertyData(propertyData: unknown): ManagerListingSubmissionV1 | null {
-  if (!propertyData || typeof propertyData !== "object") return null;
-  const submission = (propertyData as { listingSubmission?: unknown }).listingSubmission;
-  if (!submission || typeof submission !== "object") return null;
-  if ((submission as { v?: unknown }).v !== 1) return null;
-  return normalizeManagerListingSubmissionV1(submission as ManagerListingSubmissionV1);
-}
 
 function chargeOwnedByUser(charge: HouseholdCharge, userId: string, email: string): boolean {
   const e = email.trim().toLowerCase();
@@ -33,7 +32,7 @@ function chargeOwnedByUser(charge: HouseholdCharge, userId: string, email: strin
 }
 
 /**
- * Creates Stripe Checkout for a pending household charge (rent, utilities, deposits, etc.) via ACH.
+ * Creates Stripe Checkout for one or more pending household charges via ACH.
  */
 export async function POST(req: Request) {
   try {
@@ -46,55 +45,79 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json()) as Body;
-    const chargeId = typeof body.chargeId === "string" ? body.chargeId.trim() : "";
     const useEmbedded = body.embedded !== false;
-    if (!chargeId) {
-      return NextResponse.json({ error: "chargeId is required." }, { status: 400 });
+    const requestedIds = [
+      ...(Array.isArray(body.chargeIds) ? body.chargeIds : []),
+      ...(typeof body.chargeId === "string" ? [body.chargeId] : []),
+    ]
+      .map((id) => id.trim())
+      .filter(Boolean);
+    const uniqueIds = [...new Set(requestedIds)];
+    if (uniqueIds.length === 0) {
+      return NextResponse.json({ error: "chargeId or chargeIds is required." }, { status: 400 });
     }
 
     const db = createSupabaseServiceRoleClient();
-    const { data: row, error: rowErr } = await db
-      .from("portal_household_charge_records")
-      .select("id, row_data, status, manager_user_id")
-      .eq("id", chargeId)
-      .maybeSingle();
-
-    if (rowErr) return NextResponse.json({ error: rowErr.message }, { status: 500 });
-    if (!row) return NextResponse.json({ error: "Charge not found." }, { status: 404 });
-
-    const charge = row.row_data as HouseholdCharge | null;
-    if (!charge?.id) return NextResponse.json({ error: "Invalid charge record." }, { status: 500 });
-    if (row.status === "paid" || charge.status === "paid") {
-      return NextResponse.json({ error: "This charge is already paid." }, { status: 409 });
-    }
-
     const userEmail = (user.email ?? "").trim().toLowerCase();
-    if (!chargeOwnedByUser(charge, user.id, userEmail)) {
-      return NextResponse.json({ error: "You do not have access to this charge." }, { status: 403 });
+    const loaded: Array<{ id: string; charge: HouseholdCharge; managerUserId: string }> = [];
+
+    for (const id of uniqueIds) {
+      const { data: row, error: rowErr } = await db
+        .from("portal_household_charge_records")
+        .select("id, row_data, status, manager_user_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (rowErr) return NextResponse.json({ error: rowErr.message }, { status: 500 });
+      if (!row) return NextResponse.json({ error: `Charge not found: ${id}` }, { status: 404 });
+
+      const charge = row.row_data as HouseholdCharge | null;
+      if (!charge?.id) return NextResponse.json({ error: "Invalid charge record." }, { status: 500 });
+      if (row.status === "paid" || charge.status === "paid") {
+        return NextResponse.json({ error: "One or more selected charges are already paid." }, { status: 409 });
+      }
+      if (!chargeOwnedByUser(charge, user.id, userEmail)) {
+        return NextResponse.json({ error: "You do not have access to one of the selected charges." }, { status: 403 });
+      }
+
+      const managerUserId = (row.manager_user_id as string | null)?.trim() || charge.managerUserId?.trim() || "";
+      if (!managerUserId) {
+        return NextResponse.json({ error: "A selected charge is not linked to a property manager yet." }, { status: 422 });
+      }
+
+      const listing =
+        listingFromPropertyData(
+          (
+            await db
+              .from("manager_property_records")
+              .select("property_data")
+              .eq("id", charge.propertyId)
+              .maybeSingle()
+          ).data?.property_data,
+        ) ?? (await resolveListingForHouseholdCharge(db, charge, managerUserId));
+
+      if (!axisPaymentsEnabledOnListing(listing)) {
+        return NextResponse.json(
+          {
+            code: "AXIS_PAYMENTS_DISABLED",
+            error: "Bank (ACH) payments are not enabled for all selected properties.",
+          },
+          { status: 422 },
+        );
+      }
+
+      loaded.push({ id, charge, managerUserId });
     }
 
-    const managerUserId = (row.manager_user_id as string | null)?.trim() || charge.managerUserId?.trim() || "";
-    if (!managerUserId) {
-      return NextResponse.json({ error: "This charge is not linked to a property manager yet." }, { status: 422 });
-    }
-
-    const { data: propertyRow } = await db
-      .from("manager_property_records")
-      .select("property_data")
-      .eq("id", charge.propertyId)
-      .maybeSingle();
-
-    const listing = listingFromPropertyData(propertyRow?.property_data);
-    if (!axisPaymentsEnabledOnListing(listing)) {
+    const managerIds = [...new Set(loaded.map((row) => row.managerUserId))];
+    if (managerIds.length !== 1) {
       return NextResponse.json(
-        {
-          code: "AXIS_PAYMENTS_DISABLED",
-          error: "Axis bank (ACH) payments are not enabled for this property. Use Zelle or Venmo if available.",
-        },
+        { error: "Pay selected charges together only when they belong to the same property manager." },
         { status: 422 },
       );
     }
 
+    const managerUserId = managerIds[0]!;
     const stripe = getStripe();
     const connect = await resolveAndValidateManagerConnectForPayments(stripe, db, managerUserId);
     if (!connect.ok) {
@@ -107,28 +130,36 @@ export async function POST(req: Request) {
       );
     }
 
-    const amountCents = householdChargeAmountCents(charge);
-    if (amountCents < 100 || amountCents > 500_000) {
-      return NextResponse.json({ error: "Invalid charge amount (must be between $1.00 and $5,000.00)." }, { status: 400 });
-    }
+    const lineItems = loaded.map(({ charge }) => {
+      const amountCents = householdChargeAmountCents(charge);
+      if (amountCents < 100 || amountCents > 500_000) {
+        throw new Error("Each charge must be between $1.00 and $5,000.00.");
+      }
+      return {
+        amountCents,
+        productName: charge.title?.trim() || "Resident payment",
+        productDescription: charge.propertyLabel?.trim() || "Axis",
+      };
+    });
 
+    const amountCents = lineItems.reduce((sum, item) => sum + item.amountCents, 0);
+    const residentEmail = loaded[0]!.charge.residentEmail.trim().toLowerCase();
     const appUrl = resolveAppOrigin(req);
-    const residentEmail = charge.residentEmail.trim().toLowerCase();
+    const chargeIdsCsv = loaded.map((row) => row.id).join(",").slice(0, 450);
 
     const metadata: Record<string, string> = {
       purpose: HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE,
-      charge_id: chargeId,
-      property_id: charge.propertyId.slice(0, 450),
+      charge_id: loaded[0]!.id,
+      charge_ids: chargeIdsCsv,
+      property_id: loaded[0]!.charge.propertyId.slice(0, 450),
       resident_email: residentEmail.slice(0, 450),
       manager_user_id: managerUserId,
+      bulk: loaded.length > 1 ? "true" : "false",
     };
-    if (charge.title?.trim()) metadata.charge_title = charge.title.trim().slice(0, 450);
 
     const result = await createAxisAchCheckoutSession(stripe, {
       residentEmail,
-      amountCents,
-      productName: charge.title?.trim() || "Resident payment",
-      productDescription: charge.propertyLabel?.trim() || "Axis",
+      lineItems,
       metadata,
       destinationAccountId: connect.accountId,
       mode: useEmbedded ? "embedded" : "hosted",
@@ -143,6 +174,7 @@ export async function POST(req: Request) {
         sessionId: result.sessionId,
         amountCents,
         platformFeeCents: result.platformFeeCents,
+        chargeIds: loaded.map((row) => row.id),
       });
     }
 
@@ -151,6 +183,7 @@ export async function POST(req: Request) {
       sessionId: result.sessionId,
       amountCents,
       platformFeeCents: result.platformFeeCents,
+      chargeIds: loaded.map((row) => row.id),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Checkout failed";
@@ -158,6 +191,15 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { code: "STRIPE_NOT_CONFIGURED", error: "Stripe is not configured on the server (missing STRIPE_SECRET_KEY)." },
         { status: 503 },
+      );
+    }
+    if (isStripeConnectAccountAccessError(message)) {
+      return NextResponse.json(
+        {
+          code: "MANAGER_CONNECT_STALE",
+          error: managerConnectReconnectMessage(),
+        },
+        { status: 422 },
       );
     }
     return NextResponse.json({ error: message }, { status: 500 });

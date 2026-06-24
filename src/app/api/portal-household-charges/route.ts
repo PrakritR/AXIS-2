@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import type { HouseholdCharge } from "@/lib/household-charges";
+import { enrichHouseholdChargesFromPropertyRecords } from "@/lib/household-charge-payment-eligibility";
 
 export const runtime = "nodejs";
 
@@ -70,7 +72,8 @@ export async function GET() {
     if (chargeResult.error) return NextResponse.json({ error: chargeResult.error.message }, { status: 500 });
     if (profileResult.error) return NextResponse.json({ error: profileResult.error.message }, { status: 500 });
 
-    const charges = (chargeResult.data ?? []).map((r) => r.row_data);
+    const rawCharges = (chargeResult.data ?? []).map((r) => r.row_data as HouseholdCharge);
+    const charges = await enrichHouseholdChargesFromPropertyRecords(db, rawCharges);
     const rentProfiles = (profileResult.data ?? []).map((r) => r.row_data);
     return NextResponse.json({ charges, rentProfiles });
   } catch (e) {

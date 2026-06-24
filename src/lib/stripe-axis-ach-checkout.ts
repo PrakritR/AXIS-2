@@ -5,11 +5,24 @@ export const APPLICATION_FEE_CHECKOUT_PURPOSE = "rental_application_fee";
 
 export type AxisAchCheckoutMode = "embedded" | "hosted";
 
-export type AxisAchCheckoutInput = {
-  residentEmail: string;
+export function stripeNotConfiguredError(message: string): boolean {
+  return message.includes("STRIPE_SECRET_KEY") || message.includes("Missing STRIPE");
+}
+
+export type AxisAchLineItem = {
   amountCents: number;
   productName: string;
   productDescription?: string;
+};
+
+export type AxisAchCheckoutInput = {
+  residentEmail: string;
+  /** Total cents when using a single line item (default). */
+  amountCents?: number;
+  productName?: string;
+  productDescription?: string;
+  /** Multiple line items for paying several charges in one checkout. */
+  lineItems?: AxisAchLineItem[];
   metadata: Record<string, string>;
   returnUrl?: string;
   successUrl?: string;
@@ -32,13 +45,25 @@ export function axisAchCheckoutProcessing(session: Stripe.Checkout.Session): boo
 
 /**
  * Creates a Stripe Checkout Session for US bank account (ACH) Connect destination charges.
+ * Used only for resident portal payments (rent, utilities, application fees) — not manager subscriptions.
  * Property managers must have ACH enabled in their Stripe Dashboard payment method settings.
  */
 export async function createAxisAchCheckoutSession(
   stripe: Stripe,
   input: AxisAchCheckoutInput,
 ): Promise<AxisAchCheckoutResult> {
-  const amountCents = Math.round(input.amountCents);
+  const lineItems =
+    input.lineItems && input.lineItems.length > 0
+      ? input.lineItems
+      : [
+          {
+            amountCents: Math.round(input.amountCents ?? 0),
+            productName: input.productName?.trim() || "Resident payment",
+            productDescription: input.productDescription,
+          },
+        ];
+
+  const amountCents = lineItems.reduce((sum, item) => sum + Math.round(item.amountCents), 0);
   if (amountCents < 100) {
     throw new Error("Amount must be at least $1.00.");
   }
@@ -71,19 +96,17 @@ export async function createAxisAchCheckoutSession(
         verification_method: "automatic" as const,
       },
     },
-    line_items: [
-      {
-        price_data: {
-          currency: "usd" as const,
-          product_data: {
-            name: input.productName,
-            description: input.productDescription,
-          },
-          unit_amount: amountCents,
+    line_items: lineItems.map((item) => ({
+      price_data: {
+        currency: "usd" as const,
+        product_data: {
+          name: item.productName,
+          description: item.productDescription,
         },
-        quantity: 1,
+        unit_amount: Math.round(item.amountCents),
       },
-    ],
+      quantity: 1,
+    })),
     metadata: input.metadata,
     payment_intent_data: paymentIntentData,
   };
@@ -119,8 +142,4 @@ export async function createAxisAchCheckoutSession(
     sessionId: session.id,
     platformFeeCents: applicationFeeAmount,
   };
-}
-
-export function stripeNotConfiguredError(message: string): boolean {
-  return message.includes("STRIPE_SECRET_KEY") || message.includes("Missing STRIPE");
 }

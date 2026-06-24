@@ -1,23 +1,21 @@
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+import { resolveAppOrigin } from "@/lib/app-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, stripeConnectRedirectOriginError } from "@/lib/stripe";
+import { ensureManagerConnectAccountId } from "@/lib/stripe-connect-account";
 import {
   connectAccountReadyForAchPayouts,
-  connectAccountTransfersActive,
-  createAxisConnectAccount,
   ensureConnectAccountTransfersRequested,
+  isStripeConnectAccountAccessError,
 } from "@/lib/stripe-connect";
 
 export const runtime = "nodejs";
 
 /**
- * Creates or resumes Stripe Connect Express onboarding for the signed-in user.
- * - New user: create Express account, store `stripe_connect_account_id` on `profiles`, then Account Link.
- * - Existing: Account Link (onboarding / update) or Express Login Link if fully enabled.
- * Without STRIPE_SECRET_KEY, returns a demo payload instead of throwing.
+ * Creates or resumes Stripe Connect onboarding for the signed-in user.
+ * Returns an Account Link URL — the client should navigate in the same tab (window.location.assign).
  */
-export async function POST() {
+export async function POST(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -28,43 +26,26 @@ export async function POST() {
     }
 
     const basePath = "/portal";
-
-    const h = await headers();
-    const host = h.get("x-forwarded-host") ?? h.get("host");
-    const proto = h.get("x-forwarded-proto") ?? "http";
-    const origin = host ? `${proto}://${host}` : "http://localhost:3000";
+    const origin = resolveAppOrigin(req);
+    const redirectError = stripeConnectRedirectOriginError(origin);
+    if (redirectError) {
+      return NextResponse.json(
+        { code: "LIVEMODE_REQUIRES_HTTPS", error: redirectError },
+        { status: 422 },
+      );
+    }
 
     const refreshUrl = `${origin}${basePath}/payments?connect=refresh`;
     const returnUrl = `${origin}${basePath}/payments?connect=done`;
 
     try {
       const stripe = getStripe();
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("stripe_connect_account_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      let accountId = profile?.stripe_connect_account_id?.trim() ?? null;
-
-      if (!accountId) {
-        const account = await createAxisConnectAccount(stripe, {
-          email: user.email ?? undefined,
-          axisUserId: user.id,
-        });
-        accountId = account.id;
-        await supabase
-          .from("profiles")
-          .update({
-            stripe_connect_account_id: accountId,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", user.id);
-      }
+      const accountId = await ensureManagerConnectAccountId(stripe, supabase, {
+        userId: user.id,
+        email: user.email ?? undefined,
+      });
 
       const acct = await ensureConnectAccountTransfersRequested(stripe, accountId);
-
       const readyForPayouts = connectAccountReadyForAchPayouts(acct);
 
       if (readyForPayouts) {
@@ -92,25 +73,44 @@ export async function POST() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Stripe error";
       if (msg.includes("STRIPE_SECRET_KEY") || msg.includes("Missing STRIPE")) {
-        return NextResponse.json({
-          demo: true,
-          message:
-            "Stripe is not configured (missing STRIPE_SECRET_KEY). Add keys in your environment to enable live Connect onboarding.",
-        });
+        return NextResponse.json(
+          {
+            code: "STRIPE_NOT_CONFIGURED",
+            error: "Stripe is not configured (missing STRIPE_SECRET_KEY).",
+          },
+          { status: 503 },
+        );
       }
       if (msg.includes("signed up for Connect")) {
         return NextResponse.json(
           {
+            code: "CONNECT_NOT_ENABLED",
             error:
-              "Stripe Connect is not activated for your platform account yet. In the Stripe Dashboard, open Connect and complete setup (Get started): https://dashboard.stripe.com/connect/account/onboarding — then return here and try again.",
+              "Stripe Connect is not activated yet. In the Stripe Dashboard (live mode), open Connect and complete setup, then try again.",
           },
           { status: 400 },
         );
       }
-      return NextResponse.json({
-        demo: true,
-        message: `Stripe Connect could not start: ${msg}. Check API version and Connect settings in Stripe Dashboard.`,
-      });
+      if (msg.includes("redirected via HTTPS") || msg.toLowerCase().includes("https")) {
+        return NextResponse.json(
+          {
+            code: "LIVEMODE_REQUIRES_HTTPS",
+            error:
+              "Live Stripe requires HTTPS return URLs. Use test keys locally, or set NEXT_PUBLIC_APP_URL to your production https URL.",
+          },
+          { status: 422 },
+        );
+      }
+      if (isStripeConnectAccountAccessError(msg)) {
+        return NextResponse.json(
+          {
+            code: "CONNECT_ACCOUNT_STALE",
+            error: "Your saved Stripe account is from an old setup. Refresh this page and link your bank again.",
+          },
+          { status: 422 },
+        );
+      }
+      return NextResponse.json({ code: "STRIPE_CONNECT_ERROR", error: msg }, { status: 400 });
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

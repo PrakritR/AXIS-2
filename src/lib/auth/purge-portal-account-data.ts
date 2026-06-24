@@ -3,8 +3,17 @@ import { purgeCoManagerReferencesToUser } from "@/lib/auth/purge-orphaned-co-man
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
 
+function looksLikeMissingTableError(err: { message?: string } | null | undefined): boolean {
+  const m = (err?.message ?? "").toLowerCase();
+  return (
+    m.includes("schema cache") ||
+    m.includes("does not exist") ||
+    (m.includes("relation") && m.includes("not"))
+  );
+}
+
 function assertNoDeleteErrors(results: { error: { message: string } | null }[]) {
-  const failed = results.find((result) => result.error);
+  const failed = results.find((result) => result.error && !looksLikeMissingTableError(result.error));
   if (failed?.error) throw new Error(failed.error.message);
 }
 

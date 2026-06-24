@@ -7,6 +7,7 @@ import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { paymentSnapshotsFromListing } from "@/lib/household-charge-payment-eligibility";
 import {
   rentDueDayModeFromSubmission,
   resolveRentDueDayForMonth,
@@ -74,6 +75,8 @@ export type HouseholdCharge = {
   zelleContactSnapshot?: string;
   /** Snapshot of Venmo contact from listing when charge was created */
   venmoContactSnapshot?: string;
+  /** Snapshot of whether Axis ACH was enabled on the listing when the charge was created or synced. */
+  axisPaymentsEnabledSnapshot?: boolean;
   /** When true, lease signing stays disabled until this line is paid */
   blocksLeaseUntilPaid: boolean;
   /** When this charge was created from a manager work order pass-through */
@@ -2255,6 +2258,7 @@ export function createManagerCharge(input: {
   managerUserId: string | null;
   title: string;
   amount: number;
+  applicationId?: string;
   blocksLeaseUntilPaid?: boolean;
   dueDateLabel?: string;
   initialStatus?: "pending" | "paid";
@@ -2263,9 +2267,14 @@ export function createManagerCharge(input: {
   if (!email || !Number.isFinite(input.amount) || input.amount <= 0) return null;
   const isPaid = input.initialStatus === "paid";
   const balance = `$${input.amount.toFixed(2)}`;
+  const prop = getPropertyById(input.propertyId);
+  const sub =
+    prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  const paymentSnapshots = paymentSnapshotsFromListing(sub);
   const charge: HouseholdCharge = {
     id: `hc_mgr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString(),
+    applicationId: input.applicationId?.trim() || undefined,
     residentEmail: email,
     residentName: input.residentName.trim() || "Resident",
     residentUserId: null,
@@ -2280,6 +2289,7 @@ export function createManagerCharge(input: {
     paidAt: isPaid ? new Date().toISOString() : undefined,
     dueDateLabel: input.dueDateLabel?.trim() || undefined,
     blocksLeaseUntilPaid: input.blocksLeaseUntilPaid ?? false,
+    ...paymentSnapshots,
   };
   writeAll([...readAll(), charge]);
   return charge;

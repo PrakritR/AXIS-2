@@ -17,6 +17,15 @@ export function connectAccountTransfersActive(account: Stripe.Account): boolean 
   return account.capabilities?.transfers === "active";
 }
 
+export function isStripeConnectAccountAccessError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("does not have access to account") || m.includes("that account does not exist");
+}
+
+export function managerConnectReconnectMessage(): string {
+  return "Your Stripe payout account was created under a different Axis Stripe setup. Open Portal → Payments and complete Stripe payout setup again.";
+}
+
 /** True when the manager can receive ACH destination transfers and withdraw to their bank. */
 export function connectAccountReadyForAchPayouts(account: Stripe.Account): boolean {
   return connectAccountTransfersActive(account) && Boolean(account.payouts_enabled);
@@ -77,7 +86,22 @@ export async function validateManagerConnectForDestinationCharge(
     return { ok: false, code: "NO_ACCOUNT", error: "No Stripe Connect account linked." };
   }
 
-  const account = await ensureConnectAccountTransfersRequested(stripe, id);
+  const account = await ensureConnectAccountTransfersRequested(stripe, id).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isStripeConnectAccountAccessError(message)) {
+      return null;
+    }
+    throw error;
+  });
+
+  if (!account) {
+    return {
+      ok: false,
+      code: "NO_ACCOUNT",
+      error: managerConnectReconnectMessage(),
+    };
+  }
+
   if (connectAccountTransfersActive(account)) {
     return { ok: true, accountId: account.id };
   }
@@ -87,6 +111,50 @@ export async function validateManagerConnectForDestinationCharge(
     code: "TRANSFERS_NOT_ACTIVE",
     error: managerConnectValidationError(account),
   };
+}
+
+export async function retrieveManagerConnectAccountOrNull(
+  stripe: Stripe,
+  accountId: string,
+): Promise<Stripe.Account | null> {
+  const id = accountId.trim();
+  if (!id) return null;
+  try {
+    return await stripe.accounts.retrieve(id);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isStripeConnectAccountAccessError(message)) return null;
+    throw error;
+  }
+}
+
+export async function clearManagerConnectAccountId(
+  db: SupabaseClient,
+  managerUserId: string,
+): Promise<void> {
+  const id = managerUserId.trim();
+  if (!id) return;
+  await db
+    .from("profiles")
+    .update({
+      stripe_connect_account_id: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+}
+
+/** Clears a stale Connect account id when the platform key cannot access it, then returns a fresh id or null. */
+export async function resolveOrResetManagerConnectAccountId(
+  stripe: Stripe,
+  db: SupabaseClient,
+  managerUserId: string,
+): Promise<string | null> {
+  const accountId = await resolveManagerConnectAccountId(db, managerUserId);
+  if (!accountId) return null;
+  const account = await retrieveManagerConnectAccountOrNull(stripe, accountId);
+  if (account) return account.id;
+  await clearManagerConnectAccountId(db, managerUserId);
+  return null;
 }
 
 export async function resolveManagerConnectAccountId(
@@ -117,5 +185,9 @@ export async function resolveAndValidateManagerConnectForPayments(
         "This property manager has not connected Stripe payouts yet. Use Zelle or Venmo if the listing offers it.",
     };
   }
-  return validateManagerConnectForDestinationCharge(stripe, accountId);
+  const result = await validateManagerConnectForDestinationCharge(stripe, accountId);
+  if (!result.ok && result.code === "NO_ACCOUNT") {
+    await clearManagerConnectAccountId(db, managerUserId);
+  }
+  return result;
 }

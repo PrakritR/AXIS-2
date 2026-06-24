@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -10,6 +10,20 @@ import { createManagerCharge } from "@/lib/household-charges";
 import { MANAGER_PAYMENT_PRESETS, type ManagerPaymentPresetId } from "@/lib/payment-policy";
 import { buildNewChargeNoticeBody, deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
+import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
+import {
+  MANAGER_APPLICATIONS_EVENT,
+  readManagerApplicationRows,
+  syncManagerApplicationsFromServer,
+} from "@/lib/manager-applications-storage";
+import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
+import { getRoomChoiceLabel } from "@/lib/rental-application/data";
+import {
+  PROPERTY_PIPELINE_EVENT,
+  readExtraListingsForUser,
+  readPendingManagerPropertiesForUser,
+  syncPropertyPipelineFromServer,
+} from "@/lib/demo-property-pipeline";
 
 function dueLabelFromIso(iso: string): string {
   const d = new Date(`${iso}T12:00:00`);
@@ -17,9 +31,104 @@ function dueLabelFromIso(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+/** Property name only — strips " · 9 rooms", unit labels, and legacy id suffixes. */
+function displayPropertyLabel(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  return trimmed
+    .split(" · ")[0]!
+    .replace(/\s*·\s*[^·]*::[^·]*$/i, "")
+    .replace(/\s+[.-]\s+[^\s]+::[^\s]+$/i, "")
+    .trim();
+}
+
+type PropertyPaymentOption = {
+  propertyId: string;
+  propertyLabel: string;
+};
+
+function buildManagerPropertyOptions(managerUserId: string | null): PropertyPaymentOption[] {
+  if (!managerUserId) return [];
+  const seen = new Map<string, PropertyPaymentOption>();
+
+  for (const property of readExtraListingsForUser(managerUserId)) {
+    const propertyId = property.id.trim();
+    if (!propertyId || seen.has(propertyId)) continue;
+    const propertyLabel = displayPropertyLabel(property.buildingName.trim() || property.title);
+    if (!propertyLabel) continue;
+    seen.set(propertyId, { propertyId, propertyLabel });
+  }
+
+  for (const property of readPendingManagerPropertiesForUser(managerUserId)) {
+    const propertyId = property.id.trim();
+    if (!propertyId || seen.has(propertyId)) continue;
+    const propertyLabel = displayPropertyLabel(property.buildingName.trim());
+    if (!propertyLabel) continue;
+    seen.set(propertyId, { propertyId, propertyLabel });
+  }
+
+  return [...seen.values()].sort((a, b) =>
+    a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" }),
+  );
+}
+
+type ResidentPaymentOption = {
+  applicationId: string;
+  residentName: string;
+  residentEmail: string;
+  propertyId: string;
+  propertyLabel: string;
+  roomLabel: string;
+};
+
+function residentBelongsToProperty(resident: ResidentPaymentOption, property: PropertyPaymentOption): boolean {
+  if (resident.propertyId && resident.propertyId === property.propertyId) return true;
+  return resident.propertyLabel.toLowerCase() === property.propertyLabel.toLowerCase();
+}
+
+function buildResidentPaymentOptions(managerUserId: string | null): ResidentPaymentOption[] {
+  return readManagerApplicationRows()
+    .filter(
+      (row) =>
+        isCurrentResidentApplicationRow(row) &&
+        applicationVisibleToPortalUser(row, managerUserId) &&
+        row.name?.trim() &&
+        row.email?.trim().includes("@"),
+    )
+    .map((row) => {
+      const propertyLabel = displayPropertyLabel(row.property?.trim() || "");
+      const propertyId =
+        row.assignedPropertyId?.trim() ||
+        row.propertyId?.trim() ||
+        (propertyLabel
+          ? `prop_mgr_${propertyLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`
+          : "");
+      const roomLabel =
+        getRoomChoiceLabel(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "")
+          .split(" · ")[0]
+          ?.trim() ||
+        row.manualResidentDetails?.roomNumber?.trim() ||
+        "";
+      return {
+        applicationId: row.id,
+        residentName: row.name.trim(),
+        residentEmail: row.email!.trim().toLowerCase(),
+        propertyId,
+        propertyLabel: propertyLabel || "Property",
+        roomLabel,
+      };
+    })
+    .sort((a, b) => {
+      const byProperty = a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" });
+      if (byProperty !== 0) return byProperty;
+      return a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
+    });
+}
+
 type PaymentPreview = {
   propertyName: string;
   propertyId: string;
+  applicationId?: string;
   residentName: string;
   residentEmail: string;
   chargeTitle: string;
@@ -40,10 +149,10 @@ export function ManagerAddPaymentModal({
   managerUserId: string | null;
 }) {
   const { showToast } = useAppUi();
-  const [propertyName, setPropertyName] = useState("");
-  const [roomNumber, setRoomNumber] = useState("");
-  const [residentName, setResidentName] = useState("");
-  const [residentEmail, setResidentEmail] = useState("");
+  const [applicationTick, setApplicationTick] = useState(0);
+  const [propertyTick, setPropertyTick] = useState(0);
+  const [propertyId, setPropertyId] = useState("");
+  const [residentApplicationId, setResidentApplicationId] = useState("");
   const [preset, setPreset] = useState<ManagerPaymentPresetId>("rent");
   const [chargeTitle, setChargeTitle] = useState("Monthly rent");
   const [amount, setAmount] = useState("");
@@ -51,6 +160,45 @@ export function ManagerAddPaymentModal({
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [noticePreview, setNoticePreview] = useState<PaymentPreview | null>(null);
   const [noticeBusy, setNoticeBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onApplications = () => setApplicationTick((n) => n + 1);
+    const onProperties = () => setPropertyTick((n) => n + 1);
+    void syncManagerApplicationsFromServer({ force: true, managerUserId: managerUserId ?? undefined }).then(onApplications);
+    void syncPropertyPipelineFromServer({ force: true }).then(onProperties);
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, onApplications);
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, onProperties);
+    return () => {
+      window.removeEventListener(MANAGER_APPLICATIONS_EVENT, onApplications);
+      window.removeEventListener(PROPERTY_PIPELINE_EVENT, onProperties);
+    };
+  }, [open, managerUserId]);
+
+  const propertyOptions = useMemo(() => {
+    void propertyTick;
+    return buildManagerPropertyOptions(managerUserId);
+  }, [managerUserId, propertyTick]);
+
+  const residentOptions = useMemo(() => {
+    void applicationTick;
+    return buildResidentPaymentOptions(managerUserId);
+  }, [applicationTick, managerUserId]);
+
+  const selectedProperty = useMemo(
+    () => propertyOptions.find((row) => row.propertyId === propertyId) ?? null,
+    [propertyId, propertyOptions],
+  );
+
+  const residentsForProperty = useMemo(() => {
+    if (!selectedProperty) return [];
+    return residentOptions.filter((row) => residentBelongsToProperty(row, selectedProperty));
+  }, [residentOptions, selectedProperty]);
+
+  const selectedResident = useMemo(
+    () => residentOptions.find((row) => row.applicationId === residentApplicationId) ?? null,
+    [residentApplicationId, residentOptions],
+  );
 
   const onPresetChange = (next: ManagerPaymentPresetId) => {
     setPreset(next);
@@ -60,10 +208,8 @@ export function ManagerAddPaymentModal({
   };
 
   const reset = () => {
-    setPropertyName("");
-    setRoomNumber("");
-    setResidentName("");
-    setResidentEmail("");
+    setPropertyId("");
+    setResidentApplicationId("");
     setPreset("rent");
     setChargeTitle("Monthly rent");
     setAmount("");
@@ -80,29 +226,25 @@ export function ManagerAddPaymentModal({
 
   const buildPreview = (): PaymentPreview | null => {
     const amountNum = Number.parseFloat(amount);
-    const email = residentEmail.trim();
-    if (
-      !propertyName.trim() ||
-      !residentName.trim() ||
-      !email ||
-      !email.includes("@") ||
-      !chargeTitle.trim() ||
-      !Number.isFinite(amountNum) ||
-      amountNum <= 0
-    ) {
-      showToast("Enter property, resident name, resident email, charge title, and a positive amount.");
+    if (!selectedResident) {
+      showToast("Select a property and resident.");
+      return null;
+    }
+    if (!chargeTitle.trim() || !Number.isFinite(amountNum) || amountNum <= 0) {
+      showToast("Enter a charge title and a positive amount.");
       return null;
     }
 
-    const titleWithRoom = roomNumber.trim()
-      ? `${chargeTitle.trim()} — Unit ${roomNumber.trim()}`
+    const titleWithRoom = selectedResident.roomLabel
+      ? `${chargeTitle.trim()} — Unit ${selectedResident.roomLabel}`
       : chargeTitle.trim();
 
     return {
-      propertyName: propertyName.trim(),
-      propertyId: `prop_mgr_${propertyName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
-      residentName: residentName.trim(),
-      residentEmail: email,
+      propertyName: selectedResident.propertyLabel,
+      propertyId: selectedProperty?.propertyId || selectedResident.propertyId,
+      applicationId: selectedResident.applicationId,
+      residentName: selectedResident.residentName,
+      residentEmail: selectedResident.residentEmail,
       chargeTitle: titleWithRoom,
       amount: amountNum,
       dueDateLabel: dueLabelFromIso(dueIso),
@@ -126,6 +268,7 @@ export function ManagerAddPaymentModal({
         propertyId: noticePreview.propertyId,
         propertyLabel: noticePreview.propertyName,
         managerUserId,
+        applicationId: noticePreview.applicationId,
         title: noticePreview.chargeTitle,
         amount: noticePreview.amount,
         dueDateLabel: noticePreview.dueDateLabel,
@@ -183,6 +326,8 @@ export function ManagerAddPaymentModal({
       propertyLabel: noticePreview.propertyName,
     });
 
+  const noProperties = propertyOptions.length === 0;
+
   return (
     <>
       <Modal
@@ -204,25 +349,42 @@ export function ManagerAddPaymentModal({
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-muted">Property</span>
-            <Input value={propertyName} onChange={(e) => setPropertyName(e.target.value)} placeholder="Demo Building" autoComplete="off" />
+            <Select
+              value={propertyId}
+              onChange={(e) => {
+                setPropertyId(e.target.value);
+                setResidentApplicationId("");
+              }}
+              disabled={noProperties}
+            >
+              <option value="">{noProperties ? "No properties in portfolio" : "Select property"}</option>
+              {propertyOptions.map((option) => (
+                <option key={option.propertyId} value={option.propertyId}>
+                  {option.propertyLabel}
+                </option>
+              ))}
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Room / unit</span>
-            <Input value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} placeholder="2A" autoComplete="off" />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Resident name</span>
-            <Input value={residentName} onChange={(e) => setResidentName(e.target.value)} placeholder="Alex Chen" autoComplete="off" />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Resident email</span>
-            <Input
-              type="email"
-              value={residentEmail}
-              onChange={(e) => setResidentEmail(e.target.value)}
-              placeholder="alex@example.com"
-              autoComplete="off"
-            />
+            <span className="font-medium text-muted">Resident</span>
+            <Select
+              value={residentApplicationId}
+              onChange={(e) => setResidentApplicationId(e.target.value)}
+              disabled={!propertyId || residentsForProperty.length === 0}
+            >
+              <option value="">
+                {!propertyId
+                  ? "Select property first"
+                  : residentsForProperty.length === 0
+                    ? "No residents at this property"
+                    : "Select resident"}
+              </option>
+              {residentsForProperty.map((row) => (
+                <option key={row.applicationId} value={row.applicationId}>
+                  {row.residentName}
+                </option>
+              ))}
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-muted">Charge title</span>
@@ -256,7 +418,7 @@ export function ManagerAddPaymentModal({
             <Button type="button" variant="outline" className="rounded-full" onClick={handleClose}>
               Cancel
             </Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={reviewPayment}>
+            <Button type="button" variant="primary" className="rounded-full" onClick={reviewPayment} disabled={!propertyId}>
               Review & add payment
             </Button>
           </div>

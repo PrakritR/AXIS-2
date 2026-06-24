@@ -43,61 +43,78 @@ export async function markHouseholdChargePaidFromStripeSession(
     return { ok: false };
   }
 
-  const chargeId = session.metadata?.charge_id?.trim();
-  if (!chargeId) return { ok: false };
+  const chargeIds =
+    session.metadata?.charge_ids
+      ?.split(",")
+      .map((id) => id.trim())
+      .filter(Boolean) ?? [];
+  const fallbackId = session.metadata?.charge_id?.trim();
+  const idsToMark = chargeIds.length > 0 ? chargeIds : fallbackId ? [fallbackId] : [];
+  if (idsToMark.length === 0) return { ok: false };
 
   if (!householdChargeCheckoutPaid(session)) {
     return { ok: false };
   }
 
-  const { data: row, error } = await db
-    .from("portal_household_charge_records")
-    .select("id, row_data, status")
-    .eq("id", chargeId)
-    .maybeSingle();
+  const expectedEmail =
+    session.customer_email?.trim().toLowerCase() ?? session.metadata?.resident_email?.trim().toLowerCase() ?? "";
 
-  if (error || !row) return { ok: false };
-
-  const charge = row.row_data as HouseholdCharge | null;
-  if (!charge?.id) return { ok: false };
-
-  if (row.status === "paid" || charge.status === "paid") {
-    return { ok: true, chargeId, alreadyPaid: true };
-  }
-
-  const expectedEmail = charge.residentEmail.trim().toLowerCase();
-  const sessionEmail = session.customer_email?.trim().toLowerCase() ?? session.metadata?.resident_email?.trim().toLowerCase() ?? "";
-  if (sessionEmail && expectedEmail && sessionEmail !== expectedEmail) {
-    return { ok: false };
-  }
-
+  let marked = 0;
+  let alreadyPaid = false;
   const now = new Date().toISOString();
-  const nextCharge: HouseholdCharge = {
-    ...charge,
-    status: "paid",
-    paidAt: now,
-    balanceLabel: "$0.00",
-  };
 
-  const { error: upsertErr } = await db.from("portal_household_charge_records").upsert(
-    {
-      id: chargeId,
-      manager_user_id: charge.managerUserId,
-      resident_user_id: charge.residentUserId,
-      resident_email: charge.residentEmail.trim().toLowerCase(),
-      property_id: charge.propertyId,
-      kind: charge.kind,
+  for (const chargeId of idsToMark) {
+    const { data: row, error } = await db
+      .from("portal_household_charge_records")
+      .select("id, row_data, status")
+      .eq("id", chargeId)
+      .maybeSingle();
+
+    if (error || !row) continue;
+
+    const charge = row.row_data as HouseholdCharge | null;
+    if (!charge?.id) continue;
+
+    if (row.status === "paid" || charge.status === "paid") {
+      alreadyPaid = true;
+      marked += 1;
+      continue;
+    }
+
+    const chargeEmail = charge.residentEmail.trim().toLowerCase();
+    if (expectedEmail && chargeEmail && expectedEmail !== chargeEmail) {
+      continue;
+    }
+
+    const nextCharge: HouseholdCharge = {
+      ...charge,
       status: "paid",
-      row_data: {
-        ...nextCharge,
-        stripeCheckoutSessionId: session.id,
-        stripePaymentStatus: session.payment_status,
-      },
-      updated_at: now,
-    },
-    { onConflict: "id" },
-  );
+      paidAt: now,
+      balanceLabel: "$0.00",
+    };
 
-  if (upsertErr) return { ok: false };
-  return { ok: true, chargeId };
+    const { error: upsertErr } = await db.from("portal_household_charge_records").upsert(
+      {
+        id: chargeId,
+        manager_user_id: charge.managerUserId,
+        resident_user_id: charge.residentUserId,
+        resident_email: charge.residentEmail.trim().toLowerCase(),
+        property_id: charge.propertyId,
+        kind: charge.kind,
+        status: "paid",
+        row_data: {
+          ...nextCharge,
+          stripeCheckoutSessionId: session.id,
+          stripePaymentStatus: session.payment_status,
+        },
+        updated_at: now,
+      },
+      { onConflict: "id" },
+    );
+
+    if (!upsertErr) marked += 1;
+  }
+
+  if (marked === 0) return { ok: false };
+  return { ok: true, chargeId: idsToMark[0], alreadyPaid };
 }

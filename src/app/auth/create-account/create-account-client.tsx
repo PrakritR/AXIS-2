@@ -84,9 +84,11 @@ export default function CreateAccountClient() {
   const effectivePreviewError = shouldLoadCheckout ? previewError : null;
   const effectivePreviewLoading = shouldLoadCheckout ? previewLoading : false;
 
-  if (!shouldLoadCheckout && confirmPassword !== "") {
-    setConfirmPassword("");
-  }
+  useEffect(() => {
+    if (!shouldLoadCheckout) {
+      setConfirmPassword("");
+    }
+  }, [shouldLoadCheckout]);
 
   useEffect(() => {
     if (!isEmailCheckable) return;
@@ -444,7 +446,8 @@ export default function CreateAccountClient() {
               <PasswordInput
                 id="mgr-pw2"
                 className="mt-1.5"
-                autoComplete="new-password"
+                autoComplete="off"
+                placeholder="Re-enter your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
@@ -501,7 +504,8 @@ export default function CreateAccountClient() {
               <PasswordInput
                 id="mgr-pw2-activate"
                 className="mt-1.5"
-                autoComplete="new-password"
+                autoComplete="off"
+                placeholder="Re-enter your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />

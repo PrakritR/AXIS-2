@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -24,12 +25,13 @@ const AppUiContext = createContext<AppUiContextValue | null>(null);
 
 export function AppUiProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastSeq = useRef(0);
   const [modal, setModal] = useState<{ title: string; body: string } | null>(
     null,
   );
 
   const showToast = useCallback((message: string) => {
-    const id = Date.now();
+    const id = Date.now() * 1000 + (toastSeq.current++ % 1000);
     setToasts((t) => [...t, { id, message }]);
     window.setTimeout(() => {
       setToasts((t) => t.filter((x) => x.id !== id));
