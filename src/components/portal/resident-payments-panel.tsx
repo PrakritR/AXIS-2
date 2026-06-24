@@ -373,7 +373,7 @@ export function ResidentPaymentsPanel() {
         <p className="text-sm text-muted">Sign in to see your application fees, rent, and deposits.</p>
       ) : (
         <>
-          {showBulkCheckoutBar ? (
+          {showBulkCheckoutBar && checkout ? (
             <div className="mb-6 glass-card rounded-2xl border border-border p-4">
               {renderCheckoutBlock(
                 checkout.chargeIds.length > 1

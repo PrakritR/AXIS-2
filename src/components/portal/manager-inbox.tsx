@@ -159,14 +159,8 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     else if (tabId === "trash") filtered = local.filter((t) => t.folder === "trash");
     else filtered = [];
 
-    return [...filtered].sort((a, b) => {
-      if (sortBy === "newest") return threadTimestamp(b) - threadTimestamp(a);
-      if (sortBy === "oldest") return threadTimestamp(a) - threadTimestamp(b);
-      if (sortBy === "sender") return a.from.localeCompare(b.from, undefined, { sensitivity: "base" });
-      if (sortBy === "subject") return a.subject.localeCompare(b.subject, undefined, { sensitivity: "base" });
-      return 0;
-    });
-  }, [local, tabId, sortBy]);
+    return [...filtered].sort((a, b) => threadTimestamp(b) - threadTimestamp(a));
+  }, [local, tabId]);
 
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
