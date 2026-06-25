@@ -8,7 +8,8 @@ import type { HouseholdCharge } from "@/lib/household-charges";
 
 describe("stripe-household-charge", () => {
   it("calculates ACH platform fee", () => {
-    expect(axisAchPlatformFeeCents(10000)).toBe(80);
+    // Tier-based Axis fee = resident processing fee + Axis platform fee on $100.00.
+    expect(axisAchPlatformFeeCents(10000)).toBe(130);
     expect(axisAchPlatformFeeCents(0)).toBe(0);
   });
 

@@ -1,4 +1,5 @@
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
+import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
@@ -28,6 +29,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
           </main>
         </div>
       </div>
+      <AxisAssistant />
     </div>
   );
 }
