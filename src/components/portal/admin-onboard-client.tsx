@@ -121,11 +121,11 @@ export function AdminOnboardClient() {
         </p>
       ) : null}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid gap-6 lg:grid-cols-3 lg:items-stretch">
         {tiers.map((tier) => (
           <article
             key={tier.id}
-            className="glass-card flex flex-col rounded-2xl border border-border p-5 sm:p-6"
+            className="glass-card flex h-full min-h-[720px] flex-col rounded-2xl border border-border p-5 sm:min-h-[760px] sm:p-6"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -140,71 +140,80 @@ export function AdminOnboardClient() {
             </div>
             <p className="mt-3 text-sm leading-6 text-muted">{tier.description}</p>
 
-            {!tier.noCard ? (
-              <div className="mt-5 space-y-3 rounded-xl border border-border/70 bg-background/40 p-4">
-                <p className="text-xs font-semibold text-foreground">Link pricing</p>
-                <div>
-                  <label className="text-xs font-medium text-muted" htmlFor={`${tier.id}-pricing`}>
-                    Pricing mode
-                  </label>
-                  <Select
-                    id={`${tier.id}-pricing`}
-                    className="mt-1.5"
-                    value={tier.state.pricingMode}
-                    onChange={(e) =>
-                      updateTierOffer(tier.id, {
-                        pricingMode: e.target.value as TierOfferState["pricingMode"],
-                      })
-                    }
-                  >
-                    <option value="standard">Standard list price</option>
-                    <option value="discount">Discount % (Stripe)</option>
-                    <option value="free">Free signup (skip Stripe)</option>
-                  </Select>
-                </div>
-
-                {tier.state.pricingMode === "discount" ? (
+            <div className="mt-5 flex-1">
+              {!tier.noCard ? (
+                <div className="space-y-3 rounded-xl border border-border/70 bg-background/40 p-4">
+                  <p className="text-xs font-semibold text-foreground">Link pricing</p>
                   <div>
-                    <label className="text-xs font-medium text-muted" htmlFor={`${tier.id}-discount`}>
-                      Discount on first payment
+                    <label className="text-xs font-medium text-muted" htmlFor={`${tier.id}-pricing`}>
+                      Pricing mode
                     </label>
-                    <Input
-                      id={`${tier.id}-discount`}
+                    <Select
+                      id={`${tier.id}-pricing`}
                       className="mt-1.5"
-                      type="number"
-                      min={1}
-                      max={99}
-                      value={tier.state.discountPercent}
-                      onChange={(e) => updateTierOffer(tier.id, { discountPercent: e.target.value })}
-                    />
+                      value={tier.state.pricingMode}
+                      onChange={(e) =>
+                        updateTierOffer(tier.id, {
+                          pricingMode: e.target.value as TierOfferState["pricingMode"],
+                        })
+                      }
+                    >
+                      <option value="standard">Standard list price</option>
+                      <option value="discount">Discount % (Stripe)</option>
+                      <option value="free">Free signup (skip Stripe)</option>
+                    </Select>
                   </div>
-                ) : null}
 
-                <div>
-                  <label className="text-xs font-medium text-muted" htmlFor={`${tier.id}-billing`}>
-                    Default billing
-                  </label>
-                  <Select
-                    id={`${tier.id}-billing`}
-                    className="mt-1.5"
-                    value={tier.state.billing}
-                    onChange={(e) =>
-                      updateTierOffer(tier.id, {
-                        billing: e.target.value as TierOfferState["billing"],
-                      })
-                    }
-                  >
-                    <option value="">Let manager choose</option>
-                    <option value="monthly">Monthly</option>
-                    <option value="annual">Annual (20% off)</option>
-                  </Select>
+                  {tier.state.pricingMode === "discount" ? (
+                    <div>
+                      <label className="text-xs font-medium text-muted" htmlFor={`${tier.id}-discount`}>
+                        Discount on first payment
+                      </label>
+                      <Input
+                        id={`${tier.id}-discount`}
+                        className="mt-1.5"
+                        type="number"
+                        min={1}
+                        max={99}
+                        value={tier.state.discountPercent}
+                        onChange={(e) => updateTierOffer(tier.id, { discountPercent: e.target.value })}
+                      />
+                    </div>
+                  ) : null}
+
+                  <div>
+                    <label className="text-xs font-medium text-muted" htmlFor={`${tier.id}-billing`}>
+                      Default billing
+                    </label>
+                    <Select
+                      id={`${tier.id}-billing`}
+                      className="mt-1.5"
+                      value={tier.state.billing}
+                      onChange={(e) =>
+                        updateTierOffer(tier.id, {
+                          billing: e.target.value as TierOfferState["billing"],
+                        })
+                      }
+                    >
+                      <option value="">Let manager choose</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="annual">Annual (20% off)</option>
+                    </Select>
+                  </div>
+
+                  {tier.offerNote ? (
+                    <p className="text-xs font-medium text-[var(--status-confirmed-fg)]">{tier.offerNote}</p>
+                  ) : null}
                 </div>
-
-                {tier.offerNote ? (
-                  <p className="text-xs font-medium text-[var(--status-confirmed-fg)]">{tier.offerNote}</p>
-                ) : null}
-              </div>
-            ) : null}
+              ) : (
+                <div className="flex h-full min-h-[248px] flex-col justify-center rounded-xl border border-border/70 bg-background/40 p-4 text-center">
+                  <p className="text-xs font-semibold text-foreground">Link pricing</p>
+                  <p className="mt-3 text-sm leading-6 text-muted">
+                    Free tier — no Stripe checkout. Managers sign up with Google or email at list price $0.
+                  </p>
+                </div>
+              )}
+            </div>
 
             <div className="mt-6 flex justify-center">
               {tier.url ? <OnboardQrCode url={tier.url} label={tier.label} /> : null}

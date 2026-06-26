@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveAppOrigin } from "@/lib/app-url";
-import { stripePriceIdForPaidTier } from "@/lib/stripe-price-ids";
+import { resolveStripePriceIdForPaidTier } from "@/lib/stripe/resolve-manager-price";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
 
@@ -47,11 +47,11 @@ export async function POST(req: Request) {
     const tier = tierRaw;
     const billing = billingRaw;
 
-    const price = stripePriceIdForPaidTier(tier, billing)?.trim();
+    const price = await resolveStripePriceIdForPaidTier(tier, billing);
     if (!price) {
       return NextResponse.json(
         {
-          error: `Missing Stripe price for ${tier} ${billing}. Set STRIPE_PRICE_* env vars.`,
+          error: `No Stripe price found for ${tier} ${billing}. Set lookup_key axis_manager_${tier}_${billing} on the active Stripe price.`,
         },
         { status: 500 },
       );

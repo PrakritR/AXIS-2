@@ -61,15 +61,21 @@ async function ensureProduct(stripe, name, key) {
   });
 }
 
-async function ensurePrice(stripe, productId, amountUsd, interval) {
+async function ensurePrice(stripe, productId, amountUsd, interval, lookupKey) {
   const listed = await stripe.prices.list({ product: productId, limit: 100, active: true });
   const match = listed.data.find((p) => priceMatches(p, amountUsd, interval));
-  if (match) return match;
+  if (match) {
+    if (!match.lookup_key) {
+      await stripe.prices.update(match.id, { lookup_key: lookupKey });
+    }
+    return match;
+  }
   return stripe.prices.create({
     product: productId,
     currency: "usd",
     unit_amount: usdToCents(amountUsd),
     recurring: { interval },
+    lookup_key: lookupKey,
   });
 }
 
@@ -139,12 +145,24 @@ async function main() {
     if (!monthlyId || !annualId) {
       const product = await ensureProduct(stripe, plan.productName, plan.productKey);
       if (!monthlyId) {
-        const price = await ensurePrice(stripe, product.id, plan.monthlyUsd, "month");
+        const price = await ensurePrice(
+          stripe,
+          product.id,
+          plan.monthlyUsd,
+          "month",
+          `axis_manager_${plan.productKey.replace("axis_", "")}_monthly`,
+        );
         monthlyId = price.id;
         console.log(`  + created ${plan.envMonthly}: ${monthlyId}`);
       }
       if (!annualId) {
-        const price = await ensurePrice(stripe, product.id, plan.annualUsd, "year");
+        const price = await ensurePrice(
+          stripe,
+          product.id,
+          plan.annualUsd,
+          "year",
+          `axis_manager_${plan.productKey.replace("axis_", "")}_annual`,
+        );
         annualId = price.id;
         console.log(`  + created ${plan.envAnnual}: ${annualId}`);
       }
