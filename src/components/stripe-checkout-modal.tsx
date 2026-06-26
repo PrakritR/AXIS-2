@@ -26,12 +26,13 @@ export function StripeCheckoutModal({
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={(e) => {
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className="relative w-full max-w-xl rounded-2xl bg-card shadow-2xl overflow-hidden">
+      <button type="button" aria-label="Close checkout" className="modal-overlay fixed inset-0" onClick={onClose} />
+      <div className="modal-panel relative z-10 w-full max-w-xl overflow-hidden rounded-2xl border border-border shadow-2xl">
         <button
           type="button"
           onClick={onClose}

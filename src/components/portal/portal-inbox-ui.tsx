@@ -19,6 +19,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { TabItem } from "@/components/ui/tabs";
+import type { InboxThreadMessage } from "@/lib/portal-inbox-storage";
 
 /** Same chrome as other portal data tables */
 export const PORTAL_INBOX_TABLE_WRAP = PORTAL_DATA_TABLE_WRAP;
@@ -173,6 +174,8 @@ export function PortalInboxMessageTable({
   rows,
   onMarkRead,
   getDetailBody,
+  getThreadMessages,
+  onReply,
   expandedId,
   onToggleExpand,
   renderExtraActions,
@@ -182,6 +185,8 @@ export function PortalInboxMessageTable({
   onMarkRead?: (id: string) => void;
   /** Full message body shown in an expandable row (Details). */
   getDetailBody?: (row: PortalInboxTableRow) => string | undefined;
+  getThreadMessages?: (row: PortalInboxTableRow) => InboxThreadMessage[];
+  onReply?: (row: PortalInboxTableRow, text: string) => void | Promise<void>;
   expandedId?: string | null;
   onToggleExpand?: (id: string) => void;
   /** Trash / restore / delete — shown in the expanded row only (with Mark read, Reply, Hide). */
@@ -189,6 +194,8 @@ export function PortalInboxMessageTable({
   primaryPartyHeader?: "From" | "To";
 }) {
   const { showToast } = useAppUi();
+  const [replyDraftById, setReplyDraftById] = useState<Record<string, string>>({});
+  const [replyBusyId, setReplyBusyId] = useState<string | null>(null);
   return (
     <div className={PORTAL_INBOX_TABLE_WRAP}>
       <div className="overflow-x-auto">
@@ -261,10 +268,34 @@ export function PortalInboxMessageTable({
                   {isExpanded ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
                       <td colSpan={5} className={`${PORTAL_TABLE_DETAIL_CELL} text-left`}>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Message</p>
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted">
-                          {(detailText ?? "").trim() ? detailText : "—"}
-                        </p>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Conversation</p>
+                        <div className="mt-2 space-y-3">
+                          {(getThreadMessages?.(row) ?? [
+                            {
+                              id: `${row.id}-root`,
+                              from: row.name,
+                              body: (detailText ?? "").trim() || "—",
+                              at: row.whenLabel,
+                            },
+                          ]).map((msg) => (
+                            <div key={msg.id} className="rounded-xl border border-border bg-accent/20 px-3 py-2.5">
+                              <p className="text-[11px] font-semibold text-foreground">{msg.from}</p>
+                              <p className="text-[10px] text-muted">{msg.at}</p>
+                              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-muted">{msg.body}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {onReply ? (
+                          <div className="mt-4">
+                            <Textarea
+                              rows={3}
+                              placeholder="Write a reply…"
+                              value={replyDraftById[row.id] ?? ""}
+                              onChange={(e) => setReplyDraftById((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                              className="text-sm"
+                            />
+                          </div>
+                        ) : null}
                         <PortalTableDetailActions>
                           {hasMarkRead ? (
                             <Button
@@ -277,9 +308,32 @@ export function PortalInboxMessageTable({
                             </Button>
                           ) : null}
                           {extra}
-                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Reply sent.")}>
-                            Reply
-                          </Button>
+                          {onReply ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              disabled={replyBusyId === row.id || !(replyDraftById[row.id] ?? "").trim()}
+                              onClick={() => {
+                                const text = (replyDraftById[row.id] ?? "").trim();
+                                if (!text) return;
+                                setReplyBusyId(row.id);
+                                void Promise.resolve(onReply(row, text))
+                                  .then(() => {
+                                    setReplyDraftById((prev) => ({ ...prev, [row.id]: "" }));
+                                    showToast("Reply sent.");
+                                  })
+                                  .catch(() => showToast("Could not send reply."))
+                                  .finally(() => setReplyBusyId(null));
+                              }}
+                            >
+                              {replyBusyId === row.id ? "Sending…" : "Send reply"}
+                            </Button>
+                          ) : (
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Reply sent.")}>
+                              Reply
+                            </Button>
+                          )}
                           <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onToggleExpand?.(row.id)}>
                             Hide
                           </Button>

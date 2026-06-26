@@ -774,11 +774,11 @@ export function PortalCalendarPanels({
       <button
         type="button"
         aria-label="Close calendar details"
-        className="absolute inset-0 bg-slate-900/15 backdrop-blur-[1px]"
+        className="absolute inset-0 modal-overlay"
         onClick={closeSelectedBlock}
       />
       <div
-        className="relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-border bg-card p-4 shadow-2xl ring-1 ring-slate-900/5 sm:p-5"
+        className="modal-panel relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
       >
       <div className="mb-4 flex items-start justify-between gap-3 border-b border-border pb-3">
         <h3 className="min-w-0 text-base font-bold text-foreground">
@@ -916,7 +916,7 @@ export function PortalCalendarPanels({
       confirmLabelWithoutMessage="Confirm tour only"
       confirmBusy={tourConfirmBusy}
       confirmBusyLabel="Confirming…"
-      panelClassName="relative z-[90] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border bg-card p-4 shadow-2xl sm:my-4 sm:p-6"
+      panelClassName="modal-panel relative z-[90] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border p-4 shadow-2xl sm:my-4 sm:p-6"
       onConfirm={(skipMessage) => void confirmTourWithNotification(skipMessage)}
     />
   );

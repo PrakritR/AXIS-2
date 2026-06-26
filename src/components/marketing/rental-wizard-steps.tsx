@@ -91,6 +91,7 @@ export type WizardStepsProps = {
   form: RentalWizardFormState;
   errors: RentalWizardErrors;
   propertyOptions: { value: string; label: string }[];
+  propertyLocked?: boolean;
   patch: (p: Partial<RentalWizardFormState>) => void;
   applicationFeeGate: {
     needsFee: boolean;
@@ -157,7 +158,7 @@ function ReviewRow({ k, v }: { k: string; v: ReactNode }) {
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, propertyOptions, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
+  const { step, form, errors, propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
 
   if (step === 1) {
     return (
@@ -336,7 +337,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-foreground">Property information</h2>
           <StepIntro>
-            Choose the listing you are applying for and your room preferences. Lease dates should match what you are prepared to
+            Your property manager shared this listing with you. Choose your room preferences and lease dates you are prepared to
             sign.
           </StepIntro>
         </div>
@@ -345,6 +346,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <Label htmlFor="propertyId" required>
             Property name
           </Label>
+          {propertyLocked && selectedProperty ? (
+            <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
+              <p className="font-semibold text-foreground">{selectedProperty.title}</p>
+              {selectedProperty.address ? (
+                <p className="mt-1 text-muted">{selectedProperty.address}</p>
+              ) : null}
+            </div>
+          ) : (
           <div className={errors.propertyId ? "rounded-xl ring-2 ring-red-100" : ""}>
           <PropertySearchPicker
             options={propertySearchOptions}
@@ -359,6 +368,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             ariaLabel="Search properties to apply for"
           />
           </div>
+          )}
           <FieldError msg={errors.propertyId} />
         </div>
 
@@ -1272,8 +1282,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div className="rounded-2xl border border-border bg-accent/30 p-5 text-sm leading-relaxed text-foreground">
           <p>
             By submitting this application, you authorize the property manager to obtain consumer reports (including credit and
-            criminal history) and to verify employment, income, and rental history. You understand that false or incomplete
-            information may result in denial or termination of a lease.
+            criminal history) and to verify employment, income, and rental history. If your manager has automatic screening
+            enabled, a report may be ordered when you submit. You understand that false or incomplete information may result in
+            denial or termination of a lease.
           </p>
         </div>
         <label
@@ -1591,7 +1602,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         ) : null}
         {applicationFeeGate.needsFee && isAchApplicationFeeChannel(payChannel) ? (
-          <div className="rounded-2xl border border-violet-200/80 bg-violet-50/60 px-4 py-4 text-sm text-violet-950">
+          <div className="rounded-2xl border border-blue-200/80 bg-blue-50/60 px-4 py-4 text-sm text-blue-950">
             Pay by bank transfer (ACH). Your application submits after payment is authorized; the fee is marked paid when
             the transfer clears (usually 3–5 business days).
           </div>

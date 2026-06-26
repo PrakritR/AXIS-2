@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import {
+  ManagerPortalPageShell,
+  PortalDashboardSectionHeader,
+  PortalDashboardTile,
+  PORTAL_DASHBOARD_SECTION_CARD,
+} from "@/components/portal/portal-metrics";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
+  chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
   readChargesForResident,
   syncHouseholdChargesFromServer,
@@ -30,6 +36,7 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import {
   countUnopenedPersistedInbox,
+  loadPersistedInbox,
   PORTAL_INBOX_CHANGED_EVENT,
   RESIDENT_INBOX_STORAGE_KEY,
   syncPersistedInboxFromServer,
@@ -39,9 +46,13 @@ const BASE = "/resident";
 
 type AppStatus = "pending" | "approved" | "rejected";
 
+function dollars(cents: number) {
+  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function leaseBadge(row: LeasePipelineRow | null, approved: boolean): {
   label: string;
-  tone: "emerald" | "amber" | "sky" | "slate" | "violet";
+  tone: "emerald" | "amber" | "sky" | "slate" | "blue";
   cta: boolean;
 } {
   if (!approved || !row) return { label: "Not started", tone: "slate", cta: false };
@@ -51,7 +62,7 @@ function leaseBadge(row: LeasePipelineRow | null, approved: boolean): {
   }
   switch (row.status) {
     case "Fully Signed": return { label: "Active ✓", tone: "emerald", cta: false };
-    case "Resident Signature Pending": return { label: "Sign now", tone: "violet", cta: true };
+    case "Resident Signature Pending": return { label: "Sign now", tone: "blue", cta: true };
     case "Manager Signature Pending": return { label: "Awaiting manager", tone: "sky", cta: false };
     default: return { label: row.status || "In progress", tone: "amber", cta: false };
   }
@@ -62,8 +73,8 @@ function StatusBadge({ label, tone }: { label: string; tone: string }) {
     emerald: "portal-badge-success",
     amber: "portal-badge-pending",
     sky: "portal-badge-info",
+    blue: "portal-badge-info",
     slate: "bg-accent/30 text-muted",
-    violet: "portal-badge-notice",
     rose: "portal-badge-danger",
   };
   return (
@@ -77,27 +88,17 @@ function NotifBanner({
   tone,
   children,
 }: {
-  tone: "amber" | "blue" | "violet" | "rose";
+  tone: "amber" | "blue" | "rose";
   children: React.ReactNode;
 }) {
   const cls = {
     amber: "portal-banner-pending",
     blue: "portal-banner-info",
-    violet: "portal-banner-notice",
     rose: "portal-banner-danger",
   }[tone];
   return (
     <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
       {children}
-    </div>
-  );
-}
-
-function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
-      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{title}</p>
-      <div className="mt-3">{children}</div>
     </div>
   );
 }
@@ -119,6 +120,7 @@ export function ResidentDashboard({
   residentUserId?: string | null;
   managerSubscriptionTier?: "free" | "paid" | null;
 }) {
+  void managerSubscriptionTier;
   const initialEmail = residentEmail.trim().toLowerCase();
   const session = usePortalSession({ userId: residentUserId, email: initialEmail || null });
   const email = session.email?.trim().toLowerCase() || initialEmail;
@@ -132,7 +134,6 @@ export function ResidentDashboard({
 
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
-  /** Avoid reading session/local storage during SSR — prevents hydration mismatches on lease badge, inbox, etc. */
   const [clientReady, setClientReady] = useState(false);
 
   useEffect(() => {
@@ -163,7 +164,6 @@ export function ResidentDashboard({
       window.removeEventListener("storage", bump);
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, onInbox as EventListener);
     };
-   
   }, []);
 
   useEffect(() => {
@@ -195,7 +195,6 @@ export function ResidentDashboard({
           return roomLabel.split(" · ")[0]?.trim() || roomLabel;
         })();
 
-        // Use row's bucket, but prefer server-determined approval status if it's more permissive
         const finalBucket = applicationApproved && row.bucket === "pending" ? "approved" : row.bucket;
         setAppStatus(finalBucket);
         setAppStage(row.stage?.trim() || finalBucket);
@@ -231,6 +230,7 @@ export function ResidentDashboard({
         scheduledWO: 0,
         completedWO: 0,
         inbox: 0,
+        inboxThreads: [] as ReturnType<typeof loadPersistedInbox>,
         pendingCharges: [] as ReturnType<typeof readChargesForResident>,
         pendingTotal: 0,
       };
@@ -246,6 +246,9 @@ export function ResidentDashboard({
     const scheduledWO = workOrders.filter((r) => r.bucket === "scheduled").length;
     const completedWO = workOrders.filter((r) => r.bucket === "completed").length;
 
+    const inboxThreads = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK)
+      .filter((t) => t.folder === "inbox" && t.unread)
+      .slice(0, 5);
     const inbox = countUnopenedPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK);
 
     const charges = email ? readChargesForResident(email, residentUserId) : [];
@@ -255,12 +258,15 @@ export function ResidentDashboard({
       return s + (Number.isFinite(n) ? Math.round(n * 100) : 0);
     }, 0);
 
-    return { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, pendingCharges, pendingTotal };
+    return { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges, pendingTotal };
   }, [tick, email, appStatus, residentUserId, clientReady]);
 
-  const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, pendingCharges, pendingTotal } = data;
+  const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges, pendingTotal } = data;
 
-  // ── Status banner copy ──
+  const welcomeTitle = `Welcome${displayName && displayName !== "Resident" ? `, ${displayName.split(" ")[0]}` : ""}`;
+  const propertySubtitle =
+    appProperty && appRoom ? `${appProperty} · ${appRoom}` : appProperty ?? undefined;
+
   let statusTone = "portal-banner-pending";
   let statusCopy = "Application submitted and pending manager review. Your portal will unlock after approval.";
   if (showTestAccessNote) {
@@ -278,34 +284,32 @@ export function ResidentDashboard({
     statusCopy = "Your most recent application is marked rejected. Contact your manager if you need help or want to reapply.";
   }
 
+  const moveInDateLabel = leaseRow?.application?.leaseStart?.trim() || null;
+
   return (
-    <ManagerPortalPageShell title={`Welcome${displayName && displayName !== "Resident" ? `, ${displayName.split(" ")[0]}` : ""}`}>
+    <ManagerPortalPageShell title={welcomeTitle} subtitle={propertySubtitle}>
       <div className="space-y-5">
 
-        {/* ── Application status notice ── */}
         <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>{statusCopy}</div>
 
-        {/* ── Action-required banners (only when actionable) ── */}
-        {(lease.cta || pendingCharges.length > 0 || inbox > 0 || (canUseFullPortal && openWO > 0)) && (
+        {(pendingCharges.length > 0 || lease.cta || inbox > 0 || (canUseFullPortal && openWO > 0)) && (
           <div className="space-y-2">
-            {lease.cta && (
-              <NotifBanner tone="violet">
-                <span>Your lease is ready — <span className="font-semibold">signature required</span></span>
-                <Link href={`${BASE}/lease`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Lease →
-                </Link>
-              </NotifBanner>
-            )}
             {pendingCharges.length > 0 && (
               <NotifBanner tone="amber">
                 <span>
-                  <span className="font-semibold">
-                    ${(pendingTotal / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>{" "}
+                  <span className="font-semibold">{dollars(pendingTotal)}</span>{" "}
                   outstanding balance — {pendingCharges.length} pending charge{pendingCharges.length === 1 ? "" : "s"}
                 </span>
                 <Link href={`${BASE}/payments`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
                   Payments →
+                </Link>
+              </NotifBanner>
+            )}
+            {lease.cta && (
+              <NotifBanner tone="blue">
+                <span>Your lease is ready — <span className="font-semibold">signature required</span></span>
+                <Link href={`${BASE}/lease`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
+                  Lease →
                 </Link>
               </NotifBanner>
             )}
@@ -333,123 +337,166 @@ export function ResidentDashboard({
         )}
 
         {appStatus === "approved" ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <PortalDashboardTile
+                label="Outstanding balance"
+                value={pendingCharges.length === 0 ? "$0.00" : dollars(pendingTotal)}
+                sub={pendingCharges.length > 0 ? `${pendingCharges.length} pending charge${pendingCharges.length === 1 ? "" : "s"}` : "All caught up"}
+                href={`${BASE}/payments`}
+                urgent={pendingTotal > 0}
+              />
+              <PortalDashboardTile
+                label="Open maintenance"
+                value={canUseFullPortal ? openWO : "—"}
+                sub={canUseFullPortal && scheduledWO > 0 ? `${scheduledWO} scheduled` : canUseFullPortal ? "No open requests" : "Available on upgraded plans"}
+                href={`${BASE}/services/work-orders`}
+                urgent={canUseFullPortal && openWO > 0}
+              />
+            </div>
 
-            {/* Lease */}
-            <InfoCard title="Lease">
-              <div className="flex items-center justify-between gap-3">
-                <StatusBadge label={lease.label} tone={lease.tone} />
-                {leaseRow?.application?.leaseStart ? (
-                  <span className="text-xs text-muted">
-                    {leaseRow.application.leaseStart}
-                    {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
-                  </span>
-                ) : null}
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+                <PortalDashboardSectionHeader title="Payments" href={`${BASE}/payments`} linkLabel="Payments →" />
+                {pendingCharges.length === 0 ? (
+                  <p className="mt-4 text-sm text-muted">No outstanding charges.</p>
+                ) : (
+                  <ul className="mt-3 space-y-2">
+                    {pendingCharges.slice(0, 5).map((charge) => (
+                      <li key={charge.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-foreground">{charge.title || "Charge"}</p>
+                          <p className="truncate text-xs text-muted">{chargeDueLabel(charge)}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                          {charge.balanceLabel}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-              <Link href={`${BASE}/lease`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                Lease →
-              </Link>
-            </InfoCard>
 
-            {/* Charges */}
-            <InfoCard title="Charges & payments">
-              {pendingCharges.length === 0 ? (
-                <p className="text-sm text-muted">No outstanding charges.</p>
-              ) : (
-                <>
-                  <p className="text-2xl font-bold tracking-tight text-foreground">
-                    ${(pendingTotal / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted">
-                    {pendingCharges.length} pending charge{pendingCharges.length === 1 ? "" : "s"}
-                  </p>
-                </>
-              )}
-              <Link href={`${BASE}/payments`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                Payments →
-              </Link>
-            </InfoCard>
-
-            {/* Maintenance */}
-            {canUseFullPortal ? (
-              <InfoCard title="Maintenance">
-                <div className="space-y-1 text-sm">
-                  {openWO + scheduledWO === 0 ? (
-                    <p className="text-muted">No active requests.</p>
+              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+                <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <StatusBadge label={lease.label} tone={lease.tone} />
+                  {leaseRow?.application?.leaseStart ? (
+                    <span className="text-xs text-muted">
+                      {leaseRow.application.leaseStart}
+                      {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
+                    </span>
                   ) : (
-                    <>
-                      {openWO > 0 && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted">Open</span>
-                          <span className="font-semibold text-rose-700">{openWO}</span>
-                        </div>
-                      )}
-                      {scheduledWO > 0 && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted">Scheduled</span>
-                          <span className="font-semibold text-sky-700">{scheduledWO}</span>
-                        </div>
-                      )}
-                      {completedWO > 0 && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted">Completed</span>
-                          <span className="text-muted">{completedWO}</span>
-                        </div>
-                      )}
-                    </>
+                    <span className="text-sm text-muted">No lease dates on file yet.</span>
                   )}
                 </div>
-                <Link href={`${BASE}/services/work-orders`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                  {openWO + scheduledWO > 0 ? "Work orders →" : "Services →"}
-                </Link>
-              </InfoCard>
-            ) : (
-              <InfoCard title="Maintenance">
-                <p className="text-sm text-muted">Available on upgraded property plans.</p>
-              </InfoCard>
-            )}
+              </div>
+            </div>
 
-            {/* Inbox */}
-            <InfoCard title="Inbox">
-              {inbox > 0 ? (
-                <p className="text-sm font-semibold text-foreground">
-                  {inbox} unread message{inbox === 1 ? "" : "s"}
-                </p>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+                <PortalDashboardSectionHeader title="Move-in" href={`${BASE}/move-in`} linkLabel="Move-in →" />
+                {appProperty || appRoom || moveInDateLabel ? (
+                  <ul className="mt-3 space-y-2">
+                    {appProperty ? (
+                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Property</p>
+                        <p className="mt-0.5 text-sm font-semibold text-foreground">{appProperty}</p>
+                        {appId ? <p className="mt-0.5 text-xs font-mono text-muted">{appId}</p> : null}
+                      </li>
+                    ) : null}
+                    {appRoom ? (
+                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Room</p>
+                        <p className="mt-0.5 text-sm font-semibold text-foreground">{appRoom}</p>
+                      </li>
+                    ) : null}
+                    {moveInDateLabel ? (
+                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Lease start</p>
+                        <p className="mt-0.5 text-sm font-semibold text-foreground">{moveInDateLabel}</p>
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : (
+                  <p className="mt-4 text-sm text-muted">Move-in details will appear once your placement is assigned.</p>
+                )}
+              </div>
+
+              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+                <PortalDashboardSectionHeader
+                  title="Services"
+                  href={canUseFullPortal ? `${BASE}/services/work-orders` : `${BASE}/services`}
+                  linkLabel="Services →"
+                />
+                {canUseFullPortal ? (
+                  openWO + scheduledWO + completedWO === 0 ? (
+                    <p className="mt-4 text-sm text-muted">No active maintenance requests.</p>
+                  ) : (
+                    <ul className="mt-3 space-y-2">
+                      {openWO > 0 ? (
+                        <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                          <span className="text-sm text-muted">Open</span>
+                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">{openWO}</span>
+                        </li>
+                      ) : null}
+                      {scheduledWO > 0 ? (
+                        <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                          <span className="text-sm text-muted">Scheduled</span>
+                          <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">{scheduledWO}</span>
+                        </li>
+                      ) : null}
+                      {completedWO > 0 ? (
+                        <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                          <span className="text-sm text-muted">Completed</span>
+                          <span className="text-sm font-semibold text-muted">{completedWO}</span>
+                        </li>
+                      ) : null}
+                    </ul>
+                  )
+                ) : (
+                  <p className="mt-4 text-sm text-muted">Available on upgraded property plans.</p>
+                )}
+              </div>
+            </div>
+
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />
+              {inbox === 0 ? (
+                <p className="mt-4 text-sm text-muted">No unread messages — inbox is clear.</p>
               ) : (
-                <p className="text-sm text-muted">No unread messages.</p>
+                <ul className="mt-3 space-y-2">
+                  {inboxThreads.map((thread) => (
+                    <li key={thread.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{thread.from || "Unknown sender"}</p>
+                        <p className="truncate text-xs text-muted">{thread.subject || thread.preview || "—"}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">
+                        Unread
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               )}
-              <Link href={`${BASE}/inbox/unopened`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                Inbox →
-              </Link>
-            </InfoCard>
-
-            {/* Property info */}
-            {appProperty && (
-              <InfoCard title="Your property">
-                <p className="text-sm font-semibold text-foreground">{appProperty}</p>
-                {appId && <p className="mt-0.5 text-xs font-mono text-muted">{appId}</p>}
-              </InfoCard>
-            )}
-
-          </div>
+            </div>
+          </>
         ) : (
-          /* ── Pre-approval layout ── */
           <div className="grid gap-4 sm:grid-cols-2">
-            <InfoCard title="Application">
-              <p className="text-sm font-semibold text-foreground">{appStage}</p>
-              {appId && <p className="mt-0.5 text-xs font-mono text-muted">{appId}</p>}
-              {appProperty && <p className="mt-1 text-xs text-muted">{appProperty}</p>}
-            </InfoCard>
-            <InfoCard title="Inbox">
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader title="Application" />
+              <p className="mt-4 text-sm font-semibold text-foreground">{appStage}</p>
+              {appId ? <p className="mt-0.5 text-xs font-mono text-muted">{appId}</p> : null}
+              {appProperty ? <p className="mt-1 text-xs text-muted">{appProperty}</p> : null}
+            </div>
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />
               {inbox > 0 ? (
-                <p className="text-sm font-semibold text-foreground">{inbox} unread message{inbox === 1 ? "" : "s"}</p>
+                <p className="mt-4 text-sm font-semibold text-foreground">{inbox} unread message{inbox === 1 ? "" : "s"}</p>
               ) : (
-                <p className="text-sm text-muted">No unread messages.</p>
+                <p className="mt-4 text-sm text-muted">No unread messages.</p>
               )}
-              <Link href={`${BASE}/inbox/unopened`} className="mt-3 block text-xs font-semibold text-primary hover:underline underline-offset-2">
-                Inbox →
-              </Link>
-            </InfoCard>
+            </div>
           </div>
         )}
 

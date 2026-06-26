@@ -9,6 +9,7 @@ import type { MockProperty } from "@/data/types";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
+import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
@@ -47,6 +48,13 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
+import {
+  buildManagerApplyUrl,
+  buildManagerListingUrl,
+  buildManagerShareablePropertyOptions,
+  buildManagerTourUrl,
+  copyTextToClipboard,
+} from "@/lib/manager-property-links";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
@@ -99,7 +107,7 @@ function deferCatalogMutation(fn: () => void) {
 
 const MANAGER_STAGES = [
   { key: "pending", label: "Pending review", buckets: [0, 1] as AdminPropertyBucketIndex[] },
-  { key: "listed", label: "Listed", buckets: [2] as AdminPropertyBucketIndex[] },
+  { key: "listed", label: "Active", buckets: [2] as AdminPropertyBucketIndex[] },
   { key: "unlisted", label: "Unlisted", buckets: [3] as AdminPropertyBucketIndex[] },
   { key: "rejected", label: "Rejected", buckets: [4] as AdminPropertyBucketIndex[] },
 ] as const;
@@ -108,14 +116,14 @@ type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
 
 const EMPTY_COPY: Record<ManagerStageKey, string> = {
   pending: "Nothing awaiting review.",
-  listed: "No listed properties.",
+  listed: "No active properties.",
   unlisted: "No unlisted properties.",
   rejected: "No rejected properties.",
 };
 
 const BANNER_COPY: Record<ManagerStageKey, string> = {
   pending: "New submissions and listings that need updates appear here until prakritramachandran@gmail.com clears them to go live.",
-  listed: "Live on Rent with Axis — published listings you can unlist or remove.",
+  listed: "Active listings accept apply & tour links — use Send to prospect to email a concise summary.",
   unlisted: "These listings are off the public site. You can relist or delete them from your queue.",
   rejected: "Rejected submissions stay here until you restore them to pending or delete them permanently.",
 };
@@ -181,7 +189,7 @@ function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: 
     case 1:
       return { label: "Approved · edits requested", variant: "amber" };
     case 2:
-      return { label: "Listed", variant: "green" };
+      return { label: "Active", variant: "green" };
     case 3:
       return { label: "Unlisted", variant: "slate" };
     default:
@@ -195,12 +203,14 @@ function ManagerPropertyInlineDetails({
   onUpdated,
   showToast,
   managerUserId,
+  onSendToProspect,
 }: {
   bucket: AdminPropertyBucketIndex;
   row: AdminPropertyRow | null;
   onUpdated: () => void;
   showToast: (m: string) => void;
   managerUserId: string | null;
+  onSendToProspect?: (listingId: string) => void;
 }) {
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
   const rich = useMemo(() => (mock ? getListingRichContent(mock) : null), [mock]);
@@ -317,6 +327,44 @@ function ManagerPropertyInlineDetails({
 
       {bucket === 2 && listingId ? (
         <>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              onClick={() => onSendToProspect?.(listingId)}
+            >
+              Send to prospect
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => {
+                void (async () => {
+                  const url = buildManagerApplyUrl(window.location.origin, { propertyId: listingId });
+                  const ok = await copyTextToClipboard(url);
+                  showToast(ok ? "Apply link copied." : "Could not copy link.");
+                })();
+              }}
+            >
+              Copy apply link
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => {
+                void (async () => {
+                  const url = buildManagerTourUrl(window.location.origin, listingId);
+                  const ok = await copyTextToClipboard(url);
+                  showToast(ok ? "Tour link copied." : "Could not copy link.");
+                })();
+              }}
+            >
+              Copy tour link
+            </Button>
+          </div>
           <Button
             type="button"
             variant="outline"
@@ -338,16 +386,6 @@ function ManagerPropertyInlineDetails({
           >
             Delete listing
           </Button>
-          {publicHref ? (
-            <Link
-              href={publicHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent/30"
-            >
-              View listing
-            </Link>
-          ) : null}
         </>
       ) : null}
 
@@ -369,7 +407,7 @@ function ManagerPropertyInlineDetails({
               });
             }}
           >
-            Relist on Rent with Axis
+            Relist property
           </Button>
           <Button
             type="button"
@@ -477,6 +515,8 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
+  const [shareListingOpen, setShareListingOpen] = useState(false);
+  const [shareListingPropertyId, setShareListingPropertyId] = useState<string | undefined>();
   const activeStage = managerStageFromParam(searchParams.get("status"));
 
   const setActiveStage = useCallback((stage: ManagerStageKey) => {
@@ -523,6 +563,11 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
       readAdminPropertyRows(bucket, managerUserId).map((row) => ({ sourceBucket: bucket, row })),
     );
   }, [tick, managerUserId, activeStage]);
+
+  const shareableProperties = useMemo(() => {
+    void tick;
+    return buildManagerShareablePropertyOptions(managerUserId);
+  }, [managerUserId, tick]);
 
   useEffect(() => {
     if (activeStage !== "pending") return;
@@ -636,6 +681,10 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                               onUpdated={() => setTick((t) => t + 1)}
                               showToast={showToast}
                               managerUserId={managerUserId}
+                              onSendToProspect={(listingId) => {
+                                setShareListingPropertyId(listingId);
+                                setShareListingOpen(true);
+                              }}
                             />
                           </td>
                         </tr>
@@ -648,6 +697,14 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
           </div>
         )}
       </div>
+
+      <ShareLeadLinkModal
+        open={shareListingOpen}
+        onClose={() => setShareListingOpen(false)}
+        kind="listing"
+        properties={shareableProperties}
+        preselectedPropertyId={shareListingPropertyId}
+      />
     </>
   );
 }

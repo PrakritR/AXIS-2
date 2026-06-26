@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 /** Dashboard / KPI link tiles (manager, resident, admin). */
@@ -244,14 +245,70 @@ export function ManagerPortalStatusPills({
   );
 }
 
+/** Linked KPI tile on manager / resident dashboards. */
+export function PortalDashboardTile({
+  label,
+  value,
+  sub,
+  href,
+  urgent,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  href: string;
+  urgent?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`surface-panel group flex flex-col gap-1 rounded-2xl border p-5 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-card)] ${
+        urgent ? "border-[var(--status-pending-bg)] ring-1 ring-[var(--status-pending-bg)]" : "border-border hover:border-primary/25"
+      }`}
+    >
+      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-foreground">{value}</p>
+      <p className="text-sm font-medium text-muted">{label}</p>
+      {sub ? <p className="text-xs text-muted">{sub}</p> : null}
+    </Link>
+  );
+}
+
+/** Section title row with optional link (manager / resident dashboards). */
+export function PortalDashboardSectionHeader({
+  title,
+  href,
+  linkLabel,
+}: {
+  title: string;
+  href?: string;
+  linkLabel?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
+      {href && linkLabel ? (
+        <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
+          {linkLabel}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+/** Inner card shell for dashboard section panels. */
+export const PORTAL_DASHBOARD_SECTION_CARD =
+  "rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]";
+
 /** Manager sections aligned with admin portal leases / managers shell. */
 export function ManagerPortalPageShell({
   title,
+  subtitle,
   titleAside,
   filterRow,
   children,
 }: {
   title: string;
+  subtitle?: string;
   titleAside?: ReactNode;
   filterRow?: ReactNode;
   children: ReactNode;
@@ -259,7 +316,10 @@ export function ManagerPortalPageShell({
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <h1 className="min-w-0 text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem]">{title}</h1>
+        <div className="min-w-0">
+          <h1 className="text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem]">{title}</h1>
+          {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
+        </div>
         {titleAside ? <div className="flex flex-wrap items-center gap-2.5 sm:justify-end sm:pt-0.5">{titleAside}</div> : null}
       </div>
       {filterRow ? <div className="mt-6 border-b border-border pb-6">{filterRow}</div> : null}

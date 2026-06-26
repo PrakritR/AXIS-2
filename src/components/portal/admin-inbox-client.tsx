@@ -212,12 +212,12 @@ function ComposeModal({
     <>
       <button
         type="button"
-        className="fixed inset-0 z-40 bg-slate-900/25 backdrop-blur-[1px]"
+        className="fixed inset-0 z-40 modal-overlay"
         aria-label="Close compose"
         onClick={onClose}
       />
       <div
-        className="fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] max-h-[min(100%-2rem,90vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
+        className="modal-panel fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] max-h-[min(100%-2rem,90vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="admin-inbox-compose-title"
@@ -329,13 +329,6 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     managers: [],
     residents: [],
   });
-
-  const refresh = useCallback(() => {
-    void syncInboxMessagesFromServer({ force: true }).then(() => {
-      setTick((t) => t + 1);
-      showToast("Refreshed inbox.");
-    });
-  }, [showToast]);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -466,9 +459,6 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
               Delete all trash
             </Button>
           ) : null}
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-            Refresh
-          </Button>
         </>
       }
       filterRow={

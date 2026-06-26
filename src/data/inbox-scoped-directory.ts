@@ -11,8 +11,10 @@ export type InboxScopedContact = {
   role: InboxContactRole;
 };
 
+import { PRIMARY_ADMIN_EMAIL } from "@/lib/auth/primary-admin";
+
 /** Axis partner inbox (admin). */
-export const PRIMARY_AXIS_ADMIN_EMAIL = "prakritramachandran@gmail.com";
+export const PRIMARY_AXIS_ADMIN_EMAIL = PRIMARY_ADMIN_EMAIL;
 
 export const PRIMARY_AXIS_ADMIN_LABEL = "Axis admin";
 

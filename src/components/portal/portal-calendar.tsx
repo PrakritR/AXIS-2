@@ -21,6 +21,8 @@ import {
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 import { buildManagerPropertyFilterOptions, MANAGER_PORTFOLIO_REFRESH_EVENTS } from "@/lib/manager-portfolio-access";
+import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
+import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 
 type CopyRange = "week" | "future" | "all";
 
@@ -87,6 +89,7 @@ export function PortalCalendar({
   const [copySourceId, setCopySourceId] = useState<string>("");
   const [copyDestId, setCopyDestId] = useState<string>("");
   const [copyRange, setCopyRange] = useState<CopyRange>("all");
+  const [shareTourModalOpen, setShareTourModalOpen] = useState(false);
 
   useEffect(() => {
     if (portal !== "manager") return;
@@ -126,6 +129,12 @@ export function PortalCalendar({
 
   const activeCalendarPropertyId =
     calendarPropertyId && managerProperties.some((property) => property.id === calendarPropertyId) ? calendarPropertyId : "";
+
+  const shareableProperties = useMemo(() => {
+    if (portal !== "manager" || !userId) return [];
+    void propertyTick;
+    return buildManagerShareablePropertyOptions(userId);
+  }, [portal, userId, propertyTick]);
 
   // Register this manager as a tour host for the selected property so the public
   // booking page can discover combined availability across all linked managers.
@@ -192,18 +201,12 @@ export function PortalCalendar({
     return name ? `Tours · ${name}` : undefined;
   }, [portal, activeCalendarPropertyId, managerProperties]);
 
-  const reloadAvailability = () => setCalendarRefreshSignal((n) => n + 1);
   const pageTitle = portal === "manager" ? "Schedule tours" : "Schedule meeting";
 
   if (portal === "manager" && !authReady) {
     return (
       <ManagerPortalPageShell
         title={pageTitle}
-        titleAside={
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={reloadAvailability}>
-            Refresh
-          </Button>
-        }
         filterRow={
           <ManagerCalendarPropertyFilter properties={managerProperties} value={activeCalendarPropertyId} onChange={setCalendarPropertyId} />
         }
@@ -216,11 +219,6 @@ export function PortalCalendar({
     return (
       <ManagerPortalPageShell
         title={pageTitle}
-        titleAside={
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={reloadAvailability}>
-            Refresh
-          </Button>
-        }
         filterRow={
           <ManagerCalendarPropertyFilter properties={managerProperties} value={activeCalendarPropertyId} onChange={setCalendarPropertyId} />
         }
@@ -353,9 +351,18 @@ export function PortalCalendar({
                 Copy schedule
               </Button>
             ) : null}
-            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={reloadAvailability}>
-              Refresh
-            </Button>
+            {portal === "manager" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0 rounded-full"
+                disabled={!activeCalendarPropertyId}
+                title={!activeCalendarPropertyId ? "Select a house first" : undefined}
+                onClick={() => setShareTourModalOpen(true)}
+              >
+                Share tour link
+              </Button>
+            ) : null}
           </div>
         }
         filterRow={
@@ -419,6 +426,15 @@ export function PortalCalendar({
         )}
       </ManagerPortalPageShell>
       {copyModal}
+      {portal === "manager" ? (
+        <ShareLeadLinkModal
+          open={shareTourModalOpen}
+          onClose={() => setShareTourModalOpen(false)}
+          kind="tour"
+          properties={shareableProperties}
+          preselectedPropertyId={activeCalendarPropertyId || undefined}
+        />
+      ) : null}
     </>
   );
 }

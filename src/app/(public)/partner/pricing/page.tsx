@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isManagerOnboardTier } from "@/lib/manager-onboard-links";
 
 function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
   return tiers.find((t) => t.id === id) ?? tiers[0]!;
@@ -41,6 +42,14 @@ export default function PartnerPricingPage() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tier = params.get("tier");
+    if (tier && isManagerOnboardTier(tier)) {
+      setSelectedTierId(tier);
+    }
   }, []);
 
   const selected = useMemo(() => tierById(planTiers, selectedTierId), [planTiers, selectedTierId]);
@@ -460,7 +469,13 @@ export default function PartnerPricingPage() {
               }}
               className="btn-cobalt inline-flex shrink-0 items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-all duration-150 hover:brightness-105 active:scale-[0.98] disabled:opacity-60"
             >
-              {checkoutBusy ? "Starting…" : checkoutClientSecret ? "Checkout open" : `Continue with ${selected.label}`}
+              {checkoutBusy
+                ? "Starting…"
+                : checkoutClientSecret
+                  ? "Checkout open"
+                  : selectedTierId === "free"
+                    ? "Create free account"
+                    : `Continue with ${selected.label}`}
             </button>
           </div>
 

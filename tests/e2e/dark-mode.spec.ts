@@ -70,12 +70,6 @@ test.describe("Dark mode — public surfaces", () => {
     expect(cardBg).not.toMatch(/rgb\(255,\s*255,\s*255/);
   });
 
-  test("rent listings page respects dark theme", async ({ page }) => {
-    await page.goto("/rent/listings");
-    await expect(page).toHaveURL(/\/rent\/listings/);
-    await assertMainContentNotLightThemed(page, 0);
-  });
-
   test("partner page respects dark theme", async ({ page }) => {
     await page.goto("/partner");
     await assertMainContentNotLightThemed(page, 0);

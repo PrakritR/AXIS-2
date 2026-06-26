@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -295,50 +294,8 @@ export function ManagerPayments() {
             residentValue={activeResidentFilter}
             onResidentChange={setResidentFilter}
           />
-          <Link
-            href={`${portalBase}/payments/payouts`}
-            className={`inline-flex shrink-0 items-center justify-center rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-accent ${PORTAL_HEADER_ACTION_BTN}`}
-          >
-            Payout settings
-          </Link>
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddOpen(true)}>
             Add payment
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => {
-              void Promise.all([
-                syncPropertyPipelineFromServer({ force: true }),
-                syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
-              ]).then(() => {
-                reconcileApprovedResidentPaymentSchedules(userId ?? null, true);
-                setHcTick((n) => n + 1);
-                showToast("Payments regenerated from current listing settings.");
-              });
-            }}
-          >
-            Regenerate
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => {
-              void Promise.all([
-                syncHouseholdChargesFromServer(),
-                syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
-                syncPropertyPipelineFromServer({ force: true }),
-              ]).then(() => {
-                setHcTick((n) => n + 1);
-                setApplicationTick((n) => n + 1);
-                setPropertyTick((n) => n + 1);
-                showToast("Payments refreshed.");
-              });
-            }}
-          >
-            Refresh
           </Button>
         </>
       }

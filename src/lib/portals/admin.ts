@@ -8,6 +8,7 @@ export const adminPortal: PortalDefinition = {
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
+    { section: "onboard", label: "Onboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
     { section: "axis-users", label: "Axis users", tabs: [] },
     { section: "leases", label: "Leases", tabs: [] },

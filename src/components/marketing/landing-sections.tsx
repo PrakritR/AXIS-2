@@ -1,35 +1,25 @@
 import Link from "next/link";
 import { RevealOnView } from "@/components/motion/reveal-on-view";
 
-const AUDIENCE_CARDS = [
-  {
-    title: "For residents",
-    body: "Search by move-in date and budget, apply online, schedule tours, and manage your lease — all in one place.",
-    href: "/rent/listings",
-    cta: "Find a room",
-    features: ["Room search & filters", "Online applications", "Tour scheduling", "Lease & payments"],
-  },
-  {
-    title: "For property owners",
-    body: "Use our software to run your portfolio, or let us handle everything — tenant sourcing, leases, maintenance, and reporting.",
-    href: "/partner",
-    cta: "Partner with Axis",
-    features: ["Listing management", "Lease workflows", "Rent collection", "Full-service option"],
-  },
+const OWNER_FEATURES = [
+  "Property records & unit setup",
+  "Apply & tour links you share",
+  "Lease workflows",
+  "Rent collection",
 ] as const;
 
 const HOW_STEPS = [
   {
-    title: "Search or onboard",
-    body: "Residents filter by ZIP, budget, and move-in date. Owners book a consultation or sign up for software.",
+    title: "Onboard your properties",
+    body: "Add units, fees, and availability in the manager portal.",
   },
   {
-    title: "Apply or list",
-    body: "Online applications with cosigner support. Owners publish listings and manage availability in the portal.",
+    title: "Share apply & tour links",
+    body: "Prospects find you on Zillow or Redfin — Axis handles applications and tour scheduling.",
   },
   {
-    title: "Lease & manage",
-    body: "Sign leases digitally, collect rent, and coordinate maintenance — residents and managers stay in sync.",
+    title: "Lease & collect",
+    body: "Sign leases digitally, collect rent, and coordinate maintenance from one place.",
   },
 ] as const;
 
@@ -38,38 +28,38 @@ export function LandingAudienceBento() {
     <section className="mx-auto max-w-6xl px-4 py-16 sm:px-5 sm:py-20">
       <RevealOnView>
         <div className="text-center">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Built for both sides</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Built for property owners</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
-            One platform, two audiences
+            One platform for your portfolio
           </h2>
         </div>
       </RevealOnView>
 
-      <div className="mt-12 grid gap-6 lg:grid-cols-2">
-        {AUDIENCE_CARDS.map((card, i) => (
-          <RevealOnView key={card.title} delayMs={i * 80}>
-            <Link
-              href={card.href}
-              className="glass-card group flex h-full cursor-pointer flex-col rounded-2xl p-7 transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-card-hover)]"
-            >
-              <h3 className="text-lg font-semibold text-foreground">{card.title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-muted">{card.body}</p>
-              <ul className="mt-5 space-y-2">
-                {card.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-sm text-foreground/80">
-                    <CheckIcon />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors duration-200 group-hover:gap-2">
-                {card.cta}
-                <ArrowIcon />
-              </span>
-            </Link>
-          </RevealOnView>
-        ))}
-      </div>
+      <RevealOnView delayMs={80}>
+        <div className="mx-auto mt-12 max-w-2xl">
+          <Link
+            href="/partner"
+            className="glass-card group flex h-full cursor-pointer flex-col rounded-2xl p-7 transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-card-hover)]"
+          >
+            <h3 className="text-lg font-semibold text-foreground">Property management software</h3>
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              Run your portfolio in Axis — applications, screening, leases, and rent — or partner with us for full-service management.
+            </p>
+            <ul className="mt-5 space-y-2">
+              {OWNER_FEATURES.map((f) => (
+                <li key={f} className="flex items-center gap-2 text-sm text-foreground/80">
+                  <CheckIcon />
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors duration-200 group-hover:gap-2">
+              Partner with Axis
+              <ArrowIcon />
+            </span>
+          </Link>
+        </div>
+      </RevealOnView>
     </section>
   );
 }
@@ -82,7 +72,7 @@ export function LandingHowItWorks() {
           <div className="text-center">
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">How it works</p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
-              From search to signed lease
+              From listing to signed lease
             </h2>
           </div>
         </RevealOnView>
@@ -117,18 +107,12 @@ export function LandingFinalCta() {
             Ready to get started?
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-white/85">
-            Whether you&apos;re looking for a room or managing properties, Axis Housing has a path for you.
+            Run applications, leases, and rent collection on Axis — or let us manage your properties end to end.
           </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
-            <Link
-              href="/rent/listings"
-              className="btn-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-foreground transition-[transform,filter] duration-200 active:scale-[0.99] sm:w-auto"
-            >
-              Find a room
-            </Link>
+          <div className="mt-10 flex justify-center">
             <Link
               href="/partner"
-              className="inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full border border-white/40 bg-card/10 px-8 py-3 text-sm font-semibold text-white transition-[transform,background-color] duration-200 hover:bg-card/20 active:scale-[0.99] sm:w-auto"
+              className="btn-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-foreground transition-[transform,filter] duration-200 active:scale-[0.99] sm:w-auto"
             >
               Partner with Axis
             </Link>

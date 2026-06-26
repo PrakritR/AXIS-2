@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { notifyManagerTourRequest } from "@/lib/tour-notification-delivery.server";
+import { notifyManagerTourRequest, notifyTenantTourRequestReceived } from "@/lib/tour-notification-delivery.server";
 
 export const runtime = "nodejs";
 
@@ -230,6 +230,7 @@ export async function POST(req: Request) {
       const managerUserId = textValue(row.managerUserId) || textValue(requestedWindows[0]?.adminUserId);
       if (managerUserId) {
         void notifyManagerTourRequest(db, req, row, requestedWindows[0]).catch(() => undefined);
+        void notifyTenantTourRequestReceived(db, req, row, requestedWindows[0]).catch(() => undefined);
       }
     }
 

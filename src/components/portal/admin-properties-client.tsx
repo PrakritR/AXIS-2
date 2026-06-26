@@ -368,11 +368,6 @@ export function AdminPropertiesClient() {
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
 
-  const refresh = useCallback(() => {
-    setTick((t) => t + 1);
-    showToast("Refreshed property queue.");
-  }, [showToast]);
-
   useEffect(() => {
     void syncPropertyPipelineFromServer().then(() => {
       setTick((t) => t + 1);
@@ -400,11 +395,6 @@ export function AdminPropertiesClient() {
   return (
     <ManagerPortalPageShell
       title="Properties"
-      titleAside={
-        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-          Refresh
-        </Button>
-      }
     >
       <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
         {KPI_LABELS.map((label, i) => (

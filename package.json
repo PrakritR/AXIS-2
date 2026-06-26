@@ -23,12 +23,9 @@
     "check": "npm run lint && npm run test:unit && npm run build",
     "lockfile:verify": "node scripts/verify-lockfile.mjs",
     "admin:sync-account": "node scripts/ensure-admin-account.mjs",
+    "admin:set-manager-plan": "node scripts/set-manager-plan.mjs",
     "admin:ensure-demo-manager": "node scripts/ensure-demo-manager-account.mjs",
-    "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs",
-    "stripe:setup-plans": "node --env-file=.env.local scripts/setup-stripe-plan-prices.mjs --write-env",
-    "stripe:listen": "node scripts/stripe-listen.mjs",
-    "stripe:validate": "node --env-file=.env.local scripts/stripe-validate-env.mjs",
-    "stripe:validate-live": "node --env-file=.env.local scripts/stripe-validate-env.mjs --expect-live"
+    "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.14",
@@ -45,6 +42,8 @@
     "clsx": "^2.1.1",
     "leaflet": "^1.9.4",
     "next": "^16.2.9",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "stripe": "^22.0.2",
@@ -60,6 +59,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.2",

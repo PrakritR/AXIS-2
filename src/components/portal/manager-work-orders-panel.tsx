@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
@@ -28,6 +28,11 @@ import {
   recordWorkOrderResidentCharge,
 } from "@/lib/household-charges";
 import { deleteManagerWorkOrderRow, updateManagerWorkOrder } from "@/lib/manager-work-orders-storage";
+import {
+  MANAGER_VENDORS_EVENT,
+  readActiveManagerVendorRows,
+  syncManagerVendorsFromServer,
+} from "@/lib/manager-vendors-storage";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 
 function priorityClass(p: string) {
@@ -83,6 +88,19 @@ export function ManagerWorkOrdersPanel({
   const [billDraftById, setBillDraftById] = useState<Record<string, BillDraft>>({});
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
   const [hcTick, setHcTick] = useState(0);
+  const [vendorTick, setVendorTick] = useState(0);
+
+  useEffect(() => {
+    void syncManagerVendorsFromServer();
+    const onVendors = () => setVendorTick((n) => n + 1);
+    window.addEventListener(MANAGER_VENDORS_EVENT, onVendors);
+    return () => window.removeEventListener(MANAGER_VENDORS_EVENT, onVendors);
+  }, []);
+
+  const activeVendors = useMemo(() => {
+    void vendorTick;
+    return readActiveManagerVendorRows();
+  }, [vendorTick]);
 
   const rows = useMemo(() => allRows.filter((r) => r.bucket === bucket), [allRows, bucket]);
 
@@ -253,6 +271,31 @@ export function ManagerWorkOrdersPanel({
       setExpandedId(null);
       setHcTick((n) => n + 1);
     } else showToast("Could not delete work order.");
+  };
+
+  const assignVendor = (row: DemoManagerWorkOrderRow, vendorId: string) => {
+    if (!vendorId) {
+      updateManagerWorkOrder(row.id, (r) => ({
+        ...r,
+        vendorId: undefined,
+        vendorName: undefined,
+        vendorAssignedAt: undefined,
+      }));
+      showToast("Vendor unassigned.");
+      return;
+    }
+    const vendor = activeVendors.find((v) => v.id === vendorId);
+    if (!vendor) {
+      showToast("Vendor not found.");
+      return;
+    }
+    updateManagerWorkOrder(row.id, (r) => ({
+      ...r,
+      vendorId: vendor.id,
+      vendorName: vendor.name,
+      vendorAssignedAt: new Date().toISOString(),
+    }));
+    showToast(`Assigned ${vendor.name}.`);
   };
 
   if (rows.length === 0) {
@@ -431,6 +474,54 @@ export function ManagerWorkOrdersPanel({
                               )}
                             </div>
                           </div>
+                        ) : null}
+
+                        {/* Vendor assignment */}
+                        {row.bucket !== "completed" ? (
+                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
+                            <p className="text-xs font-semibold text-foreground">Assigned vendor</p>
+                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
+                              Pick from your vendor directory. Add vendors under Services → Vendors.
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-end gap-2">
+                              <Select
+                                className="h-9 min-w-[200px] rounded-md text-sm"
+                                value={row.vendorId ?? ""}
+                                onChange={(e) => assignVendor(row, e.target.value)}
+                              >
+                                <option value="">No vendor assigned</option>
+                                {activeVendors.map((v) => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.name}{v.trade ? ` · ${v.trade}` : ""}
+                                  </option>
+                                ))}
+                              </Select>
+                              {row.vendorId ? (
+                                <>
+                                  {activeVendors.find((v) => v.id === row.vendorId)?.phone ? (
+                                    <a
+                                      href={`tel:${activeVendors.find((v) => v.id === row.vendorId)!.phone}`}
+                                      className="text-xs font-medium text-primary hover:underline"
+                                    >
+                                      Call vendor
+                                    </a>
+                                  ) : null}
+                                  {activeVendors.find((v) => v.id === row.vendorId)?.email ? (
+                                    <a
+                                      href={`mailto:${activeVendors.find((v) => v.id === row.vendorId)!.email}`}
+                                      className="text-xs font-medium text-primary hover:underline"
+                                    >
+                                      Email vendor
+                                    </a>
+                                  ) : null}
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : row.vendorName ? (
+                          <p className="mt-4 text-xs text-muted">
+                            Vendor: <span className="font-medium text-foreground">{row.vendorName}</span>
+                          </p>
                         ) : null}
 
                         {/* Billing section */}

@@ -10,13 +10,31 @@ This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription
    - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (keep secret; server-only)
 3. Open **SQL Editor** and run the migration in `supabase/migrations/20250418140000_profiles_manager_purchases.sql`.
-4. **Authentication → Providers**: enable **Email** (password). For development you may disable **Confirm email** under Auth settings so sign-up can insert `profiles` immediately; in production keep confirmations on and confirm email before expecting a `profiles` row from client sign-up.
-5. **URL configuration** (Auth): add site URL `NEXT_PUBLIC_APP_URL` and redirect URL `{NEXT_PUBLIC_APP_URL}/auth/callback` if you add magic links later.
+4. **Authentication → Providers**: enable **Email** (password). Enable **Google** and add your Google OAuth client ID/secret (see below).
+5. **URL configuration** (Auth): set site URL to `NEXT_PUBLIC_APP_URL` and add redirect URLs:
+   - `{NEXT_PUBLIC_APP_URL}/auth/callback`
+   - `http://localhost:3000/auth/callback` for local dev (if using localhost)
 
 ### Profiles and manager purchases
 
 - `profiles`: one row per user (`id` = `auth.users.id`), `role`, optional `manager_id`, `application_approved` for residents.
 - `manager_purchases`: written when Stripe checkout completes; links `stripe_checkout_session_id`, `email`, `manager_id`, and later `user_id` when the manager finishes password setup.
+
+### Google sign-in
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create an OAuth 2.0 **Web application** client.
+2. Add **Authorized redirect URI**: `https://<your-supabase-project-ref>.supabase.co/auth/v1/callback`
+3. In Supabase **Authentication → Providers → Google**, paste the client ID and secret, then enable Google.
+4. Ensure `{NEXT_PUBLIC_APP_URL}/auth/callback` is listed under Supabase **Authentication → URL configuration → Redirect URLs**.
+5. Users sign in at `/auth/sign-in` via **Continue with Google**. Existing Axis accounts match by email; new Google users without a profile are sent through `/auth/continue` (create an account first if you are not already provisioned).
+
+### Tenant screening (Certn)
+
+1. Create a [Certn](https://certn.co) partner account with API access (pay-per-report).
+2. Set `CERTN_API_KEY` and `CERTN_WEBHOOK_SECRET` in `.env.local`.
+3. In Certn **Partner settings**, enable webhooks pointing to `{NEXT_PUBLIC_APP_URL}/api/webhooks/screening/certn`.
+4. Managers choose screening mode on **Applications** → **Off**, **Manual per applicant**, or **Auto on submit**.
+5. Each report bills the manager’s Stripe card on file (`SCREENING_COST_CENTS`, default $39.99) before Certn is called.
 
 ## 2. Stripe
 

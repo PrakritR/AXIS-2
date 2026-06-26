@@ -4,8 +4,16 @@
  * Signing order: manager prepares/sends → resident signs → manager countersigns → fully signed.
  */
 
-import { type ManagerLeaseBucket } from "@/data/demo-portal";
+import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { type ManagerLeaseBucket, type ManagerLeaseTab } from "@/data/demo-portal";
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
+import {
+  isLeaseGenerationSupported,
+  resolveLeaseJurisdiction,
+  unsupportedJurisdictionMessage,
+} from "@/lib/lease-jurisdiction";
+import { mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
+import { stripLeaseAiDisclaimerFromHtml, stripLeaseAiReviewDisclaimer } from "@/lib/lease-templates/types";
 import { effectiveApplicationForRow, enrichApplicationForLease, readManagerApplicationRows, signedRentLabelForRow } from "@/lib/manager-applications-storage";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
@@ -88,6 +96,13 @@ export function hasAnyLeaseSignature(row: LeasePipelineRow): boolean {
   return Boolean(row.managerSignature || row.residentSignature || (row.signatureName && row.signedAtIso));
 }
 
+/** True when the manager may generate, upload, or replace the lease document (manager review only). */
+export function leaseAllowsManagerDocumentEdits(row: LeasePipelineRow): boolean {
+  if (row.status === "Voided" || row.status === "Fully Signed") return false;
+  if (hasAnyLeaseSignature(row)) return false;
+  return row.bucket === "manager";
+}
+
 export function hasBothLeaseSignatures(row: LeasePipelineRow): boolean {
   return Boolean(row.managerSignature && (row.residentSignature || (row.signatureName && row.signedAtIso)));
 }
@@ -164,7 +179,7 @@ export type LeasePipelineRow = {
   application?: Partial<RentalWizardFormState>;
   generatedHtml?: string | null;
   generatedAtIso?: string | null;
-  managerUploadedPdf?: { dataUrl: string; fileName: string; uploadedAt: string } | null;
+  managerUploadedPdf?: { dataUrl: string; fileName: string; uploadedAt: string; originalDataUrl?: string } | null;
   thread: LeaseThreadMessage[];
   managerSignature?: LeaseSignature | null;
   residentSignature?: LeaseSignature | null;
@@ -279,7 +294,7 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     updated: String(r.updated ?? "").trim() || "—",
     bucket,
     pdfVersion: typeof r.pdfVersion === "number" && Number.isFinite(r.pdfVersion) ? Math.max(0, Math.floor(r.pdfVersion)) : 1,
-    notes: typeof r.notes === "string" ? r.notes : String(r.notes ?? ""),
+    notes: stripLeaseAiReviewDisclaimer(typeof r.notes === "string" ? r.notes : String(r.notes ?? "")),
     updatedAtIso: typeof r.updatedAtIso === "string" && r.updatedAtIso.trim() ? r.updatedAtIso : isoFallback,
     axisId: typeof r.axisId === "string" ? r.axisId : undefined,
     propertyId: typeof r.propertyId === "string" ? r.propertyId : undefined,
@@ -288,7 +303,7 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     roomChoice: typeof r.roomChoice === "string" ? r.roomChoice : null,
     signedRentLabel: typeof r.signedRentLabel === "string" ? r.signedRentLabel : null,
     application: r.application,
-    generatedHtml: r.generatedHtml ?? null,
+    generatedHtml: stripLeaseAiDisclaimerFromHtml(r.generatedHtml ?? null),
     generatedAtIso: r.generatedAtIso ?? null,
     managerUploadedPdf: r.managerUploadedPdf ?? null,
     thread: safeThread,
@@ -387,6 +402,22 @@ function stageLabelForBucket(b: ManagerLeaseBucket): string {
     default:
       return "—";
   }
+}
+
+export function leaseRowMatchesManagerTab(row: LeasePipelineRow, tab: ManagerLeaseTab): boolean {
+  if (tab === "completed") return row.status === "Fully Signed";
+  if (tab === "signed") return row.bucket === "signed" && row.status !== "Fully Signed";
+  return row.bucket === tab;
+}
+
+export function countManagerLeaseTabs(rows: LeasePipelineRow[]): Record<ManagerLeaseTab, number> {
+  return {
+    manager: rows.filter((r) => r.bucket === "manager").length,
+    admin: rows.filter((r) => r.bucket === "admin").length,
+    resident: rows.filter((r) => r.bucket === "resident").length,
+    signed: rows.filter((r) => r.bucket === "signed" && r.status !== "Fully Signed").length,
+    completed: rows.filter((r) => r.status === "Fully Signed").length,
+  };
 }
 
 function formatUpdatedLabel(iso: string): string {
@@ -499,6 +530,34 @@ async function persistLeaseRowToServerAwait(row: LeasePipelineRow): Promise<bool
   }
 }
 
+function findLeaseRowIndexForApprovedApp(
+  rows: LeasePipelineRow[],
+  app: { id: string; email?: string; assignedPropertyId?: string; propertyId?: string; application?: { propertyId?: string } },
+): number {
+  const email = app.email?.trim().toLowerCase() ?? "";
+  const propertyId =
+    app.assignedPropertyId?.trim() || app.propertyId?.trim() || app.application?.propertyId?.trim() || "";
+  const normalizedAppId = normalizeApplicationAxisId(app.id);
+
+  const byAxisId = rows.findIndex(
+    (r) => r.axisId?.trim() && normalizeApplicationAxisId(r.axisId) === normalizedAppId,
+  );
+  if (byAxisId !== -1) return byAxisId;
+
+  if (email) {
+    const byEmailProperty = rows.findIndex(
+      (r) => r.residentEmail.toLowerCase() === email && (r.propertyId ?? "") === propertyId,
+    );
+    if (byEmailProperty !== -1) return byEmailProperty;
+
+    // Resident email match when property assignment changed on the application.
+    const byEmailOnly = rows.findIndex((r) => r.residentEmail.toLowerCase() === email && Boolean(r.sentToResidentAt || r.generatedHtml || r.managerUploadedPdf));
+    if (byEmailOnly !== -1) return byEmailOnly;
+  }
+
+  return -1;
+}
+
 function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: string | null): LeasePipelineRow[] {
   const apps = readManagerApplicationRows().filter(
     (a) =>
@@ -518,11 +577,7 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       propertyLabel: app.property,
       roomChoice,
     });
-    const idx = next.findIndex((r) => {
-      if (r.axisId === app.id) return true;
-      if (r.axisId) return false;
-      return r.residentEmail.toLowerCase() === email && (r.propertyId ?? "") === propertyId;
-    });
+    const idx = findLeaseRowIndexForApprovedApp(next, app);
     const iso = new Date().toISOString();
     const seeded = normalizeLeasePipelineRow({
       id: idx === -1 ? `lease_app_${app.id}` : next[idx]!.id,
@@ -630,6 +685,31 @@ export function readLeasePipeline(managerUserId?: string | null): LeasePipelineR
   }
 }
 
+function preferLeasePipelineRow(local: LeasePipelineRow, remote: LeasePipelineRow): LeasePipelineRow {
+  const localRank = residentLeasePriority(local);
+  const remoteRank = residentLeasePriority(remote);
+  if (localRank !== remoteRank) return localRank > remoteRank ? local : remote;
+  const localTs = Date.parse(local.updatedAtIso || "");
+  const remoteTs = Date.parse(remote.updatedAtIso || "");
+  if (localTs !== remoteTs) {
+    return (Number.isFinite(localTs) ? localTs : 0) > (Number.isFinite(remoteTs) ? remoteTs : 0) ? local : remote;
+  }
+  if (local.sentToResidentAt && !remote.sentToResidentAt) return local;
+  if (remote.sentToResidentAt && !local.sentToResidentAt) return remote;
+  return local;
+}
+
+function mergeLeasePipelineRows(local: LeasePipelineRow[], remote: LeasePipelineRow[]): LeasePipelineRow[] {
+  const byId = new Map<string, LeasePipelineRow>();
+  for (const row of remote) byId.set(row.id, normalizeLeasePipelineRow(row));
+  for (const row of local) {
+    const normalized = normalizeLeasePipelineRow(row);
+    const existing = byId.get(normalized.id);
+    byId.set(normalized.id, existing ? preferLeasePipelineRow(normalized, existing) : normalized);
+  }
+  return [...byId.values()];
+}
+
 export async function syncLeasePipelineFromServer(managerUserId?: string | null, opts?: { force?: boolean }): Promise<LeasePipelineRow[]> {
   if (!canUseStorage()) return [];
   ensureLeasePipelineScope(managerUserId);
@@ -641,20 +721,17 @@ export async function syncLeasePipelineFromServer(managerUserId?: string | null,
   }
   try {
     leasePipelineSyncPromise = (async () => {
+      const localSnapshot = readLeasePipeline(managerUserId);
       const res = await fetch("/api/portal-lease-pipeline", { credentials: "include", cache: "no-store" });
-      if (!res.ok) return readLeasePipeline(managerUserId);
+      if (!res.ok) return localSnapshot;
       const body = (await res.json()) as { rows?: unknown[] };
       const fetched = filterLeasesForManager((body.rows ?? []).map(normalizeLeasePipelineRow), managerUserId);
-      memoryRows = fetched;
-      persistLeasePipelineToSession(fetched, managerUserId);
+      const merged = dedupeLeasePipelineRows(mergeLeasePipelineRows(localSnapshot, fetched));
+      memoryRows = merged;
+      persistLeasePipelineToSession(merged, managerUserId);
       leasePipelineLastSyncedAt = Date.now();
-      const next = readLeasePipeline(managerUserId);
-      if (JSON.stringify(memoryRows) !== JSON.stringify(next)) {
-        write(next, managerUserId);
-        return next;
-      }
       emit();
-      return next;
+      return readLeasePipeline(managerUserId);
     })();
     return await leasePipelineSyncPromise;
   } finally {
@@ -788,7 +865,7 @@ function makeMsg(role: LeaseThreadRole, body: string): LeaseThreadMessage {
   };
 }
 
-/** Removes a lease row and clears any resident-uploaded PDF keyed by that row's email (demo storage). */
+/** Removes lease document content and resets workflow to manager review on the same row. */
 export function deleteLeasePipelineRow(id: string, managerUserId?: string | null): boolean {
   const rows = readLeasePipeline(managerUserId);
   const row = rows.find((r) => r.id === id);
@@ -796,9 +873,32 @@ export function deleteLeasePipelineRow(id: string, managerUserId?: string | null
   if (String(row.residentEmail ?? "").trim()) {
     clearUploadedOwnLease(row.residentEmail);
   }
-  const raw = [...(readRaw(managerUserId) ?? [])];
-  const next = raw.filter((r) => r.id !== id);
-  write(next, managerUserId);
+  const raw = [...materializeLeasePipeline(managerUserId)];
+  const rawIdx = findRawLeaseRowIndex(id, managerUserId);
+  if (rawIdx === -1) return false;
+  const iso = new Date().toISOString();
+  raw[rawIdx] = normalizeLeasePipelineRow({
+    ...row,
+    bucket: "manager",
+    generatedHtml: null,
+    generatedAtIso: null,
+    managerUploadedPdf: null,
+    managerSignature: null,
+    residentSignature: null,
+    signatureName: null,
+    signedAtIso: null,
+    residentSignedAt: null,
+    managerSignedAt: null,
+    sentToResidentAt: null,
+    fullySignedAt: null,
+    adminReviewRequestedAt: null,
+    voidedAt: null,
+    pdfVersion: 1,
+    versionNumber: 1,
+    updatedAtIso: iso,
+    updated: formatUpdatedLabel(iso),
+  });
+  write(raw, managerUserId);
   return true;
 }
 
@@ -855,7 +955,8 @@ export function updateLeasePipelineRow(id: string, patch: Partial<LeasePipelineR
 }
 
 export function getLeaseDocumentHtml(row: LeasePipelineRow): string | null {
-  return hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, row.generatedHtml) : row.generatedHtml ?? null;
+  const raw = hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, row.generatedHtml) : row.generatedHtml ?? null;
+  return stripLeaseAiDisclaimerFromHtml(raw);
 }
 
 export function recomputeLeaseSignedHtml(): boolean {
@@ -898,6 +999,30 @@ function applicationSnapshotForLeaseRow(row: LeasePipelineRow): Partial<RentalWi
   return enrichApplicationForLease(appRow, effectiveApplicationForRow(appRow), row.application);
 }
 
+export function leaseGenerationSupportedForRow(row: LeasePipelineRow): { ok: true } | { ok: false; error: string } {
+  const app = applicationSnapshotForLeaseRow(row);
+  if (!app || !Object.keys(app).length) {
+    return { ok: false, error: "No application data on file." };
+  }
+  const ctx = leaseContextFromApplication(app as RentalWizardFormState);
+  const jurisdiction = resolveLeaseJurisdiction(ctx);
+  if (!isLeaseGenerationSupported(jurisdiction)) {
+    return { ok: false, error: unsupportedJurisdictionMessage(jurisdiction) };
+  }
+  return { ok: true };
+}
+
+async function refreshUploadedPdfSignatures(row: LeasePipelineRow): Promise<LeasePipelineRow["managerUploadedPdf"]> {
+  if (!row.managerUploadedPdf?.dataUrl) return row.managerUploadedPdf ?? null;
+  try {
+    const merged = await mergeUploadedLeasePdfWithSignatures(row);
+    if (!merged) return row.managerUploadedPdf;
+    return { ...row.managerUploadedPdf, dataUrl: merged };
+  } catch {
+    return row.managerUploadedPdf;
+  }
+}
+
 export function generateLeaseHtmlForRow(
   rowId: string,
   managerUserId?: string | null,
@@ -905,19 +1030,22 @@ export function generateLeaseHtmlForRow(
   const rows = readLeasePipeline(managerUserId);
   const row = rows.find((r) => r.id === rowId);
   if (!leaseAccessibleToManager(row, managerUserId)) return { ok: false, error: "Lease not found." };
-  if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
-    return { ok: false, error: "This lease can no longer be regenerated after signatures. Void/restart it first." };
+  if (!leaseAllowsManagerDocumentEdits(row)) {
+    return { ok: false, error: "Move the lease back to manager review before generating a new document." };
   }
   const app = applicationSnapshotForLeaseRow(row);
   if (!app || !Object.keys(app).length) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
+  const supported = leaseGenerationSupportedForRow(row);
+  if (!supported.ok) return { ok: false, error: supported.error };
   let html: string;
   try {
     const ctx = leaseContextFromApplication(app as RentalWizardFormState);
     html = buildAiGeneratedLeaseHtml(ctx);
-  } catch {
-    return { ok: false, error: "Could not build lease from saved application — check answers or regenerate after fixing data." };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Could not build lease from saved application.";
+    return { ok: false, error: msg };
   }
   const version = (row.versionNumber ?? row.pdfVersion) + 1;
   const ok = updateLeasePipelineRow(
@@ -931,7 +1059,6 @@ export function generateLeaseHtmlForRow(
       versionNumber: version,
       status: "Manager Review",
       currentActorRole: "manager",
-      notes: row.notes,
     },
     managerUserId,
   );
@@ -996,6 +1123,10 @@ export function regenerateAllLeaseHtml(managerUserId?: string | null): {
     if (signed) {
       try {
         const ctx = leaseContextFromApplication(app as RentalWizardFormState);
+        if (!isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
+          skipped++;
+          continue;
+        }
         const html = buildAiGeneratedLeaseHtml(ctx);
         updateLeasePipelineRow(
           row.id,
@@ -1016,8 +1147,16 @@ export function regenerateAllLeaseHtml(managerUserId?: string | null): {
       skipped++;
       continue;
     }
+    if (!leaseAllowsManagerDocumentEdits(row)) {
+      skipped++;
+      continue;
+    }
     try {
       const ctx = leaseContextFromApplication(app as RentalWizardFormState);
+      if (!isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
+        skipped++;
+        continue;
+      }
       const html = buildAiGeneratedLeaseHtml(ctx);
       const version = (row.versionNumber ?? row.pdfVersion) + 1;
       updateLeasePipelineRow(
@@ -1062,17 +1201,15 @@ export function downloadLeaseFromRow(row: LeasePipelineRow): void {
 export function dedupeLeasePipelineRows(rows: LeasePipelineRow[]): LeasePipelineRow[] {
   const byAgreement = new Map<string, LeasePipelineRow>();
   for (const row of rows) {
-    const key = row.axisId?.trim() || `${row.residentEmail.trim().toLowerCase()}::${row.propertyId ?? ""}::${row.roomChoice ?? ""}`;
+    const key =
+      row.axisId?.trim() ||
+      `${row.residentEmail.trim().toLowerCase()}::${row.propertyId ?? ""}::${row.roomChoice ?? ""}`;
     const existing = byAgreement.get(key);
     if (!existing) {
       byAgreement.set(key, row);
       continue;
     }
-    const existingTs = Date.parse(existing.updatedAtIso || "");
-    const rowTs = Date.parse(row.updatedAtIso || "");
-    if ((Number.isFinite(rowTs) ? rowTs : 0) >= (Number.isFinite(existingTs) ? existingTs : 0)) {
-      byAgreement.set(key, row);
-    }
+    byAgreement.set(key, preferLeasePipelineRow(row, existing));
   }
   return [...byAgreement.values()];
 }
@@ -1098,11 +1235,16 @@ export function managerUploadLeasePdf(
       resolve({ ok: false, error: "Missing resident email on lease row." });
       return;
     }
+    if (!leaseAllowsManagerDocumentEdits(row)) {
+      resolve({ ok: false, error: "Move the lease back to manager review before uploading a new PDF." });
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
       const payload = {
         dataUrl,
+        originalDataUrl: dataUrl,
         fileName: file.name,
         uploadedAt: new Date().toISOString(),
       };
@@ -1169,6 +1311,7 @@ export function residentUploadLeasePdf(email: string, file: File): Promise<{ ok:
         ...row,
         managerUploadedPdf: {
           dataUrl,
+          originalDataUrl: dataUrl,
           fileName: file.name,
           uploadedAt: iso,
         },
@@ -1178,6 +1321,15 @@ export function residentUploadLeasePdf(email: string, file: File): Promise<{ ok:
         versionNumber: nextVersion,
         updatedAtIso: iso,
         updated: formatUpdatedLabel(iso),
+        managerSignature: null,
+        residentSignature: null,
+        signatureName: null,
+        signedAtIso: null,
+        residentSignedAt: null,
+        managerSignedAt: null,
+        fullySignedAt: null,
+        bucket: "resident",
+        status: "Resident Signature Pending",
       });
       write(rows);
       resolve({ ok: true });
@@ -1188,7 +1340,7 @@ export function residentUploadLeasePdf(email: string, file: File): Promise<{ ok:
 }
 
 /** Resident electronically signs; row always moves to **signed** (awaiting manager countersign unless already fully executed). */
-export function residentSignLease(email: string, signatureName?: string): boolean {
+export async function residentSignLease(email: string, signatureName?: string): Promise<boolean> {
   const rows = [...(readRaw() ?? readLeasePipeline())];
   const idx = findActiveResidentLeaseRawIndex(email);
   if (idx === -1) return false;
@@ -1206,8 +1358,10 @@ export function residentSignLease(email: string, signatureName?: string): boolea
     signedAtIso: iso,
   });
   const bothSigned = hasBothLeaseSignatures(nextRowBase);
+  const mergedPdf = await refreshUploadedPdfSignatures(nextRowBase);
   rows[idx] = {
     ...nextRowBase,
+    managerUploadedPdf: mergedPdf ?? nextRowBase.managerUploadedPdf,
     bucket: "signed",
     status: bothSigned ? "Fully Signed" : "Manager Signature Pending",
     currentActorRole: bothSigned ? "system" : "manager",
@@ -1224,13 +1378,12 @@ export function residentSignLease(email: string, signatureName?: string): boolea
 }
 
 /** Manager / authorized agent electronically countersigns (only after the resident has signed). */
-export function managerSignLease(rowId: string, signatureName: string, managerUserId?: string | null): boolean {
+export async function managerSignLease(rowId: string, signatureName: string, managerUserId?: string | null): Promise<boolean> {
   const rows = readLeasePipeline(managerUserId);
   const idx = rows.findIndex((r) => r.id === rowId);
   if (idx === -1) return false;
   const row = rows[idx]!;
   if (!leaseAccessibleToManager(row, managerUserId)) return false;
-  if (row.managerUploadedPdf?.dataUrl) return false;
   if (row.status !== "Manager Signature Pending" || row.bucket !== "signed" || !residentHasSignedLease(row) || row.managerSignature) return false;
   const trimmedSignature = signatureName.trim();
   if (!trimmedSignature) return false;
@@ -1241,12 +1394,14 @@ export function managerSignLease(rowId: string, signatureName: string, managerUs
     managerSignature,
   });
   const bothSigned = hasBothLeaseSignatures(nextRowBase);
+  const mergedPdf = await refreshUploadedPdfSignatures(nextRowBase);
   const thread = [...(row.thread ?? []), makeMsg("manager", `Manager signed electronically — ${trimmedSignature}.`)];
   const raw = [...(readRaw(managerUserId) ?? [])];
   const rawIdx = raw.findIndex((r) => r.id === rowId);
   if (rawIdx === -1) return false;
   raw[rawIdx] = {
     ...nextRowBase,
+    managerUploadedPdf: mergedPdf ?? nextRowBase.managerUploadedPdf,
     bucket: "signed",
     status: bothSigned ? "Fully Signed" : "Manager Signature Pending",
     currentActorRole: bothSigned ? "system" : "manager",
@@ -1344,7 +1499,7 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
   if (logical.status === "Fully Signed" || logical.status === "Voided") {
     return { ok: false, error: "This lease is already finalized." };
   }
-  if (hasAnyLeaseSignature(logical)) {
+  if (residentHasSignedLease(logical) || logical.managerSignature) {
     return { ok: false, error: "This lease already has signatures and cannot be re-sent." };
   }
   const raw = [...materializeLeasePipeline(managerUserId)];
@@ -1354,6 +1509,7 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
   const iso = new Date().toISOString();
   const updated = normalizeLeasePipelineRow({
     ...row,
+    managerUserId: row.managerUserId ?? managerUserId ?? null,
     bucket: "resident",
     status: "Resident Signature Pending",
     currentActorRole: "resident",
@@ -1365,12 +1521,12 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
     signatureName: null,
     signedAtIso: null,
   });
-  raw[idx] = updated;
-  write(raw, managerUserId);
   const persisted = await persistLeaseRowToServerAwait(updated);
   if (!persisted) {
     return { ok: false, error: "Lease could not be saved to the server. Check your connection and try again." };
   }
+  raw[idx] = updated;
+  write(raw, managerUserId);
   return { ok: true };
 }
 
@@ -1418,6 +1574,14 @@ export function sendLeaseBackToManager(rowId: string, managerUserId?: string | n
     bucket: "manager",
     status: "Manager Review",
     currentActorRole: "manager",
+    managerSignature: null,
+    residentSignature: null,
+    signatureName: null,
+    signedAtIso: null,
+    sentToResidentAt: null,
+    residentSignedAt: null,
+    managerSignedAt: null,
+    fullySignedAt: null,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
   });

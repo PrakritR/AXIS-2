@@ -4,6 +4,7 @@
 
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { ApplicationBackgroundCheckStatus } from "@/lib/application-background-check";
+import type { ApplicationScreeningReport } from "@/lib/screening/types";
 
 export const demoKpis = {
   applications: { pending: "0", approved: "0", rejected: "0" },
@@ -53,6 +54,8 @@ export type DemoApplicantRow = {
   moveInInstructions?: string;
   /** Background screening outcome shown to managers (automation fills this later). */
   backgroundCheckStatus?: ApplicationBackgroundCheckStatus;
+  /** Vendor screening report (Certn) with manager-facing pros/cons summary. */
+  screening?: ApplicationScreeningReport;
   /** Extra fields only present on manually-added residents. */
   manualResidentDetails?: {
     moveInDate?: string;
@@ -153,11 +156,17 @@ export type DemoManagerWorkOrderRow = {
   assignedRoomChoice?: string;
   managerUserId?: string | null;
   photoDataUrls?: string[];
+  vendorId?: string;
+  vendorName?: string;
+  vendorAssignedAt?: string;
 };
 
 export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];
 
 export type ManagerLeaseBucket = "manager" | "admin" | "resident" | "signed";
+
+/** UI tabs on the manager Leases page (includes fully signed leases separate from countersign). */
+export type ManagerLeaseTab = ManagerLeaseBucket | "completed";
 
 export type DemoManagerLeaseDraftRow = {
   id: string;

@@ -114,7 +114,9 @@ export function ResidentLeasePanel() {
 
   const leaseLocked = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
   const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow) && leaseAuthorized;
-  const usesElectronicSigning = Boolean(pipelineRow?.generatedHtml && !pipelineRow?.managerUploadedPdf?.dataUrl);
+  const usesElectronicSigning = Boolean(
+    pipelineRow?.generatedHtml || pipelineRow?.managerUploadedPdf?.dataUrl,
+  );
 
   const upgradeBreakdown = useMemo(() => {
     const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? leaseCtx.application?.propertyId;
@@ -175,9 +177,10 @@ export function ResidentLeasePanel() {
     setShowSigningModal(true);
   };
 
-  const handleModalSign = (signatureName: string) => {
+  const handleModalSign = async (signatureName: string) => {
     if (!email || !pipelineRow) return false;
-    if (residentSignLease(email, signatureName)) {
+    const ok = await residentSignLease(email, signatureName);
+    if (ok) {
       const signedRow = {
         ...pipelineRow,
         residentSignature: { role: "resident" as const, name: signatureName, signedAtIso: new Date().toISOString() },
@@ -352,7 +355,7 @@ export function ResidentLeasePanel() {
             ) : null}
             {pipelineRow.managerUploadedPdf?.dataUrl && pipelineRow.status === "Resident Signature Pending" ? (
               <Card className="glass-card mt-4 border-[color-mix(in_srgb,var(--status-approved-fg)_25%,transparent)] p-4 text-sm text-[var(--status-approved-fg)]">
-                This lease was uploaded as a manual PDF. Review it here, sign it offline, and return the signed lease to your manager.
+                Sign in the portal to append an electronic signature page, or upload a manually signed PDF if you prefer.
               </Card>
             ) : null}
           </div>

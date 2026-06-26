@@ -43,9 +43,9 @@ export function LeaseSigningModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-900/60 p-2 sm:items-center sm:p-4">
-      <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Close" />
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-2xl">
+    <div className="fixed inset-0 z-[200] flex items-end justify-center p-2 sm:items-center sm:p-4">
+      <button type="button" aria-label="Close" className="modal-overlay fixed inset-0" onClick={onClose} />
+      <div className="modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border shadow-2xl">
         <div className="shrink-0 border-b border-border px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">

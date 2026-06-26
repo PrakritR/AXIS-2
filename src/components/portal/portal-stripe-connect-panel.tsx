@@ -94,6 +94,25 @@ export function PortalStripeConnectPanel({
   const startConnect = useCallback(async () => {
     setBusy(true);
     setActionError(null);
+
+    // Open synchronously on click so popup blockers allow a new tab (async window.open is often blocked).
+    const popup = window.open("about:blank", "_blank");
+    if (!popup) {
+      const message = "Could not open a new tab. Allow pop-ups for this site and try again.";
+      setActionError(message);
+      showToast(message);
+      setBusy(false);
+      return;
+    }
+
+    try {
+      popup.document.title = "Opening Stripe…";
+      popup.document.body.innerHTML =
+        '<p style="font-family:system-ui,sans-serif;padding:2rem;color:#444">Opening secure bank setup…</p>';
+    } catch {
+      /* cross-origin once navigated; harmless on about:blank */
+    }
+
     try {
       const res = await fetch("/api/stripe/connect/onboard", {
         method: "POST",
@@ -102,28 +121,28 @@ export function PortalStripeConnectPanel({
       const body = (await res.json()) as OnboardResponse;
       if (!res.ok) {
         const message = body.error ?? "Could not start bank linking.";
+        popup.close();
         setActionError(message);
         showToast(message);
         return;
       }
       if (body.demo && body.message) {
+        popup.close();
         setActionError(body.message);
         showToast(body.message);
         return;
       }
       if (body.url) {
-        const popup = window.open(body.url, "_blank", "noopener,noreferrer");
-        if (!popup) {
-          const message = "Could not open a new tab. Allow pop-ups for this site and try again.";
-          setActionError(message);
-          showToast(message);
-        }
+        popup.location.href = body.url;
+        popup.opener = null;
         return;
       }
+      popup.close();
       const message = "Stripe did not return an onboarding URL.";
       setActionError(message);
       showToast(message);
     } catch {
+      popup.close();
       const message = "Could not start bank linking.";
       setActionError(message);
       showToast(message);

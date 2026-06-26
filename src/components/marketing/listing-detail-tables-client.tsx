@@ -282,9 +282,9 @@ function ListingDetailModal({
 
   const panel = (
     <div className="fixed inset-0 z-[240] flex items-end justify-center p-3 sm:items-center sm:p-6" role="dialog" aria-modal>
-      <button type="button" className="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]" onClick={onClose} aria-label="Close dialog" />
+      <button type="button" className="absolute inset-0 modal-overlay" onClick={onClose} aria-label="Close dialog" />
       <div
-        className="relative z-10 max-h-[min(92vh,820px)] w-full max-w-lg overflow-y-auto rounded-3xl bg-card shadow-2xl sm:max-w-2xl"
+        className="modal-panel relative z-10 max-h-[min(92vh,820px)] w-full max-w-lg overflow-y-auto rounded-3xl border border-border shadow-2xl sm:max-w-2xl"
         onClick={stop}
       >
         <button

@@ -1,0 +1,12 @@
+/** Post-auth path used after OAuth callback exchanges the Supabase code. */
+export function oauthContinuePath(nextPath: string): string {
+  if (!nextPath.startsWith("/")) return "/auth/continue";
+  return `/auth/continue?next=${encodeURIComponent(nextPath)}`;
+}
+
+/** Supabase OAuth redirect target — must be allowlisted in Supabase Auth settings. */
+export function authCallbackUrl(origin: string, nextPath: string): string {
+  const base = origin.trim().replace(/\/$/, "");
+  const next = nextPath.startsWith("/") ? nextPath : "/auth/continue";
+  return `${base}/auth/callback?next=${encodeURIComponent(next)}`;
+}
