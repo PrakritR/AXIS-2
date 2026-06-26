@@ -1,8 +1,14 @@
+import { syncOAuthProfile } from "@/lib/auth/sync-oauth-profile";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
-export async function GET(request: Request) {
+function safeNextPath(raw: string | null): string {
+  if (raw && raw.startsWith("/")) return raw;
+  return "/auth/continue";
+}
+
+export async function GET(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
@@ -11,24 +17,23 @@ export async function GET(request: Request) {
 
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const next = requestUrl.searchParams.get("next") ?? "/";
+  const next = safeNextPath(requestUrl.searchParams.get("next"));
 
   if (!code) {
-    return NextResponse.redirect(new URL("/auth/sign-in", request.url));
+    return NextResponse.redirect(new URL("/auth/sign-in?error=auth", request.url));
   }
 
-  const cookieStore = await cookies();
+  let response = NextResponse.redirect(new URL(next, request.url));
+
   const supabase = createServerClient(url, anon, {
     cookies: {
       getAll() {
-        return cookieStore.getAll();
+        return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
-        } catch {
-          /* handled in route */
-        }
+        cookiesToSet.forEach(({ name, value, options }) => {
+          response.cookies.set(name, value, options);
+        });
       },
     },
   });
@@ -38,5 +43,17 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/auth/sign-in?error=auth", request.url));
   }
 
-  return NextResponse.redirect(new URL(next, request.url));
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const service = createSupabaseServiceRoleClient();
+      await syncOAuthProfile(service, user);
+    }
+  } catch (syncError) {
+    console.error("OAuth profile sync failed:", syncError);
+  }
+
+  return response;
 }

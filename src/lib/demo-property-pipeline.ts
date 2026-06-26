@@ -305,6 +305,22 @@ export async function loadPublicExtraListingsFromServer(): Promise<MockProperty[
   }
 }
 
+/** Hydrates a single active property for manager-shared apply/tour deep links. */
+export async function loadPublicPropertyLeadFromServer(propertyId: string): Promise<MockProperty | null> {
+  const id = propertyId.trim();
+  if (!id || !isBrowser()) return null;
+  try {
+    const res = await fetch(`/api/public/property-lead?propertyId=${encodeURIComponent(id)}`, { cache: "no-store" });
+    const body = (await res.json()) as { property?: MockProperty };
+    if (!res.ok || !body.property) return null;
+    cachePublicExtraListings([body.property], { silent: true });
+    window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+    return body.property;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * One-time: moves flat legacy arrays into the signed-in user's bucket so other accounts stay isolated.
  */
@@ -339,9 +355,14 @@ export function readAllExtraListings(): MockProperty[] {
   return Object.values(map).flat();
 }
 
-/** Properties visible on `/rent/listings` and hero search — admin-approved live listings only. */
-export function isRentCatalogPublished(p: Pick<MockProperty, "adminPublishLive">): boolean {
+/** Properties visible on manager-shared apply/tour links — active listings only. */
+export function isPropertyActiveForLeads(p: Pick<MockProperty, "adminPublishLive">): boolean {
   return p.adminPublishLive === true;
+}
+
+/** @deprecated Alias for isPropertyActiveForLeads — kept for older call sites. */
+export function isRentCatalogPublished(p: Pick<MockProperty, "adminPublishLive">): boolean {
+  return isPropertyActiveForLeads(p);
 }
 
 /** Public Rent with Axis catalog: extras that are approved for live search (demo localStorage). */

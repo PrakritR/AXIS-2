@@ -59,7 +59,7 @@
   --background: #080b14;
   --background-solid: #080b14;
   --foreground: #ffffff;
-  --muted: rgba(255, 255, 255, 0.62);
+  --muted: rgba(255, 255, 255, 0.78);
   --border: rgba(255, 255, 255, 0.18);
   --card: rgba(255, 255, 255, 0.1);
   --accent: rgba(124, 140, 255, 0.12);
@@ -89,7 +89,7 @@
   /* Tailwind @theme color aliases — must mirror semantic tokens for utilities */
   --color-background: #080b14;
   --color-foreground: #ffffff;
-  --color-muted: rgba(255, 255, 255, 0.62);
+  --color-muted: rgba(255, 255, 255, 0.78);
   --color-border: rgba(255, 255, 255, 0.18);
   --color-card: rgba(255, 255, 255, 0.1);
   --color-auth-input-bg: rgba(255, 255, 255, 0.1);
@@ -109,7 +109,167 @@
 }
 
 [data-theme="dark"] .text-muted {
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* Embedded listing / marketing blocks inside dark portal shells */
+[data-surface="light"] {
+  color-scheme: light;
+  --foreground: #0b1b3a;
+  --muted: #4a5878;
+  --border: #e6ebf3;
+  --card: rgba(255, 255, 255, 0.94);
+  --accent: rgba(47, 107, 255, 0.08);
+}
+
+[data-surface="light"] .text-foreground {
+  color: #0b1b3a;
+}
+
+[data-surface="light"] .text-muted {
+  color: #4a5878;
+}
+
+[data-surface="light"] .bg-card {
+  background-color: rgba(255, 255, 255, 0.94);
+}
+
+[data-surface="light"] .border-border {
+  border-color: #e6ebf3;
+}
+
+/* Dark portal: stronger chips, table headers, and outline controls */
+[data-theme="dark"] .portal-surface-muted {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+[data-theme="dark"] .portal-outline-control {
+  border-color: rgba(255, 255, 255, 0.32) !important;
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .portal-outline-control:hover {
+  background-color: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.42) !important;
+}
+
+[data-theme="dark"] .portal-danger-outline {
+  border-color: rgba(251, 113, 133, 0.55) !important;
+  color: #fecdd3 !important;
+}
+
+[data-theme="dark"] .portal-danger-outline:hover {
+  background-color: rgba(190, 24, 93, 0.18) !important;
+}
+
+[data-theme="dark"] .portal-status-pill-active {
+  background-color: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .portal-status-pill-count-active {
+  background-color: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+[data-theme="dark"] .portal-table-th {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+/* Tour / schedule calendar contrast on dark portal shells */
+[data-theme="dark"] .portal-calendar-grid {
+  background-color: rgba(255, 255, 255, 0.14);
+}
+
+[data-theme="dark"] .portal-calendar-header-cell {
+  background-color: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.84);
+}
+
+[data-theme="dark"] .portal-calendar-time-cell {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="dark"] .portal-calendar-open-count {
+  color: #86efac;
+}
+
+[data-theme="dark"] .portal-calendar-open-slot {
+  background-color: rgba(22, 163, 74, 0.34) !important;
+  color: #ecfdf5 !important;
+  box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.5);
+}
+
+[data-theme="dark"] .portal-calendar-badge-success {
+  background-color: rgba(22, 163, 74, 0.24);
+  color: #bbf7d0;
+  border: 1px solid rgba(74, 222, 128, 0.38);
+}
+
+[data-theme="dark"] .portal-calendar-badge-info {
+  background-color: rgba(59, 130, 246, 0.22);
+  color: #bfdbfe;
+  border: 1px solid rgba(96, 165, 250, 0.38);
+}
+
+[data-theme="dark"] .portal-calendar-badge-error {
+  background-color: rgba(244, 63, 94, 0.2);
+  color: #fecdd3;
+  border: 1px solid rgba(251, 113, 133, 0.4);
+}
+
+[data-theme="dark"] .portal-calendar-callout-sky {
+  background-color: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+[data-theme="dark"] .portal-calendar-callout-sky-title {
+  color: #e0f2fe;
+}
+
+[data-theme="dark"] .portal-calendar-callout-sky-sub {
+  color: #bae6fd;
+}
+
+[data-theme="dark"] .portal-calendar-meeting-confirmed {
+  background-color: rgba(56, 189, 248, 0.28) !important;
+  color: #f0f9ff !important;
+  border-color: rgba(125, 211, 252, 0.55) !important;
+}
+
+[data-theme="dark"] .portal-calendar-meeting-pending {
+  background-color: rgba(245, 158, 11, 0.28) !important;
+  color: #fffbeb !important;
+  border-color: rgba(251, 191, 36, 0.55) !important;
+}
+
+[data-theme="dark"] .portal-calendar-empty-slot {
+  color: rgba(255, 255, 255, 0.34);
+}
+
+[data-theme="dark"] .portal-calendar-empty-slot:hover {
+  color: #bcd4ff;
+}
+
+[data-theme="dark"] .portal-calendar-week-banner {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+[data-theme="dark"] .portal-calendar-inactive-slot {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+[data-theme="dark"] .portal-calendar-inactive-slot:hover {
+  background-color: rgba(47, 107, 255, 0.14);
+  color: #dbeafe;
 }
 
 [data-theme="light"] .bg-card {
@@ -411,15 +571,15 @@ html {
 
 /* ── Modal / wizard overlays ── */
 .modal-overlay {
-  background: rgba(15, 23, 42, 0.42);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 [data-theme="dark"] .modal-overlay {
-  background: rgba(2, 6, 23, 0.78);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(2, 6, 23, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .modal-panel {
@@ -490,15 +650,15 @@ html {
 }
 
 [data-theme="light"] .portal-banner-notice {
-  border-color: rgb(196 181 253 / 0.8);
-  background: rgb(237 233 254 / 0.8);
-  color: rgb(76 29 149);
+  border-color: rgb(147 197 253 / 0.8);
+  background: rgb(219 234 254 / 0.8);
+  color: rgb(30 58 138);
 }
 
 [data-theme="dark"] .portal-banner-notice {
-  border-color: rgb(167 139 250 / 0.28);
-  background: rgba(167, 139, 250, 0.16);
-  color: #ddd6fe;
+  border-color: rgb(124 140 255 / 0.28);
+  background: var(--status-approved-bg);
+  color: var(--status-approved-fg);
 }
 
 [data-theme="light"] .portal-badge-pending {
@@ -542,13 +702,13 @@ html {
 }
 
 [data-theme="light"] .portal-badge-notice {
-  background: rgb(237 233 254);
-  color: rgb(91 33 182);
+  background: rgb(219 234 254);
+  color: rgb(30 64 175);
 }
 
 [data-theme="dark"] .portal-badge-notice {
-  background: rgba(167, 139, 250, 0.16);
-  color: #ddd6fe;
+  background: var(--status-approved-bg);
+  color: var(--status-approved-fg);
 }
 
 .hero-chrome-scene {

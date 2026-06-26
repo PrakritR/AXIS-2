@@ -3,12 +3,10 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
-  PORTAL_TOOLBAR_LABEL,
-  PORTAL_TOOLBAR_SELECT,
-  PORTAL_TOOLBAR_GROUP,
   MANAGER_TABLE_TH,
+  ManagerPortalStatusPills,
 } from "@/components/portal/portal-metrics";
+import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
@@ -28,7 +26,8 @@ import {
   SERVICE_REQUESTS_EVENT,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
-import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
+import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { TabNav } from "@/components/ui/tabs";
@@ -47,11 +46,11 @@ type FilterType = "requests" | "work-orders";
 
 const STATUS_PILL: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 ring-amber-200",
-  approved: "bg-violet-50 text-violet-700 ring-violet-200",
+  approved: "bg-blue-50 text-blue-700 ring-blue-200",
   denied: "bg-rose-50 text-rose-700 ring-rose-200",
   returned: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   open: "bg-sky-50 text-sky-700 ring-sky-200",
-  scheduled: "bg-violet-50 text-violet-700 ring-violet-200",
+  scheduled: "bg-sky-50 text-sky-700 ring-sky-200",
   completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
 };
 
@@ -80,8 +79,9 @@ export function ManagerAllServicesPanel({
   const { userId, ready: authReady } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
-  const [propertyFilter, setPropertyFilter] = useState("all");
+  const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const typeFilter: FilterType = tabId;
 
   const propertyOptions = useMemo(() => {
@@ -115,17 +115,17 @@ export function ManagerAllServicesPanel({
     return readServiceRequestsForManager(userId);
   }, [userId, dataTick]);
 
-  const allPropertyOptions = useMemo(() => {
-    const opts: { id: string; label: string }[] = [{ id: "all", label: "All properties" }];
-    const seen = new Set<string>();
-    for (const p of propertyOptions) {
-      if (!seen.has(p.id)) { seen.add(p.id); opts.push(p); }
-    }
+  const filterPropertyOptions = useMemo(() => {
+    const opts = [...propertyOptions];
+    const seen = new Set(opts.map((p) => p.id));
     const woProps = workOrders
       .filter((w) => w.propertyId?.trim())
       .map((w) => ({ id: w.propertyId!, label: w.propertyName || w.propertyId! }));
     for (const p of woProps) {
-      if (!seen.has(p.id)) { seen.add(p.id); opts.push(p); }
+      if (!seen.has(p.id)) {
+        seen.add(p.id);
+        opts.push(p);
+      }
     }
     const srProps = serviceRequests
       .filter((r) => r.propertyId?.trim())
@@ -134,20 +134,23 @@ export function ManagerAllServicesPanel({
         return { id: r.propertyId, label: match?.label ?? r.propertyId };
       });
     for (const p of srProps) {
-      if (!seen.has(p.id)) { seen.add(p.id); opts.push(p); }
+      if (!seen.has(p.id)) {
+        seen.add(p.id);
+        opts.push(p);
+      }
     }
-    return opts;
+    return opts.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
   }, [propertyOptions, workOrders, serviceRequests]);
 
   const filteredWorkOrders = useMemo(() => {
     let rows = workOrders;
-    if (propertyFilter !== "all") rows = rows.filter((r) => r.propertyId === propertyFilter || r.assignedPropertyId === propertyFilter);
+    if (propertyFilter) rows = rows.filter((r) => r.propertyId === propertyFilter || r.assignedPropertyId === propertyFilter);
     return rows;
   }, [workOrders, propertyFilter]);
 
   const filteredRequests = useMemo(() => {
     let rows = serviceRequests;
-    if (propertyFilter !== "all") rows = rows.filter((r) => r.propertyId === propertyFilter);
+    if (propertyFilter) rows = rows.filter((r) => r.propertyId === propertyFilter);
     return rows;
   }, [serviceRequests, propertyFilter]);
 
@@ -174,12 +177,26 @@ export function ManagerAllServicesPanel({
 
   const pendingCount = filteredRequests.filter((r) => r.status === "pending").length;
   const openCount = filteredWorkOrders.filter((w) => w.bucket === "open").length;
+  const woCounts = useMemo(() => {
+    const c: Record<ManagerWorkOrderBucket, number> = { open: 0, scheduled: 0, completed: 0 };
+    for (const r of filteredWorkOrders) c[r.bucket] += 1;
+    return c;
+  }, [filteredWorkOrders]);
+  const woTabs = useMemo(
+    () =>
+      (["open", "scheduled", "completed"] as const).map((id) => ({
+        id,
+        label: id === "open" ? "Open" : id === "scheduled" ? "Scheduled" : "Completed",
+        count: woCounts[id],
+      })),
+    [woCounts],
+  );
 
   return (
     <ManagerPortalPageShell
       title="Services"
       titleAside={
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {pendingCount > 0 && (
             <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-300/60">
               {pendingCount} awaiting approval
@@ -190,66 +207,46 @@ export function ManagerAllServicesPanel({
               {openCount} open work orders
             </span>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            className={PORTAL_HEADER_ACTION_BTN}
-            onClick={() => {
-              void Promise.all([
-                syncManagerWorkOrdersFromServer({ force: true }),
-                syncPropertyPipelineFromServer({ force: true }),
-              ]).then(() => {
-                setDataTick((t) => t + 1);
-                setPropertyTick((t) => t + 1);
-                showToast("Refreshed.");
-              });
-            }}
-          >
-            Refresh
-          </Button>
+          <PortalPropertyFilterPill
+            propertyOptions={filterPropertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
         </div>
       }
       filterRow={null}
     >
       <div className="mt-1">
-        {/* Filter bar */}
-        <div className="flex flex-wrap items-center gap-3 pb-4">
-          {/* Property filter */}
-          {allPropertyOptions.length > 2 && (
-            <div className={`inline-flex items-center gap-2 ${PORTAL_TOOLBAR_GROUP} pr-1.5`}>
-              <label className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>Property</label>
-              <select
-                value={propertyFilter}
-                onChange={(e) => setPropertyFilter(e.target.value)}
-                className={`${PORTAL_TOOLBAR_SELECT} h-8 px-3 text-xs`}
-              >
-                {allPropertyOptions.map((p) => (
-                  <option key={p.id} value={p.id}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-        </div>
-
         <div className="mb-4">
           <TabNav
             activeId={typeFilter}
             items={[
               { id: "requests", label: "Requests", href: `${basePath}/services/requests` },
               { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
+              { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors` },
             ]}
           />
         </div>
 
-        {unified.length === 0 ? (
+        {typeFilter === "work-orders" ? (
+          <>
+            <div className="mb-4">
+              <ManagerPortalStatusPills
+                tabs={woTabs}
+                activeId={woBucket}
+                onChange={(id) => setWoBucket(id as ManagerWorkOrderBucket)}
+              />
+            </div>
+            <ManagerWorkOrdersPanel
+              allRows={filteredWorkOrders}
+              bucket={woBucket}
+              onAfterSchedule={() => setWoBucket("scheduled")}
+            />
+          </>
+        ) : unified.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-accent/30 py-16 text-center">
             <p className="text-sm font-medium text-muted">No services yet</p>
-            <p className="mt-1 max-w-xs text-xs text-muted">
-              {typeFilter === "requests"
-                ? "Service requests from residents will appear here."
-                : "Work orders from residents will appear here."}
-            </p>
+            <p className="mt-1 max-w-xs text-xs text-muted">Service requests from residents will appear here.</p>
           </div>
         ) : (
           <div className={PORTAL_DATA_TABLE_WRAP}>

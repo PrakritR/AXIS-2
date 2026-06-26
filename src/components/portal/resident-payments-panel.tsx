@@ -394,25 +394,6 @@ export function ResidentPaymentsPanel() {
   return (
     <ManagerPortalPageShell
       title="Payments"
-      titleAside={
-        <Button
-          type="button"
-          variant="outline"
-          className="shrink-0 rounded-full"
-          onClick={() => {
-            void (async () => {
-              await syncManagerApplicationsFromServer({ force: true });
-              await syncPropertyPipelineFromServer({ force: true });
-              await syncHouseholdChargesFromServer(true, { skipReconcile: true });
-            })().then(() => {
-              refresh();
-              showToast("Refreshed payments.");
-            });
-          }}
-        >
-          Refresh
-        </Button>
-      }
       filterRow={
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

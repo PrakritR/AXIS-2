@@ -485,21 +485,6 @@ export function ProAccountLinksPanel({
   return (
     <ManagerPortalPageShell
       title="Co-managers"
-      titleAside={
-        <Button
-          type="button"
-          variant="outline"
-          className={PORTAL_HEADER_ACTION_BTN}
-          onClick={() => {
-            void Promise.all([loadRemoteInvites(), syncPropertyPipelineFromServer({ force: true })]).then(() => {
-              refreshLocal();
-              showToast("Account links refreshed.");
-            });
-          }}
-        >
-          Refresh
-        </Button>
-      }
     >
       <div className="mx-auto max-w-3xl space-y-8">
         <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">

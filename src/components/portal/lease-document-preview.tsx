@@ -49,7 +49,14 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
         </p>
       ) : null}
       {pdfSrc ? (
-        <iframe title="Lease PDF preview" src={pdfSrc} className="h-[min(52vh,420px)] w-full bg-card" />
+        <>
+          {(row.residentSignature || row.managerSignature) && row.managerUploadedPdf?.dataUrl ? (
+            <p className="border-b border-emerald-100 bg-emerald-50/90 px-3 py-2 text-xs text-emerald-900">
+              Signature certificate page appended to this PDF.
+            </p>
+          ) : null}
+          <iframe title="Lease PDF preview" src={pdfSrc} className="h-[min(52vh,420px)] w-full bg-card" />
+        </>
       ) : html ? (
         <iframe
           title="Lease document"

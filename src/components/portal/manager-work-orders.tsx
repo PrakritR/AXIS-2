@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -110,23 +109,6 @@ export function ManagerWorkOrders() {
             propertyValue={propertyFilter}
             onPropertyChange={setPropertyFilter}
           />
-          <Button
-            type="button"
-            variant="outline"
-            className="shrink-0 rounded-full"
-            onClick={() => {
-              void Promise.all([
-                syncManagerWorkOrdersFromServer({ force: true }),
-                syncPropertyPipelineFromServer({ force: true }),
-              ]).then(() => {
-                setStoreTick((t) => t + 1);
-                setPropertyTick((t) => t + 1);
-                showToast("Work orders refreshed.");
-              });
-            }}
-          >
-            Refresh
-          </Button>
         </>
       }
       filterRow={

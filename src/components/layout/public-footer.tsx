@@ -1,12 +1,6 @@
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import Link from "next/link";
 
-const RENT_LINKS = [
-  { href: "/rent/listings", label: "Properties" },
-  { href: "/rent/tours-contact", label: "Schedule a tour" },
-  { href: "/rent/apply", label: "Apply" },
-];
-
 const PARTNER_LINKS = [
   { href: "/partner", label: "Partner overview" },
   { href: "/partner/pricing", label: "Software & pricing" },
@@ -31,21 +25,7 @@ export function PublicFooter() {
             </p>
           </div>
 
-          <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-4 lg:max-w-3xl lg:justify-self-end">
-            {/* Rent */}
-            <div className="min-w-0 lg:text-end">
-              <p className={sectionHeading}>Rent</p>
-              <ul className="mt-3 flex flex-col items-end gap-2">
-                {RENT_LINKS.map(({ href, label }) => (
-                  <li key={href} className="w-full lg:w-auto">
-                    <Link href={href} className={footerLinkClass}>
-                      {label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 lg:max-w-3xl lg:justify-self-end">
             {/* Partner */}
             <div className="min-w-0 lg:text-end">
               <p className={sectionHeading}>Partner</p>

@@ -37,13 +37,12 @@ function NotifBanner({
   tone,
   children,
 }: {
-  tone: "amber" | "blue" | "violet" | "rose";
+  tone: "amber" | "blue" | "rose";
   children: React.ReactNode;
 }) {
   const cls = {
     amber: "portal-banner-pending",
     blue: "portal-banner-info",
-    violet: "portal-banner-notice",
     rose: "portal-banner-danger",
   }[tone];
   return (
@@ -250,7 +249,7 @@ export function AdminDashboard() {
             </NotifBanner>
           )}
           {leasesInAdminReview > 0 && (
-            <NotifBanner tone="violet">
+            <NotifBanner tone="blue">
               <span>
                 <span className="font-semibold">{leasesInAdminReview}</span> lease{leasesInAdminReview === 1 ? "" : "s"} in admin review
               </span>
@@ -353,7 +352,7 @@ export function AdminDashboard() {
                       {row.unit || row.stageLabel || "Unit pending"} · {row.signedRentLabel || "Rent pending"}
                     </p>
                   </div>
-                  <span className="portal-badge-notice shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
+                  <span className="portal-badge-info shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
                     Admin review
                   </span>
                 </li>

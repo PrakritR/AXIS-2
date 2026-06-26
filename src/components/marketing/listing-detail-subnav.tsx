@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 const NAVBAR_ID = "axis-public-navbar";
 const PREVIEW_SCROLL_SELECTOR = "[data-listing-preview-scroll]";
+const LISTING_SECTIONS_ROOT_SELECTOR = "[data-listing-sections-root]";
 
 const nav = [
   { id: "floor-plans", label: "Floor plans" },
@@ -14,6 +15,10 @@ const nav = [
   { id: "location", label: "Location" },
 ] as const;
 
+function getListingSectionsRoot(subnavEl: HTMLElement | null): HTMLElement | null {
+  return subnavEl?.closest<HTMLElement>(LISTING_SECTIONS_ROOT_SELECTOR) ?? null;
+}
+
 function getScrollRootFromSubnav(subnavEl: HTMLElement | null): HTMLElement | null {
   return subnavEl?.closest<HTMLElement>(PREVIEW_SCROLL_SELECTOR) ?? null;
 }
@@ -23,26 +28,28 @@ function getSectionElement(id: string, mode: "page" | "modal", subnavEl: HTMLEle
     const root = getScrollRootFromSubnav(subnavEl);
     return root?.querySelector<HTMLElement>(`#${CSS.escape(id)}`) ?? null;
   }
+  const listingRoot = getListingSectionsRoot(subnavEl);
+  if (listingRoot) {
+    return listingRoot.querySelector<HTMLElement>(`#${CSS.escape(id)}`) ?? null;
+  }
   return document.getElementById(id);
 }
 
-function getListingScrollOffsetPx(mode: "page" | "modal", subnavEl: HTMLElement | null): number {
+function syncListingScrollStack(mode: "page" | "modal", subnavEl: HTMLElement | null): number {
+  if (!subnavEl) return 128;
   if (mode === "modal") {
-    const raw = getComputedStyle(document.documentElement).getPropertyValue("--listing-sticky-stack").trim();
-    if (raw) {
-      const px = Number.parseFloat(raw);
-      if (!Number.isNaN(px)) return px;
-    }
-    return subnavEl?.offsetHeight ? subnavEl.offsetHeight + 12 : 72;
-  }
-  const raw = getComputedStyle(document.documentElement).getPropertyValue("--listing-sticky-stack").trim();
-  if (raw) {
-    const px = Number.parseFloat(raw);
-    if (!Number.isNaN(px)) return px;
+    const scrollRoot = getScrollRootFromSubnav(subnavEl);
+    const stack = subnavEl.offsetHeight + 12;
+    scrollRoot?.style.setProperty("--listing-sticky-stack", `${stack}px`);
+    return stack;
   }
   const navEl = document.getElementById(NAVBAR_ID);
   const navH = navEl?.getBoundingClientRect().height ?? 64;
-  return navH + 52 + 12;
+  const stack = navH + subnavEl.offsetHeight + 12;
+  document.documentElement.style.setProperty("--listing-sticky-stack", `${stack}px`);
+  const listingRoot = getListingSectionsRoot(subnavEl);
+  listingRoot?.style.setProperty("--listing-sticky-stack", `${stack}px`);
+  return stack;
 }
 
 function scrollToSection(id: string, mode: "page" | "modal", subnavEl: HTMLElement | null) {
@@ -52,15 +59,15 @@ function scrollToSection(id: string, mode: "page" | "modal", subnavEl: HTMLEleme
   if (mode === "modal") {
     const root = getScrollRootFromSubnav(subnavEl);
     if (!root || !subnavEl) return;
+    syncListingScrollStack(mode, subnavEl);
     const subnavH = subnavEl.getBoundingClientRect().height;
     const y = el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
     root.scrollTo({ top: Math.max(0, y - subnavH - 10), behavior: "smooth" });
     return;
   }
 
-  const offset = getListingScrollOffsetPx("page", subnavEl);
-  const top = el.getBoundingClientRect().top + window.scrollY - offset;
-  window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  syncListingScrollStack(mode, subnavEl);
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /** Sticky section tabs: full marketing pages use the public navbar offset; preview modal pins to top of its scroller. */
@@ -77,8 +84,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
 
     if (mode === "modal") {
       const scrollRoot = getScrollRootFromSubnav(subEl);
-      const subH = subEl.offsetHeight;
-      scrollRoot?.style.setProperty("--listing-sticky-stack", `${subH + 12}px`);
+      syncListingScrollStack(mode, subEl);
 
       setStickyTopPx(0);
       setPageScrolled(scrollRoot ? scrollRoot.scrollTop > 8 : false);
@@ -100,9 +106,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
 
     const navH = navEl.getBoundingClientRect().height;
     setStickyTopPx(navH);
-
-    const subH = subEl.offsetHeight;
-    document.documentElement.style.setProperty("--listing-sticky-stack", `${navH + subH + 12}px`);
+    syncListingScrollStack(mode, subEl);
 
     const line = subEl.getBoundingClientRect().bottom + 6;
     let next: (typeof nav)[number]["id"] = nav[0].id;
@@ -120,7 +124,31 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
     const subEl = rootRef.current;
     if (!subEl) return;
 
-    if (mode === "modal") {
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+
+    const attachPageListeners = (navEl: HTMLElement) => {
+      const ro = new ResizeObserver(() => {
+        publishStackAndSpy();
+      });
+      ro.observe(navEl);
+      ro.observe(subEl);
+
+      const onScroll = () => publishStackAndSpy();
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", publishStackAndSpy, { passive: true });
+      queueMicrotask(() => publishStackAndSpy());
+
+      return () => {
+        ro.disconnect();
+        window.removeEventListener("scroll", onScroll);
+        window.removeEventListener("resize", publishStackAndSpy);
+        document.documentElement.style.removeProperty("--listing-sticky-stack");
+        getListingSectionsRoot(subEl)?.style.removeProperty("--listing-sticky-stack");
+      };
+    };
+
+    const attachModalListeners = () => {
       const scrollRoot = getScrollRootFromSubnav(subEl);
       const ro = new ResizeObserver(() => {
         publishStackAndSpy();
@@ -138,30 +166,27 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
         window.removeEventListener("resize", publishStackAndSpy);
         scrollRoot?.style.removeProperty("--listing-sticky-stack");
       };
-    }
-
-    const navEl = document.getElementById(NAVBAR_ID);
-    if (!navEl) return;
-
-    const ro = new ResizeObserver(() => {
-      publishStackAndSpy();
-    });
-    ro.observe(navEl);
-    ro.observe(subEl);
-
-    const onScroll = () => {
-      publishStackAndSpy();
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", publishStackAndSpy, { passive: true });
-    queueMicrotask(() => publishStackAndSpy());
+    const tryAttach = () => {
+      if (cancelled) return;
+      if (mode === "modal") {
+        cleanup = attachModalListeners();
+        return;
+      }
+      const navEl = document.getElementById(NAVBAR_ID);
+      if (!navEl) {
+        requestAnimationFrame(tryAttach);
+        return;
+      }
+      cleanup = attachPageListeners(navEl);
+    };
+
+    tryAttach();
 
     return () => {
-      ro.disconnect();
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", publishStackAndSpy);
-      document.documentElement.style.removeProperty("--listing-sticky-stack");
+      cancelled = true;
+      cleanup?.();
     };
   }, [mode, publishStackAndSpy]);
 
@@ -190,6 +215,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
   return (
     <nav
       ref={rootRef}
+      data-surface="light"
       className={`sticky z-40 -mx-4 border-b px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:-mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 ${
         pageScrolled
           ? "border-border bg-card shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_40px_-20px_rgba(15,23,42,0.1)] supports-[backdrop-filter]:bg-card"
@@ -212,7 +238,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
                 className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-full border-0 px-3.5 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
                   active
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-transparent text-muted hover:bg-card hover:text-foreground"
+                    : "bg-transparent text-[#4a5878] hover:bg-white/80 hover:text-[#0b1b3a]"
                 }`}
                 onClick={() => {
                   setActiveId(item.id);

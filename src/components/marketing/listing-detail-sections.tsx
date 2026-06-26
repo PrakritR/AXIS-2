@@ -230,7 +230,7 @@ export function ListingDetailSections({
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
   const heroUrls = rich.heroHousePhotoUrls ?? [];
   return (
-    <div className="bg-background">
+    <div className="bg-background" data-listing-sections-root>
       <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10"}`}>
         {previewModal ? <ListingStickySubnav mode="modal" /> : null}
         <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />

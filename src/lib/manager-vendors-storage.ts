@@ -1,0 +1,160 @@
+export type ManagerVendorRow = {
+  id: string;
+  managerUserId: string | null;
+  name: string;
+  trade: string;
+  phone: string;
+  email: string;
+  notes: string;
+  active: boolean;
+  propertyIds?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export const MANAGER_VENDORS_EVENT = "axis:manager-vendors";
+const MANAGER_VENDORS_SESSION_KEY = "axis:manager-vendors:v1";
+
+const EMPTY_FALLBACK: ManagerVendorRow[] = [];
+let memoryRows: ManagerVendorRow[] = [];
+const MANAGER_VENDORS_SYNC_TTL_MS = 15_000;
+let managerVendorsLastSyncedAt = 0;
+let managerVendorsSyncPromise: Promise<ManagerVendorRow[]> | null = null;
+
+function vendorRowsChanged(a: ManagerVendorRow[], b: ManagerVendorRow[]) {
+  return JSON.stringify(a) !== JSON.stringify(b);
+}
+
+function canUseStorage() {
+  return typeof window !== "undefined";
+}
+
+function hydrateVendorsFromSession() {
+  if (!canUseStorage() || memoryRows.length > 0) return;
+  try {
+    const raw = window.sessionStorage.getItem(MANAGER_VENDORS_SESSION_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as ManagerVendorRow[];
+    if (Array.isArray(parsed)) memoryRows = parsed;
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistVendorsToSession(rows: ManagerVendorRow[]) {
+  if (!canUseStorage()) return;
+  try {
+    window.sessionStorage.setItem(MANAGER_VENDORS_SESSION_KEY, JSON.stringify(rows));
+  } catch {
+    /* ignore */
+  }
+}
+
+function emit() {
+  if (!canUseStorage()) return;
+  window.dispatchEvent(new Event(MANAGER_VENDORS_EVENT));
+}
+
+function mirrorVendorsToServer(rows: ManagerVendorRow[]) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/portal-vendors", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "replace", rows }),
+  }).catch(() => undefined);
+}
+
+function mirrorVendorRowToServer(row: ManagerVendorRow) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/portal-vendors", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "upsert", row }),
+  }).catch(() => undefined);
+}
+
+function deleteVendorFromServer(id: string) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/portal-vendors", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "delete", id }),
+  }).catch(() => undefined);
+}
+
+export function makeVendorId(): string {
+  return `vendor-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export async function syncManagerVendorsFromServer(opts?: { force?: boolean }): Promise<ManagerVendorRow[]> {
+  if (!canUseStorage()) return [];
+  hydrateVendorsFromSession();
+  const force = opts?.force === true;
+  if (!force && managerVendorsSyncPromise) return managerVendorsSyncPromise;
+  if (!force && managerVendorsLastSyncedAt > 0 && Date.now() - managerVendorsLastSyncedAt < MANAGER_VENDORS_SYNC_TTL_MS) {
+    return readManagerVendorRows();
+  }
+  try {
+    managerVendorsSyncPromise = (async () => {
+      const res = await fetch("/api/portal-vendors", { credentials: "include" });
+      if (!res.ok) return readManagerVendorRows();
+      const body = (await res.json()) as { rows?: ManagerVendorRow[] };
+      const rows = Array.isArray(body.rows) ? body.rows : [];
+      const changed = vendorRowsChanged(memoryRows, rows);
+      memoryRows = rows;
+      persistVendorsToSession(rows);
+      managerVendorsLastSyncedAt = Date.now();
+      if (changed) emit();
+      return rows;
+    })();
+    return await managerVendorsSyncPromise;
+  } catch {
+    return readManagerVendorRows();
+  } finally {
+    managerVendorsSyncPromise = null;
+  }
+}
+
+export function readManagerVendorRows(fallback: ManagerVendorRow[] = EMPTY_FALLBACK): ManagerVendorRow[] {
+  hydrateVendorsFromSession();
+  if (memoryRows.length === 0) return [...fallback];
+  return memoryRows;
+}
+
+export function readActiveManagerVendorRows(fallback: ManagerVendorRow[] = EMPTY_FALLBACK): ManagerVendorRow[] {
+  return readManagerVendorRows(fallback).filter((v) => v.active !== false);
+}
+
+export function writeManagerVendorRows(rows: ManagerVendorRow[]): void {
+  if (!vendorRowsChanged(memoryRows, rows)) return;
+  memoryRows = rows;
+  persistVendorsToSession(rows);
+  managerVendorsLastSyncedAt = Date.now();
+  emit();
+  mirrorVendorsToServer(rows);
+}
+
+export function upsertManagerVendor(row: ManagerVendorRow): void {
+  const rows = readManagerVendorRows();
+  const idx = rows.findIndex((r) => r.id === row.id);
+  const next = idx === -1 ? [...rows, row] : rows.map((r, i) => (i === idx ? row : r));
+  writeManagerVendorRows(next);
+  mirrorVendorRowToServer(row);
+}
+
+export function deleteManagerVendorRow(id: string): boolean {
+  const rows = readManagerVendorRows();
+  if (!rows.some((r) => r.id === id)) return false;
+  writeManagerVendorRows(rows.filter((r) => r.id !== id));
+  deleteVendorFromServer(id);
+  return true;
+}
+
+export function subscribeManagerVendors(cb: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(MANAGER_VENDORS_EVENT, cb);
+  return () => window.removeEventListener(MANAGER_VENDORS_EVENT, cb);
+}

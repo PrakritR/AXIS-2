@@ -255,6 +255,26 @@ export function upsertApplicationRowToServer(row: DemoApplicantRow): void {
   mirrorApplicationRowToServer(row);
 }
 
+/** Await server persistence before showing post-submit UI or create-account links. */
+export async function upsertApplicationRowToServerAwait(
+  row: DemoApplicantRow,
+): Promise<{ ok: boolean; error?: string }> {
+  if (typeof window === "undefined") return { ok: false, error: "Not in browser." };
+  try {
+    const res = await fetch("/api/manager-applications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "upsert", row }),
+    });
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    if (!res.ok) return { ok: false, error: body?.error ?? "Could not save application." };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not save application." };
+  }
+}
+
 export async function deleteManagerApplicationFromServer(id: string): Promise<{ ok: boolean; error?: string }> {
   if (typeof window === "undefined" || !id.trim()) return { ok: false, error: "Application ID is required." };
   try {

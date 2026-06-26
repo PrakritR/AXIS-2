@@ -1,5 +1,12 @@
 /** Persist portal inbox threads (demo localStorage) so actions survive navigation and reloads. */
 
+export type InboxThreadMessage = {
+  id: string;
+  from: string;
+  body: string;
+  at: string;
+};
+
 export type PersistedInboxThread = {
   id: string;
   folder: "inbox" | "sent" | "trash";
@@ -11,6 +18,7 @@ export type PersistedInboxThread = {
   body: string;
   time: string;
   unread: boolean;
+  messages?: InboxThreadMessage[];
 };
 
 export const MANAGER_INBOX_STORAGE_KEY = "axis_portal_inbox_manager_v1";
@@ -22,6 +30,34 @@ const memoryByKey = new Map<string, PersistedInboxThread[]>();
 const inboxLastSyncedAtByKey = new Map<string, number>();
 const inboxSyncPromiseByKey = new Map<string, Promise<PersistedInboxThread[]>>();
 const PORTAL_INBOX_SYNC_TTL_MS = 15_000;
+let inboxMutationDepth = 0;
+
+/** True while a trash/restore/delete/reply mutation is in flight — blocks stale full replace syncs. */
+export function inboxMutationInFlight(): boolean {
+  return inboxMutationDepth > 0;
+}
+
+export function beginInboxMutation(): void {
+  inboxMutationDepth += 1;
+}
+
+export function endInboxMutation(): void {
+  inboxMutationDepth = Math.max(0, inboxMutationDepth - 1);
+}
+
+/** Commit inbox rows to memory/session immediately (before async server writes). */
+export function stagePersistedInboxRows(key: string, threads: PersistedInboxThread[]): void {
+  commitInboxMemory(key, threads);
+}
+
+export async function runInboxMutation<T>(fn: () => Promise<T>): Promise<T> {
+  beginInboxMutation();
+  try {
+    return await fn();
+  } finally {
+    endInboxMutation();
+  }
+}
 
 function inboxRowsChanged(a: PersistedInboxThread[], b: PersistedInboxThread[]) {
   return JSON.stringify(a) !== JSON.stringify(b);
@@ -201,7 +237,9 @@ function commitInboxMemory(key: string, threads: PersistedInboxThread[]): void {
   memoryByKey.set(key, threads);
   persistInboxToSession(key, threads);
   inboxLastSyncedAtByKey.set(key, Date.now());
-  window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
+  if (canUse()) {
+    window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
+  }
 }
 
 /** Upsert one or more changed rows without deleting threads missing from the payload. */
@@ -233,7 +271,7 @@ export async function persistInboxAwait(key: string, threads: PersistedInboxThre
 }
 
 export function persistInbox(key: string, threads: PersistedInboxThread[]): void {
-  if (!canUse()) return;
+  if (!canUse() || inboxMutationInFlight()) return;
   const existing = memoryByKey.get(key) ?? [];
   if (!inboxRowsChanged(existing, threads)) return;
   const newIds = new Set(threads.map((t) => t.id));
@@ -243,6 +281,7 @@ export function persistInbox(key: string, threads: PersistedInboxThread[]): void
   inboxLastSyncedAtByKey.set(key, Date.now());
   window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
   void (async () => {
+    if (inboxMutationInFlight()) return;
     if (removedIds.length > 0) {
       const deleted = await deleteInboxThreadIds(removedIds);
       if (!deleted) return;
@@ -260,4 +299,26 @@ export function persistInbox(key: string, threads: PersistedInboxThread[]): void
 export function appendPersistedInboxThread(key: string, thread: PersistedInboxThread, fallback: PersistedInboxThread[] = []): void {
   const rows = loadPersistedInbox(key, fallback);
   persistInbox(key, [thread, ...rows]);
+}
+
+export function inboxThreadMessages(thread: PersistedInboxThread): InboxThreadMessage[] {
+  const root: InboxThreadMessage = {
+    id: `${thread.id}-root`,
+    from: thread.from,
+    body: thread.body,
+    at: thread.time,
+  };
+  return [root, ...(thread.messages ?? [])];
+}
+
+export function appendReplyToInboxThread(
+  thread: PersistedInboxThread,
+  reply: InboxThreadMessage,
+): PersistedInboxThread {
+  return {
+    ...thread,
+    messages: [...(thread.messages ?? []), reply],
+    preview: reply.body.slice(0, 100).replace(/\n/g, " "),
+    unread: false,
+  };
 }

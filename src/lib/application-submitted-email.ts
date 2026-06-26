@@ -1,0 +1,91 @@
+import { residentAccountCreationUrl } from "@/lib/resident-welcome-email";
+
+export const APPLICATION_SUBMITTED_EMAIL_SUBJECT = "Your Axis application — create your resident account";
+
+export function buildApplicationSubmittedEmailBody(params: {
+  applicantName?: string;
+  applicantEmail: string;
+  axisId: string;
+  signupUrl: string;
+  propertyTitle?: string;
+}): string {
+  const greeting = params.applicantName?.trim() ? `Hi ${params.applicantName.trim()},` : "Hi,";
+  const propertyLine = params.propertyTitle?.trim() ? ` for ${params.propertyTitle.trim()}` : "";
+  return [
+    greeting,
+    "",
+    `We received your rental application${propertyLine}.`,
+    "",
+    `Your Application ID: ${params.axisId.trim()}`,
+    "",
+    "Create your resident portal account using the same email address you used on this application:",
+    params.signupUrl,
+    "",
+    `Application email on file: ${params.applicantEmail.trim()}`,
+    "",
+    "Your portal stays limited until your property manager reviews your application and fee. You can still create your account now to save your Application ID.",
+    "",
+    "— Axis",
+  ].join("\n");
+}
+
+function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escapeHtmlAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+export function buildApplicationSubmittedEmailHtml(params: {
+  applicantName?: string;
+  applicantEmail: string;
+  axisId: string;
+  signupUrl: string;
+  propertyTitle?: string;
+}): string {
+  const greeting = params.applicantName?.trim()
+    ? `Hi ${escapeHtmlText(params.applicantName.trim())},`
+    : "Hi,";
+  const propertyLine = params.propertyTitle?.trim()
+    ? ` for <strong>${escapeHtmlText(params.propertyTitle.trim())}</strong>`
+    : "";
+  const href = escapeHtmlAttr(params.signupUrl);
+  const urlPlain = escapeHtmlText(params.signupUrl);
+  return `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:24px;font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;font-size:15px;background:#f8fafc">
+<div style="max-width:36rem;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #e2e8f0">
+<p style="margin:0 0 12px 0">${greeting}</p>
+<p style="margin:0 0 12px 0">We received your rental application${propertyLine}.</p>
+<p style="margin:0 0 8px 0"><strong>Application ID:</strong> ${escapeHtmlText(params.axisId.trim())}</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:16px 0">
+<tr><td style="border-radius:10px;background:#2563eb">
+<a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none">Create resident account</a>
+</td></tr></table>
+<p style="margin:0 0 12px 0;font-size:13px;color:#64748b">Use the same email as your application: ${escapeHtmlText(params.applicantEmail.trim())}</p>
+<p style="margin:0;font-size:13px;color:#64748b">If the button does not work, copy this link:<br/><span style="word-break:break-all;color:#334155">${urlPlain}</span></p>
+<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— Axis</p>
+</div>
+</body>
+</html>`;
+}
+
+export function buildApplicationSubmittedMailtoHref(params: {
+  to: string;
+  applicantName?: string;
+  applicantEmail: string;
+  axisId: string;
+  origin: string;
+  propertyTitle?: string;
+}): string {
+  const signupUrl = residentAccountCreationUrl(params.origin, params.axisId);
+  const body = buildApplicationSubmittedEmailBody({
+    applicantName: params.applicantName,
+    applicantEmail: params.applicantEmail,
+    axisId: params.axisId,
+    signupUrl,
+    propertyTitle: params.propertyTitle,
+  });
+  return `mailto:${encodeURIComponent(params.to.trim())}?subject=${encodeURIComponent(APPLICATION_SUBMITTED_EMAIL_SUBJECT)}&body=${encodeURIComponent(body)}`;
+}

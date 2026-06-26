@@ -23,11 +23,11 @@ export function LandingHero() {
           className="hero-subtitle animate-fade-up mx-auto mt-5 max-w-2xl text-base leading-relaxed sm:text-lg"
           style={{ animationDelay: "90ms" }}
         >
-          Axis gives property managers listings, screening, leases, and rent in one platform — and gives renters a simple way to find, apply, and sign.
+          Axis gives property managers applications, screening, leases, and rent collection in one platform — with apply and tour links you share when prospects are ready.
         </p>
 
         <div
-          className="animate-fade-up mt-10 flex flex-col items-center justify-center gap-3 sm:mt-12 sm:flex-row sm:gap-4"
+          className="animate-fade-up mt-10 flex justify-center sm:mt-12"
           style={{ animationDelay: "120ms" }}
         >
           <Link
@@ -35,12 +35,6 @@ export function LandingHero() {
             className="btn-metallic hero-cta-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:brightness-105 active:translate-y-px active:scale-[0.99] sm:w-auto"
           >
             Partner with Axis
-          </Link>
-          <Link
-            href="/rent/listings"
-            className="hero-cta-outline inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full border bg-transparent px-8 py-3 text-sm font-semibold transition-[transform,background-color,border-color] duration-200 ease-out active:scale-[0.99] sm:w-auto"
-          >
-            Find a room
           </Link>
         </div>
       </div>

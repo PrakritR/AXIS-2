@@ -119,17 +119,6 @@ export function ManagerProperties() {
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={tryOpenAdd}>
             + Create listing
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => {
-              void loadSku();
-              refreshPending();
-            }}
-          >
-            Refresh
-          </Button>
         </>
       }
     >
@@ -169,7 +158,7 @@ export function ManagerProperties() {
                   <p className="mt-1 text-xs text-muted">{listing.address}</p>
                 </div>
                 {canEdit ? (
-                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                  <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
                     Editable — find in your listings above
                   </span>
                 ) : (

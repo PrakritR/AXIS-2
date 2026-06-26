@@ -41,7 +41,7 @@ function formatDate(iso: string) {
 function StatusBadge({ status }: { status: ServiceRequestStatus }) {
   const map: Record<ServiceRequestStatus, string> = {
     pending: "bg-amber-50 text-amber-700 ring-amber-200",
-    approved: "bg-violet-50 text-violet-700 ring-violet-200",
+    approved: "bg-blue-50 text-blue-700 ring-blue-200",
     denied: "bg-rose-50 text-rose-700 ring-rose-200",
     returned: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   };
@@ -172,7 +172,7 @@ function ServiceRequestCard({
             ) : null}
           </div>
           {req.servicePaid && needsReturn && !req.returnPhotoDataUrl ? (
-            <p className="mt-2 text-[10px] text-violet-600">Resident has been shown the return checklist.</p>
+            <p className="mt-2 text-[10px] text-primary">Resident has been shown the return checklist.</p>
           ) : null}
         </div>
       ) : null}

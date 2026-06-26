@@ -260,11 +260,6 @@ export function AdminLeasesClient() {
   const [tick, setTick] = useState(0);
   const [expandedLeaseId, setExpandedLeaseId] = useState<string | null>(null);
 
-  const refresh = useCallback(() => {
-    setTick((t) => t + 1);
-    showToast("Refreshed leases.");
-  }, [showToast]);
-
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
     window.addEventListener(LEASE_PIPELINE_EVENT, on);
@@ -308,9 +303,6 @@ export function AdminLeasesClient() {
             propertyValue={selectedPropertyFilter}
             onPropertyChange={setPropertyFilter}
           />
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-            Refresh
-          </Button>
         </div>
       </div>
 

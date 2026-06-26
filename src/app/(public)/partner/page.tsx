@@ -4,8 +4,7 @@ import { RevealOnView } from "@/components/motion/reveal-on-view";
 
 const STATS = [
   { value: "3", label: "Properties managed" },
-  { value: "14", label: "Avg. days to lease" },
-  { value: "98%", label: "Resident satisfaction" },
+  { value: "10", label: "Residents" },
 ] as const;
 
 export default function PartnerLandingPage() {
@@ -13,7 +12,7 @@ export default function PartnerLandingPage() {
     <div className="bg-background">
 
       {/* ── Hero ── */}
-      <section className="hero-chrome-scene relative overflow-hidden pb-20 pt-14 sm:pb-24 sm:pt-20 md:pt-24">
+      <section className="hero-chrome-scene relative overflow-hidden pb-10 pt-14 sm:pb-12 sm:pt-20 md:pt-24">
         <ChromeSubstrate variant="full" />
         <div className="relative mx-auto max-w-4xl px-4 text-center sm:px-6">
           <div className="hero-eyebrow animate-fade-up mb-5 inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-md sm:mb-6 sm:px-4">
@@ -30,7 +29,7 @@ export default function PartnerLandingPage() {
             <Link href="/partner/contact?tab=schedule" className="btn-cobalt inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:scale-[0.98] sm:w-auto">Book a consultation</Link>
             <Link href="/partner/pricing" className="btn-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-foreground transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:scale-[0.99] sm:w-auto">Use our software</Link>
           </div>
-          <div className="animate-fade-up mx-auto mt-12 grid max-w-2xl grid-cols-3 gap-4 sm:mt-14 sm:gap-6" style={{ animationDelay: "150ms" }}>
+          <div className="animate-fade-up mx-auto mt-12 grid max-w-md grid-cols-2 gap-4 sm:mt-10 sm:gap-6" style={{ animationDelay: "150ms" }}>
             {STATS.map((stat) => (
               <div key={stat.label} className="glass-card rounded-2xl px-3 py-4 sm:px-4">
                 <p className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{stat.value}</p>
@@ -42,7 +41,7 @@ export default function PartnerLandingPage() {
       </section>
 
       {/* ── What we handle ── */}
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+      <section className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pb-20 sm:pt-10">
         <RevealOnView>
           <div className="text-center">
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">What we handle</p>

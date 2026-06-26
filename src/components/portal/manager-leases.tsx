@@ -1,42 +1,37 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
 import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
-  PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
-import type { ManagerLeaseBucket } from "@/data/demo-portal";
+import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
-import { LEASE_PIPELINE_EVENT, readLeasePipeline, regenerateAllLeaseHtml, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
-import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
+import {
+  LEASE_PIPELINE_EVENT,
+  countManagerLeaseTabs,
+  readLeasePipeline,
+  syncLeasePipelineFromServer,
+} from "@/lib/lease-pipeline-storage";
+import { MANAGER_APPLICATIONS_EVENT, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
-import { useAppUi } from "@/components/providers/app-ui-provider";
-import { recordApprovedApplicationCharges } from "@/lib/household-charges";
 
-const LEASE_LABELS: { id: ManagerLeaseBucket; label: string }[] = [
+const LEASE_LABELS: { id: ManagerLeaseTab; label: string }[] = [
   { id: "manager", label: "Manager review" },
   { id: "admin", label: "Admin review" },
   { id: "resident", label: "Resident signature pending" },
-  { id: "signed", label: "Manager signature pending / signed" },
+  { id: "signed", label: "Manager signature pending" },
+  { id: "completed", label: "Signed" },
 ];
 
-function countBuckets(rows: ReturnType<typeof readLeasePipeline>) {
-  const c: Record<ManagerLeaseBucket, number> = { manager: 0, admin: 0, resident: 0, signed: 0 };
-  for (const r of rows) c[r.bucket] += 1;
-  return c;
-}
-
 export function ManagerLeases() {
-  const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
-  const [bucket, setBucket] = useState<ManagerLeaseBucket>("manager");
+  const [tab, setTab] = useState<ManagerLeaseTab>("manager");
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
@@ -138,7 +133,7 @@ export function ManagerLeases() {
     };
   }, [rows]);
 
-  const counts = useMemo(() => countBuckets(rows), [rows]);
+  const counts = useMemo(() => countManagerLeaseTabs(rows), [rows]);
   const tabs = useMemo(
     () => LEASE_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),
     [counts],
@@ -148,65 +143,21 @@ export function ManagerLeases() {
     <ManagerPortalPageShell
       title="Leases"
       titleAside={
-        <>
-          <PortalPropertyFilterPill
-            propertyOptions={propertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => {
-              const result = regenerateAllLeaseHtml(userId);
-              const approvedRows = readManagerApplicationRows().filter((r) => r.bucket === "approved");
-              for (const appRow of approvedRows) {
-                recordApprovedApplicationCharges(appRow, userId ?? null);
-              }
-              setTick((t) => t + 1);
-              const parts: string[] = [];
-              if (result.snapshotsRefreshed > 0) {
-                parts.push(`refreshed ${result.snapshotsRefreshed} application snapshot${result.snapshotsRefreshed === 1 ? "" : "s"}`);
-              }
-              if (result.updated > 0) {
-                parts.push(`regenerated ${result.updated} lease${result.updated === 1 ? "" : "s"}`);
-              }
-              showToast(parts.length > 0 ? parts.join("; ") + "." : "No leases with application data to regenerate.");
-            }}
-          >
-            Regenerate all
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => {
-              if (!userId) return;
-              void Promise.all([
-                syncPropertyPipelineFromServer({ force: true }),
-                syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
-                syncLeasePipelineFromServer(userId, { force: true }),
-              ]).then(() => {
-                setPropertyTick((t) => t + 1);
-                setTick((t) => t + 1);
-                showToast("Refreshed.");
-              });
-            }}
-          >
-            Refresh
-          </Button>
-        </>
+        <PortalPropertyFilterPill
+          propertyOptions={propertyOptions}
+          propertyValue={propertyFilter}
+          onPropertyChange={setPropertyFilter}
+        />
       }
       filterRow={
         <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerLeaseBucket)} />
+          <ManagerPortalStatusPills tabs={tabs} activeId={tab} onChange={(id) => setTab(id as ManagerLeaseTab)} />
         </ManagerPortalFilterRow>
       }
     >
       <ManagerLeasesPipelinePanel
         rows={rows}
-        bucket={bucket}
+        tab={tab}
         refreshKey={tick}
         managerUserId={userId}
         residentAccountEmails={residentAccountEmails}

@@ -351,7 +351,7 @@ export function ResidentWorkOrdersPanel() {
         )}
       </div>
 
-      <Modal open={createOpen} title="Create work order" onClose={() => setCreateOpen(false)} panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-6">
+      <Modal open={createOpen} title="Create work order" onClose={() => setCreateOpen(false)} panelClassName="modal-panel relative w-full max-w-lg overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6">
         <p className="text-xs text-muted">New requests appear in Open; open Details on a row for notes and updates.</p>
         <div className="mt-4 grid gap-3">
           <div>

@@ -2,7 +2,13 @@ import { mockProperties } from "@/data/mock-properties";
 import type { ListingRichContent } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
 import { LISTING_ROOM_FLOOR_LEVEL_OPTIONS } from "@/data/manager-listing-presets";
-import { buildMockPropertyFromDraft, readAllExtraListings, readAllPendingManagerProperties, readExtraListings } from "@/lib/demo-property-pipeline";
+import {
+  buildMockPropertyFromDraft,
+  isPropertyActiveForLeads,
+  readAllExtraListings,
+  readAllPendingManagerProperties,
+  readExtraListings,
+} from "@/lib/demo-property-pipeline";
 import { effectiveApplicationForRow, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { normalizeManagerListingSubmissionV1, resolveAllowedLeaseTerms } from "@/lib/manager-listing-submission";
 import { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, type LeaseTermOption } from "@/lib/rental-application/lease-terms";
@@ -328,6 +334,13 @@ export function getPropertyById(id: string): MockProperty | undefined {
   const pendingRow = readAllPendingManagerProperties().find((p) => p.id === propertyId);
   if (pendingRow) return buildMockPropertyFromDraft(pendingRow, propertyId);
   return undefined;
+}
+
+/** Active manager-shared link target — returns undefined for inactive or unknown properties. */
+export function getPropertyForPublicLink(propertyId: string): MockProperty | undefined {
+  const prop = getPropertyById(propertyId.trim());
+  if (!prop || !isPropertyActiveForLeads(prop)) return undefined;
+  return prop;
 }
 
 export function propertyAllowsShortTermRental(propertyId: string): boolean {

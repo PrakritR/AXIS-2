@@ -68,7 +68,7 @@ function StatusPill({ active }: { active: boolean }) {
 function RolePill({ kind }: { kind: AccountKind }) {
   const styles: Record<AccountKind, string> = {
     manager: "border-sky-200/90 bg-sky-50 text-sky-900",
-    resident: "border-violet-200/90 bg-violet-50 text-violet-900",
+    resident: "border-blue-200/90 bg-blue-50 text-blue-900",
   };
   const labels: Record<AccountKind, string> = {
     manager: "Management",
@@ -84,7 +84,7 @@ function RolePill({ kind }: { kind: AccountKind }) {
 function TierBadge({ tier }: { tier: string }) {
   const colors: Record<string, string> = {
     pro: "border-blue-200/90 bg-blue-50 text-blue-800",
-    business: "border-violet-200/90 bg-violet-50 text-violet-800",
+    business: "border-sky-200/90 bg-sky-50 text-sky-800",
     free: "border-border bg-accent/30 text-muted",
   };
   const cls = colors[tier.toLowerCase()] ?? colors.free;
@@ -453,9 +453,6 @@ export function AdminAxisUsersClient() {
     <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Axis users</h1>
-        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => void load()}>
-          Refresh
-        </Button>
       </div>
 
       <div className="mt-5">

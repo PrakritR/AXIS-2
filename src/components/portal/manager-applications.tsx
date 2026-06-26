@@ -4,6 +4,7 @@ import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState }
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
+import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -29,8 +30,10 @@ import {
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
+import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
+import { ManagerScreeningSettingsPanel } from "@/components/portal/manager-screening-settings";
 import { ManagerCosignerReadonlyReview } from "@/components/portal/manager-cosigner-readonly-review";
-import { readCosignerSubmissionsForSignerAppId } from "@/lib/cosigner-submissions-storage";
+import { fetchCosignerSubmissionsForSignerAppId, type CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   MANAGER_APPLICATIONS_EVENT,
@@ -48,6 +51,7 @@ import {
   buildManagerPropertyFilterOptions,
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
+import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
 import {
@@ -78,50 +82,51 @@ import {
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
 import {
-  APPLICATION_BACKGROUND_CHECK_STATUSES,
   applicationShowsBackgroundCheck,
   backgroundCheckStatusClassName,
   backgroundCheckStatusLabel,
   resolveBackgroundCheckStatus,
 } from "@/lib/application-background-check";
+import { recommendationLabel } from "@/lib/screening/recommendation";
 
 function ApplicationBackgroundCheckStatusBadge({ row }: { row: DemoApplicantRow }) {
   if (!applicationShowsBackgroundCheck(row)) return null;
   const status = resolveBackgroundCheckStatus(row);
+  const screening = row.screening;
   return (
-    <span
-      className={`mt-2 inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${backgroundCheckStatusClassName(status)}`}
-    >
-      {backgroundCheckStatusLabel(status)}
-    </span>
-  );
-}
-
-function ApplicationBackgroundCheckStatusField({ row }: { row: DemoApplicantRow }) {
-  if (!applicationShowsBackgroundCheck(row)) return null;
-  const status = resolveBackgroundCheckStatus(row);
-  return (
-    <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Background check</p>
-      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-        Screening status for this application. Results appear here automatically once background checks are enabled for your plan.
-      </p>
-      <label className="mt-4 block max-w-md">
-        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Status</span>
-        <Select value={status} disabled aria-readonly>
-          {APPLICATION_BACKGROUND_CHECK_STATUSES.filter((value) => value !== "not_applicable").map((value) => (
-            <option key={value} value={value}>
-              {backgroundCheckStatusLabel(value)}
-            </option>
-          ))}
-        </Select>
-      </label>
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      <span
+        className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${backgroundCheckStatusClassName(status)}`}
+      >
+        {backgroundCheckStatusLabel(status)}
+      </span>
+      {screening?.recommendation && screening.recommendation !== "not_available" ? (
+        <span className="inline-flex max-w-full items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200/80">
+          {recommendationLabel(screening.recommendation)}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 function CosignerSection({ applicationId }: { applicationId: string }) {
-  const subs = readCosignerSubmissionsForSignerAppId(applicationId);
+  const [subs, setSubs] = useState<CosignerSubmission[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCosignerSubmissionsForSignerAppId(applicationId).then((rows) => {
+      if (!cancelled) {
+        setSubs(rows);
+        setLoaded(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationId]);
+
+  if (!loaded) return null;
   if (subs.length === 0) return null;
   return (
     <div className="mt-6 space-y-6">
@@ -620,6 +625,7 @@ function ManagerApplicationsContent() {
   const [portfolioTick, setPortfolioTick] = useState(0);
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   useEffect(() => {
     const sync = () => setRows(readManagerApplicationRows());
     sync();
@@ -662,6 +668,7 @@ function ManagerApplicationsContent() {
 
   const propertyDataLoading = authReady && Boolean(userId) && portfolioTick === 0;
   const propertyOptions = buildManagerPropertyFilterOptions(userId);
+  const shareableProperties = useMemo(() => buildManagerShareablePropertyOptions(userId), [userId, portfolioTick]);
   const placementPropertyOptions = propertyOptions;
 
   const scopedRows = useMemo(() => {
@@ -707,12 +714,6 @@ function ManagerApplicationsContent() {
     const qs = nextParams.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [searchParams, scopedRows, pathname, router]);
-
-  const refreshTable = useCallback(() => {
-    setRows(readManagerApplicationRows());
-    void syncPropertyPipelineFromServer().then(() => setPortfolioTick((n) => n + 1));
-    showToast("Refreshed.");
-  }, [showToast]);
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
     const row = rows.find((r) => r.id === id);
@@ -908,8 +909,15 @@ function ManagerApplicationsContent() {
             propertyValue={propertyFilter}
             onPropertyChange={(id) => setPropertyFilter(id)}
           />
-          <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={refreshTable}>
-            Refresh
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={() => setInviteModalOpen(true)}
+            disabled={shareableProperties.length === 0}
+            title={shareableProperties.length === 0 ? "List a property as active before inviting prospects" : undefined}
+          >
+            Invite to apply
           </Button>
         </>
       }
@@ -920,6 +928,9 @@ function ManagerApplicationsContent() {
         </ManagerPortalFilterRow>
       }
     >
+      <div className="mb-4">
+        <ManagerScreeningSettingsPanel />
+      </div>
       <div className={PORTAL_DATA_TABLE_WRAP}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className="w-full min-w-[640px] border-collapse text-left text-sm">
@@ -942,7 +953,7 @@ function ManagerApplicationsContent() {
                 <tr>
                   <td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
                     {scopedRows.length === 0
-                      ? "No applications yet for your listings and linked properties."
+                      ? "No applications yet. Use Invite to apply to send prospects a link when you are ready."
                       : propertyFilter.trim()
                         ? "No applications for this property in this tab."
                         : "No applications in this tab."}
@@ -1061,7 +1072,12 @@ function ManagerApplicationsContent() {
                             </div>
                           ) : null}
 
-                          <ApplicationBackgroundCheckStatusField row={row} />
+                          <ApplicationScreeningPanel
+                            row={row}
+                            onUpdated={() => {
+                              void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
+                            }}
+                          />
 
                           <div className="space-y-5 rounded-2xl border border-border bg-card p-5 sm:p-6">
                           <ApplicantIds axisId={row.id} />
@@ -1113,6 +1129,12 @@ function ManagerApplicationsContent() {
           setApproveBusyId(row.id);
           void setRowBucket(row.id, "approved", { skipWelcomeEmail: skipMessage }).finally(() => setApproveBusyId(null));
         }}
+      />
+      <ShareLeadLinkModal
+        open={inviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+        kind="apply"
+        properties={shareableProperties}
       />
     </>
   );

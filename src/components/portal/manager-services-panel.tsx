@@ -215,7 +215,7 @@ export function ManagerServicesPanel() {
         open={modalOpen}
         title={editingOffer ? "Edit request option" : "Add request option"}
         onClose={() => setModalOpen(false)}
-        panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-6"
+        panelClassName="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6"
       >
         <div className="grid gap-3">
           <div>

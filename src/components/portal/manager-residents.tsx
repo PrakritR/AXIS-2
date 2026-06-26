@@ -24,6 +24,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
@@ -77,7 +78,10 @@ import {
   deleteLeasePipelineRow,
   deleteLeasePipelineRowsForResident,
   generateLeaseHtmlForRow,
+  hasAnyLeaseSignature,
+  leaseGenerationSupportedForRow,
   managerSignLease,
+  leaseAllowsManagerDocumentEdits,
   LEASE_PIPELINE_EVENT,
   managerUploadLeasePdf,
   readLeasePipeline,
@@ -88,7 +92,6 @@ import {
   downloadLeaseFromRow,
   printLeaseAsPdf,
   hasBothLeaseSignatures,
-  hasAnyLeaseSignature,
   residentHasSignedLease,
   updateLeasePipelineRow,
   type LeasePipelineRow,
@@ -322,6 +325,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [portalSetupMap, setPortalSetupMap] = useState<Map<string, boolean>>(new Map());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
   const [generatingLeaseRowId, setGeneratingLeaseRowId] = useState<string | null>(null);
+  const [regenerateConfirmLeaseId, setRegenerateConfirmLeaseId] = useState<string | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageSubject, setMessageSubject] = useState("");
   const [messageBody, setMessageBody] = useState("");
@@ -692,29 +696,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   if (selectedId && !filtered.some((resident) => resident.id === selectedId)) {
     setSelectedId(null);
   }
-
-  // Auto-regenerate unsigned leases when a resident is selected so stale HTML is always refreshed
-  useEffect(() => {
-    if (!selectedId) return;
-    const resident = residents.find((r) => r.id === selectedId);
-    if (!resident?.email) return;
-    const email = resident.email.trim().toLowerCase();
-    const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
-      (lr) =>
-        lr.residentEmail.trim().toLowerCase() === email &&
-        !hasAnyLeaseSignature(lr) &&
-        lr.status !== "Voided" &&
-        Boolean(lr.application),
-    );
-    if (leasesToRegen.length === 0) return;
-    for (const lr of leasesToRegen) {
-      generateLeaseHtmlForRow(lr.id, userId);
-    }
-    queueMicrotask(() => {
-      setLeaseTick((n) => n + 1);
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
 
   const residentCharges = useMemo<HouseholdCharge[]>(() => {
     void hcTick;
@@ -1167,14 +1148,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   async function confirmSendLeaseToResident(skipMessage: boolean) {
     if (!leaseSentPreview || leaseSendBusy) return;
     const { res, lease, subject, body } = leaseSentPreview;
-    setLeaseSentPreview(null);
     setLeaseSendBusy(true);
     try {
       const sendResult = await sendLeaseToResident(lease.id, userId);
       if (!sendResult.ok) {
-        showToast(sendResult.error);
+        showToast(sendResult.error ?? "Could not send lease.");
         return;
       }
+      setLeaseSentPreview(null);
       appendLeaseThreadMessage(lease.id, "manager", "Sent lease to resident for review and signature.", userId);
       if (skipMessage) {
         showToast("Lease sent to resident portal (no notification sent).");
@@ -1195,7 +1176,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           showToast("Lease sent to resident portal. Notification could not be delivered.");
         }
       }
-      await syncLeasePipelineFromServer(userId);
       setLeaseTick((n) => n + 1);
     } finally {
       setLeaseSendBusy(false);
@@ -1361,8 +1341,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
         (lr) =>
           lr.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase() &&
-          !hasAnyLeaseSignature(lr) &&
-          lr.status !== "Voided",
+          leaseAllowsManagerDocumentEdits(lr),
       );
       for (const lr of leasesToRegen) {
         updateLeasePipelineRow(lr.id, {
@@ -1473,7 +1452,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
   }
 
-  function generateLeaseDeferred(rowId: string) {
+  function leaseGenerationGateTitle(row: LeasePipelineRow): string | undefined {
+    const gate = leaseGenerationSupportedForRow(row);
+    return gate.ok ? undefined : gate.error;
+  }
+
+  function runGenerateLease(rowId: string) {
     if (generatingLeaseRowId) return;
     setGeneratingLeaseRowId(rowId);
     window.setTimeout(() => {
@@ -1487,15 +1471,19 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         }
       } finally {
         setGeneratingLeaseRowId(null);
+        setRegenerateConfirmLeaseId(null);
       }
     }, 0);
   }
 
+  function openGenerateLeaseConfirm(rowId: string) {
+    if (generatingLeaseRowId) return;
+    const row = readLeasePipeline(userId).find((r) => r.id === rowId);
+    if (!row || !leaseAllowsManagerDocumentEdits(row) || !leaseGenerationSupportedForRow(row).ok) return;
+    setRegenerateConfirmLeaseId(rowId);
+  }
+
   function signLeaseAsManager(row: LeasePipelineRow) {
-    if (row.managerUploadedPdf?.dataUrl) {
-      showToast("Uploaded PDF leases should be signed offline and re-uploaded, not electronically signed here.");
-      return;
-    }
     if (!residentHasSignedLease(row)) {
       showToast("The resident must sign the lease before you can countersign.");
       return;
@@ -1503,9 +1491,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setSigningLease(row);
   }
 
-  function handleManagerModalSign(signatureName: string) {
+  async function handleManagerModalSign(signatureName: string) {
     if (!signingLease) return false;
-    if (managerSignLease(signingLease.id, signatureName.trim(), userId)) {
+    const ok = await managerSignLease(signingLease.id, signatureName.trim(), userId);
+    if (ok) {
       setLeaseTick((n) => n + 1);
       showToast(
         hasBothLeaseSignatures({
@@ -1525,6 +1514,17 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   return (
     <>
+      <LeaseRegenerateConfirmModal
+        open={regenerateConfirmLeaseId !== null}
+        busy={Boolean(regenerateConfirmLeaseId && generatingLeaseRowId === regenerateConfirmLeaseId)}
+        onClose={() => {
+          if (generatingLeaseRowId) return;
+          setRegenerateConfirmLeaseId(null);
+        }}
+        onConfirm={() => {
+          if (regenerateConfirmLeaseId) runGenerateLease(regenerateConfirmLeaseId);
+        }}
+      />
       {signingLease ? (
         <LeaseSigningModal
           row={signingLease}
@@ -1684,8 +1684,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
                                             (lr) =>
                                               lr.residentEmail.trim().toLowerCase() === email &&
-                                              !hasAnyLeaseSignature(lr) &&
-                                              lr.status !== "Voided",
+                                              leaseAllowsManagerDocumentEdits(lr),
                                           );
                                           for (const lr of leasesToRegen) {
                                             updateLeasePipelineRow(lr.id, { application: { ...(lr.application ?? {}), ...row.application } }, userId);
@@ -1814,21 +1813,53 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 </div>
                                 {residentLease ? (
                                   <div className="flex flex-wrap gap-2">
+                                    {leaseAllowsManagerDocumentEdits(residentLease) ? (
+                                      <>
                                     <Button
                                       type="button"
                                       variant="outline"
                                       className="rounded-full px-3 py-1 text-xs"
-                                      disabled={generatingLeaseRowId === residentLease.id}
-                                      onClick={() => generateLeaseDeferred(residentLease.id)}
+                                      disabled={
+                                        generatingLeaseRowId === residentLease.id ||
+                                        !leaseGenerationSupportedForRow(residentLease).ok
+                                      }
+                                      title={leaseGenerationGateTitle(residentLease)}
+                                      onClick={() => openGenerateLeaseConfirm(residentLease.id)}
                                     >
                                       {generatingLeaseRowId === residentLease.id ? "Generating..." : "Generate lease"}
                                     </Button>
-                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) && !residentLease.managerUploadedPdf?.dataUrl ? (
+                                    <label className="inline-flex cursor-pointer items-center rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent/30">
+                                      {uploadingLeaseRowId === residentLease.id ? "Uploading..." : "Upload PDF"}
+                                      <input
+                                        type="file"
+                                        accept="application/pdf"
+                                        className="sr-only"
+                                        onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file || !residentLease) return;
+                                          setUploadingLeaseRowId(residentLease.id);
+                                          const result = await managerUploadLeasePdf(residentLease.id, file, userId);
+                                          setUploadingLeaseRowId(null);
+                                          e.currentTarget.value = "";
+                                          if (result.ok) {
+                                            setLeaseTick((n) => n + 1);
+                                            showToast("Lease PDF uploaded.");
+                                          } else {
+                                            showToast(result.error ?? "Upload failed.");
+                                          }
+                                        }}
+                                      />
+                                    </label>
+                                      </>
+                                    ) : null}
+                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) ? (
                                       <Button
                                         type="button"
                                         variant="outline"
                                         className="rounded-full px-3 py-1 text-xs"
-                                        disabled={!residentLease.generatedHtml}
+                                        disabled={
+                                          !residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl
+                                        }
                                         onClick={() => signLeaseAsManager(residentLease)}
                                       >
                                         Sign as manager
@@ -1892,28 +1923,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         </Button>
                                       </>
                                     ) : null}
-                                    <label className="inline-flex cursor-pointer items-center rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent/30">
-                                      {uploadingLeaseRowId === residentLease.id ? "Uploading..." : "Upload PDF"}
-                                      <input
-                                        type="file"
-                                        accept="application/pdf"
-                                        className="sr-only"
-                                        onChange={async (e) => {
-                                          const file = e.target.files?.[0];
-                                          if (!file || !residentLease) return;
-                                          setUploadingLeaseRowId(residentLease.id);
-                                          const result = await managerUploadLeasePdf(residentLease.id, file, userId);
-                                          setUploadingLeaseRowId(null);
-                                          e.currentTarget.value = "";
-                                          if (result.ok) {
-                                            setLeaseTick((n) => n + 1);
-                                            showToast("Lease PDF uploaded.");
-                                          } else {
-                                            showToast(result.error ?? "Upload failed.");
-                                          }
-                                        }}
-                                      />
-                                    </label>
                                     <Button
                                       type="button"
                                       variant="outline"
@@ -2108,7 +2117,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                           type="button"
                                                           variant="outline"
                                                           title={isCancelled ? `Re-enable ${label}` : `Cancel ${label}`}
-                                                          className={`rounded-full px-2 py-0.5 text-xs ${isCancelled ? "text-muted line-through" : "text-violet-700 hover:border-violet-300"}`}
+                                                          className={`rounded-full px-2 py-0.5 text-xs ${isCancelled ? "text-muted line-through" : "text-primary hover:border-primary/30"}`}
                                                           onClick={() => {
                                                             if (isCancelled) {
                                                               uncancelHouseholdChargeReminder(c.id, slot, userId ?? null);
@@ -2178,7 +2187,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     const needsReturn = hasDeposit(req.deposit);
                                     const statusColors: Record<string, string> = {
                                       pending: "bg-amber-50 text-amber-700 ring-amber-200",
-                                      approved: "bg-violet-50 text-violet-700 ring-violet-200",
+                                      approved: "bg-blue-50 text-blue-700 ring-blue-200",
                                       returned: "bg-emerald-50 text-emerald-700 ring-emerald-200",
                                       denied: "bg-rose-50 text-rose-700 ring-rose-200",
                                     };

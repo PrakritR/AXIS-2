@@ -9,6 +9,7 @@ import { ManagerPayments } from "@/components/portal/manager-payments";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
+import { AdminOnboardClient } from "@/components/portal/admin-onboard-client";
 import { AdminCreateResidentClient } from "@/components/portal/admin-create-resident-client";
 import { AdminAxisUsersClient } from "@/components/portal/admin-axis-users-client";
 import { AdminLeasesClient } from "@/components/portal/admin-leases-client";
@@ -20,6 +21,7 @@ import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-c
 import { ManagerProperties } from "@/components/portal/manager-properties";
 import { ManagerResidents } from "@/components/portal/manager-residents";
 import { ManagerAllServicesPanel } from "@/components/portal/manager-all-services-panel";
+import { ManagerVendorsPanel } from "@/components/portal/manager-vendors-panel";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
 import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
@@ -148,6 +150,11 @@ export async function renderPortalSection(
     return <AdminCreateManagerClient />;
   }
 
+  if (kind === "admin" && section === "onboard") {
+    if (tabParts?.length) notFound();
+    return <AdminOnboardClient />;
+  }
+
   if (kind === "admin" && section === "create-resident") {
     if (tabParts?.length) notFound();
     return <AdminCreateResidentClient />;
@@ -241,7 +248,15 @@ export async function renderPortalSection(
       }
       if (tabParts.length > 1) notFound();
       const servicesTab = tabParts[0]!;
-      if (!["requests", "work-orders"].includes(servicesTab)) notFound();
+      if (!["requests", "work-orders", "vendors"].includes(servicesTab)) notFound();
+      if (servicesTab === "vendors") {
+        return subscriptionGated(
+          <ManagerVendorsPanel basePath={def.basePath} />,
+          kind,
+          "services",
+          managerOwnerSubscriptionTier,
+        );
+      }
       return subscriptionGated(
         <ManagerAllServicesPanel tabId={servicesTab as "requests" | "work-orders"} basePath={def.basePath} />,
         kind,
@@ -381,7 +396,15 @@ export async function renderPortalSection(
       }
       if (tabParts.length > 1) notFound();
       const servicesTab = tabParts[0]!;
-      if (!["requests", "work-orders"].includes(servicesTab)) notFound();
+      if (!["requests", "work-orders", "vendors"].includes(servicesTab)) notFound();
+      if (servicesTab === "vendors") {
+        return subscriptionGated(
+          <ManagerVendorsPanel basePath={def.basePath} />,
+          kind,
+          "services",
+          managerOwnerSubscriptionTier,
+        );
+      }
       return subscriptionGated(
         <ManagerAllServicesPanel tabId={servicesTab as "requests" | "work-orders"} basePath={def.basePath} />,
         kind,

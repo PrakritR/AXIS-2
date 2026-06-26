@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
+import { PRIMARY_ADMIN_EMAIL } from "@/lib/auth/primary-admin";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-const PRIMARY_ADMIN_EMAIL = "prakritramachandran@gmail.com";
 const PLANNED_RECORD_ID = "axis_admin_planned_events_v1";
 
 type AdminAvailabilityHost = {

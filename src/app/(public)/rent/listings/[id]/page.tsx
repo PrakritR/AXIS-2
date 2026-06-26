@@ -1,6 +1,5 @@
-import { RentListingDetailClient } from "@/components/marketing/rent-listing-detail-client";
+import { PublicListingPageClient } from "@/components/marketing/public-listing-page-client";
 
-export default async function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  return <RentListingDetailClient id={id} />;
+export default function PublicListingPage() {
+  return <PublicListingPageClient />;
 }

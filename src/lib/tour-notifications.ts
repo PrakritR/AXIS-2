@@ -7,6 +7,8 @@ import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listin
 
 export const TOUR_REQUEST_MANAGER_SUBJECT = "New tour request — Axis";
 
+export const TOUR_REQUEST_TENANT_SUBJECT = "We received your tour request — Axis";
+
 export const TOUR_CONFIRMED_TENANT_SUBJECT = "Your Axis tour is confirmed";
 
 export type TourNotificationContext = {
@@ -65,6 +67,28 @@ export function buildTourRequestManagerBody(ctx: TourNotificationContext): strin
   lines.push(
     "",
     "Open your Axis manager portal calendar to approve or decline this tour request.",
+    "",
+    "— Axis",
+  );
+  return lines.join("\n");
+}
+
+export function buildTourRequestTenantBody(ctx: TourNotificationContext): string {
+  const greeting = ctx.guestName.trim() ? `Hi ${ctx.guestName.trim()},` : "Hi,";
+  const when = formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso);
+  const lines = [
+    greeting,
+    "",
+    "We received your tour request and sent it to the property manager for review.",
+    "",
+    `Requested time: ${when}`,
+    `Property: ${ctx.propertyTitle || "Property"}`,
+  ];
+  if (ctx.roomLabel?.trim()) lines.push(`Room: ${ctx.roomLabel.trim()}`);
+  if (ctx.propertyAddress?.trim()) lines.push(`Address: ${ctx.propertyAddress.trim()}`);
+  lines.push(
+    "",
+    "You will receive a separate confirmation email once the manager approves your tour time.",
     "",
     "— Axis",
   );

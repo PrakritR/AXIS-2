@@ -353,7 +353,8 @@ function AdminPropertyInlineDetails({
       </div>
       <div
         data-listing-preview-scroll
-        className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card"
+        data-surface="light"
+        className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-[#f5f8fd]"
       >
         <ListingDetailSections property={mock} rich={rich} previewModal />
       </div>
@@ -367,11 +368,6 @@ export function AdminPropertiesClient() {
   const [activeKpi, setActiveKpi] = useState<AdminPropertyBucketIndex>(0);
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
-
-  const refresh = useCallback(() => {
-    setTick((t) => t + 1);
-    showToast("Refreshed property queue.");
-  }, [showToast]);
 
   useEffect(() => {
     void syncPropertyPipelineFromServer().then(() => {
@@ -400,11 +396,6 @@ export function AdminPropertiesClient() {
   return (
     <ManagerPortalPageShell
       title="Properties"
-      titleAside={
-        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-          Refresh
-        </Button>
-      }
     >
       <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
         {KPI_LABELS.map((label, i) => (

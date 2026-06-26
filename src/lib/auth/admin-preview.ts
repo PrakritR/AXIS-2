@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { cache } from "react";
+import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
 import type { PreviewPortal } from "@/lib/auth/preview-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -20,6 +21,9 @@ export const getAdminPreviewFromCookies = cache(async (): Promise<{ targetUserId
 
 export const isAdminUser = cache(async (userId: string): Promise<boolean> => {
   const supabase = await createSupabaseServerClient();
+  const { data: profile } = await supabase.from("profiles").select("email, role").eq("id", userId).maybeSingle();
+  if (!isPrimaryAdminEmail(profile?.email)) return false;
+
   const { data: pr, error: prErr } = await supabase
     .from("profile_roles")
     .select("role")
@@ -27,6 +31,5 @@ export const isAdminUser = cache(async (userId: string): Promise<boolean> => {
     .eq("role", "admin")
     .maybeSingle();
   if (!prErr && pr) return true;
-  const { data } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-  return data?.role === "admin";
+  return profile?.role === "admin";
 });

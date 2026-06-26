@@ -32,6 +32,17 @@ describe("POST /api/auth/register-admin", () => {
     expect(data.error).toContain("Invalid admin");
   });
 
+  it("rejects non-primary admin email", async () => {
+    const req = jsonRequest("http://localhost/api/auth/register-admin", {
+      method: "POST",
+      body: { email: "a@test.com", password: "password123", adminKey: "prakrit-admin-register" },
+    });
+    const res = await registerAdmin(req);
+    const { status, data } = await parseJsonResponse<{ error: string }>(res);
+    expect(status).toBe(403);
+    expect(data.error).toContain("primary Axis admin");
+  });
+
   it("rejects short password", async () => {
     const req = jsonRequest("http://localhost/api/auth/register-admin", {
       method: "POST",
@@ -61,7 +72,7 @@ describe("POST /api/auth/register-admin", () => {
     const req = jsonRequest("http://localhost/api/auth/register-admin", {
       method: "POST",
       body: {
-        email: "admin@test.com",
+        email: "prakritramachandran@gmail.com",
         password: "password123",
         adminKey: "prakrit-admin-register",
         fullName: "Test Admin",

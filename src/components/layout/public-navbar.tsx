@@ -9,7 +9,6 @@ import { useMemo } from "react";
 export function PublicNavbar() {
   const pathname = usePathname();
 
-  const rentActive = useMemo(() => pathname === "/" || pathname.startsWith("/rent"), [pathname]);
   const pricingActive = useMemo(
     () => pathname === "/pricing" || pathname.startsWith("/partner/pricing"),
     [pathname],
@@ -21,11 +20,10 @@ export function PublicNavbar() {
 
   const menu: NavbarMenuItem[] = useMemo(
     () => [
-      { title: "Rent", url: "/rent/listings", active: rentActive },
       { title: "Partners", url: "/partner", active: partnerActive },
       { title: "Pricing", url: "/partner/pricing", active: pricingActive },
     ],
-    [rentActive, partnerActive, pricingActive],
+    [partnerActive, pricingActive],
   );
 
   return (

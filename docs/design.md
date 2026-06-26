@@ -6,7 +6,7 @@ Visual design reference for the Axis Housing platform. This document synthesizes
 
 ## Brand identity
 
-**Product:** Axis Housing — rental search, online applications, and lease management for residents, property managers, and platform admins.
+**Product:** Axis Housing — property management software for applications, leases, and rent collection for property managers and platform admins. Public marketing is owner-focused; apply and tour flows are manager-shared deep links only.
 
 **Design language:** **Blue Steel** — a metallic cobalt-and-steel aesthetic that reads premium and architectural without sacrificing legibility. The brand is expressed through:
 
@@ -142,7 +142,7 @@ The signature Blue Steel background. Implemented in `ChromeSubstrate` (`src/comp
 | Substrate | Surfaces |
 |-----------|----------|
 | **Full chrome** | Home hero, partner hero, auth pages, billing success |
-| **Quiet** | Listings, listing detail, apply/tours wizards, partner pricing/contact, default public layout |
+| **Quiet** | Apply/tours wizards (deep-link only), partner pricing/contact, default public layout |
 | **Portal calm** | All authenticated portal content areas |
 | **Sidebar chrome only** | Portal brand header (266px sidebar) — metal confined to this strip |
 
@@ -278,12 +278,12 @@ Five product surfaces. Per-route detail lives in [`docs/specs/`](specs/).
 
 **Chrome:** Full on `/`, `/partner`, `/billing/success`. Quiet elsewhere.
 
-**Key components:** `PublicNavbar`, `PublicFooter`, `ChromeSubstrate`, `HomeHeroSearch`, `PropertyCard`, pricing tier cards.
+**Key components:** `PublicNavbar`, `PublicFooter`, `ChromeSubstrate`, pricing tier cards.
 
 **Hero patterns:**
 - Eyebrow: glass pill + accent dot
 - Headline accent: `.text-gradient-accent`
-- Search bar: segmented glass fields, hairline splits, round cobalt submit, budget slider with `--budget-pct` gradient fill
+- Primary CTA: **Partner with Axis** → `/partner`
 
 **Partner:** Stat row on full chrome; six glass feature cards; CTA band cobalt→sky gradient.
 

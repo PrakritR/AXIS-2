@@ -43,6 +43,10 @@ export default function CreateAccountClient() {
     () => searchParams.get("axis_id")?.trim() || "",
     [searchParams],
   );
+  const emailFromUrl = useMemo(
+    () => searchParams.get("email")?.trim().toLowerCase() || "",
+    [searchParams],
+  );
   const urlDerivedRole: CreateAccountRole = axisIdFromUrl
     ? "resident"
     : sessionIdFromUrl
@@ -73,6 +77,12 @@ export default function CreateAccountClient() {
   if (axisIdFromUrl && axisId !== axisIdFromUrl) {
     setAxisId(axisIdFromUrl);
   }
+
+  if (emailFromUrl && email !== emailFromUrl && role === "resident" && axisIdFromUrl) {
+    setEmail(emailFromUrl);
+  }
+
+  const lockResidentEmail = role === "resident" && Boolean(axisIdFromUrl && emailFromUrl.includes("@"));
 
   const normalEmail = email.trim().toLowerCase();
   const isEmailCheckable = normalEmail.length > 0 && normalEmail.includes("@");
@@ -541,7 +551,12 @@ export default function CreateAccountClient() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
+                readOnly={lockResidentEmail}
+                disabled={lockResidentEmail}
               />
+              {lockResidentEmail ? (
+                <p className="mt-1 text-xs text-muted/70">Must match the email on your rental application.</p>
+              ) : null}
             </div>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="pw">

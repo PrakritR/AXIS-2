@@ -89,7 +89,7 @@ function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
     );
   if (status === "approved")
     return (
-      <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-violet-200">
+      <span className="rounded-full portal-badge-info px-2.5 py-0.5 text-[10px] font-semibold">
         Approved
       </span>
     );
@@ -224,9 +224,9 @@ function ServiceRequestCard({
 
       {/* Checkout procedure */}
       {showCheckout ? (
-        <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3">
-          <p className="text-xs font-bold text-violet-800">Return checklist</p>
-          <ol className="mt-2 space-y-1 pl-4 text-xs text-violet-700 list-decimal">
+        <div className="mt-3 rounded-xl border border-border bg-accent/30 p-3">
+          <p className="text-xs font-bold text-foreground">Return checklist</p>
+          <ol className="mt-2 space-y-1 pl-4 text-xs text-muted list-decimal">
             <li>Clean and prepare the item for return{req.returnByDate ? ` by ${formatDate(req.returnByDate)}` : ""}.</li>
             <li>Take a clear photo showing the item&apos;s current condition.</li>
             <li>Upload the photo below — your manager will review it.</li>
@@ -889,7 +889,7 @@ export function ResidentServicesPanel({
         open={modalMode === "maintenance"}
         title="Report maintenance"
         onClose={() => { setModalMode("none"); resetMaintenance(); }}
-        panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl glass-card p-5 shadow-[var(--shadow-card)] sm:p-6"
+        panelClassName="max-w-lg"
       >
         <p className="text-xs text-muted">Describe the issue — your property manager will be notified.</p>
         <div className="mt-4 grid gap-3">
@@ -956,7 +956,7 @@ export function ResidentServicesPanel({
         open={modalMode === "service"}
         title="Submit request"
         onClose={() => { setModalMode("none"); resetService(); }}
-        panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl glass-card p-5 shadow-[var(--shadow-card)] sm:p-6"
+        panelClassName="max-w-lg"
       >
         {availableOffers.length === 0 ? (
           <div className="py-8 text-center">
@@ -974,7 +974,7 @@ export function ResidentServicesPanel({
                   onClick={() => { setSelectedOffer((cur) => (cur?.id === offer.id ? null : offer)); setSReturnBy(""); }}
                   className={`w-full rounded-xl border px-4 py-3 text-left transition ${
                     selectedOffer?.id === offer.id
-                      ? "border-violet-300 bg-violet-50 ring-1 ring-violet-200"
+                      ? "border-primary/30 bg-accent/30 ring-1 ring-primary/20"
                       : "border-border bg-card hover:border-border hover:bg-accent/30"
                   }`}
                 >
