@@ -3,6 +3,7 @@ import { generateManagerId } from "@/lib/manager-id";
 import { newAxisIntentSessionId } from "@/lib/manager-signup-intent";
 import { createManagerCheckoutSession } from "@/lib/stripe/manager-checkout";
 import { normalizeOnboardDiscountPercent } from "@/lib/stripe-onboard-discount";
+import { getStripe } from "@/lib/stripe";
 import { getPaymentWaiverCode } from "@/lib/server-env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -122,6 +123,31 @@ export async function POST(req: Request) {
     }
 
     if (checkout.embedded) {
+      try {
+        const stripe = getStripe();
+        const session = await stripe.checkout.sessions.retrieve(checkout.sessionId);
+        const managerId = session.metadata?.manager_id?.trim();
+        if (managerId) {
+          const { error: reserveErr } = await supabase.from("manager_purchases").upsert(
+            {
+              stripe_checkout_session_id: checkout.sessionId,
+              email,
+              manager_id: managerId,
+              tier: tierRaw,
+              billing: billingRaw,
+              full_name: fullName || null,
+            },
+            { onConflict: "manager_id" },
+          );
+          if (reserveErr) {
+            return NextResponse.json({ error: reserveErr.message }, { status: 500 });
+          }
+        }
+      } catch (reserveError) {
+        const message = reserveError instanceof Error ? reserveError.message : "Could not reserve signup.";
+        return NextResponse.json({ error: message }, { status: 500 });
+      }
+
       return NextResponse.json({
         action: "checkout",
         clientSecret: checkout.clientSecret,

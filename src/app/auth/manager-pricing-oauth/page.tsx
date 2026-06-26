@@ -4,56 +4,108 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
-import { portalDashboardPath } from "@/components/auth/portal-switcher";
+import { managerPricingOauthPath } from "@/lib/auth/manager-pricing-oauth-path";
+import {
+  clearManagerPricingOffer,
+  persistManagerPricingOffer,
+  readManagerPricingOffer,
+} from "@/lib/auth/manager-pricing-oauth-storage";
+import { authCallbackUrl } from "@/lib/auth/oauth-redirect";
+import { resolveBrowserAppOrigin } from "@/lib/auth/password-reset-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { PlanTierId } from "@/data/manager-plan-tiers";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
-function parseTier(raw: string | null): PlanTierId {
+function parseTier(raw: string | null, fallback: PlanTierId): PlanTierId {
   if (raw === "pro" || raw === "business" || raw === "free") return raw;
-  return "pro";
+  return fallback;
 }
 
-function parseBilling(raw: string | null): "monthly" | "annual" {
-  return raw === "annual" ? "annual" : "monthly";
+function parseBilling(raw: string | null, fallback: "monthly" | "annual"): "monthly" | "annual" {
+  return raw === "annual" ? "annual" : fallback;
+}
+
+async function waitForAuthUser(supabase: ReturnType<typeof createSupabaseBrowserClient>, attempts = 8) {
+  for (let i = 0; i < attempts; i++) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) return user;
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
+  return null;
+}
+
+async function restartGoogleForPricingOffer(offer: {
+  tier: PlanTierId;
+  billing: "monthly" | "annual";
+  discountPercent?: number;
+  promo?: string;
+}) {
+  persistManagerPricingOffer(offer);
+  const supabase = createSupabaseBrowserClient();
+  const nextPath = managerPricingOauthPath(offer);
+  const redirectTo = authCallbackUrl(resolveBrowserAppOrigin(), nextPath);
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+      queryParams: { prompt: "select_account" },
+    },
+  });
+  if (error) throw new Error(error.message);
+  if (!data?.url) throw new Error("Could not start Google sign-in.");
+  window.location.assign(data.url);
 }
 
 function ManagerPricingOauthContent() {
   const searchParams = useSearchParams();
-  const tier = parseTier(searchParams.get("tier"));
-  const billing = parseBilling(searchParams.get("billing"));
+  const storedOffer = useMemo(() => readManagerPricingOffer(), []);
+  const tier = parseTier(searchParams.get("tier"), storedOffer?.tier ?? "pro");
+  const billing = parseBilling(searchParams.get("billing"), storedOffer?.billing ?? "monthly");
   const discountRaw = searchParams.get("d");
-  const discountPercent = discountRaw ? Number.parseInt(discountRaw, 10) : undefined;
-  const promo = searchParams.get("promo")?.trim() ?? "";
+  const discountPercent =
+    discountRaw != null && discountRaw !== ""
+      ? Number.parseInt(discountRaw, 10)
+      : storedOffer?.discountPercent;
+  const promo = searchParams.get("promo")?.trim() || storedOffer?.promo || "";
 
   const [errorText, setErrorText] = useState<string | null>(null);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
-  const didRunRef = useRef(false);
+  const [statusText, setStatusText] = useState("Preparing your Axis account…");
 
   useEffect(() => {
-    if (didRunRef.current) return;
-    didRunRef.current = true;
+    const offer = {
+      tier,
+      billing,
+      discountPercent: Number.isFinite(discountPercent) ? discountPercent : undefined,
+      promo: promo || undefined,
+    };
+    persistManagerPricingOffer(offer);
 
-    let cancelled = false;
+    const controller = new AbortController();
 
     void (async () => {
       try {
+        setStatusText("Confirming your Google sign-in…");
         const supabase = createSupabaseBrowserClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        const user = await waitForAuthUser(supabase);
 
-        const returnPath = `/auth/manager-pricing-oauth?${searchParams.toString()}`;
         if (!user) {
-          window.location.replace(`/auth/sign-in?next=${encodeURIComponent(returnPath)}`);
+          setStatusText("Redirecting to Google…");
+          await restartGoogleForPricingOffer(offer);
           return;
         }
+
+        setStatusText(tier === "free" ? "Creating your account…" : "Opening secure checkout…");
 
         const res = await fetch("/api/manager/pricing-oauth-continue", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          signal: controller.signal,
           body: JSON.stringify({
             tier,
             billing,
@@ -70,36 +122,44 @@ function ManagerPricingOauthContent() {
           error?: string;
         };
 
+        if (controller.signal.aborted) return;
+
         if (!res.ok) {
-          if (!cancelled) setErrorText(body.error ?? "Could not continue signup.");
+          setErrorText(body.error ?? "Could not continue signup.");
           return;
         }
 
         if (body.action === "finish" && body.sessionId) {
+          clearManagerPricingOffer();
           window.location.replace(managerOauthFinishPath(body.sessionId));
           return;
         }
 
         if (body.action === "checkout" && body.clientSecret) {
-          if (!cancelled) setCheckoutClientSecret(body.clientSecret);
+          clearManagerPricingOffer();
+          setCheckoutClientSecret(body.clientSecret);
           return;
         }
 
         if (body.action === "redirect" && body.url) {
+          clearManagerPricingOffer();
           window.location.assign(body.url);
           return;
         }
 
-        if (!cancelled) setErrorText("Unexpected signup response.");
-      } catch {
-        if (!cancelled) setErrorText("Could not continue signup. Try again.");
+        setErrorText("Unexpected signup response.");
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        const message = e instanceof Error ? e.message : "Could not continue signup. Try again.";
+        setErrorText(message);
       }
     })();
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [billing, discountPercent, promo, searchParams, tier]);
+  }, [billing, discountPercent, promo, tier]);
 
   if (checkoutClientSecret) {
     return (
@@ -115,17 +175,6 @@ function ManagerPricingOauthContent() {
           />
         </div>
         {errorText ? <p className="mt-4 text-center text-sm text-rose-600">{errorText}</p> : null}
-        <p className="mt-6 text-center text-sm text-muted">
-          After payment you&apos;ll land in your{" "}
-          <button
-            type="button"
-            className="font-semibold text-primary"
-            onClick={() => window.location.replace(portalDashboardPath("manager"))}
-          >
-            manager portal
-          </button>
-          .
-        </p>
       </AuthCard>
     );
   }
@@ -152,9 +201,9 @@ function ManagerPricingOauthContent() {
       <div
         className="h-8 w-8 animate-spin rounded-full border-2 border-steel-light/25 border-t-steel-light"
         role="status"
-        aria-label="Preparing your signup"
+        aria-label={statusText}
       />
-      <p className="text-sm text-muted">Preparing your Axis account…</p>
+      <p className="text-sm text-muted">{statusText}</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { authCallbackUrl, oauthContinuePath } from "@/lib/auth/oauth-redirect";
+import { authCallbackUrl, oauthContinuePath, usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
 import { resolveBrowserAppOrigin } from "@/lib/auth/password-reset-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useState } from "react";
@@ -35,11 +35,13 @@ export function GoogleSignInButton({
   label = "Continue with Google",
   /** When false, OAuth returns directly to nextPath instead of /auth/continue. */
   viaContinue = true,
+  onBeforeRedirect,
 }: {
   nextPath?: string;
   disabled?: boolean;
   label?: string;
   viaContinue?: boolean;
+  onBeforeRedirect?: () => void;
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
@@ -47,8 +49,14 @@ export function GoogleSignInButton({
   const signInWithGoogle = async () => {
     setBusy(true);
     try {
+      onBeforeRedirect?.();
       const supabase = createSupabaseBrowserClient();
-      const afterAuth = viaContinue ? oauthContinuePath(nextPath) : nextPath.startsWith("/") ? nextPath : "/auth/continue";
+      const directReturn = !viaContinue || usesDirectOAuthReturn(nextPath);
+      const afterAuth = directReturn
+        ? nextPath.startsWith("/")
+          ? nextPath
+          : "/auth/continue"
+        : oauthContinuePath(nextPath);
       const redirectTo = authCallbackUrl(resolveBrowserAppOrigin(), afterAuth);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",

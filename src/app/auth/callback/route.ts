@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/auth/sign-in?error=auth", request.url));
   }
 
-  let response = NextResponse.redirect(new URL(next, request.url));
+  const redirectTarget = new URL(next, requestUrl.origin);
+  let response = NextResponse.redirect(redirectTarget);
 
   const supabase = createServerClient(url, anon, {
     cookies: {

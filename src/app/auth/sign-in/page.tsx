@@ -3,6 +3,7 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { GoogleSignInSetupNote } from "@/components/auth/google-sign-in-setup-note";
+import { usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -174,7 +175,11 @@ function SignInForm() {
       <h1 className="text-center text-[22px] font-semibold tracking-tight text-foreground">Portal sign-in</h1>
 
       <div className="mt-8">
-        <GoogleSignInButton nextPath={nextPath} disabled={busy} />
+        <GoogleSignInButton
+          nextPath={nextPath}
+          viaContinue={!usesDirectOAuthReturn(nextPath)}
+          disabled={busy}
+        />
         <GoogleSignInSetupNote />
       </div>
 
