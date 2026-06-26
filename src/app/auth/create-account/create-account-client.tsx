@@ -1,6 +1,8 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -400,6 +402,19 @@ export default function CreateAccountClient() {
 
         {managerPostCheckout && effectiveCheckoutPreview ? (
           <>
+            <div className="mb-2">
+              <GoogleSignInButton
+                label="Continue with Google"
+                nextPath={managerOauthFinishPath(sessionIdFromUrl)}
+                viaContinue={false}
+                disabled={busy}
+              />
+              <div className="my-4 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" aria-hidden />
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
+                <div className="h-px flex-1 bg-border" aria-hidden />
+              </div>
+            </div>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="manager-id">
                 Axis ID

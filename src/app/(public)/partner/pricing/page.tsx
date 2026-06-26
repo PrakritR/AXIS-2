@@ -1,6 +1,7 @@
 "use client";
 
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
+import { ManagerGoogleSignupButton } from "@/components/auth/manager-google-signup-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import {
@@ -371,6 +372,31 @@ export default function PartnerPricingPage() {
               ) : null}
             </div>
           </div>
+
+          {selectedTierId === "free" || onboardIsFree ? (
+            <div className="mt-6">
+              <ManagerGoogleSignupButton
+                tier={selectedTierId}
+                billing={billing}
+                fullName={fullName}
+                email={email}
+                phone={phone}
+                promo={code.trim() || undefined}
+                discountPercent={onboardIsFree ? 100 : onboardDiscountPercent ?? undefined}
+                disabled={checkoutBusy || Boolean(checkoutClientSecret)}
+                onError={showToast}
+              />
+              <div className="my-4 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" aria-hidden />
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or</span>
+                <div className="h-px flex-1 bg-border" aria-hidden />
+              </div>
+            </div>
+          ) : (
+            <p className="mt-6 text-center text-xs text-muted sm:text-left">
+              Paid plans: complete checkout below, then finish account setup with Google on the next screen.
+            </p>
+          )}
 
           {checkoutClientSecret ? (
             <div className="glass-card mt-8 rounded-2xl p-4 sm:p-6">

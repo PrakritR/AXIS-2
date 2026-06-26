@@ -33,10 +33,13 @@ export function GoogleSignInButton({
   nextPath = "",
   disabled = false,
   label = "Continue with Google",
+  /** When false, OAuth returns directly to nextPath instead of /auth/continue. */
+  viaContinue = true,
 }: {
   nextPath?: string;
   disabled?: boolean;
   label?: string;
+  viaContinue?: boolean;
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
@@ -45,8 +48,9 @@ export function GoogleSignInButton({
     setBusy(true);
     try {
       const supabase = createSupabaseBrowserClient();
-      const redirectTo = authCallbackUrl(resolveBrowserAppOrigin(), oauthContinuePath(nextPath));
-      const { error } = await supabase.auth.signInWithOAuth({
+      const afterAuth = viaContinue ? oauthContinuePath(nextPath) : nextPath.startsWith("/") ? nextPath : "/auth/continue";
+      const redirectTo = authCallbackUrl(resolveBrowserAppOrigin(), afterAuth);
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo,
@@ -61,7 +65,14 @@ export function GoogleSignInButton({
           : error.message;
         showToast(message);
         setBusy(false);
+        return;
       }
+      if (data?.url) {
+        window.location.assign(data.url);
+        return;
+      }
+      showToast("Could not start Google sign-in.");
+      setBusy(false);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not start Google sign-in.";
       showToast(message.includes("NEXT_PUBLIC_SUPABASE") ? "Supabase is not configured." : message);

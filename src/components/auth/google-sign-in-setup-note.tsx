@@ -75,6 +75,8 @@ export function GoogleSignInSetupNote() {
 
   if (!status.googleRedirectUri) return null;
 
+  if (process.env.NODE_ENV === "production") return null;
+
   return (
     <div className="mt-3 rounded-xl border border-border/70 bg-background/40 px-4 py-3 text-left text-sm text-muted">
       <p className="font-semibold text-foreground">Google sign-in setup</p>
