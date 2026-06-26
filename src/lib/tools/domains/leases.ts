@@ -2,16 +2,15 @@ import { z } from "zod";
 import { defineTool } from "../registry";
 import type { AgentContext } from "../context";
 import { normalizeLeasePipelineRow, type LeasePipelineRow } from "@/lib/lease-pipeline-storage";
+import { loadAllManagerRows } from "./load-manager-rows";
 
 /** Server-side read of the landlord's lease pipeline, scoped by manager_user_id. */
 async function loadManagerLeases(ctx: AgentContext): Promise<LeasePipelineRow[]> {
-  const { data, error } = await ctx.db
-    .from("portal_lease_pipeline_records")
-    .select("row_data")
-    .eq("manager_user_id", ctx.landlordId)
-    .limit(1000);
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => normalizeLeasePipelineRow(r.row_data));
+  return loadAllManagerRows(
+    ctx,
+    "portal_lease_pipeline_records",
+    (rowData) => normalizeLeasePipelineRow(rowData),
+  );
 }
 
 export const listLeasesTool = defineTool({

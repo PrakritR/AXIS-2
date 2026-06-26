@@ -4,7 +4,7 @@ import {
   findOwnedOverdueCharge,
   buildRentReminderPreview,
 } from "@/lib/tools/domains/payments-logic";
-import { executeSendRentReminder } from "@/lib/tools/domains/payments";
+import { executeSendRentReminder, getOverdueChargesTool } from "@/lib/tools/domains/payments";
 import type { AgentContext } from "@/lib/tools/context";
 import type { HouseholdCharge } from "@/lib/household-charges";
 
@@ -90,11 +90,18 @@ function makeFakeDb(charges: HouseholdCharge[]) {
           return {
             eq() {
               return {
-                limit: async () => {
-                  if (table === "portal_household_charge_records") {
-                    return { data: charges.map((c) => ({ row_data: c })), error: null };
-                  }
-                  return { data: [], error: null };
+                order() {
+                  return {
+                    range: async (from: number, to: number) => {
+                      if (table === "portal_household_charge_records") {
+                        const page = charges
+                          .slice(from, to + 1)
+                          .map((c) => ({ row_data: c }));
+                        return { data: page, error: null };
+                      }
+                      return { data: [], error: null };
+                    },
+                  };
                 },
               };
             },
@@ -224,6 +231,25 @@ describe("executeSendRentReminder (same-day dedupe)", () => {
     expect(second).toMatchObject({ ok: true, delivery: "already_sent" });
     expect(auditLog).toHaveLength(1);
     expect(inboxThreads).toHaveLength(1);
+  });
+});
+
+describe("get_overdue_charges (no truncation)", () => {
+  it("loads every overdue charge across multiple pages, not just the first 1000", async () => {
+    // More than one page (page size is 1000) of overdue charges. A capped,
+    // single-page read would silently drop the overflow and hide late tenants.
+    const charges = Array.from({ length: 2300 }, (_, i) =>
+      charge({ id: `hc_${i}`, residentEmail: `t${i}@external.com` }),
+    );
+    const { ctx } = makeCtx(charges);
+
+    const result = (await getOverdueChargesTool.handler(ctx, {})) as {
+      count: number;
+      charges: { chargeId: string }[];
+    };
+
+    expect(result.count).toBe(2300);
+    expect(new Set(result.charges.map((c) => c.chargeId)).size).toBe(2300);
   });
 });
 

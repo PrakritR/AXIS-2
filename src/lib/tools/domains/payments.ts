@@ -2,6 +2,7 @@ import { z } from "zod";
 import { defineTool } from "../registry";
 import type { AgentContext } from "../context";
 import type { HouseholdCharge } from "@/lib/household-charges";
+import { loadAllManagerRows } from "./load-manager-rows";
 import {
   filterOverdueCharges,
   findOwnedOverdueCharge,
@@ -11,13 +12,11 @@ import {
 
 /** Server-side read of the landlord's charges, scoped by manager_user_id. */
 async function loadManagerCharges(ctx: AgentContext): Promise<HouseholdCharge[]> {
-  const { data, error } = await ctx.db
-    .from("portal_household_charge_records")
-    .select("row_data")
-    .eq("manager_user_id", ctx.landlordId)
-    .limit(1000);
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => r.row_data as HouseholdCharge);
+  return loadAllManagerRows(
+    ctx,
+    "portal_household_charge_records",
+    (rowData) => rowData as HouseholdCharge,
+  );
 }
 
 export const getOverdueChargesTool = defineTool({
