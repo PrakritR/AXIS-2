@@ -61,6 +61,32 @@ After saving, new sign-ins should show your **Axis** name and logo (like other a
 | Supabase → Auth → URL config | Site URL = `https://www.axis-seattle-housing.com`, redirect URLs include `/auth/callback` |
 | Supabase → Auth → Google provider | Same Google client ID + secret as Cloud Console |
 
+### Production Axis (`www.axis-seattle-housing.com`)
+
+Use these exact values when configuring Google + Supabase for the live site:
+
+| Setting | Value |
+|---------|--------|
+| Supabase project URL | `https://qahnczmilgptcedaqype.supabase.co` |
+| Google **Authorized redirect URI** (Google Cloud only) | `https://qahnczmilgptcedaqype.supabase.co/auth/v1/callback` |
+| Supabase **Site URL** | `https://www.axis-seattle-housing.com` |
+| Supabase **Redirect URLs** | `https://www.axis-seattle-housing.com/auth/callback`, `https://www.axis-seattle-housing.com/**`, `http://localhost:3000/auth/callback` |
+| App OAuth callback (this website) | `https://www.axis-seattle-housing.com/auth/callback` |
+
+Verify live config: open `https://www.axis-seattle-housing.com/api/auth/oauth-providers` — it should report `googleEnabled: true` and the redirect URIs above.
+
+#### Error: `Unable to exchange external code`
+
+This means **Supabase could not trade Google's authorization code for a session** — the failure happens before your app runs (users land on the homepage with `?error=server_error`).
+
+Fix in this order:
+
+1. **Google Cloud Console → Credentials** — OAuth client must be type **Web application** (not Desktop).
+2. **Authorized redirect URIs** must include exactly `https://qahnczmilgptcedaqype.supabase.co/auth/v1/callback` — do **not** put `https://www.axis-seattle-housing.com/auth/callback` here.
+3. **Supabase → Authentication → Providers → Google** — paste the **same** Client ID and Client secret from that Google OAuth client (re-copy if the secret was ever rotated). Save and re-enable Google.
+4. **Supabase → Authentication → URL configuration** — Site URL and redirect URLs as in the table above.
+5. Retest at `/auth/sign-in` → Continue with Google. After OAuth works, paid manager signup (Pro/Business → Continue with Google) will proceed to Stripe checkout.
+
 ### Tenant screening (Certn)
 
 1. Create a [Certn](https://certn.co) partner account with API access (pay-per-report).

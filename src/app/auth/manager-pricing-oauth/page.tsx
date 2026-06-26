@@ -11,12 +11,12 @@ import {
   readManagerPricingOffer,
 } from "@/lib/auth/manager-pricing-oauth-storage";
 import { authCallbackUrl } from "@/lib/auth/oauth-redirect";
-import { resolveBrowserAppOrigin } from "@/lib/auth/password-reset-url";
+import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { PlanTierId } from "@/data/manager-plan-tiers";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 function parseTier(raw: string | null, fallback: PlanTierId): PlanTierId {
   if (raw === "pro" || raw === "business" || raw === "free") return raw;
@@ -47,7 +47,7 @@ async function restartGoogleForPricingOffer(offer: {
   persistManagerPricingOffer(offer);
   const supabase = createSupabaseBrowserClient();
   const nextPath = managerPricingOauthPath(offer);
-  const redirectTo = authCallbackUrl(resolveBrowserAppOrigin(), nextPath);
+  const redirectTo = authCallbackUrl(resolveOAuthBrowserOrigin(), nextPath);
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
@@ -75,8 +75,12 @@ function ManagerPricingOauthContent() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
   const [statusText, setStatusText] = useState("Preparing your Axis account…");
+  const didRunRef = useRef(false);
 
   useEffect(() => {
+    if (didRunRef.current) return;
+    didRunRef.current = true;
+
     const offer = {
       tier,
       billing,
@@ -84,8 +88,6 @@ function ManagerPricingOauthContent() {
       promo: promo || undefined,
     };
     persistManagerPricingOffer(offer);
-
-    const controller = new AbortController();
 
     void (async () => {
       try {
@@ -95,6 +97,7 @@ function ManagerPricingOauthContent() {
 
         if (!user) {
           setStatusText("Redirecting to Google…");
+          didRunRef.current = false;
           await restartGoogleForPricingOffer(offer);
           return;
         }
@@ -105,7 +108,6 @@ function ManagerPricingOauthContent() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          signal: controller.signal,
           body: JSON.stringify({
             tier,
             billing,
@@ -122,8 +124,6 @@ function ManagerPricingOauthContent() {
           error?: string;
         };
 
-        if (controller.signal.aborted) return;
-
         if (!res.ok) {
           setErrorText(body.error ?? "Could not continue signup.");
           return;
@@ -135,30 +135,24 @@ function ManagerPricingOauthContent() {
           return;
         }
 
-        if (body.action === "checkout" && body.clientSecret) {
-          clearManagerPricingOffer();
-          setCheckoutClientSecret(body.clientSecret);
-          return;
-        }
-
         if (body.action === "redirect" && body.url) {
           clearManagerPricingOffer();
           window.location.assign(body.url);
           return;
         }
 
+        if (body.action === "checkout" && body.clientSecret) {
+          clearManagerPricingOffer();
+          setCheckoutClientSecret(body.clientSecret);
+          return;
+        }
+
         setErrorText("Unexpected signup response.");
       } catch (e) {
-        if (controller.signal.aborted) return;
-        if (e instanceof DOMException && e.name === "AbortError") return;
         const message = e instanceof Error ? e.message : "Could not continue signup. Try again.";
         setErrorText(message);
       }
     })();
-
-    return () => {
-      controller.abort();
-    };
   }, [billing, discountPercent, promo, tier]);
 
   if (checkoutClientSecret) {

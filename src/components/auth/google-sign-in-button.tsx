@@ -2,7 +2,7 @@
 
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { authCallbackUrl, oauthContinuePath, usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
-import { resolveBrowserAppOrigin } from "@/lib/auth/password-reset-url";
+import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useState } from "react";
 
@@ -57,7 +57,7 @@ export function GoogleSignInButton({
           ? nextPath
           : "/auth/continue"
         : oauthContinuePath(nextPath);
-      const redirectTo = authCallbackUrl(resolveBrowserAppOrigin(), afterAuth);
+      const redirectTo = authCallbackUrl(resolveOAuthBrowserOrigin(), afterAuth);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {

@@ -68,6 +68,12 @@ function ContinueContent() {
   const didRedirectRef = useRef(false);
 
   useEffect(() => {
+    // Paid manager signup must finish on its dedicated route, not portal routing.
+    if (nextPath.startsWith("/auth/manager-")) {
+      window.location.replace(nextPath);
+      return;
+    }
+
     let cancelled = false;
     void (async () => {
       try {

@@ -82,6 +82,7 @@ function SignInForm() {
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "";
   const authError = searchParams.get("error");
+  const oauthMessage = searchParams.get("message");
 
   const [email, setEmail] = useState(readRememberedLoginEmail);
   const [password, setPassword] = useState("");
@@ -91,10 +92,14 @@ function SignInForm() {
   const [errorText, setErrorText] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authError === "auth") {
+    if (authError === "oauth" && oauthMessage) {
+      setErrorText(oauthMessage);
+      return;
+    }
+    if (authError === "auth" || authError === "oauth") {
       setErrorText("Google sign-in could not be completed. Try again or use email and password.");
     }
-  }, [authError]);
+  }, [authError, oauthMessage]);
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) {

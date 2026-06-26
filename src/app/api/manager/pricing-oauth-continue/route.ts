@@ -114,7 +114,7 @@ export async function POST(req: Request) {
       userId: user.id,
       promo,
       discountPercent: onboardDiscount ?? undefined,
-      embedded: true,
+      embedded: false,
       req,
     });
 
@@ -122,32 +122,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: checkout.error, code: checkout.code }, { status: checkout.status });
     }
 
-    if (checkout.embedded) {
-      try {
-        const stripe = getStripe();
-        const session = await stripe.checkout.sessions.retrieve(checkout.sessionId);
-        const managerId = session.metadata?.manager_id?.trim();
-        if (managerId) {
-          const { error: reserveErr } = await supabase.from("manager_purchases").upsert(
-            {
-              stripe_checkout_session_id: checkout.sessionId,
-              email,
-              manager_id: managerId,
-              tier: tierRaw,
-              billing: billingRaw,
-              full_name: fullName || null,
-            },
-            { onConflict: "manager_id" },
-          );
-          if (reserveErr) {
-            return NextResponse.json({ error: reserveErr.message }, { status: 500 });
-          }
+    try {
+      const stripe = getStripe();
+      const session = await stripe.checkout.sessions.retrieve(checkout.sessionId);
+      const managerId = session.metadata?.manager_id?.trim();
+      if (managerId) {
+        const { error: reserveErr } = await supabase.from("manager_purchases").upsert(
+          {
+            stripe_checkout_session_id: checkout.sessionId,
+            email,
+            manager_id: managerId,
+            tier: tierRaw,
+            billing: billingRaw,
+            full_name: fullName || null,
+          },
+          { onConflict: "manager_id" },
+        );
+        if (reserveErr) {
+          return NextResponse.json({ error: reserveErr.message }, { status: 500 });
         }
-      } catch (reserveError) {
-        const message = reserveError instanceof Error ? reserveError.message : "Could not reserve signup.";
-        return NextResponse.json({ error: message }, { status: 500 });
       }
+    } catch (reserveError) {
+      const message = reserveError instanceof Error ? reserveError.message : "Could not reserve signup.";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
 
+    if (checkout.embedded) {
       return NextResponse.json({
         action: "checkout",
         clientSecret: checkout.clientSecret,
