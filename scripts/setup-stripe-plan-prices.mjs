@@ -65,8 +65,9 @@ async function ensurePrice(stripe, productId, amountUsd, interval, lookupKey) {
   const listed = await stripe.prices.list({ product: productId, limit: 100, active: true });
   const match = listed.data.find((p) => priceMatches(p, amountUsd, interval));
   if (match) {
-    if (!match.lookup_key) {
+    if (match.lookup_key !== lookupKey) {
       await stripe.prices.update(match.id, { lookup_key: lookupKey });
+      console.log(`  + set lookup_key ${lookupKey} on ${match.id}`);
     }
     return match;
   }
@@ -77,6 +78,14 @@ async function ensurePrice(stripe, productId, amountUsd, interval, lookupKey) {
     recurring: { interval },
     lookup_key: lookupKey,
   });
+}
+
+async function ensureLookupKey(stripe, priceId, lookupKey, label) {
+  if (!priceId) return;
+  const price = await stripe.prices.retrieve(priceId);
+  if (price.lookup_key === lookupKey) return;
+  await stripe.prices.update(priceId, { lookup_key: lookupKey });
+  console.log(`  + set lookup_key ${lookupKey} on ${label} (${priceId})`);
 }
 
 async function verifyExistingPrice(stripe, priceId, amountUsd, interval, label) {
@@ -170,6 +179,15 @@ async function main() {
 
     envOut[plan.envMonthly] = monthlyId;
     envOut[plan.envAnnual] = annualId;
+
+    const tierSlug = plan.productKey.replace("axis_", "");
+    if (monthlyId) {
+      await ensureLookupKey(stripe, monthlyId, `axis_manager_${tierSlug}_monthly`, plan.envMonthly);
+    }
+    if (annualId) {
+      await ensureLookupKey(stripe, annualId, `axis_manager_${tierSlug}_annual`, plan.envAnnual);
+    }
+
     console.log("");
   }
 

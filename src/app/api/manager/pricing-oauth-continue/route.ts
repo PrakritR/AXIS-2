@@ -75,7 +75,7 @@ export async function POST(req: Request) {
 
     const waiverCode = getPaymentWaiverCode();
     const skipStripeForFree = tierRaw === "free";
-    const skipStripeForPromo = Boolean(waiverCode) && promo === waiverCode.trim().toUpperCase();
+    const skipStripeForPromo = waiverCode != null && promo === waiverCode.trim().toUpperCase();
     const skipStripeForOnboardOffer = tierRaw !== "free" && onboardDiscount === 100;
 
     if (skipStripeForFree || skipStripeForPromo || skipStripeForOnboardOffer) {
@@ -102,10 +102,6 @@ export async function POST(req: Request) {
       }
 
       return NextResponse.json({ action: "finish", sessionId });
-    }
-
-    if (tierRaw === "free") {
-      return NextResponse.json({ error: "Unexpected tier state." }, { status: 400 });
     }
 
     const checkout = await createManagerCheckoutSession({

@@ -8,7 +8,6 @@ import {
 import { resolveStripePriceIdForPaidTier } from "@/lib/stripe/resolve-manager-price";
 import type { PaidTier, StripeBilling } from "@/lib/stripe-price-ids";
 import { getStripe } from "@/lib/stripe";
-import type Stripe from "stripe";
 
 export type ManagerCheckoutInput = {
   tier: PaidTier;
@@ -95,7 +94,7 @@ export async function createManagerCheckoutSession(input: ManagerCheckoutInput):
 
   const sessionBase = {
     mode: "subscription" as const,
-    payment_method_types: ["card"] as Stripe.Checkout.SessionCreateParams.PaymentMethodType[],
+    payment_method_types: ["card"],
     line_items: [{ price, quantity: 1 }],
     ...(email ? { customer_email: email } : {}),
     metadata,
