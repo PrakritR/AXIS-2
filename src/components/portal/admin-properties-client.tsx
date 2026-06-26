@@ -353,7 +353,8 @@ function AdminPropertyInlineDetails({
       </div>
       <div
         data-listing-preview-scroll
-        className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card"
+        data-surface="light"
+        className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-[#f5f8fd]"
       >
         <ListingDetailSections property={mock} rich={rich} previewModal />
       </div>

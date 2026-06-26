@@ -16,7 +16,7 @@ const variants: Record<Variant, string> = {
   danger:
     "bg-transparent text-danger shadow-none hover:bg-danger/5 active:scale-[0.99]",
   outline:
-    "border border-border bg-card/80 text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-primary/30 hover:bg-card active:scale-[0.99]",
+    "border border-border bg-card/80 text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-primary/30 hover:bg-card active:scale-[0.99] [html[data-theme=dark]_&]:portal-outline-control",
 };
 
 export function Button({

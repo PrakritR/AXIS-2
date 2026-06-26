@@ -215,6 +215,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
   return (
     <nav
       ref={rootRef}
+      data-surface="light"
       className={`sticky z-40 -mx-4 border-b px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:-mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 ${
         pageScrolled
           ? "border-border bg-card shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_40px_-20px_rgba(15,23,42,0.1)] supports-[backdrop-filter]:bg-card"
@@ -237,7 +238,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
                 className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-full border-0 px-3.5 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
                   active
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-transparent text-muted hover:bg-card hover:text-foreground"
+                    : "bg-transparent text-[#4a5878] hover:bg-white/80 hover:text-[#0b1b3a]"
                 }`}
                 onClick={() => {
                   setActiveId(item.id);

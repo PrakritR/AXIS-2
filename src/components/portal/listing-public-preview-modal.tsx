@@ -66,7 +66,8 @@ export function ListingPublicPreviewModal({
         </div>
         <div
           data-listing-preview-scroll
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          data-surface="light"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f5f8fd]"
         >
           <ListingDetailSections property={property} rich={rich} previewModal />
         </div>

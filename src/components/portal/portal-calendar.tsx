@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { ManagerPortalPageShell } from "./portal-metrics";
+import { ManagerPortalPageShell, PORTAL_TOOLBAR_SELECT } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
@@ -26,8 +26,7 @@ import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 
 type CopyRange = "week" | "future" | "all";
 
-const selectClassName =
-  "h-10 min-w-[12rem] max-w-full rounded-full border border-border bg-card px-3.5 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary/25";
+const selectClassName = `${PORTAL_TOOLBAR_SELECT} min-w-[12rem] max-w-full [html[data-theme=dark]_&]:border-white/32 [html[data-theme=dark]_&]:bg-white/10`;
 
 function ManagerCalendarPropertyFilter({
   properties,

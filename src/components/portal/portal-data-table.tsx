@@ -44,11 +44,11 @@ export function PortalTableDetailActions({
 
 /** “Details” / “Hide” toggle on the summary row (use with `Button variant="outline"`). */
 export const PORTAL_TABLE_ROW_TOGGLE_CLASS =
-  "h-8 min-h-0 !rounded-lg border-border px-3 py-0 text-xs font-medium text-foreground/80 !shadow-none hover:!translate-y-0";
+  "h-8 min-h-0 !rounded-lg border-border px-3 py-0 text-xs font-medium text-foreground/80 !shadow-none hover:!translate-y-0 [html[data-theme=dark]_&]:portal-outline-control";
 
 /** Secondary actions in {@link PortalTableDetailActions} (use with `Button variant="outline"`). */
 export const PORTAL_DETAIL_BTN =
-  "h-8 min-h-0 !rounded-lg border-border px-3 py-0 text-xs font-medium text-foreground/80 !shadow-none hover:!translate-y-0";
+  "h-8 min-h-0 !rounded-lg border-border px-3 py-0 text-xs font-medium text-foreground/80 !shadow-none hover:!translate-y-0 [html[data-theme=dark]_&]:portal-outline-control";
 
 /** Primary / success action in detail toolbar (use with `Button variant="outline"`). */
 export const PORTAL_DETAIL_BTN_PRIMARY =

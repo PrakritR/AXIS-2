@@ -103,7 +103,7 @@ function navLinkClass(active: boolean) {
     "relative flex min-h-10 items-center justify-between gap-2 rounded-[14px] px-3 py-2.5 text-[14px] font-medium transition duration-200",
     active
       ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-border/60 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
-      : "text-muted hover:bg-accent/70 hover:text-foreground",
+      : "text-muted hover:bg-accent/70 hover:text-foreground [html[data-theme=dark]_&]:text-white/78",
   ].join(" ");
 }
 
@@ -254,7 +254,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                   className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
                     active
                       ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
-                      : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground"
+                      : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
                   }`}
                 >
                   {showNavIcons ? (

@@ -10,7 +10,8 @@ export const PORTAL_SECTION_SURFACE =
   "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6";
 
 /** Calendar week grid outer frame (matches manager calendar chrome). */
-export const PORTAL_CALENDAR_FRAME = "overflow-hidden rounded-2xl border border-border bg-accent/40";
+export const PORTAL_CALENDAR_FRAME =
+  "overflow-hidden rounded-2xl border border-border bg-accent/40 [html[data-theme=dark]_&]:portal-calendar-grid";
 
 /** Pill toggles: Day / Week / Month (Managers filter style). */
 export function PortalSegmentedControl<T extends string>({
@@ -222,8 +223,8 @@ export function ManagerPortalStatusPills({
               active
                 ? isPrimary
                   ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
-                  : "bg-card text-foreground shadow-[var(--shadow-sm)]"
-                : "text-muted hover:text-foreground"
+                  : "bg-card text-foreground shadow-[var(--shadow-sm)] [html[data-theme=dark]_&]:portal-status-pill-active"
+                : "text-muted hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
             }`}
           >
             {tab.label}
@@ -232,8 +233,8 @@ export function ManagerPortalStatusPills({
                 active
                   ? isPrimary
                     ? "bg-primary-foreground/20 text-primary-foreground"
-                    : "bg-accent text-foreground"
-                  : "bg-accent/50 text-muted"
+                    : "bg-accent text-foreground [html[data-theme=dark]_&]:portal-status-pill-count-active"
+                  : "bg-accent/50 text-muted [html[data-theme=dark]_&]:bg-white/10 [html[data-theme=dark]_&]:text-white/75"
               }`}
             >
               {tab.count}
@@ -330,7 +331,7 @@ export function ManagerPortalPageShell({
 
 /** Table header cell class (admin leases / managers / portal tabs). */
 export const MANAGER_TABLE_TH =
-  "px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:px-5";
+  "portal-table-th px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:px-5";
 
 /** Shared toolbar shell for filters/toggles in portal tabs. */
 export const PORTAL_TOOLBAR_GROUP =
@@ -338,11 +339,11 @@ export const PORTAL_TOOLBAR_GROUP =
 
 /** Shared pill toggle button in portal toolbars. */
 export const PORTAL_TOOLBAR_PILL_BUTTON =
-  "min-h-9 rounded-full px-4 py-1.5 text-sm font-semibold text-muted transition hover:text-foreground";
+  "min-h-9 rounded-full px-4 py-1.5 text-sm font-semibold text-muted transition hover:text-foreground [html[data-theme=dark]_&]:text-white/78";
 
 /** Active variant for toolbar pill buttons. */
 export const PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE =
-  "bg-card text-foreground shadow-[var(--shadow-sm)]";
+  "bg-card text-foreground shadow-[var(--shadow-sm)] [html[data-theme=dark]_&]:portal-status-pill-active";
 
 /** Label used before toolbar selects (Property/Sort/etc.). */
 export const PORTAL_TOOLBAR_LABEL = "text-xs font-semibold text-muted";

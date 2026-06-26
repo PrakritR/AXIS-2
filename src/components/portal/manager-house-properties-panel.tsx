@@ -10,7 +10,7 @@ import { ListingDetailSections } from "@/components/marketing/listing-detail-sec
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_HEAD_ROW,
@@ -151,52 +151,6 @@ function HouseIcon({ className }: { className?: string }) {
   );
 }
 
-function StatusPill({
-  label,
-  variant,
-}: {
-  label: string;
-  variant: "green" | "amber" | "slate" | "rose";
-}) {
-  const styles = {
-    green: "border-emerald-200/90 bg-emerald-50 text-emerald-900",
-    amber: "border-amber-200/90 bg-amber-50 text-amber-950",
-    slate: "border-border bg-accent/30 text-muted",
-    rose: "border-rose-200/90 bg-rose-50 text-rose-900",
-  } as const;
-  const dot = {
-    green: "bg-emerald-500",
-    amber: "bg-amber-500",
-    slate: "bg-slate-400",
-    rose: "bg-rose-500",
-  }[variant];
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[variant]}`}
-    >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} aria-hidden />
-      {label}
-    </span>
-  );
-}
-
-
-function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; variant: "green" | "amber" | "slate" | "rose" } {
-  switch (bucket) {
-    case 0:
-      return { label: "Pending review", variant: "amber" };
-    case 1:
-      return { label: "Approved · edits requested", variant: "amber" };
-    case 2:
-      return { label: "Active", variant: "green" };
-    case 3:
-      return { label: "Unlisted", variant: "slate" };
-    default:
-      return { label: "Rejected", variant: "rose" };
-  }
-}
-
 function ManagerPropertyInlineDetails({
   bucket,
   row,
@@ -286,7 +240,7 @@ function ManagerPropertyInlineDetails({
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50 portal-danger-outline"
               onClick={() => {
                 if (row.adminRefId.startsWith("mgr-")) {
                   if (!window.confirm("Permanently delete this listing from your catalog?")) return;
@@ -378,7 +332,7 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50 portal-danger-outline"
             onClick={() => {
               if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
               deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(listingId, managerUserId)));
@@ -412,7 +366,7 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50 portal-danger-outline"
             onClick={() => {
               if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
               deferCatalogMutation(() =>
@@ -442,7 +396,7 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50 portal-danger-outline"
             onClick={() =>
               deferCatalogMutation(() => run("Property removed.", removeRejectedProperty(row.adminRefId, managerUserId)))
             }
@@ -480,12 +434,13 @@ function ManagerPropertyInlineDetails({
       {mock && rich ? (
         <div
           data-listing-preview-scroll
-          className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card"
+          data-surface="light"
+          className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-[#f5f8fd]"
         >
           <ListingDetailSections property={mock} rich={rich} previewModal />
         </div>
       ) : null}
-      <div className="rounded-2xl border border-border bg-accent/30 px-4 py-4 sm:px-5">{footer}</div>
+      <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5 [html[data-theme=dark]_&]:portal-surface-muted">{footer}</div>
 
       {editorOpen && portalSub ? (
         <ManagerAddListingForm
@@ -585,32 +540,20 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
 
   return (
     <>
-      <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
-        {MANAGER_STAGES.map((stage) => (
-          <button
-            key={stage.key}
-            type="button"
-            onClick={() => {
-              setActiveStage(stage.key);
-              setExpandedRowKey(null);
-            }}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
-              activeStage === stage.key ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
-            }`}
-          >
-            {stage.label}
-            <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                activeStage === stage.key ? "bg-accent/30 text-muted" : "bg-accent/40 text-muted"
-              }`}
-            >
-              {stageCounts[stage.key]}
-            </span>
-          </button>
-        ))}
-      </div>
+      <ManagerPortalStatusPills
+        tabs={MANAGER_STAGES.map((stage) => ({
+          id: stage.key,
+          label: stage.label,
+          count: stageCounts[stage.key],
+        }))}
+        activeId={activeStage}
+        onChange={(id) => {
+          setActiveStage(id as ManagerStageKey);
+          setExpandedRowKey(null);
+        }}
+      />
 
-      <div className="mt-4 rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">{BANNER_COPY[activeStage]}</div>
+      <div className="mt-4 rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted [html[data-theme=dark]_&]:portal-surface-muted">{BANNER_COPY[activeStage]}</div>
 
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>
         {rows.length === 0 ? (
@@ -622,12 +565,11 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-[800px] w-full border-collapse text-left text-sm">
+            <table className="min-w-[640px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                   <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
               </thead>
@@ -635,7 +577,6 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                 {rows.map(({ sourceBucket, row }) => {
                   const rowKey = row.adminRefId + (row.listingId ?? "");
                   const expanded = expandedRowKey === rowKey;
-                  const status = rowStatus(sourceBucket);
 
                   return (
                     <Fragment key={rowKey}>
@@ -656,9 +597,6 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                           </p>
                           {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p> : null}
                         </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <StatusPill label={status.label} variant={status.variant} />
-                        </td>
                         <td className={`${PORTAL_TABLE_TD} text-right`}>
                           <Button
                             type="button"
@@ -673,7 +611,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                       </tr>
                       {expanded ? (
                         <tr key={`${rowKey}-details`} className="border-b border-border">
-                          <td colSpan={4} className="bg-accent/30/40 px-4 py-4">
+                          <td colSpan={3} className="bg-accent/30/40 px-4 py-4">
                             <ManagerPropertyInlineDetails
                               key={rowKey}
                               bucket={sourceBucket}

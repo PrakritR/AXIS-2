@@ -77,10 +77,10 @@ export function LandingHowItWorks() {
           </div>
         </RevealOnView>
 
-        <ol className="mt-12 grid gap-6 md:grid-cols-3">
+        <ol className="mt-12 grid gap-6 md:grid-cols-3 md:items-stretch">
           {HOW_STEPS.map((step, i) => (
-            <RevealOnView key={step.title} delayMs={i * 80}>
-              <li className="glass-card rounded-2xl p-7">
+            <RevealOnView key={step.title} delayMs={i * 80} className="h-full">
+              <li className="glass-card flex h-full flex-col rounded-2xl p-7">
                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
                   {i + 1}
                 </span>

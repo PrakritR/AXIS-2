@@ -58,6 +58,31 @@ const WEEKDAY_OPTIONS = [
   { value: 6, label: "Sun" },
 ] as const;
 
+const CALENDAR_HEADER_CELL =
+  "bg-accent/30 font-bold uppercase tracking-[0.12em] text-muted [html[data-theme=dark]_&]:portal-calendar-header-cell";
+const CALENDAR_TIME_CELL =
+  "font-semibold text-muted [html[data-theme=dark]_&]:portal-calendar-time-cell";
+const CALENDAR_GRID_GAP = "gap-px bg-accent/40 [html[data-theme=dark]_&]:portal-calendar-grid";
+const CALENDAR_OPEN_SLOT =
+  "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300 [html[data-theme=dark]_&]:portal-calendar-open-slot";
+const CALENDAR_OPEN_SLOT_SOFT =
+  "border-emerald-300 bg-emerald-100 text-emerald-900 [html[data-theme=dark]_&]:portal-calendar-open-slot";
+const CALENDAR_BADGE_SUCCESS =
+  "rounded-full bg-emerald-50 text-emerald-700 [html[data-theme=dark]_&]:portal-calendar-badge-success";
+const CALENDAR_BADGE_INFO =
+  "rounded-full bg-blue-50 text-blue-700 [html[data-theme=dark]_&]:portal-calendar-badge-info";
+const CALENDAR_BADGE_ERROR =
+  "rounded-full bg-rose-50 text-rose-700 [html[data-theme=dark]_&]:portal-calendar-badge-error";
+const CALENDAR_OPEN_COUNT = "text-emerald-700 [html[data-theme=dark]_&]:portal-calendar-open-count";
+const CALENDAR_EMPTY_SLOT =
+  "bg-card text-transparent hover:bg-primary/[0.07] hover:text-primary [html[data-theme=dark]_&]:portal-calendar-empty-slot";
+const CALENDAR_INACTIVE_SLOT =
+  "border-border bg-accent/30 text-muted hover:border-primary/20 hover:bg-primary/[0.06] [html[data-theme=dark]_&]:portal-calendar-inactive-slot";
+const MEETING_CONFIRMED_COLOR =
+  "border-sky-300 bg-sky-100 text-sky-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
+const MEETING_PENDING_COLOR =
+  "border-amber-300 bg-amber-100 text-amber-950 [html[data-theme=dark]_&]:portal-calendar-meeting-pending";
+
 function addDays(d: Date, n: number): Date {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
   x.setDate(x.getDate() + n);
@@ -280,7 +305,7 @@ export function PortalCalendarPanels({
         startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / 30)),
         span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
         title: event.title,
-        color: "border-sky-300 bg-sky-100 text-sky-950",
+        color: MEETING_CONFIRMED_COLOR,
         statusLabel: "Confirmed",
         name: event.attendeeName,
         email: event.attendeeEmail,
@@ -323,7 +348,7 @@ export function PortalCalendarPanels({
             startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / 30)),
             span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
             title: row.kind === "tour" ? `Tour · ${row.name}` : `${row.name} request`,
-            color: "border-amber-300 bg-amber-100 text-amber-950",
+            color: MEETING_PENDING_COLOR,
             statusLabel: row.kind === "tour" ? "Tour requested" : "Requested",
             name: row.name,
             email: row.email,
@@ -839,9 +864,9 @@ export function PortalCalendarPanels({
           ) : null}
 
           {selectedBlock.meeting.instructions ? (
-            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">Confirmation details</p>
-              <p className="mt-1.5 whitespace-pre-wrap text-sky-950">{selectedBlock.meeting.instructions}</p>
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm portal-calendar-callout-sky [html[data-theme=dark]_&]:portal-calendar-callout-sky">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-sky-700 portal-calendar-callout-sky-sub [html[data-theme=dark]_&]:portal-calendar-callout-sky-sub">Confirmation details</p>
+              <p className="mt-1.5 whitespace-pre-wrap text-sky-950 portal-calendar-callout-sky-title [html[data-theme=dark]_&]:portal-calendar-callout-sky-title">{selectedBlock.meeting.instructions}</p>
             </div>
           ) : null}
 
@@ -872,7 +897,7 @@ export function PortalCalendarPanels({
         </div>
       ) : selectedBlock?.kind === "availability" ? (
         <div className="space-y-5">
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 portal-calendar-badge-success [html[data-theme=dark]_&]:portal-calendar-badge-success">
             <p className="font-semibold">Open tour window</p>
             <p className="mt-1">
               {formatRangeLabel(
@@ -938,7 +963,7 @@ export function PortalCalendarPanels({
               <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
                 ←
               </Button>
-              <div className="min-w-0 rounded-2xl border border-border bg-accent/30 px-4 py-2">
+              <div className="min-w-0 rounded-2xl border border-border bg-accent/30 px-4 py-2 [html[data-theme=dark]_&]:portal-calendar-week-banner">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">{availabilityHeading}</p>
                 <p className="truncate text-sm font-semibold text-foreground">Week of {formatWeekRangeMonSun(weekMonday)}</p>
                 {tourScopeLabel ? <p className="truncate text-xs font-medium text-primary">{tourScopeLabel}</p> : null}
@@ -948,10 +973,10 @@ export function PortalCalendarPanels({
               </Button>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {saveStatus === "saving" ? <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">Saving…</span> : null}
-              {saveStatus === "saved" ? <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">Saved</span> : null}
-              {saveStatus === "error" ? <span className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700">Save failed</span> : null}
-              <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open this week</div>
+              {saveStatus === "saving" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
+              {saveStatus === "saved" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
+              {saveStatus === "error" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_ERROR}`}>Save failed</span> : null}
+              <div className={`px-4 py-2 text-sm font-semibold ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open this week</div>
             </div>
           </div>
 
@@ -982,14 +1007,14 @@ export function PortalCalendarPanels({
           </div>
 
           {upcomingMeetingSummary.total > 0 ? (
-            <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/80 px-4 py-3">
+            <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/80 px-4 py-3 portal-calendar-callout-sky [html[data-theme=dark]_&]:portal-calendar-callout-sky">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-bold text-sky-950">
+                  <p className="text-sm font-bold text-sky-950 portal-calendar-callout-sky-title [html[data-theme=dark]_&]:portal-calendar-callout-sky-title">
                     {upcomingMeetingSummary.total} upcoming {eventSummaryKind}
                     {upcomingMeetingSummary.total === 1 ? "" : "s"} on this calendar
                   </p>
-                  <p className="mt-1 text-xs font-medium text-sky-800">
+                  <p className="mt-1 text-xs font-medium text-sky-800 portal-calendar-callout-sky-sub [html[data-theme=dark]_&]:portal-calendar-callout-sky-sub">
                     {upcomingMeetingSummary.pending} pending · {upcomingMeetingSummary.confirmed} confirmed
                   </p>
                 </div>
@@ -1014,27 +1039,27 @@ export function PortalCalendarPanels({
           ) : null}
 
           <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
-            <div className="border-b border-border bg-accent/30 px-3 py-2">
+            <div className="border-b border-border bg-accent/30 px-3 py-2 [html[data-theme=dark]_&]:portal-calendar-week-banner">
               <p className="text-xs font-semibold text-muted">Drag to define a time block, then edit it before saving. Use Create block for recurring schedules.</p>
             </div>
             <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
-              <div className="grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] gap-px bg-accent/40 text-xs">
-                <div className="bg-accent/30 px-2 py-2 font-bold uppercase tracking-[0.12em] text-muted">Time</div>
+              <div className={`grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
+                <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                 {fullWeekDates.map((d) => {
                   const ds = toLocalDateStr(d);
                   const count = visibleSlotIndices.reduce((total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0), 0);
                   return (
-                    <div key={ds} className="bg-accent/30 px-2 py-2 text-center">
-                      <p className="font-bold uppercase tracking-[0.12em] text-muted">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
+                    <div key={ds} className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
+                      <p className="font-bold uppercase tracking-[0.12em]">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
                       <p className="mt-0.5 font-semibold text-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-                      <p className="mt-0.5 text-[11px] font-medium text-emerald-700">{count} open</p>
+                      <p className={`mt-0.5 text-[11px] font-medium ${CALENDAR_OPEN_COUNT}`}>{count} open</p>
                     </div>
                   );
                 })}
 
                 {visibleSlotIndices.map((slotIdx) => (
                   <Fragment key={slotIdx}>
-                    <div className="flex min-h-9 items-center bg-card px-2 font-semibold text-muted">{formatAvailabilitySlotLabel(slotIdx)}</div>
+                    <div className={`flex min-h-9 items-center bg-card px-2 ${CALENDAR_TIME_CELL}`}>{formatAvailabilitySlotLabel(slotIdx)}</div>
                     {fullWeekDateStrs.map((ds) => {
                       const key = dateSlotKey(ds, slotIdx);
                       const active = activeSlots.has(key);
@@ -1064,8 +1089,8 @@ export function PortalCalendarPanels({
                               : selected
                                 ? "bg-primary/[0.14] text-primary ring-2 ring-inset ring-primary/35"
                               : active
-                                ? "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300"
-                                : "bg-card text-transparent hover:bg-primary/[0.07] hover:text-primary"
+                                ? CALENDAR_OPEN_SLOT
+                                : CALENDAR_EMPTY_SLOT
                           }`}
                           aria-label={`${meeting || active ? "Open details for" : "Select"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
                         >
@@ -1111,7 +1136,7 @@ export function PortalCalendarPanels({
                       className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
                         active
                           ? "border-primary bg-primary text-white"
-                          : "border-border bg-card text-muted hover:border-primary/30 hover:text-primary"
+                          : "border-border bg-card text-muted hover:border-primary/30 hover:text-primary [html[data-theme=dark]_&]:portal-calendar-inactive-slot"
                       }`}
                     >
                       {option.label}
@@ -1361,7 +1386,7 @@ export function PortalCalendarPanels({
               const ds = toLocalDateStr(d);
               return (
                 <div key={ds} className="overflow-hidden rounded-2xl border border-border bg-card">
-                  <div className="bg-accent/30 px-4 py-3">
+                  <div className={`bg-accent/30 px-4 py-3 [html[data-theme=dark]_&]:portal-calendar-week-banner`}>
                     <p className="text-sm font-semibold text-foreground">{d.toLocaleDateString(undefined, { weekday: "long" })}</p>
                     <p className="text-xs text-muted">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
                   </div>
@@ -1370,7 +1395,7 @@ export function PortalCalendarPanels({
                       const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
                       return (
                         <Fragment key={`${ds}-${slotIdx}`}>
-                          <div className="bg-card px-3 py-2 text-[11px] font-semibold text-muted">{formatAvailabilitySlotLabel(slotIdx)}</div>
+                          <div className={`bg-card px-3 py-2 text-[11px] ${CALENDAR_TIME_CELL}`}>{formatAvailabilitySlotLabel(slotIdx)}</div>
                           <div className="relative min-h-[40px] bg-card p-1">
                             {meeting ? (
                               <button
@@ -1398,8 +1423,8 @@ export function PortalCalendarPanels({
 
       {viewMode === "day" ? (
         <div className={PORTAL_CALENDAR_FRAME}>
-          <div className="grid grid-cols-[68px_minmax(0,1fr)] gap-px bg-accent/40">
-            <div className="col-span-2 bg-accent/30 px-3 py-3 text-center">
+          <div className={`grid grid-cols-[68px_minmax(0,1fr)] ${CALENDAR_GRID_GAP}`}>
+            <div className={`col-span-2 px-3 py-3 text-center ${CALENDAR_HEADER_CELL}`}>
               <p className="text-sm font-semibold text-foreground">{anchorDate.toLocaleDateString(undefined, { weekday: "long" })}</p>
               <p className="text-xs text-muted">{anchorDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</p>
             </div>
@@ -1408,7 +1433,7 @@ export function PortalCalendarPanels({
               const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
               return (
                 <Fragment key={slotIdx}>
-                  <div className="bg-card px-2 py-2 text-[11px] font-semibold text-muted">{formatAvailabilitySlotLabel(slotIdx)}</div>
+                  <div className={`bg-card px-2 py-2 text-[11px] ${CALENDAR_TIME_CELL}`}>{formatAvailabilitySlotLabel(slotIdx)}</div>
                   <div className="relative min-h-[40px] bg-card p-1">
                     {meeting ? (
                       <button
@@ -1456,10 +1481,10 @@ export function PortalCalendarPanels({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {saveStatus === "saving" ? <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">Saving…</span> : null}
-          {saveStatus === "saved" ? <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">Saved</span> : null}
-          {saveStatus === "error" ? <span className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700">Save failed</span> : null}
-          <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">{weekSlotCount} open slots</div>
+          {saveStatus === "saving" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
+          {saveStatus === "saved" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
+          {saveStatus === "error" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_ERROR}`}>Save failed</span> : null}
+          <div className={`px-4 py-2 text-sm font-semibold ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open slots</div>
         </div>
       </div>
 
@@ -1513,8 +1538,8 @@ export function PortalCalendarPanels({
                           ? "border-primary/40 bg-primary/[0.12] text-primary"
                           : 
                         active
-                          ? "border-emerald-300 bg-emerald-100 text-emerald-900"
-                          : "border-border bg-accent/30 text-muted hover:border-primary/20 hover:bg-primary/[0.06]"
+                          ? CALENDAR_OPEN_SLOT_SOFT
+                          : CALENDAR_INACTIVE_SLOT
                       }`}
                     >
                       <span>{formatAvailabilitySlotLabel(slotIdx)}</span>
