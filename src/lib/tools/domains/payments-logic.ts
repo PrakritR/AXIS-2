@@ -59,7 +59,8 @@ export function buildRentReminderPreview(charge: HouseholdCharge): RentReminderP
   return {
     chargeId: charge.id,
     residentName: charge.residentName?.trim() || "Resident",
-    residentEmail: charge.residentEmail.trim().toLowerCase(),
+    residentEmail:
+      typeof charge.residentEmail === "string" ? charge.residentEmail.trim().toLowerCase() : "",
     chargeTitle: charge.title?.trim() || "outstanding charge",
     balanceDue: charge.balanceLabel?.trim() || charge.amountLabel?.trim() || "",
     propertyLabel: charge.propertyLabel?.trim() || "",

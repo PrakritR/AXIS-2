@@ -89,8 +89,11 @@ export async function executeSendRentReminder(
   //    configured (portal-only delivery); a real failure is reported honestly.
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const isDemoAddress = preview.residentEmail.endsWith("@axis.local") || preview.residentEmail === ctx.email;
+  // An empty/invalid resident email (e.g. missing in untrusted row_data) has no
+  // deliverable address: record in the portal rather than attempting a doomed send.
+  const hasDeliverableEmail = preview.residentEmail.includes("@");
   let delivery: "emailed" | "portal_only" | "email_failed";
-  if (!apiKey || isDemoAddress) {
+  if (!apiKey || isDemoAddress || !hasDeliverableEmail) {
     delivery = "portal_only";
   } else {
     try {

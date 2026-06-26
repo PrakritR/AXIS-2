@@ -265,4 +265,10 @@ describe("buildRentReminderPreview", () => {
       propertyLabel: "12 Main St",
     });
   });
+
+  it("degrades gracefully when residentEmail is missing or non-string (untrusted row_data)", () => {
+    expect(() => buildRentReminderPreview(charge({ residentEmail: null as unknown as string }))).not.toThrow();
+    expect(buildRentReminderPreview(charge({ residentEmail: null as unknown as string })).residentEmail).toBe("");
+    expect(buildRentReminderPreview(charge({ residentEmail: 12345 as unknown as string })).residentEmail).toBe("");
+  });
 });
