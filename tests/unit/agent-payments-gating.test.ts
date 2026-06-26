@@ -82,6 +82,7 @@ type AuditRow = Record<string, unknown> & { dedupe_key: string | null };
 
 function makeFakeDb(charges: HouseholdCharge[]) {
   const auditLog: AuditRow[] = [];
+  const inboxThreads: Record<string, unknown>[] = [];
   const db = {
     from(table: string) {
       return {
@@ -108,7 +109,10 @@ function makeFakeDb(charges: HouseholdCharge[]) {
           }
           return { error: null };
         },
-        upsert: async () => ({ error: null }),
+        upsert: async (row: Record<string, unknown>) => {
+          if (table === "portal_inbox_thread_records") inboxThreads.push({ ...row });
+          return { error: null };
+        },
         update(vals: Partial<AuditRow>) {
           return {
             eq: async (col: string, val: unknown) => {
@@ -122,11 +126,11 @@ function makeFakeDb(charges: HouseholdCharge[]) {
       };
     },
   };
-  return { db, auditLog };
+  return { db, auditLog, inboxThreads };
 }
 
 function makeCtx(charges: HouseholdCharge[]) {
-  const { db, auditLog } = makeFakeDb(charges);
+  const { db, auditLog, inboxThreads } = makeFakeDb(charges);
   const ctx = {
     landlordId: "manager_a",
     userId: "manager_a",
@@ -135,7 +139,7 @@ function makeCtx(charges: HouseholdCharge[]) {
     isAdmin: false,
     db,
   } as unknown as AgentContext;
-  return { ctx, auditLog };
+  return { ctx, auditLog, inboxThreads };
 }
 
 describe("executeSendRentReminder (same-day dedupe)", () => {
@@ -166,35 +170,60 @@ describe("executeSendRentReminder (same-day dedupe)", () => {
     expect(auditLog).toHaveLength(2);
   });
 
+  it("does not record a 'sent' inbox thread when delivery fails", async () => {
+    process.env.RESEND_API_KEY = "re_test_key";
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+    const { ctx, auditLog, inboxThreads } = makeCtx([
+      charge({ id: "hc_fail", residentEmail: "tenant@external.com" }),
+    ]);
+
+    // Two same-day failed attempts must leave the Sent folder empty and never
+    // accumulate duplicate "sent" threads.
+    await executeSendRentReminder(ctx, "hc_fail");
+    await executeSendRentReminder(ctx, "hc_fail");
+    expect(inboxThreads).toHaveLength(0);
+    expect(auditLog).toHaveLength(2);
+    for (const row of auditLog) {
+      expect((row.result_summary as { inboxRecorded: boolean }).inboxRecorded).toBe(false);
+    }
+  });
+
   it("blocks a duplicate same-day send after a successful email (emailed)", async () => {
     process.env.RESEND_API_KEY = "re_test_key";
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 200 }),
     );
-    const { ctx, auditLog } = makeCtx([
+    const { ctx, auditLog, inboxThreads } = makeCtx([
       charge({ id: "hc_ok", residentEmail: "tenant@external.com" }),
     ]);
 
     const first = await executeSendRentReminder(ctx, "hc_ok");
     expect(first).toMatchObject({ ok: true, delivery: "emailed" });
+    // A successful send is recorded in the manager's Sent folder.
+    expect(inboxThreads).toHaveLength(1);
+    expect((auditLog[0].result_summary as { inboxRecorded: boolean }).inboxRecorded).toBe(true);
 
     const second = await executeSendRentReminder(ctx, "hc_ok");
     expect(second).toMatchObject({ ok: true, delivery: "already_sent" });
     expect(auditLog).toHaveLength(1);
+    expect(inboxThreads).toHaveLength(1);
   });
 
   it("blocks a duplicate same-day send for portal_only delivery", async () => {
     delete process.env.RESEND_API_KEY;
-    const { ctx, auditLog } = makeCtx([
+    const { ctx, auditLog, inboxThreads } = makeCtx([
       charge({ id: "hc_portal", residentEmail: "tenant@axis.local" }),
     ]);
 
     const first = await executeSendRentReminder(ctx, "hc_portal");
     expect(first).toMatchObject({ ok: true, delivery: "portal_only" });
+    // Portal-only delivery still records the Sent thread.
+    expect(inboxThreads).toHaveLength(1);
 
     const second = await executeSendRentReminder(ctx, "hc_portal");
     expect(second).toMatchObject({ ok: true, delivery: "already_sent" });
     expect(auditLog).toHaveLength(1);
+    expect(inboxThreads).toHaveLength(1);
   });
 });
 

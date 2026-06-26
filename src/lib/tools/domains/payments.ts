@@ -107,30 +107,37 @@ export async function executeSendRentReminder(
     }
   }
 
-  // 3. Best-effort manager "sent" inbox record (owned by the landlord).
-  const threadId = `payment_sent_${ctx.userId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const { error: inboxError } = await ctx.db.from("portal_inbox_thread_records").upsert(
-    {
-      id: threadId,
-      scope: "axis_portal_inbox_manager_v1",
-      owner_user_id: ctx.userId,
-      participant_email: null,
-      thread_type: "payment_reminder",
-      row_data: {
+  // 3. Best-effort manager "sent" inbox record (owned by the landlord). Only
+  //    record a "sent" thread when delivery actually happened; a hard email
+  //    failure must never show up in the manager's Sent folder, and skipping it
+  //    keeps same-day retries from accumulating duplicate "sent" threads.
+  let inboxRecorded = false;
+  if (delivery === "emailed" || delivery === "portal_only") {
+    const threadId = `payment_sent_${ctx.userId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const { error: inboxError } = await ctx.db.from("portal_inbox_thread_records").upsert(
+      {
         id: threadId,
-        folder: "sent",
-        from: "Axis Assistant",
-        email: preview.residentEmail,
-        subject,
-        preview: body.slice(0, 100).replace(/\n/g, " "),
-        body,
-        unread: false,
         scope: "axis_portal_inbox_manager_v1",
+        owner_user_id: ctx.userId,
+        participant_email: null,
+        thread_type: "payment_reminder",
+        row_data: {
+          id: threadId,
+          folder: "sent",
+          from: "Axis Assistant",
+          email: preview.residentEmail,
+          subject,
+          preview: body.slice(0, 100).replace(/\n/g, " "),
+          body,
+          unread: false,
+          scope: "axis_portal_inbox_manager_v1",
+        },
+        updated_at: nowIso,
       },
-      updated_at: nowIso,
-    },
-    { onConflict: "id" },
-  );
+      { onConflict: "id" },
+    );
+    inboxRecorded = !inboxError;
+  }
 
   // Update the audit record with the realized delivery outcome. On a hard email
   // failure, clear the dedupe key so a same-day retry can record a fresh attempt
@@ -139,7 +146,7 @@ export async function executeSendRentReminder(
   await ctx.db
     .from("audit_log")
     .update({
-      result_summary: { residentEmail: preview.residentEmail, delivery, inboxRecorded: !inboxError },
+      result_summary: { residentEmail: preview.residentEmail, delivery, inboxRecorded },
       ...(delivery === "email_failed" ? { dedupe_key: null } : {}),
     })
     .eq("dedupe_key", dedupeKey);
