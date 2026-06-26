@@ -27,19 +27,24 @@ export async function POST(req: Request) {
   const confirmAction = body.confirmAction as { type?: string; chargeId?: unknown } | undefined;
   if (confirmAction?.type === "send_rent_reminder") {
     const chargeId = String(confirmAction.chargeId ?? "").trim();
-    const result = await executeSendRentReminder(ctx, chargeId);
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-    track("assistant_action_confirmed", ctx.userId, { action: "send_rent_reminder", delivery: result.delivery });
-    const name = result.preview.residentName;
-    const reply =
-      result.delivery === "emailed"
-        ? `Payment reminder emailed to ${name}.`
-        : result.delivery === "already_sent"
-          ? `A reminder was already sent to ${name} today; nothing new was sent.`
-          : result.delivery === "email_failed"
-            ? `Recorded the reminder for ${name}, but the email failed to send. Please try again.`
-            : `Recorded a payment reminder for ${name} in the portal (no email is configured).`;
-    return NextResponse.json({ reply, toolTrace: [{ tool: "send_rent_reminder", ok: true }] });
+    try {
+      const result = await executeSendRentReminder(ctx, chargeId);
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      track("assistant_action_confirmed", ctx.userId, { action: "send_rent_reminder", delivery: result.delivery });
+      const name = result.preview.residentName;
+      const reply =
+        result.delivery === "emailed"
+          ? `Payment reminder emailed to ${name}.`
+          : result.delivery === "already_sent"
+            ? `A reminder was already sent to ${name} today; nothing new was sent.`
+            : result.delivery === "email_failed"
+              ? `Recorded the reminder for ${name}, but the email failed to send. Please try again.`
+              : `Recorded a payment reminder for ${name} in the portal (no email is configured).`;
+      return NextResponse.json({ reply, toolTrace: [{ tool: "send_rent_reminder", ok: true }] });
+    } catch (e) {
+      console.error("[agent/chat] confirm action failed:", e);
+      return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });
+    }
   }
 
   const rawMessages = Array.isArray(body.messages) ? (body.messages as ChatMessage[]) : [];
