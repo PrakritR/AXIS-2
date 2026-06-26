@@ -1,9 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   filterOverdueCharges,
   findOwnedOverdueCharge,
   buildRentReminderPreview,
 } from "@/lib/tools/domains/payments-logic";
+import { executeSendRentReminder } from "@/lib/tools/domains/payments";
+import type { AgentContext } from "@/lib/tools/context";
 import type { HouseholdCharge } from "@/lib/household-charges";
 
 /**
@@ -67,6 +69,132 @@ describe("findOwnedOverdueCharge (write-gating)", () => {
   it("rejects empty or whitespace ids", () => {
     expect(findOwnedOverdueCharge(managerCharges, "")).toBeNull();
     expect(findOwnedOverdueCharge(managerCharges, "   ")).toBeNull();
+  });
+});
+
+/**
+ * In-memory stand-in for the service-role Supabase client used by
+ * executeSendRentReminder. It models only what the executor touches, including
+ * the partial UNIQUE behavior of dedupe_key (NULLs never collide), so the
+ * same-day idempotency and failed-send retry paths are exercised end to end.
+ */
+type AuditRow = Record<string, unknown> & { dedupe_key: string | null };
+
+function makeFakeDb(charges: HouseholdCharge[]) {
+  const auditLog: AuditRow[] = [];
+  const db = {
+    from(table: string) {
+      return {
+        select() {
+          return {
+            eq() {
+              return {
+                limit: async () => {
+                  if (table === "portal_household_charge_records") {
+                    return { data: charges.map((c) => ({ row_data: c })), error: null };
+                  }
+                  return { data: [], error: null };
+                },
+              };
+            },
+          };
+        },
+        insert: async (row: AuditRow) => {
+          if (table === "audit_log") {
+            if (row.dedupe_key != null && auditLog.some((r) => r.dedupe_key === row.dedupe_key)) {
+              return { error: { code: "23505", message: "duplicate key value" } };
+            }
+            auditLog.push({ ...row });
+          }
+          return { error: null };
+        },
+        upsert: async () => ({ error: null }),
+        update(vals: Partial<AuditRow>) {
+          return {
+            eq: async (col: string, val: unknown) => {
+              for (const r of auditLog) {
+                if (r[col] === val) Object.assign(r, vals);
+              }
+              return { error: null };
+            },
+          };
+        },
+      };
+    },
+  };
+  return { db, auditLog };
+}
+
+function makeCtx(charges: HouseholdCharge[]) {
+  const { db, auditLog } = makeFakeDb(charges);
+  const ctx = {
+    landlordId: "manager_a",
+    userId: "manager_a",
+    email: "manager@axis.test",
+    roles: ["manager"],
+    isAdmin: false,
+    db,
+  } as unknown as AgentContext;
+  return { ctx, auditLog };
+}
+
+describe("executeSendRentReminder (same-day dedupe)", () => {
+  const ORIGINAL_RESEND_KEY = process.env.RESEND_API_KEY;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (ORIGINAL_RESEND_KEY === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = ORIGINAL_RESEND_KEY;
+  });
+
+  it("does not block a same-day retry after an email_failed send", async () => {
+    process.env.RESEND_API_KEY = "re_test_key";
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+    const { ctx, auditLog } = makeCtx([
+      charge({ id: "hc_fail", residentEmail: "tenant@external.com" }),
+    ]);
+
+    const first = await executeSendRentReminder(ctx, "hc_fail");
+    expect(first).toMatchObject({ ok: true, delivery: "email_failed" });
+    // The failed attempt's dedupe key is cleared so it cannot block a retry.
+    expect(auditLog).toHaveLength(1);
+    expect(auditLog[0].dedupe_key).toBeNull();
+
+    const second = await executeSendRentReminder(ctx, "hc_fail");
+    expect(second).toMatchObject({ ok: true, delivery: "email_failed" });
+    expect(second).not.toMatchObject({ delivery: "already_sent" });
+    expect(auditLog).toHaveLength(2);
+  });
+
+  it("blocks a duplicate same-day send after a successful email (emailed)", async () => {
+    process.env.RESEND_API_KEY = "re_test_key";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
+    const { ctx, auditLog } = makeCtx([
+      charge({ id: "hc_ok", residentEmail: "tenant@external.com" }),
+    ]);
+
+    const first = await executeSendRentReminder(ctx, "hc_ok");
+    expect(first).toMatchObject({ ok: true, delivery: "emailed" });
+
+    const second = await executeSendRentReminder(ctx, "hc_ok");
+    expect(second).toMatchObject({ ok: true, delivery: "already_sent" });
+    expect(auditLog).toHaveLength(1);
+  });
+
+  it("blocks a duplicate same-day send for portal_only delivery", async () => {
+    delete process.env.RESEND_API_KEY;
+    const { ctx, auditLog } = makeCtx([
+      charge({ id: "hc_portal", residentEmail: "tenant@axis.local" }),
+    ]);
+
+    const first = await executeSendRentReminder(ctx, "hc_portal");
+    expect(first).toMatchObject({ ok: true, delivery: "portal_only" });
+
+    const second = await executeSendRentReminder(ctx, "hc_portal");
+    expect(second).toMatchObject({ ok: true, delivery: "already_sent" });
+    expect(auditLog).toHaveLength(1);
   });
 });
 

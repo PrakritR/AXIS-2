@@ -132,10 +132,16 @@ export async function executeSendRentReminder(
     { onConflict: "id" },
   );
 
-  // Update the audit record with the realized delivery outcome.
+  // Update the audit record with the realized delivery outcome. On a hard email
+  // failure, clear the dedupe key so a same-day retry can record a fresh attempt
+  // instead of short-circuiting to "already_sent". Successful and portal-only
+  // sends keep their key, staying idempotent for the day.
   await ctx.db
     .from("audit_log")
-    .update({ result_summary: { residentEmail: preview.residentEmail, delivery, inboxRecorded: !inboxError } })
+    .update({
+      result_summary: { residentEmail: preview.residentEmail, delivery, inboxRecorded: !inboxError },
+      ...(delivery === "email_failed" ? { dedupe_key: null } : {}),
+    })
     .eq("dedupe_key", dedupeKey);
 
   return { ok: true, preview, delivery };
