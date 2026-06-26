@@ -1,3 +1,5 @@
+import { resolveShareableAppOrigin } from "@/lib/app-url";
+
 /** Supabase password-reset links land on /auth/callback, then redirect here. */
 export const PASSWORD_RESET_NEXT_PATH = "/auth/reset-password";
 
@@ -9,8 +11,7 @@ export function passwordResetCallbackUrl(origin: string): string {
 
 export function resolveBrowserAppOrigin(): string {
   if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin.replace(/\/$/, "");
+    return resolveShareableAppOrigin(window.location.origin);
   }
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
-  return envUrl || "http://localhost:3000";
+  return resolveShareableAppOrigin();
 }

@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { resolveAppOrigin } from "@/lib/app-url";
 import { generateManagerId } from "@/lib/manager-id";
 import { normalizeProMonthlyPromoInput, PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
+import {
+  normalizeOnboardDiscountPercent,
+  stripeCouponIdForOnboardDiscount,
+} from "@/lib/stripe-onboard-discount";
 import { stripePriceIdForPaidTier } from "@/lib/stripe-price-ids";
 import { getStripe } from "@/lib/stripe";
 
@@ -19,6 +23,8 @@ type Body = {
   userId?: string;
   /** Optional; if set to FREEFIRST (or alias), checkout must be Pro monthly. */
   promo?: string;
+  /** Onboard link discount (1–99). 100 should use signup-intent instead. */
+  discountPercent?: number;
   embedded?: boolean;
 };
 
@@ -68,6 +74,14 @@ export async function POST(req: Request) {
     const userId = typeof body.userId === "string" ? body.userId.trim() : "";
     const promoRaw = typeof body.promo === "string" ? normalizeProMonthlyPromoInput(body.promo) : "";
     const promoUpper = promoRaw.toUpperCase();
+    const onboardDiscount = normalizeOnboardDiscountPercent(body.discountPercent);
+
+    if (onboardDiscount === 100) {
+      return NextResponse.json(
+        { error: "100% onboard discount must use free signup (no Stripe checkout).", code: "REQUIRES_SIGNUP_INTENT" },
+        { status: 400 },
+      );
+    }
 
     const isProMonthly = tier === "pro" && billing === "monthly";
     if (promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE && !isProMonthly) {
@@ -89,6 +103,7 @@ export async function POST(req: Request) {
     if (phone) metadata.phone = phone;
     if (userId) metadata.userId = userId;
     if (promoRaw) metadata.promo = promoRaw;
+    if (onboardDiscount != null) metadata.onboard_discount_percent = String(onboardDiscount);
 
     /** Auto-apply first-month-free when configured (Dashboard promotion code id: promo_…). */
     const promoCodeId = process.env.STRIPE_PROMOTION_CODE_ID_FIRST_MONTH_FREE?.trim();
@@ -96,7 +111,12 @@ export async function POST(req: Request) {
       isProMonthly && promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE && Boolean(promoCodeId);
 
     /** Let customers enter other codes at Checkout when not auto-applying FREEFIRST. */
-    const allowPromotionCodes = isProMonthly && !autoFirstMonthFree;
+    const allowPromotionCodes = isProMonthly && !autoFirstMonthFree && onboardDiscount == null;
+
+    let onboardCouponId: string | null = null;
+    if (onboardDiscount != null) {
+      onboardCouponId = await stripeCouponIdForOnboardDiscount(onboardDiscount, "once");
+    }
 
     const sessionBase = {
       mode: "subscription" as const,
@@ -106,6 +126,7 @@ export async function POST(req: Request) {
       ...(email ? { customer_email: email } : {}),
       metadata,
       ...(autoFirstMonthFree && promoCodeId ? { discounts: [{ promotion_code: promoCodeId }] } : {}),
+      ...(onboardCouponId ? { discounts: [{ coupon: onboardCouponId }] } : {}),
       ...(allowPromotionCodes ? { allow_promotion_codes: true } : {}),
     };
 

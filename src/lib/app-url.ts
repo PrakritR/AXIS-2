@@ -1,3 +1,49 @@
+function trimOrigin(url: string | undefined): string {
+  return url?.trim().replace(/\/$/, "") ?? "";
+}
+
+function isLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+function isVercelDeploymentHost(hostname: string): boolean {
+  return hostname.toLowerCase().endsWith(".vercel.app");
+}
+
+/**
+ * Origin for shareable links (onboarding, invites). Prefers a canonical custom domain
+ * over the default *.vercel.app deployment URL.
+ */
+export function resolveShareableAppOrigin(browserOrigin?: string): string {
+  const canonical = trimOrigin(process.env.NEXT_PUBLIC_CANONICAL_APP_URL);
+  if (canonical) return canonical;
+
+  const browser = trimOrigin(browserOrigin);
+  if (browser) {
+    try {
+      const host = new URL(browser).hostname;
+      if (!isLocalHost(host) && !isVercelDeploymentHost(host)) {
+        return browser;
+      }
+    } catch {
+      /* ignore malformed browser origin */
+    }
+  }
+
+  const env = trimOrigin(process.env.NEXT_PUBLIC_APP_URL);
+  if (env) {
+    try {
+      const host = new URL(env).hostname;
+      if (!isVercelDeploymentHost(host)) return env;
+    } catch {
+      return env;
+    }
+  }
+
+  return browser || env || "http://localhost:3000";
+}
+
 /**
  * Resolve the app origin for Stripe return URLs.
  *
@@ -18,12 +64,21 @@ export function resolveAppOrigin(req: Request): string {
     /* ignore malformed request URL */
   }
 
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  const shareable = resolveShareableAppOrigin(requestOrigin);
+  if (shareable !== "http://localhost:3000") {
+    try {
+      const host = new URL(shareable).hostname;
+      if (!isLocalHost(host)) return shareable;
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const envUrl = trimOrigin(process.env.NEXT_PUBLIC_APP_URL);
   if (envUrl) {
     try {
       const parsed = new URL(envUrl);
-      const host = parsed.hostname.toLowerCase();
-      if (host !== "localhost" && host !== "127.0.0.1") {
+      if (!isLocalHost(parsed.hostname)) {
         return parsed.origin;
       }
     } catch {

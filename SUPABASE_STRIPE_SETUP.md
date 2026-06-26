@@ -11,9 +11,11 @@ This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription
    - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (keep secret; server-only)
 3. Open **SQL Editor** and run the migration in `supabase/migrations/20250418140000_profiles_manager_purchases.sql`.
 4. **Authentication → Providers**: enable **Email** (password). Enable **Google** and add your Google OAuth client ID/secret (see below).
-5. **URL configuration** (Auth): set site URL to `NEXT_PUBLIC_APP_URL` and add redirect URLs:
-   - `{NEXT_PUBLIC_APP_URL}/auth/callback`
+5. **URL configuration** (Auth): set site URL to your production domain (`NEXT_PUBLIC_CANONICAL_APP_URL` or `NEXT_PUBLIC_APP_URL`) and add redirect URLs:
+   - `{your-domain}/auth/callback`
    - `http://localhost:3000/auth/callback` for local dev (if using localhost)
+
+For shareable onboarding links and QR codes, set `NEXT_PUBLIC_CANONICAL_APP_URL` to your custom domain so links do not use the default `*.vercel.app` deployment URL.
 
 ### Profiles and manager purchases
 
@@ -25,8 +27,14 @@ This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription
 1. In [Google Cloud Console](https://console.cloud.google.com/), create an OAuth 2.0 **Web application** client.
 2. Add **Authorized redirect URI**: `https://<your-supabase-project-ref>.supabase.co/auth/v1/callback`
 3. In Supabase **Authentication → Providers → Google**, paste the client ID and secret, then enable Google.
-4. Ensure `{NEXT_PUBLIC_APP_URL}/auth/callback` is listed under Supabase **Authentication → URL configuration → Redirect URLs**.
-5. Users sign in at `/auth/sign-in` via **Continue with Google**. Existing Axis accounts match by email; new Google users without a profile are sent through `/auth/continue` (create an account first if you are not already provisioned).
+4. In Google Cloud **Credentials → your OAuth client → Authorized redirect URIs**, add **only** the Supabase callback (copy from Supabase Google provider screen):
+
+   `https://<your-project-ref>.supabase.co/auth/v1/callback`
+
+   Do **not** put your website URL (`https://www.axis-seattle-housing.com/auth/callback`) here — that causes `redirect_uri_mismatch`.
+
+5. Ensure `{your-domain}/auth/callback` is listed under Supabase **Authentication → URL configuration → Redirect URLs** (not in Google Cloud redirect URIs).
+6. Users sign in at `/auth/sign-in` via **Continue with Google**. Existing Axis accounts match by email; new Google users without a profile are sent through `/auth/continue` (create an account first if you are not already provisioned).
 
 ### Tenant screening (Certn)
 

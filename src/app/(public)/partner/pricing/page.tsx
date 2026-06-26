@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { isManagerOnboardTier } from "@/lib/manager-onboard-links";
+import { isManagerOnboardTier, parseOnboardOfferSearchParams } from "@/lib/manager-onboard-links";
 
 function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
   return tiers.find((t) => t.id === id) ?? tiers[0]!;
@@ -31,6 +31,7 @@ export default function PartnerPricingPage() {
   const [code, setCode] = useState("");
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+  const [onboardOffer, setOnboardOffer] = useState<ReturnType<typeof parseOnboardOfferSearchParams>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +51,11 @@ export default function PartnerPricingPage() {
     if (tier && isManagerOnboardTier(tier)) {
       setSelectedTierId(tier);
     }
+
+    const offer = parseOnboardOfferSearchParams(params);
+    setOnboardOffer(offer);
+    if (offer.billing) setBilling(offer.billing);
+    if (offer.promo) setCode(offer.promo);
   }, []);
 
   const selected = useMemo(() => tierById(planTiers, selectedTierId), [planTiers, selectedTierId]);
@@ -64,11 +70,20 @@ export default function PartnerPricingPage() {
     [showToast],
   );
 
+  const onboardDiscountPercent = onboardOffer.discountPercent ?? null;
+  const onboardIsFree = onboardDiscountPercent === 100;
+  const showOnboardDiscountNote =
+    onboardDiscountPercent != null &&
+    onboardDiscountPercent > 0 &&
+    selectedTierId !== "free" &&
+    (onboardIsFree || onboardDiscountPercent < 100);
+
   const startManagerSignupIntent = useCallback(
     async (opts: {
       tier: PlanTierId;
       billing: "monthly" | "annual";
       promo?: string;
+      discountPercent?: number;
     }): Promise<"redirected" | "needs-checkout" | "error"> => {
       setCheckoutBusy(true);
       try {
@@ -82,6 +97,7 @@ export default function PartnerPricingPage() {
             fullName: typeof fullName === "string" ? fullName.trim() : "",
             phone: typeof phone === "string" ? phone.trim() : "",
             promo: opts.promo,
+            discountPercent: opts.discountPercent,
           }),
         });
         let payload: { sessionId?: string; error?: string; code?: string };
@@ -135,6 +151,14 @@ export default function PartnerPricingPage() {
           Choose a tier, fill out the form below, and complete checkout (or free-tier setup). Your plan and contact
           details are confirmed here before you create your property portal account.
         </p>
+
+        {showOnboardDiscountNote ? (
+          <p className="mx-auto mt-4 max-w-2xl rounded-2xl border border-[var(--status-confirmed-fg)]/25 bg-[var(--status-confirmed-bg)] px-4 py-3 text-sm font-medium text-[var(--status-confirmed-fg)]">
+            {onboardIsFree
+              ? "This invite link includes free signup — no payment required."
+              : `This invite link includes ${onboardDiscountPercent}% off your first payment (applied automatically at checkout).`}
+          </p>
+        ) : null}
 
         <div className="glass-card mt-8 inline-flex items-center gap-1 rounded-full p-1">
           <button
@@ -408,8 +432,12 @@ export default function PartnerPricingPage() {
                       return;
                     }
 
-                    if (selectedTierId === "free") {
-                      await startManagerSignupIntent({ tier: selectedTierId, billing });
+                    if (selectedTierId === "free" || onboardIsFree) {
+                      await startManagerSignupIntent({
+                        tier: selectedTierId,
+                        billing,
+                        ...(onboardIsFree ? { discountPercent: 100 } : {}),
+                      });
                       return;
                     }
 
@@ -421,6 +449,9 @@ export default function PartnerPricingPage() {
                         tier: selectedTierId,
                         billing,
                         promo: codeSafe.trim(),
+                        ...(onboardDiscountPercent != null && onboardDiscountPercent < 100
+                          ? { discountPercent: onboardDiscountPercent }
+                          : {}),
                       });
                       if (outcome !== "needs-checkout") {
                         return;
@@ -440,6 +471,11 @@ export default function PartnerPricingPage() {
                           phone: typeof phone === "string" ? phone.trim() : "",
                           embedded: true,
                           ...(isProMonthly && codeSafe.trim() ? { promo: normalizedPromo } : {}),
+                          ...(onboardDiscountPercent != null &&
+                          onboardDiscountPercent > 0 &&
+                          onboardDiscountPercent < 100
+                            ? { discountPercent: onboardDiscountPercent }
+                            : {}),
                         }),
                       });
                       const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string };
@@ -473,7 +509,7 @@ export default function PartnerPricingPage() {
                 ? "Starting…"
                 : checkoutClientSecret
                   ? "Checkout open"
-                  : selectedTierId === "free"
+                  : selectedTierId === "free" || onboardIsFree
                     ? "Create free account"
                     : `Continue with ${selected.label}`}
             </button>

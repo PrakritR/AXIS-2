@@ -97,6 +97,60 @@ describe("Stripe subscription billing", () => {
     );
   });
 
+  it("POST /api/stripe/checkout applies onboard discount coupon", async () => {
+    const retrieve = vi.fn().mockResolvedValue({ id: "AXIS_ONBOARD_20_ONCE", valid: true });
+    const createCoupon = vi.fn();
+    const createSession = vi.fn().mockResolvedValue({
+      id: "cs_test_discount",
+      client_secret: "cs_test_secret_discount",
+    });
+    vi.mocked(getStripe).mockReturnValue({
+      coupons: { retrieve, create: createCoupon },
+      checkout: { sessions: { create: createSession } },
+    } as never);
+
+    const req = jsonRequest("http://localhost/api/stripe/checkout", {
+      method: "POST",
+      body: {
+        tier: "pro",
+        billing: "monthly",
+        email: "mgr@example.com",
+        fullName: "Discount Manager",
+        embedded: true,
+        discountPercent: 20,
+      },
+    });
+    const res = await checkout(req);
+    const { status, data } = await parseJsonResponse<{ clientSecret?: string }>(res);
+
+    expect(status).toBe(200);
+    expect(data.clientSecret).toBe("cs_test_secret_discount");
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        discounts: [{ coupon: "AXIS_ONBOARD_20_ONCE" }],
+        metadata: expect.objectContaining({ onboard_discount_percent: "20" }),
+      }),
+    );
+    expect(createSession.mock.calls[0]?.[0]).not.toHaveProperty("allow_promotion_codes");
+  });
+
+  it("POST /api/stripe/checkout rejects 100% onboard discount", async () => {
+    const req = jsonRequest("http://localhost/api/stripe/checkout", {
+      method: "POST",
+      body: {
+        tier: "pro",
+        billing: "monthly",
+        email: "mgr@example.com",
+        fullName: "Free Manager",
+        discountPercent: 100,
+      },
+    });
+    const res = await checkout(req);
+    const { status, data } = await parseJsonResponse<{ code?: string }>(res);
+    expect(status).toBe(400);
+    expect(data.code).toBe("REQUIRES_SIGNUP_INTENT");
+  });
+
   it("POST /api/stripe/checkout rejects missing price env", async () => {
     delete process.env.STRIPE_PRICE_BUSINESS_ANNUAL;
     const req = jsonRequest("http://localhost/api/stripe/checkout", {

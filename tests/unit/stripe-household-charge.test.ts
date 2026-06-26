@@ -8,7 +8,8 @@ import type { HouseholdCharge } from "@/lib/household-charges";
 
 describe("stripe-household-charge", () => {
   it("calculates ACH platform fee", () => {
-    expect(axisAchPlatformFeeCents(10000)).toBe(80);
+    // $100 ACH: 0.8% processing (80¢) + default free-tier rent fee 0.5% (50¢)
+    expect(axisAchPlatformFeeCents(10000)).toBe(130);
     expect(axisAchPlatformFeeCents(0)).toBe(0);
   });
 

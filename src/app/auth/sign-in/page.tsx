@@ -2,6 +2,7 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { GoogleSignInSetupNote } from "@/components/auth/google-sign-in-setup-note";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -174,6 +175,7 @@ function SignInForm() {
 
       <div className="mt-8">
         <GoogleSignInButton nextPath={nextPath} disabled={busy} />
+        <GoogleSignInSetupNote />
       </div>
 
       <div className="my-6 flex items-center gap-3">

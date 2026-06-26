@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateManagerId } from "@/lib/manager-id";
 import { newAxisIntentSessionId } from "@/lib/manager-signup-intent";
+import { normalizeOnboardDiscountPercent } from "@/lib/stripe-onboard-discount";
 import { getPaymentWaiverCode } from "@/lib/server-env";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -16,6 +17,8 @@ type Body = {
   fullName?: string;
   phone?: string;
   promo?: string;
+  /** Onboard link discount. 100 = free signup on a paid tier without Stripe. */
+  discountPercent?: number;
 };
 
 function isTier(s: string): s is Tier {
@@ -38,6 +41,7 @@ export async function POST(req: Request) {
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
     const promo = typeof body.promo === "string" ? body.promo.trim().toUpperCase() : "";
+    const onboardDiscount = normalizeOnboardDiscountPercent(body.discountPercent);
     if (!email.includes("@")) {
       return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
     }
@@ -51,8 +55,9 @@ export async function POST(req: Request) {
     const waiverCode = getPaymentWaiverCode();
     const skipStripeForFree = tierRaw === "free";
     const skipStripeForPromo = Boolean(waiverCode) && promo === waiverCode!.trim().toUpperCase();
+    const skipStripeForOnboardOffer = tierRaw !== "free" && onboardDiscount === 100;
 
-    if (!skipStripeForFree && !skipStripeForPromo) {
+    if (!skipStripeForFree && !skipStripeForPromo && !skipStripeForOnboardOffer) {
       return NextResponse.json(
         {
           error: "This tier requires Stripe checkout. Use Continue on the pricing page for paid plans.",
@@ -82,7 +87,7 @@ export async function POST(req: Request) {
       manager_id: managerId,
       tier: tierRaw,
       billing: billingRaw,
-      promo_code: skipStripeForPromo ? promo : null,
+      promo_code: skipStripeForPromo ? promo : skipStripeForOnboardOffer ? `ONBOARD_FREE_${tierRaw.toUpperCase()}` : null,
       paid_at: new Date().toISOString(),
       full_name: fullName,
     });

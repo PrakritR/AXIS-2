@@ -56,7 +56,10 @@ export function GoogleSignInButton({
         },
       });
       if (error) {
-        showToast(error.message);
+        const message = error.message.toLowerCase().includes("not enabled")
+          ? "Google sign-in is not enabled in Supabase. Ask your admin to enable the Google provider."
+          : error.message;
+        showToast(message);
         setBusy(false);
       }
     } catch (e) {
