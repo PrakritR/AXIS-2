@@ -8,7 +8,6 @@ import {
   updateExtraListingFromSubmission,
   updatePendingManagerProperty,
 } from "@/lib/demo-property-pipeline";
-import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   getPortalListingNote,
@@ -107,8 +106,6 @@ export function ManagerPropertyHouseDetailsPanel({
       ok = updateExtraListingFromSubmission(saveTarget.saveId, managerUserId, next);
     } else if (saveTarget?.mode === "requestChange") {
       ok = updateRequestChangeProperty(saveTarget.saveId, managerUserId, next);
-    } else {
-      ok = true;
     }
     if (!ok) {
       showToast("Could not save house details.");
