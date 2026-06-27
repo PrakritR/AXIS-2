@@ -37,10 +37,10 @@ only does a cookie-based `getSession` with no network round-trip, and importing
 the `server-only` module into the middleware bundle is avoided.
 
 > **The guard protects the app runtime only — not the Supabase CLI.** `db:push`,
-> `db:pull`, and `db:reset --linked` act on whichever project is currently
-> linked. A `supabase link` to production followed by `db:reset` would wipe
-> production. Always confirm the linked project (keep dev/test linked by
-> default) before any reset/push.
+> `db:pull`, and `db:baseline` act on whichever project is currently linked. A
+> `supabase link` to production followed by `db:push` (or a hand-run `supabase db
+> reset`) would mutate production. Always confirm the linked project (keep
+> dev/test linked by default) before any push.
 
 The production project ref is supplied out-of-band via the optional
 `AXIS_PROD_SUPABASE_REF` env var (so the ref is not hardcoded in source). Set it
@@ -80,20 +80,33 @@ npm run db:push                # apply pending migrations to dev/test
 
 ### Baseline / mirror the dev/test project from production
 
-Run once so the dev/test schema reflects production's *actual* current schema
-(including any drift from past manual SQL-Editor edits):
+Both projects were originally built from the same migration files, so they
+already share a schema — what they lack is the CLI **migration-history** table
+that lets `db push` / `db diff` track state. Adopt the existing schema as the
+baseline (non-destructive — nothing is dropped or re-run):
 
 ```bash
-supabase link --project-ref qahnczmilgptcedaqype   # link production
-npm run db:pull                                     # capture prod schema into a new migration
-# review the generated migration — it reveals any drift vs the repo history
-npm run db:link:dev                                 # relink to dev/test
-npm run db:reset                                    # drop + re-apply all migrations to dev/test
-npm run test:seed                                   # repopulate dev/test accounts
-npm run admin:ensure-demo-manager
+# 1. Confirm production matches the repo history (should add no migration)
+supabase link --project-ref qahnczmilgptcedaqype
+npm run db:pull                 # if it writes a migration, that is prod drift — commit it
+npm run db:baseline            # mark all current migrations as applied on prod
+npm run db:status              # all 35 show applied
+
+# 2. Do the same on dev/test, then keep it linked as the default
+npm run db:link:dev
+npm run db:baseline
+npm run db:status
+
+# 3. (optional, needs Docker) prove there is no schema drift on dev/test
+npm run db:diff                # expect: "No schema changes found"
 ```
 
-`npm run db:diff` should then report **no** differences.
+> **`npm run db:reset` does not exist, by design.** `supabase db reset --linked`
+> fails on managed Supabase — its teardown truncates `auth.*` / `storage.*`
+> objects that the `postgres` role does not own (e.g.
+> `auth.refresh_tokens_id_seq`), so it aborts with `must be owner of sequence …`.
+> Reset is only for the local Docker DB. To adopt an already-applied schema use
+> `db:baseline` (above). `db:diff` requires Docker to build its shadow database.
 
 ### Deploying a schema change to production
 
@@ -109,7 +122,7 @@ npm run db:link:dev                                 # ALWAYS relink back to dev/
 Because the same migration files are pushed to both projects, the schemas stay
 mirrored.
 
-> Note: `supabase db push/diff/reset` act on whichever project is currently
+> Note: `supabase db push/diff/baseline` act on whichever project is currently
 > **linked**. Keep dev/test linked by default; only link production for a
 > deliberate deploy, and relink to dev/test immediately after.
 
