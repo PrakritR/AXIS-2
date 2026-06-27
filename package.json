@@ -25,7 +25,8 @@
     "admin:sync-account": "node scripts/ensure-admin-account.mjs",
     "admin:set-manager-plan": "node scripts/set-manager-plan.mjs",
     "admin:ensure-demo-manager": "node scripts/ensure-demo-manager-account.mjs",
-    "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs"
+    "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs",
+    "db:apply-sql": "node --env-file=.env.local scripts/apply-supabase-sql.mjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.14",
@@ -43,6 +44,7 @@
     "leaflet": "^1.9.4",
     "next": "^16.2.9",
     "pdf-lib": "^1.17.1",
+    "pg": "^8.16.3",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -70,6 +72,7 @@
     "eslint-config-next": "16.2.4",
     "jsdom": "^29.1.1",
     "msw": "^2.14.6",
+    "pg": "^8.22.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.9"

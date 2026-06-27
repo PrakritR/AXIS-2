@@ -5,6 +5,7 @@ import {
   filterBugFeedbackByTab,
   groupBugFeedbackForAdmin,
   isManagerSideReporterRole,
+  isPortalBugFeedbackSchemaError,
   normalizeBugFeedbackRow,
   roleGroupLabelForFeedback,
 } from "@/lib/portal-bug-feedback-utils";
@@ -60,6 +61,15 @@ describe("portal bug feedback utils", () => {
   it("rejects malformed rows", () => {
     expect(normalizeBugFeedbackRow(null)).toBeNull();
     expect(normalizeBugFeedbackRow({ type: "bug" })).toBeNull();
+  });
+
+  it("detects missing feedback table errors", () => {
+    expect(
+      isPortalBugFeedbackSchemaError(
+        "Could not find the 'portal_bug_feedback_records' table in the schema cache",
+      ),
+    ).toBe(true);
+    expect(isPortalBugFeedbackSchemaError("Unauthorized")).toBe(false);
   });
 
   it("builds a new report with trimmed fields", () => {

@@ -57,10 +57,15 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [schemaMissing, setSchemaMissing] = useState(false);
+  const [applyingSchema, setApplyingSchema] = useState(false);
 
   const refresh = useCallback(async () => {
-    const next = await syncBugFeedbackFromServer({ force: true });
-    setRows(next);
+    const result = await syncBugFeedbackFromServer({ force: true });
+    setRows(result.rows);
+    setLoadError(result.error ?? null);
+    setSchemaMissing(Boolean(result.schemaMissing));
   }, []);
 
   useEffect(() => {
@@ -71,8 +76,25 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
   }, [refresh]);
 
   const { managerRows, residentRows } = useMemo(() => groupBugFeedbackForAdmin(rows, tabId), [rows, tabId]);
-
   const tabCounts = useMemo(() => countBugFeedbackTabs(rows), [rows]);
+
+  const applySchema = async () => {
+    setApplyingSchema(true);
+    try {
+      const res = await fetch("/api/admin/ensure-portal-schema", { method: "POST", credentials: "include" });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(body.error ?? "Could not set up feedback storage.");
+        return;
+      }
+      showToast("Feedback storage is ready. Ask managers to resubmit any reports sent before setup.");
+      await refresh();
+    } catch {
+      showToast("Could not set up feedback storage.");
+    } finally {
+      setApplyingSchema(false);
+    }
+  };
 
   const saveStatus = async (row: PortalBugFeedbackRow, status: BugFeedbackStatus, adminNotes: string) => {
     setSavingId(row.id);
@@ -107,6 +129,51 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
           ? "Issues reported from manager and resident portals, grouped by role."
           : "Product feedback from portal users, grouped by role."}
       </p>
+
+      {schemaMissing ? (
+        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-semibold">Feedback storage is not set up in Supabase yet.</p>
+          <p className="mt-1 leading-relaxed">
+            Manager and resident submissions cannot be saved until the{" "}
+            <code className="rounded bg-white/70 px-1 py-0.5 text-xs">portal_bug_feedback_records</code> table exists.
+            Run the migration in Supabase SQL Editor, or use the button below if{" "}
+            <code className="rounded bg-white/70 px-1 py-0.5 text-xs">DATABASE_URL</code> is configured on the server.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" className="rounded-full" disabled={applyingSchema} onClick={() => void applySchema()}>
+              {applyingSchema ? "Setting up…" : "Set up feedback storage"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    const res = await fetch("/api/admin/ensure-portal-schema", { credentials: "include" });
+                    const body = (await res.json().catch(() => ({}))) as { migrationSql?: string };
+                    const sql = body.migrationSql?.trim();
+                    if (!sql) {
+                      showToast("Could not load migration SQL.");
+                      return;
+                    }
+                    await navigator.clipboard.writeText(sql);
+                    showToast("Migration SQL copied. Paste into Supabase → SQL Editor → Run.");
+                  } catch {
+                    showToast("Could not copy migration SQL.");
+                  }
+                })();
+              }}
+            >
+              Copy migration SQL
+            </Button>
+          </div>
+        </div>
+      ) : loadError ? (
+        <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          Could not load feedback: {loadError}
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         <FeedbackRoleGroup

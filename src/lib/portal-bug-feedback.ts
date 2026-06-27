@@ -59,21 +59,35 @@ export function readBugFeedbackRows(): PortalBugFeedbackRow[] {
   return cachedRows;
 }
 
-export async function syncBugFeedbackFromServer(opts?: { force?: boolean }): Promise<PortalBugFeedbackRow[]> {
-  if (!isBrowser()) return [];
-  if (syncedFromServer && !opts?.force) return cachedRows;
+export type BugFeedbackSyncResult = {
+  rows: PortalBugFeedbackRow[];
+  error?: string;
+  schemaMissing?: boolean;
+};
+
+export async function syncBugFeedbackFromServer(opts?: {
+  force?: boolean;
+}): Promise<BugFeedbackSyncResult> {
+  if (!isBrowser()) return { rows: [] };
+  if (syncedFromServer && !opts?.force) return { rows: cachedRows };
   try {
     const res = await fetch("/api/portal-bug-feedback", { credentials: "include" });
-    const data = (await res.json().catch(() => ({}))) as { rows?: unknown[] };
-    if (!res.ok) return cachedRows;
+    const data = (await res.json().catch(() => ({}))) as { rows?: unknown[]; error?: string };
+    if (!res.ok) {
+      const error = data.error ?? "Could not load feedback.";
+      const schemaMissing =
+        error.toLowerCase().includes("portal_bug_feedback_records") &&
+        error.toLowerCase().includes("schema cache");
+      return { rows: cachedRows, error, schemaMissing };
+    }
     const rows = (Array.isArray(data.rows) ? data.rows : [])
       .map(normalizeBugFeedbackRow)
       .filter((r): r is PortalBugFeedbackRow => Boolean(r));
     cachedRows = rows;
     syncedFromServer = true;
-    return rows;
+    return { rows };
   } catch {
-    return cachedRows;
+    return { rows: cachedRows, error: "Could not load feedback." };
   }
 }
 
@@ -106,8 +120,8 @@ export async function submitBugFeedbackReport(input: {
     createdAt: now,
     updatedAt: now,
   };
-  writeLocal([row, ...cachedRows.filter((r) => r.id !== row.id)]);
   await persistRow(row);
+  writeLocal([row, ...cachedRows.filter((r) => r.id !== row.id)]);
   return row;
 }
 

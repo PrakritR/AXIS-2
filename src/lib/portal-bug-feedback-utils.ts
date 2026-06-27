@@ -77,6 +77,11 @@ export function groupBugFeedbackForAdmin(
   };
 }
 
+export function isPortalBugFeedbackSchemaError(message: string | undefined | null): boolean {
+  const m = String(message ?? "").toLowerCase();
+  return m.includes("portal_bug_feedback_records") && m.includes("schema cache");
+}
+
 export function buildBugFeedbackReportInput(input: {
   type: BugFeedbackType;
   reporterUserId: string;

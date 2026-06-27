@@ -46,8 +46,8 @@ export function PortalBugFeedbackPanel({
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
 
   const refresh = useCallback(async () => {
-    const next = await syncBugFeedbackFromServer({ force: true });
-    setRows(next);
+    const result = await syncBugFeedbackFromServer({ force: true });
+    setRows(result.rows);
   }, []);
 
   useEffect(() => {
