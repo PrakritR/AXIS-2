@@ -4,6 +4,7 @@ import { platformFeeCents } from "@/lib/platform-fees";
 
 export type RentDueDayMode = "first_of_month" | "last_of_month";
 
+/** @deprecated Prefer PaymentReminderKind from payment-automation-settings. */
 export type PaymentReminderSlot = "7d" | "5d" | "3d" | "12h" | "overdue_daily";
 
 /** Recommended charge presets managers can pick when adding a custom payment line. */

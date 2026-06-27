@@ -25,6 +25,7 @@ function normalizeRow(row: ManagerVendorRow, managerUserId: string): ManagerVend
     email: row.email.trim().toLowerCase(),
     notes: row.notes.trim(),
     active: row.active !== false,
+    sharedWithManagers: row.sharedWithManagers === true,
     propertyIds: Array.isArray(row.propertyIds) ? row.propertyIds : undefined,
     updatedAt: new Date().toISOString(),
   };
@@ -57,7 +58,33 @@ export async function GET() {
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const rows = (data ?? []).map((record) => record.row_data).filter(Boolean) as ManagerVendorRow[];
+    const ownRows = (data ?? []).map((record) => record.row_data).filter(Boolean) as ManagerVendorRow[];
+
+    let sharedRows: ManagerVendorRow[] = [];
+    if (!admin) {
+      const { data: sharedData, error: sharedError } = await db
+        .from("manager_vendor_records")
+        .select("row_data, manager_user_id")
+        .neq("manager_user_id", user.id)
+        .eq("row_data->>sharedWithManagers", "true")
+        .order("updated_at", { ascending: false })
+        .limit(200);
+      if (sharedError) return NextResponse.json({ error: sharedError.message }, { status: 500 });
+      sharedRows = (sharedData ?? [])
+        .map((record) => {
+          const row = record.row_data as ManagerVendorRow | null;
+          if (!row?.id) return null;
+          return { ...row, managerUserId: record.manager_user_id };
+        })
+        .filter(Boolean) as ManagerVendorRow[];
+    }
+
+    const seen = new Set<string>();
+    const rows = [...ownRows, ...sharedRows].filter((row) => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
     return NextResponse.json({ rows });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load vendors.";
@@ -89,7 +116,11 @@ export async function POST(req: Request) {
     const managerUserId = user.id;
 
     if (body.action === "replace") {
-      const rows = Array.isArray(body.rows) ? body.rows.map((r) => normalizeRow(r, managerUserId)) : [];
+      const rows = Array.isArray(body.rows)
+        ? body.rows
+            .filter((r) => !r.managerUserId || r.managerUserId === managerUserId)
+            .map((r) => normalizeRow(r, managerUserId))
+        : [];
       for (const row of rows) {
         await db.from("manager_vendor_records").upsert(
           {
@@ -115,6 +146,9 @@ export async function POST(req: Request) {
     }
 
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });
+    if (!admin && body.row.managerUserId && body.row.managerUserId !== managerUserId) {
+      return NextResponse.json({ error: "Cannot edit another manager's vendor." }, { status: 403 });
+    }
     const row = normalizeRow(body.row, managerUserId);
     const { error } = await db.from("manager_vendor_records").upsert(
       {

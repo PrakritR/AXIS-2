@@ -1,7 +1,8 @@
 import type Stripe from "stripe";
-import { getManagerPurchaseSku } from "@/lib/manager-access";
+import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
+import { stripeSubscriptionPeriodEndSec } from "@/lib/stripe-subscription-helpers";
 import {
   inferBillingFromStripePriceId,
   inferPaidTierFromStripePriceId,
@@ -90,8 +91,16 @@ export async function reconcileManagerPurchaseByStripeSubscriptionId(subscriptio
  * `stripe_subscription_id`. Fixes drift when webhooks lag or metadata was incomplete.
  */
 export async function reconcileManagerPurchaseWithStripe(userId: string): Promise<void> {
-  const { stripeSubscriptionId } = await getManagerPurchaseSku(userId);
-  const sid = stripeSubscriptionId?.trim();
+  const supabase = createSupabaseServiceRoleClient();
+  const { data: purchase } = await supabase
+    .from("manager_purchases")
+    .select("stripe_subscription_id, stripe_checkout_session_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (isAdminManagedManagerPurchase(purchase?.stripe_checkout_session_id)) return;
+
+  const sid = purchase?.stripe_subscription_id?.trim();
   if (!sid) return;
 
   const stripe = getStripe();
@@ -99,7 +108,6 @@ export async function reconcileManagerPurchaseWithStripe(userId: string): Promis
   try {
     sub = await stripe.subscriptions.retrieve(sid, { expand: ["items.data.price"] });
   } catch {
-    const supabase = createSupabaseServiceRoleClient();
     await supabase
       .from("manager_purchases")
       .update({ tier: "free", billing: "free", stripe_subscription_id: null })
@@ -108,7 +116,16 @@ export async function reconcileManagerPurchaseWithStripe(userId: string): Promis
   }
 
   if (sub.status === "canceled" || sub.status === "incomplete_expired") {
-    const supabase = createSupabaseServiceRoleClient();
+    await supabase
+      .from("manager_purchases")
+      .update({ tier: "free", billing: "free", stripe_subscription_id: null })
+      .eq("user_id", userId);
+    return;
+  }
+
+  const periodEndSec = stripeSubscriptionPeriodEndSec(sub);
+  const cancelAtPeriodEnd = Boolean((sub as { cancel_at_period_end?: boolean }).cancel_at_period_end);
+  if (cancelAtPeriodEnd && periodEndSec && periodEndSec * 1000 <= Date.now()) {
     await supabase
       .from("manager_purchases")
       .update({ tier: "free", billing: "free", stripe_subscription_id: null })
@@ -123,7 +140,6 @@ export async function reconcileManagerPurchaseWithStripe(userId: string): Promis
 
   if (!paidTier || !billing) return;
 
-  const supabase = createSupabaseServiceRoleClient();
   await supabase
     .from("manager_purchases")
     .update({

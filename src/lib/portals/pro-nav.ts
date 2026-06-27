@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
-import { FREE_SUBSCRIPTION_SECTIONS, getManagerPurchaseSku, normalizeManagerSkuTier, paidWorkspacePortalTitle } from "@/lib/manager-access";
+import { FREE_SUBSCRIPTION_SECTIONS, getManagerPurchaseSku, getManagerSubscriptionTier, isManagerFreePlan, paidWorkspacePortalTitle } from "@/lib/manager-access";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { proPortal } from "./pro";
@@ -30,16 +30,9 @@ export const getProPortalRenderContext = cache(async () => {
   if (!effectiveUserId) redirect("/admin/dashboard");
 
   const purchase = await getManagerPurchaseSku(effectiveUserId);
+  const subscriptionTier = await getManagerSubscriptionTier(effectiveUserId);
   const portalTitle = paidWorkspacePortalTitle(purchase.tier, purchase.stripeSubscriptionId);
-  const missingTier = purchase.tier == null || String(purchase.tier).trim() === "";
-  const stripeManaged = Boolean(purchase.stripeSubscriptionId);
-  const isFree = normalizeManagerSkuTier(purchase.tier) === "free" || (missingTier && !stripeManaged);
-  const subscriptionTier: "free" | "paid" | null =
-    purchase.tier == null || String(purchase.tier).trim() === ""
-      ? null
-      : String(purchase.tier).toLowerCase() === "free"
-        ? "free"
-        : "paid";
+  const isFree = isManagerFreePlan(subscriptionTier);
 
   return {
     ctx,
@@ -73,9 +66,10 @@ export async function buildProPortalDefinition(): Promise<{
     previewLabel = p?.full_name?.trim() || p?.email || preview.targetUserId;
   }
 
-  const sections = isFree
-    ? proPortal.sections.filter((s) => FREE_SUBSCRIPTION_SECTIONS.has(s.section))
-    : proPortal.sections;
+  const sections = proPortal.sections.map((s) => ({
+    ...s,
+    tierLocked: isFree && !FREE_SUBSCRIPTION_SECTIONS.has(s.section),
+  }));
 
   return {
     definition: { ...proPortal, sections, title: portalTitle },

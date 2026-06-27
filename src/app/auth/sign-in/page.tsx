@@ -2,7 +2,6 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
-import { GoogleSignInSetupNote } from "@/components/auth/google-sign-in-setup-note";
 import { usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
@@ -92,13 +91,15 @@ function SignInForm() {
   const [errorText, setErrorText] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authError === "oauth" && oauthMessage) {
-      setErrorText(oauthMessage);
-      return;
-    }
-    if (authError === "auth" || authError === "oauth") {
-      setErrorText("Google sign-in could not be completed. Try again or use email and password.");
-    }
+    void Promise.resolve().then(() => {
+      if (authError === "oauth" && oauthMessage) {
+        setErrorText(oauthMessage);
+        return;
+      }
+      if (authError === "auth" || authError === "oauth") {
+        setErrorText("Google sign-in could not be completed. Try again or use email and password.");
+      }
+    });
   }, [authError, oauthMessage]);
 
   const handleSignIn = async () => {
@@ -185,7 +186,6 @@ function SignInForm() {
           viaContinue={!usesDirectOAuthReturn(nextPath)}
           disabled={busy}
         />
-        <GoogleSignInSetupNote />
       </div>
 
       <div className="my-6 flex items-center gap-3">

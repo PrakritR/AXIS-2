@@ -30,6 +30,24 @@ export const proPortal: PortalDefinition = {
       tabs: [],
     },
     {
+      section: "documents",
+      label: "Documents",
+      tabs: [
+        { id: "expense-documents", label: "Expense documents" },
+        { id: "income-documents", label: "Income documents" },
+        { id: "1099", label: "1099 forms" },
+        { id: "tax-summary", label: "Tax summary" },
+      ],
+    },
+    {
+      section: "financials",
+      label: "Finances",
+      tabs: [
+        { id: "income", label: "Income" },
+        { id: "expenses", label: "Expenses" },
+      ],
+    },
+    {
       section: "services",
       label: "Services",
       tabs: [
@@ -44,6 +62,7 @@ export const proPortal: PortalDefinition = {
       tabs: [
         { id: "unopened", label: "Unopened" },
         { id: "opened", label: "Opened" },
+        { id: "schedule", label: "Schedule" },
         { id: "sent", label: "Sent" },
         { id: "trash", label: "Trash" },
       ],

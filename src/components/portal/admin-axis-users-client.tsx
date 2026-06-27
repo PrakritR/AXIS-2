@@ -37,6 +37,14 @@ type CategoryFilter = "management" | "resident";
 type StatusTab = "active" | "disabled";
 type TierFilter = "all" | "free" | "pro" | "business";
 
+function normalizeManagerBilling(tier: string, billing: string): string {
+  if (tier === "free" || tier === "pending") return "free";
+  if (billing === "monthly" || billing === "annual" || billing === "portal" || billing === "free") {
+    return billing === "free" ? "portal" : billing;
+  }
+  return "portal";
+}
+
 function UsersEmptyIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -86,6 +94,7 @@ function TierBadge({ tier }: { tier: string }) {
     pro: "border-blue-200/90 bg-blue-50 text-blue-800",
     business: "border-sky-200/90 bg-sky-50 text-sky-800",
     free: "border-border bg-accent/30 text-muted",
+    pending: "border-amber-200/90 bg-amber-50 text-amber-900",
   };
   const cls = colors[tier.toLowerCase()] ?? colors.free;
   return (
@@ -106,6 +115,41 @@ function ManagerDetailRow({
 }) {
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editFullName, setEditFullName] = useState(row.fullName);
+  const [editTier, setEditTier] = useState(row.tier);
+  const [editBilling, setEditBilling] = useState(() => normalizeManagerBilling(row.tier, row.billing));
+
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      setEditFullName(row.fullName);
+      setEditTier(row.tier);
+      setEditBilling(normalizeManagerBilling(row.tier, row.billing));
+    });
+  }, [row.fullName, row.tier, row.billing]);
+
+  const saveEdits = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/managers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: row.id,
+          fullName: editFullName,
+          tier: editTier,
+          billing: editBilling,
+        }),
+      });
+      if (!res.ok) {
+        showToast("Could not save account changes.");
+        return;
+      }
+      showToast("Manager account updated.");
+      onRefresh();
+    } finally {
+      setBusy(false);
+    }
+  };
   const toggle = async () => {
     setBusy(true);
     try {
@@ -148,14 +192,69 @@ function ManagerDetailRow({
     <tr className="bg-accent/30">
       <td colSpan={5} className="px-5 py-5">
         <div className="flex flex-wrap items-start gap-8">
-          <div className="min-w-[160px] space-y-1">
+          <div className="min-w-[220px] space-y-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-muted" htmlFor={`mgr-name-${row.id}`}>
+                Full name
+              </label>
+              <input
+                id={`mgr-name-${row.id}`}
+                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm"
+                value={editFullName}
+                onChange={(e) => setEditFullName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-muted" htmlFor={`mgr-tier-${row.id}`}>
+                Plan tier
+              </label>
+              <select
+                id={`mgr-tier-${row.id}`}
+                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm"
+                value={editTier}
+                onChange={(e) => {
+                  const nextTier = e.target.value;
+                  setEditTier(nextTier);
+                  if (nextTier === "free" || nextTier === "pending") {
+                    setEditBilling("free");
+                  } else if (editBilling === "free") {
+                    setEditBilling("portal");
+                  }
+                }}
+              >
+                <option value="pending">Pending</option>
+                <option value="free">Free</option>
+                <option value="pro">Pro</option>
+                <option value="business">Business</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-muted" htmlFor={`mgr-billing-${row.id}`}>
+                Billing
+              </label>
+              <select
+                id={`mgr-billing-${row.id}`}
+                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm"
+                value={editBilling}
+                onChange={(e) => setEditBilling(e.target.value)}
+                disabled={editTier === "free" || editTier === "pending"}
+              >
+                <option value="free">Free</option>
+                <option value="portal">Admin grant (no payment)</option>
+                <option value="monthly">Monthly (expires in 1 month)</option>
+                <option value="annual">Annual (expires in 1 year)</option>
+              </select>
+            </div>
+            <Button type="button" className="rounded-full" onClick={() => void saveEdits()} disabled={busy}>
+              {busy ? "Saving…" : "Save changes"}
+            </Button>
             <div className="flex flex-wrap gap-2 pt-1">
               <TierBadge tier={row.tier} />
               <StatusPill active={row.active} />
             </div>
             {row.joinedAt && (
-              <p className="pt-1 text-xs text-muted">
+              <p className="text-xs text-muted">
                 Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
               </p>
             )}

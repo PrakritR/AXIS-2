@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
@@ -34,6 +35,9 @@ import {
   syncManagerVendorsFromServer,
 } from "@/lib/manager-vendors-storage";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-documents/spec";
+import type { WorkOrderCategory } from "@/lib/reports/categories";
+import { syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
@@ -89,6 +93,15 @@ export function ManagerWorkOrdersPanel({
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
   const [hcTick, setHcTick] = useState(0);
   const [vendorTick, setVendorTick] = useState(0);
+  const [completeRow, setCompleteRow] = useState<DemoManagerWorkOrderRow | null>(null);
+  const [completeBusy, setCompleteBusy] = useState(false);
+  const [completeDraft, setCompleteDraft] = useState({
+    category: "general" as WorkOrderCategory,
+    vendorCost: "",
+    materialsCost: "",
+    materialsMemo: "",
+    workDoneSummary: "",
+  });
 
   useEffect(() => {
     void syncManagerVendorsFromServer();
@@ -230,15 +243,61 @@ export function ManagerWorkOrdersPanel({
     showToast("Visit time updated.");
   };
 
-  const markComplete = (row: DemoManagerWorkOrderRow) => {
+  const openCompleteModal = (row: DemoManagerWorkOrderRow) => {
     if (row.bucket !== "scheduled") return;
-    updateManagerWorkOrder(row.id, (r) => ({
-      ...r,
-      bucket: "completed",
-      status: "Completed",
-    }));
-    showToast("Marked complete.");
-    setExpandedId(null);
+    setCompleteRow(row);
+    setCompleteDraft({
+      category: row.category ?? parseWorkOrderCategoryFromDescription(row.description),
+      vendorCost: row.vendorCostCents ? String(row.vendorCostCents / 100) : "",
+      materialsCost: row.materialsCostCents ? String(row.materialsCostCents / 100) : "",
+      materialsMemo: row.materialsMemo ?? "",
+      workDoneSummary: row.workDoneSummary ?? row.title,
+    });
+  };
+
+  const submitComplete = async () => {
+    if (!completeRow) return;
+    setCompleteBusy(true);
+    try {
+      const vendorCostCents = completeDraft.vendorCost.trim()
+        ? Math.round(Number.parseFloat(completeDraft.vendorCost.replace(/[^0-9.]/g, "")) * 100)
+        : 0;
+      const materialsCostCents = completeDraft.materialsCost.trim()
+        ? Math.round(Number.parseFloat(completeDraft.materialsCost.replace(/[^0-9.]/g, "")) * 100)
+        : 0;
+      const res = await fetch("/api/portal/work-orders/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          workOrder: completeRow,
+          category: completeDraft.category,
+          vendorCostCents: vendorCostCents > 0 ? vendorCostCents : undefined,
+          materialsCostCents: materialsCostCents > 0 ? materialsCostCents : undefined,
+          materialsMemo: completeDraft.materialsMemo,
+          workDoneSummary: completeDraft.workDoneSummary,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not complete work order.");
+      updateManagerWorkOrder(completeRow.id, () => data.workOrder as DemoManagerWorkOrderRow);
+      void syncManagerWorkOrdersFromServer();
+      showToast(
+        data.expenseEntryIds?.length
+          ? "Work order completed and expenses logged."
+          : "Work order marked complete.",
+      );
+      setCompleteRow(null);
+      setExpandedId(null);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not complete work order.");
+    } finally {
+      setCompleteBusy(false);
+    }
+  };
+
+  const markComplete = (row: DemoManagerWorkOrderRow) => {
+    openCompleteModal(row);
   };
 
   /** Persist cost without changing bucket. */
@@ -633,6 +692,72 @@ export function ManagerWorkOrdersPanel({
           </tbody>
         </table>
       </div>
+
+      <Modal open={Boolean(completeRow)} onClose={() => setCompleteRow(null)} title="Complete work order">
+        {completeRow ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              {completeRow.propertyName} · {completeRow.title}
+            </p>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Category
+              <select
+                className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+                value={completeDraft.category}
+                onChange={(e) => setCompleteDraft({ ...completeDraft, category: e.target.value as WorkOrderCategory })}
+                disabled={completeBusy}
+              >
+                <option value="cleaning">Cleaning</option>
+                <option value="plumbing">Plumbing</option>
+                <option value="mold">Mold remediation</option>
+                <option value="electrical">Electrical</option>
+                <option value="hvac">HVAC</option>
+                <option value="general">General maintenance</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Vendor / labor cost (USD)
+              <Input
+                value={completeDraft.vendorCost}
+                onChange={(e) => setCompleteDraft({ ...completeDraft, vendorCost: e.target.value })}
+                disabled={completeBusy}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Materials / equipment cost (USD)
+              <Input
+                value={completeDraft.materialsCost}
+                onChange={(e) => setCompleteDraft({ ...completeDraft, materialsCost: e.target.value })}
+                disabled={completeBusy}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Materials notes
+              <Input
+                value={completeDraft.materialsMemo}
+                onChange={(e) => setCompleteDraft({ ...completeDraft, materialsMemo: e.target.value })}
+                disabled={completeBusy}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Work done summary
+              <Input
+                value={completeDraft.workDoneSummary}
+                onChange={(e) => setCompleteDraft({ ...completeDraft, workDoneSummary: e.target.value })}
+                disabled={completeBusy}
+              />
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setCompleteRow(null)} disabled={completeBusy}>
+                Cancel
+              </Button>
+              <Button type="button" variant="primary" onClick={() => void submitComplete()} disabled={completeBusy}>
+                Complete &amp; log expenses
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

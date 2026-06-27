@@ -53,6 +53,9 @@ import { POST as webhook } from "@/app/api/stripe/webhook/route";
 describe("Stripe subscription billing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(createSupabaseServerClient).mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+    } as never);
     process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
     process.env.STRIPE_PRICE_PRO_MONTHLY = "price_pro_monthly_test";
     process.env.STRIPE_PRICE_PRO_ANNUAL = "price_pro_annual_test";

@@ -299,7 +299,7 @@ export function ResidentPaymentsPanel() {
       selectedIds.has(expandedId) && selectedIds.size > 1 ? [...selectedIds] : [expandedId];
     const key = checkoutKey(ids, paymentMethod);
     if (checkout?.key === key && (checkout.loading || checkout.clientSecret || checkout.error)) return;
-    void loadCheckout(ids, paymentMethod);
+    void Promise.resolve().then(() => void loadCheckout(ids, paymentMethod));
   }, [
     charges,
     checkout?.key,
@@ -591,7 +591,7 @@ export function ResidentPaymentsPanel() {
                                 {row.blocksLeaseUntilPaid && row.status === "pending" ? (
                                   <p className="mt-3 text-sm text-amber-900">
                                     Pay this before signing your lease.{" "}
-                                    <Link href="/resident/lease" className="font-semibold text-primary underline underline-offset-2">
+                                    <Link href="/resident/documents/lease" className="font-semibold text-primary underline underline-offset-2">
                                       Open lease tab
                                     </Link>
                                     .
@@ -610,7 +610,7 @@ export function ResidentPaymentsPanel() {
                                     Copy balance
                                   </Button>
                                   <Link
-                                    href="/resident/lease"
+                                    href="/resident/documents/lease"
                                     className={`inline-flex items-center justify-center ${PORTAL_DETAIL_BTN}`}
                                   >
                                     Lease tab

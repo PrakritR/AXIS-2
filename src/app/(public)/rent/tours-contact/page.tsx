@@ -212,13 +212,15 @@ function TourFlow({
 
   useEffect(() => {
     let cancelled = false;
-    const params = new URLSearchParams({
-      propertyId: property.id,
-      buildingName: property.buildingName,
-      address: property.address,
-    });
-    setAvailabilityLoading(true);
-    void fetch(`/api/public/property-tour-availability?${params.toString()}`, { cache: "no-store" })
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      const params = new URLSearchParams({
+        propertyId: property.id,
+        buildingName: property.buildingName,
+        address: property.address,
+      });
+      setAvailabilityLoading(true);
+      void fetch(`/api/public/property-tour-availability?${params.toString()}`, { cache: "no-store" })
       .then(async (res) => {
         const body = (await res.json()) as { slotHosts?: Record<string, PropertyManagerEntry[]> };
         if (!cancelled) setSlotHosts(res.ok && body.slotHosts ? body.slotHosts : {});
@@ -229,6 +231,7 @@ function TourFlow({
       .finally(() => {
         if (!cancelled) setAvailabilityLoading(false);
       });
+    });
     return () => {
       cancelled = true;
     };

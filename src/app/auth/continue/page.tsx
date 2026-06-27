@@ -87,17 +87,64 @@ function ContinueContent() {
           return;
         }
 
+        try {
+          await fetch("/api/auth/reconcile-account", {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+          });
+        } catch {
+          // Non-blocking: portal routing still proceeds if linking fails.
+        }
+
         let roles = await fetchPortalRolesFast();
         if (!roles || roles.length === 0) {
           roles = fallbackRolesFromUser(user);
         }
         if (roles.length === 0) {
           const legacyRole = await fetchLegacyRole(supabase, user.id);
-          roles = legacyRole ? [legacyRole] : ["resident"];
+          if (legacyRole) {
+            roles = [legacyRole];
+          } else {
+            const accessRes = await fetch(
+              `/api/auth/oauth-portal-access?next=${encodeURIComponent(nextPath || "/auth/continue")}`,
+              { credentials: "include", cache: "no-store" },
+            );
+            if (accessRes.ok) {
+              const accessBody = (await accessRes.json()) as { redirectTo?: string };
+              const redirectTo = accessBody.redirectTo?.trim() ?? "";
+              const isContinueLoop =
+                redirectTo === "/auth/continue" || redirectTo.startsWith("/auth/continue?");
+              if (redirectTo.startsWith("/") && !isContinueLoop) {
+                if (cancelled || didRedirectRef.current) return;
+                didRedirectRef.current = true;
+                window.location.replace(redirectTo);
+                return;
+              }
+            }
+            if (cancelled || didRedirectRef.current) return;
+            didRedirectRef.current = true;
+            window.location.replace("/auth/create-account");
+            return;
+          }
         }
 
         if (cancelled || didRedirectRef.current) return;
         didRedirectRef.current = true;
+
+        if (roles.length === 1 && roles[0] === "manager") {
+          const onboardingRes = await fetch("/api/auth/manager-onboarding-status", {
+            credentials: "include",
+            cache: "no-store",
+          });
+          if (onboardingRes.ok) {
+            const onboardingBody = (await onboardingRes.json()) as { needsPricing?: boolean };
+            if (onboardingBody.needsPricing) {
+              window.location.replace("/partner/pricing");
+              return;
+            }
+          }
+        }
 
         if (roles.length > 1) {
           const q = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";

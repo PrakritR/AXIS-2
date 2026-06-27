@@ -15,45 +15,47 @@ function ManagerOauthFinishContent() {
   const didRunRef = useRef(false);
 
   useEffect(() => {
-    if (!sessionId) {
-      setErrorText("Missing signup session. Start again from Partner pricing.");
-      return;
-    }
-    if (didRunRef.current) return;
-    didRunRef.current = true;
-
     let cancelled = false;
 
-    void (async () => {
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (!user) {
-          window.location.replace(`/auth/sign-in?next=${encodeURIComponent(`/auth/manager-oauth-finish?session_id=${sessionId}`)}`);
-          return;
-        }
-
-        const res = await fetch("/api/auth/manager-signup-oauth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId }),
-        });
-        const body = (await res.json()) as { error?: string; managerId?: string };
-        if (!res.ok) {
-          if (!cancelled) setErrorText(body.error ?? "Could not finish account setup.");
-          return;
-        }
-
-        if (!cancelled) {
-          window.location.replace(portalDashboardPath("manager"));
-        }
-      } catch {
-        if (!cancelled) setErrorText("Could not finish account setup. Try again.");
+    void Promise.resolve().then(() => {
+      if (!sessionId) {
+        setErrorText("Missing signup session. Start again from Partner pricing.");
+        return;
       }
-    })();
+      if (didRunRef.current) return;
+      didRunRef.current = true;
+
+      void (async () => {
+        try {
+          const supabase = createSupabaseBrowserClient();
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+
+          if (!user) {
+            window.location.replace(`/auth/sign-in?next=${encodeURIComponent(`/auth/manager-oauth-finish?session_id=${sessionId}`)}`);
+            return;
+          }
+
+          const res = await fetch("/api/auth/manager-signup-oauth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId }),
+          });
+          const body = (await res.json()) as { error?: string; managerId?: string };
+          if (!res.ok) {
+            if (!cancelled) setErrorText(body.error ?? "Could not finish account setup.");
+            return;
+          }
+
+          if (!cancelled) {
+            window.location.replace(portalDashboardPath("manager"));
+          }
+        } catch {
+          if (!cancelled) setErrorText("Could not finish account setup. Try again.");
+        }
+      })();
+    });
 
     return () => {
       cancelled = true;

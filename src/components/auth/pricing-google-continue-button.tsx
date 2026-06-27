@@ -39,6 +39,7 @@ export function PricingGoogleContinueButton({
       label="Continue with Google"
       nextPath={nextPath}
       viaContinue={false}
+      fixedCallbackPath="/auth/callback/partner-pricing"
       disabled={disabled}
       onBeforeRedirect={onBeforeOAuth}
     />
