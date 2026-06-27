@@ -135,7 +135,6 @@ function ManagerPricingOauthContent() {
         }
 
         if (body.action === "checkout" && body.clientSecret) {
-          clearManagerPricingOffer();
           setCheckoutClientSecret(body.clientSecret);
           return;
         }

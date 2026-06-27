@@ -23,7 +23,19 @@ export type ReportsAuthContext =
       db: ReturnType<typeof createSupabaseServiceRoleClient>;
     };
 
-export async function getReportsAuthContext(): Promise<ReportsAuthContext | null> {
+export type ReportsPreferRole = "manager" | "resident";
+
+function hasManagerRole(roles: string[]): boolean {
+  return roles.some((r) => r === "manager" || r === "owner" || r === "pro");
+}
+
+function hasResidentRole(roles: string[]): boolean {
+  return roles.includes("resident");
+}
+
+export async function getReportsAuthContext(options?: {
+  preferRole?: ReportsPreferRole;
+}): Promise<ReportsAuthContext | null> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -46,7 +58,16 @@ export async function getReportsAuthContext(): Promise<ReportsAuthContext | null
   if (admin) {
     return { role: "admin", userId: user.id, email, db };
   }
-  if (allRoles.some((r) => r === "manager" || r === "owner" || r === "pro")) {
+
+  const preferRole = options?.preferRole;
+  if (preferRole === "resident" && hasResidentRole(allRoles)) {
+    return { role: "resident", userId: user.id, email, db };
+  }
+  if (preferRole === "manager" && hasManagerRole(allRoles)) {
+    return { role: "manager", userId: user.id, email, db };
+  }
+
+  if (hasManagerRole(allRoles)) {
     return { role: "manager", userId: user.id, email, db };
   }
   return { role: "resident", userId: user.id, email, db };

@@ -119,8 +119,10 @@ export async function markHouseholdChargePaidFromStripeSession(
       { onConflict: "id" },
     );
 
-    if (!upsertErr) marked += 1;
-    await syncLedgerPaymentEntry(db, nextCharge, now, session.id);
+    if (!upsertErr) {
+      marked += 1;
+      await syncLedgerPaymentEntry(db, nextCharge, now, session.id);
+    }
   }
 
   if (marked === 0) return { ok: false };

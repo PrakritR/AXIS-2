@@ -31,13 +31,14 @@ export async function GET(
 ) {
   try {
     const { reportId } = await ctx.params;
-    const auth = await getReportsAuthContext();
+    const isResidentReport = RESIDENT_REPORT_IDS.includes(reportId as (typeof RESIDENT_REPORT_IDS)[number]);
+    const auth = await getReportsAuthContext({ preferRole: isResidentReport ? "resident" : "manager" });
     if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
     const searchParams = new URL(req.url).searchParams;
     const backfill = searchParams.get("backfill") === "1";
 
-    if (RESIDENT_REPORT_IDS.includes(reportId as (typeof RESIDENT_REPORT_IDS)[number])) {
+    if (isResidentReport) {
       const gate = await assertResidentFinancialsAccess(auth);
       if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
 

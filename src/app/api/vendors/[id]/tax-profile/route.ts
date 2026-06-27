@@ -82,7 +82,7 @@ export async function PATCH(
 
     const { data, error } = await auth.db
       .from("vendor_tax_profiles")
-      .upsert(row, { onConflict: "vendor_id" })
+      .upsert(row, { onConflict: "manager_user_id,vendor_id" })
       .select(
         "vendor_id, legal_name, business_name, entity_type, address_line1, address_line2, city, state, zip, tin_type, tin_last4, w9_received_at, w9_attestation",
       )

@@ -83,8 +83,8 @@ create index if not exists manager_expense_entries_vendor_idx
   on public.manager_expense_entries (manager_user_id, vendor_id);
 
 create table if not exists public.vendor_tax_profiles (
-  vendor_id text primary key,
   manager_user_id uuid not null references auth.users (id) on delete cascade,
+  vendor_id text not null,
   legal_name text,
   business_name text,
   entity_type text check (entity_type in ('individual', 'business')),
@@ -99,11 +99,9 @@ create table if not exists public.vendor_tax_profiles (
   w9_received_at timestamptz,
   w9_attestation boolean not null default false,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  primary key (manager_user_id, vendor_id)
 );
-
-create index if not exists vendor_tax_profiles_manager_idx
-  on public.vendor_tax_profiles (manager_user_id);
 
 create table if not exists public.manager_tax_profiles (
   manager_user_id uuid primary key references auth.users (id) on delete cascade,

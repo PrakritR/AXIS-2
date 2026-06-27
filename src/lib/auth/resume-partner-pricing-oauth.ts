@@ -54,7 +54,6 @@ export async function resumePartnerPricingOAuth(): Promise<ResumePartnerPricingO
   }
 
   if (body.action === "checkout" && body.clientSecret) {
-    clearManagerPricingOffer();
     return { status: "checkout", clientSecret: body.clientSecret };
   }
 

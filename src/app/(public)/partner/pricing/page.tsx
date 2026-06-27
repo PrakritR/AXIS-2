@@ -3,7 +3,7 @@
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
+import { clearManagerPricingOffer, readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import {
   partnerPricingFinishPath,
   resumePartnerPricingOAuth,
@@ -195,6 +195,7 @@ export default function PartnerPricingPage() {
     const params = new URLSearchParams(window.location.search);
     const sid = params.get("session_id");
     if (sid) {
+      clearManagerPricingOffer();
       window.history.replaceState({}, "", "/partner/pricing");
       router.replace(`/auth/manager-id?session_id=${encodeURIComponent(sid)}`);
     }

@@ -102,6 +102,12 @@ export async function resolveOAuthPortalRedirect(
     if (linked.ok) {
       return "/resident/dashboard";
     }
+    const params = new URLSearchParams({
+      role: "resident",
+      message: "resident_signup_failed",
+    });
+    if (linked.error) params.set("error", linked.error);
+    return `/auth/create-account?${params.toString()}`;
   }
 
   const hasUnapprovedApplication = (applicationRows ?? []).some((row) => applicationBucket(row.row_data) !== "approved");

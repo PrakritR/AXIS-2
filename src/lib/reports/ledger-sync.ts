@@ -25,6 +25,10 @@ function dueDateFromCharge(charge: HouseholdCharge): string | null {
   return parseIsoDate(charge.createdAt);
 }
 
+function throwIfLedgerError(error: { message: string } | null): void {
+  if (error) throw new Error(`Ledger sync failed: ${error.message}`);
+}
+
 export async function syncLedgerChargeEntry(
   db: SupabaseClient,
   charge: HouseholdCharge,
@@ -61,9 +65,11 @@ export async function syncLedgerChargeEntry(
     .maybeSingle();
 
   if (existing?.id) {
-    await db.from("ledger_entries").update(row).eq("id", existing.id);
+    const { error } = await db.from("ledger_entries").update(row).eq("id", existing.id);
+    throwIfLedgerError(error);
   } else {
-    await db.from("ledger_entries").insert(row);
+    const { error } = await db.from("ledger_entries").insert(row);
+    throwIfLedgerError(error);
   }
 
   if (charge.status === "paid") {
@@ -109,9 +115,11 @@ export async function syncLedgerPaymentEntry(
     .maybeSingle();
 
   if (existing?.id) {
-    await db.from("ledger_entries").update(row).eq("id", existing.id);
+    const { error } = await db.from("ledger_entries").update(row).eq("id", existing.id);
+    throwIfLedgerError(error);
   } else {
-    await db.from("ledger_entries").insert(row);
+    const { error } = await db.from("ledger_entries").insert(row);
+    throwIfLedgerError(error);
   }
 }
 
