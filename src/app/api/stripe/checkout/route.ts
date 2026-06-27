@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveManagerPurchaseForPricing } from "@/lib/auth/manager-pricing-selection";
+import { ensureProvisionedManagerForPricing } from "@/lib/auth/manager-pricing-selection";
 import { createManagerCheckoutSession } from "@/lib/stripe/manager-checkout";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -57,13 +57,16 @@ export async function POST(req: Request) {
       const email = authUser.email?.trim().toLowerCase() ?? (typeof body.email === "string" ? body.email.trim().toLowerCase() : "");
       if (email) {
         const supabase = createSupabaseServiceRoleClient();
-        const purchaseState = await resolveManagerPurchaseForPricing(supabase, authUser.id, email);
-        if (purchaseState.kind === "complete") {
+        const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+        const prepared = await ensureProvisionedManagerForPricing(supabase, {
+          userId: authUser.id,
+          email,
+          fullName: fullName || null,
+        });
+        if (prepared.kind === "complete") {
           return NextResponse.json({ error: "A manager account already exists for this email." }, { status: 409 });
         }
-        if (purchaseState.kind === "pending") {
-          managerId = purchaseState.managerId;
-        }
+        managerId = prepared.managerId;
       }
     }
 

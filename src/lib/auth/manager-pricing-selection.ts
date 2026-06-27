@@ -1,8 +1,8 @@
 import {
   findManagerPurchaseForAccount,
   finalizePendingManagerFreeTier,
-  isAxisPendingSessionId,
   isManagerOnboardingComplete,
+  provisionPendingManagerAccount,
 } from "@/lib/auth/manager-onboarding";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -21,10 +21,24 @@ export async function resolveManagerPurchaseForPricing(
   const purchase = await findManagerPurchaseForAccount(supabase, userId, email);
   if (!purchase) return { kind: "none" };
   if (isManagerOnboardingComplete(purchase)) return { kind: "complete" };
-  if (isAxisPendingSessionId(purchase.stripe_checkout_session_id) || purchase.tier == null) {
-    return { kind: "pending", managerId: purchase.manager_id, purchaseId: purchase.id };
+  return { kind: "pending", managerId: purchase.manager_id, purchaseId: purchase.id };
+}
+
+/** Ensures profile + pending purchase exist for a signed-in user starting or resuming pricing. */
+export async function ensureProvisionedManagerForPricing(
+  supabase: SupabaseClient,
+  opts: { userId: string; email: string; fullName?: string | null },
+): Promise<{ kind: "complete" } | { kind: "ready"; managerId: string }> {
+  const state = await resolveManagerPurchaseForPricing(supabase, opts.userId, opts.email);
+  if (state.kind === "complete") return { kind: "complete" };
+
+  if (state.kind === "none") {
+    const { managerId } = await provisionPendingManagerAccount(supabase, opts);
+    return { kind: "ready", managerId };
   }
-  return { kind: "none" };
+
+  await provisionPendingManagerAccount(supabase, opts);
+  return { kind: "ready", managerId: state.managerId };
 }
 
 export async function completeFreeManagerTierForUser(
@@ -38,13 +52,11 @@ export async function completeFreeManagerTierForUser(
     promo?: string | null;
   },
 ): Promise<{ managerId: string; alreadyLinked: boolean }> {
-  const state = await resolveManagerPurchaseForPricing(supabase, opts.userId, opts.email);
-  if (state.kind === "complete") {
+  const prepared = await ensureProvisionedManagerForPricing(supabase, opts);
+  if (prepared.kind === "complete") {
     throw new Error("A manager account already exists for this email. Sign in instead.");
   }
-  if (state.kind === "pending") {
-    await finalizePendingManagerFreeTier(supabase, opts);
-    return { managerId: state.managerId, alreadyLinked: true };
-  }
-  return { managerId: "", alreadyLinked: false };
+
+  await finalizePendingManagerFreeTier(supabase, opts);
+  return { managerId: prepared.managerId, alreadyLinked: true };
 }

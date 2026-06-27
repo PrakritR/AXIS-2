@@ -42,7 +42,11 @@ describe("GET /api/cron/send-payment-reminders", () => {
           return { select: vi.fn().mockResolvedValue({ data: [] }) };
         }
         if (table === "portal_outbound_mail_records") {
-          return { select: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue({ data: [] }) }) };
+          return {
+            select: vi.fn().mockReturnValue({
+              or: vi.fn().mockResolvedValue({ data: [] }),
+            }),
+          };
         }
         if (table === "manager_automation_settings") {
           return {

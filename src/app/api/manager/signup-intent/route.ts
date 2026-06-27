@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { completeFreeManagerTierForUser, resolveManagerPurchaseForPricing } from "@/lib/auth/manager-pricing-selection";
+import { completeFreeManagerTierForUser } from "@/lib/auth/manager-pricing-selection";
 import { generateManagerId } from "@/lib/manager-id";
 import { newAxisIntentSessionId } from "@/lib/manager-signup-intent";
 import { normalizeOnboardDiscountPercent } from "@/lib/stripe-onboard-discount";
@@ -76,15 +76,8 @@ export async function POST(req: Request) {
     } = await supabaseAuth.auth.getUser();
 
     if (authUser?.id && authUser.email?.trim().toLowerCase() === email) {
-      const purchaseState = await resolveManagerPurchaseForPricing(supabase, authUser.id, email);
-      if (purchaseState.kind === "complete") {
-        return NextResponse.json(
-          { error: "A manager account already exists for this email. Sign in instead." },
-          { status: 409 },
-        );
-      }
-      if (purchaseState.kind === "pending") {
-        await completeFreeManagerTierForUser(supabase, {
+      try {
+        const { managerId } = await completeFreeManagerTierForUser(supabase, {
           userId: authUser.id,
           email,
           fullName,
@@ -96,7 +89,13 @@ export async function POST(req: Request) {
               ? `ONBOARD_FREE_${tierRaw.toUpperCase()}`
               : null,
         });
-        return NextResponse.json({ action: "portal", managerId: purchaseState.managerId });
+        return NextResponse.json({ action: "portal", managerId });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Could not create signup.";
+        if (message.includes("already exists")) {
+          return NextResponse.json({ error: message }, { status: 409 });
+        }
+        throw e;
       }
     } else {
       const { data: purchasesForEmail } = await supabase.from("manager_purchases").select("user_id").eq("email", email);

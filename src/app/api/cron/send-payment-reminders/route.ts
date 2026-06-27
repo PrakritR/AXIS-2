@@ -97,7 +97,10 @@ export async function GET(req: Request) {
     chargesByManager.set(mgr, list);
   }
 
-  const { data: outboundRows } = await db.from("portal_outbound_mail_records").select("id").limit(10000);
+  const { data: outboundRows } = await db
+    .from("portal_outbound_mail_records")
+    .select("id")
+    .or("id.like.payment_reminder_%,id.like.late_fee_notice_%");
   const sentDedupIds = new Set((outboundRows ?? []).map((r) => String(r.id)));
 
   let sent = 0;
@@ -198,7 +201,7 @@ export async function GET(req: Request) {
         const listing = listingByPropertyId.get(charge.propertyId);
         const policy = lateFeePolicyFromSubmission(listing);
         const daysPastDue = daysBetween(dueDate, now);
-        if (policy.enabled && daysPastDue >= policy.graceDays && settings.lateFeeNoticeEnabled) {
+        if (policy.enabled && daysPastDue >= policy.graceDays) {
           const lateFeeId = `hc_late_fee_${charge.id}`;
           const lateFeeCharge: HouseholdCharge = {
             id: lateFeeId,
@@ -248,7 +251,7 @@ export async function GET(req: Request) {
           const residentLower = charge.residentEmail.trim().toLowerCase();
           const noticeDedupId = `late_fee_notice_${lateFeeId}`;
 
-          if (apiKey && !sentDedupIds.has(noticeDedupId)) {
+          if (apiKey && settings.lateFeeNoticeEnabled && !sentDedupIds.has(noticeDedupId)) {
             try {
               await fetch("https://api.resend.com/emails", {
                 method: "POST",

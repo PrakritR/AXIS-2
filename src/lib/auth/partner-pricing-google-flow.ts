@@ -71,6 +71,14 @@ export async function continuePartnerPricingWithOffer(
     return { status: "error", message: "Sign in with Google first." };
   }
 
+  const session = await fetchPartnerPricingSession();
+  if (session.authenticated && session.needsPricing) {
+    const provision = await provisionPartnerPricingGoogleAccount();
+    if (!provision.ok) {
+      return { status: "error", message: provision.error };
+    }
+  }
+
   const res = await fetch("/api/manager/pricing-oauth-continue", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
