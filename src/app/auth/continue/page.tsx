@@ -93,7 +93,7 @@ function ContinueContent() {
         }
         if (roles.length === 0) {
           const legacyRole = await fetchLegacyRole(supabase, user.id);
-          roles = legacyRole ? [legacyRole] : ["resident"];
+          roles = legacyRole ? [legacyRole] : ["manager"];
         }
 
         if (cancelled || didRedirectRef.current) return;
@@ -105,7 +105,7 @@ function ContinueContent() {
           return;
         }
 
-        const role = roles[0] ?? "resident";
+        const role = roles[0] ?? "manager";
         window.location.replace(nextPath || portalDashboardPath(role));
       } catch {
         if (cancelled) return;

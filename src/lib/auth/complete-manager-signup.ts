@@ -54,6 +54,13 @@ async function linkManagerPurchase(
     return { ok: false, status: 500, error: linkErr.message };
   }
 
+  await supabase
+    .from("manager_purchases")
+    .delete()
+    .eq("email", normalizedEmail)
+    .is("user_id", null)
+    .neq("id", purchase.id);
+
   return { ok: true, managerId: purchase.manager_id };
 }
 

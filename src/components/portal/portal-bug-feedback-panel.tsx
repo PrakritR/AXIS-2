@@ -15,6 +15,7 @@ import {
   type BugSeverity,
   type PortalBugFeedbackRow,
 } from "@/lib/portal-bug-feedback";
+import { BUG_FEEDBACK_MAX_ATTACHMENTS, uploadBugFeedbackImages } from "@/lib/bug-feedback-attachments";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 function formatWhen(iso: string) {
@@ -42,6 +43,7 @@ export function PortalBugFeedbackPanel({
   const [description, setDescription] = useState("");
   const [steps, setSteps] = useState("");
   const [severity, setSeverity] = useState<BugSeverity>("medium");
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
 
@@ -70,6 +72,7 @@ export function PortalBugFeedbackPanel({
     setDescription("");
     setSteps("");
     setSeverity("medium");
+    setAttachments([]);
   };
 
   const handleSubmit = async () => {
@@ -89,6 +92,7 @@ export function PortalBugFeedbackPanel({
     }
     setBusy(true);
     try {
+      const attachmentUrls = attachments.length > 0 ? await uploadBugFeedbackImages(attachments) : undefined;
       await submitBugFeedbackReport({
         type: formType,
         reporterUserId: userId,
@@ -99,6 +103,7 @@ export function PortalBugFeedbackPanel({
         description,
         stepsToReproduce: formType === "bug" ? steps : undefined,
         severity: formType === "bug" ? severity : undefined,
+        attachmentUrls,
       });
       resetForm();
       await refresh();
@@ -191,6 +196,30 @@ export function PortalBugFeedbackPanel({
                 />
               </div>
             ) : null}
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-muted">
+                Screenshots (optional, up to {BUG_FEEDBACK_MAX_ATTACHMENTS})
+              </p>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                multiple
+                className="block w-full text-xs text-muted file:mr-3 file:rounded-full file:border-0 file:bg-accent/50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-foreground"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []).slice(0, BUG_FEEDBACK_MAX_ATTACHMENTS);
+                  setAttachments(files);
+                }}
+              />
+              {attachments.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {attachments.map((file) => (
+                    <span key={`${file.name}-${file.lastModified}`} className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] text-muted">
+                      {file.name}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <Button type="button" className="rounded-full" disabled={busy} onClick={() => void handleSubmit()}>
               {busy ? "Sending…" : formType === "bug" ? "Submit bug report" : "Send feedback"}
             </Button>

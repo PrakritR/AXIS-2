@@ -132,16 +132,6 @@ export function isStripeManagedBilling(billing: string | null | undefined): bool
   return b === "monthly" || b === "annual";
 }
 
-const TIER_RANK: Record<string, number> = {
-  business: 3,
-  pro: 2,
-  free: 1,
-};
-
-function tierRank(tier: string | null | undefined): number {
-  return TIER_RANK[String(tier ?? "").toLowerCase()] ?? 0;
-}
-
 type ManagerPurchaseRowRecord = {
   id: string;
   tier: string | null;
@@ -149,6 +139,7 @@ type ManagerPurchaseRowRecord = {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   paid_at: string | null;
+  user_id: string | null;
 };
 
 async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPurchaseRowRecord[]> {
@@ -156,7 +147,7 @@ async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPu
   const { data: profile } = await supabase.from("profiles").select("email").eq("id", userId).maybeSingle();
   const email = profile?.email?.trim().toLowerCase() ?? "";
 
-  const select = "id, tier, billing, stripe_customer_id, stripe_subscription_id, paid_at";
+  const select = "id, tier, billing, stripe_customer_id, stripe_subscription_id, paid_at, user_id";
   const [{ data: byUserId }, { data: byEmail }] = await Promise.all([
     supabase.from("manager_purchases").select(select).eq("user_id", userId),
     email
@@ -171,11 +162,17 @@ async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPu
   return [...merged.values()];
 }
 
-function pickBestManagerPurchaseRow(rows: ManagerPurchaseRowRecord[]): ManagerPurchaseRowRecord | null {
+/** Prefer the linked signup row; otherwise the most recent purchase — not the highest tier. */
+export function pickBestManagerPurchaseRow(
+  rows: ManagerPurchaseRowRecord[],
+  userId?: string,
+): ManagerPurchaseRowRecord | null {
   if (rows.length === 0) return null;
-  return [...rows].sort((a, b) => {
-    const tierDiff = tierRank(b.tier) - tierRank(a.tier);
-    if (tierDiff !== 0) return tierDiff;
+
+  const linked = userId ? rows.filter((r) => r.user_id === userId) : [];
+  const pool = linked.length > 0 ? linked : rows;
+
+  return [...pool].sort((a, b) => {
     const aTime = a.paid_at ? Date.parse(a.paid_at) : 0;
     const bTime = b.paid_at ? Date.parse(b.paid_at) : 0;
     return bTime - aTime;
@@ -188,7 +185,7 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
 }> => {
-  const best = pickBestManagerPurchaseRow(await loadManagerPurchaseRowsForUser(userId));
+  const best = pickBestManagerPurchaseRow(await loadManagerPurchaseRowsForUser(userId), userId);
   if (!best) {
     return { tier: null, billing: null, stripeCustomerId: null, stripeSubscriptionId: null };
   }

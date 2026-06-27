@@ -20,6 +20,7 @@ export type PortalBugFeedbackRow = {
   severity?: BugSeverity;
   status: BugFeedbackStatus;
   adminNotes?: string;
+  attachmentUrls?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -102,6 +103,7 @@ export async function submitBugFeedbackReport(input: {
   description: string;
   stepsToReproduce?: string;
   severity?: BugSeverity;
+  attachmentUrls?: string[];
 }): Promise<PortalBugFeedbackRow> {
   const now = new Date().toISOString();
   const row: PortalBugFeedbackRow = {
@@ -116,6 +118,7 @@ export async function submitBugFeedbackReport(input: {
     description: input.description.trim(),
     stepsToReproduce: input.type === "bug" ? input.stepsToReproduce?.trim() : undefined,
     severity: input.type === "bug" ? input.severity ?? "medium" : undefined,
+    attachmentUrls: input.attachmentUrls?.length ? input.attachmentUrls : undefined,
     status: "open",
     createdAt: now,
     updatedAt: now,
@@ -140,4 +143,19 @@ export async function updateBugFeedbackRow(
   rows[idx] = next;
   writeLocal(rows);
   await persistRow(next);
+}
+
+export async function deleteBugFeedbackRow(id: string): Promise<void> {
+  if (!isBrowser()) return;
+  const res = await fetch("/api/portal-bug-feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "delete", id }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Could not delete feedback.");
+  }
+  writeLocal(cachedRows.filter((r) => r.id !== id));
 }

@@ -34,6 +34,11 @@ export function normalizeBugFeedbackRow(row: unknown): PortalBugFeedbackRow | nu
       ? r.status
       : "open") as BugFeedbackStatus,
     adminNotes: typeof r.adminNotes === "string" ? r.adminNotes.trim() : undefined,
+    attachmentUrls: Array.isArray(r.attachmentUrls)
+      ? r.attachmentUrls.map(String).filter(Boolean)
+      : Array.isArray(r.attachment_urls)
+        ? r.attachment_urls.map(String).filter(Boolean)
+        : undefined,
     createdAt: String(r.createdAt ?? r.created_at ?? new Date().toISOString()),
     updatedAt: String(r.updatedAt ?? r.updated_at ?? new Date().toISOString()),
   };
