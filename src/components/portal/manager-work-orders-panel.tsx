@@ -595,106 +595,87 @@ export function ManagerWorkOrdersPanel({
                         ) : null}
 
                         {/* Billing section */}
-                        <div className="mt-4 rounded-lg border border-border bg-card p-3">
-                          <p className="text-xs font-semibold text-foreground">Billing (optional)</p>
-                          <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                            Bill the resident for pass-through costs. Choose paid if they already paid you (e.g. lockout fee).
-                          </p>
-                          {linkedCharge ? (
-                            <p className="mt-2 rounded-md bg-accent/40 px-2.5 py-1.5 text-[11px] text-foreground ring-1 ring-border">
-                              {linkedCharge.status === "paid" ? (
-                                <>
-                                  Paid: <span className="font-semibold">{linkedCharge.amountLabel}</span>
-                                </>
-                              ) : (
-                                <>
-                                  Pending: <span className="font-semibold">{linkedCharge.balanceLabel}</span>
-                                </>
-                              )}{" "}
-                              · <span className="font-medium">{linkedCharge.residentEmail}</span>
-                              {linkedCharge.status === "pending" ? ". Mark paid in Payments before changing the amount." : ""}
+                        {!linkedCharge ? (
+                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
+                            <p className="text-xs font-semibold text-foreground">Billing (optional)</p>
+                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
+                              Bill the resident for pass-through costs. Choose paid if they already paid you (e.g. lockout fee).
                             </p>
-                          ) : null}
-                          <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
-                            <div>
-                              <p className="mb-1 text-[11px] font-medium text-muted">Cost</p>
-                              <Input
-                                type="text"
-                                inputMode="decimal"
-                                placeholder="e.g. 75 or $75"
-                                value={draft.cost}
-                                onChange={(e) =>
-                                  setBillDraftById((prev) => ({
-                                    ...prev,
-                                    [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), cost: e.target.value },
-                                  }))
-                                }
-                                className="h-8 rounded-md text-sm"
-                                disabled={!!linkedCharge}
-                              />
-                            </div>
-                            <div>
-                              <p className="mb-1 text-[11px] font-medium text-muted">Payment status</p>
-                              <Select
-                                className="h-8 rounded-md text-sm"
-                                value={draft.paymentStatus}
-                                onChange={(e) =>
-                                  setBillDraftById((prev) => ({
-                                    ...prev,
-                                    [row.id]: {
-                                      ...(prev[row.id] ?? defaultBillDraft(row)),
-                                      paymentStatus: e.target.value as "pending" | "paid",
-                                    },
-                                  }))
-                                }
-                                disabled={!!linkedCharge}
-                              >
-                                <option value="pending">Pending</option>
-                                <option value="paid">Paid</option>
-                              </Select>
-                            </div>
-                            <div className="sm:col-span-1">
-                              <p className="mb-1 text-[11px] font-medium text-muted">Resident email</p>
-                              <Input
-                                type="email"
-                                autoComplete="email"
-                                placeholder="resident@email.com"
-                                value={draft.email}
-                                onChange={(e) =>
-                                  setBillDraftById((prev) => ({
-                                    ...prev,
-                                    [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), email: e.target.value },
-                                  }))
-                                }
-                                className="h-8 rounded-md text-sm"
-                                disabled={!!linkedCharge}
-                              />
-                            </div>
-                            <div className="sm:col-span-3">
-                              <p className="mb-1 text-[11px] font-medium text-muted">Resident name (optional)</p>
-                              <Input
-                                type="text"
-                                autoComplete="name"
-                                placeholder="Shown on the payment line"
-                                value={draft.name}
-                                onChange={(e) =>
-                                  setBillDraftById((prev) => ({
-                                    ...prev,
-                                    [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), name: e.target.value },
-                                  }))
-                                }
-                                className="h-8 rounded-md text-sm"
-                                disabled={!!linkedCharge}
-                              />
+                            <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
+                              <div>
+                                <p className="mb-1 text-[11px] font-medium text-muted">Cost</p>
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="e.g. 75 or $75"
+                                  value={draft.cost}
+                                  onChange={(e) =>
+                                    setBillDraftById((prev) => ({
+                                      ...prev,
+                                      [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), cost: e.target.value },
+                                    }))
+                                  }
+                                  className="h-8 rounded-md text-sm"
+                                />
+                              </div>
+                              <div>
+                                <p className="mb-1 text-[11px] font-medium text-muted">Payment status</p>
+                                <Select
+                                  className="h-8 rounded-md text-sm"
+                                  value={draft.paymentStatus}
+                                  onChange={(e) =>
+                                    setBillDraftById((prev) => ({
+                                      ...prev,
+                                      [row.id]: {
+                                        ...(prev[row.id] ?? defaultBillDraft(row)),
+                                        paymentStatus: e.target.value as "pending" | "paid",
+                                      },
+                                    }))
+                                  }
+                                >
+                                  <option value="pending">Pending</option>
+                                  <option value="paid">Paid</option>
+                                </Select>
+                              </div>
+                              <div className="sm:col-span-1">
+                                <p className="mb-1 text-[11px] font-medium text-muted">Resident email</p>
+                                <Input
+                                  type="email"
+                                  autoComplete="email"
+                                  placeholder="resident@email.com"
+                                  value={draft.email}
+                                  onChange={(e) =>
+                                    setBillDraftById((prev) => ({
+                                      ...prev,
+                                      [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), email: e.target.value },
+                                    }))
+                                  }
+                                  className="h-8 rounded-md text-sm"
+                                />
+                              </div>
+                              <div className="sm:col-span-3">
+                                <p className="mb-1 text-[11px] font-medium text-muted">Resident name (optional)</p>
+                                <Input
+                                  type="text"
+                                  autoComplete="name"
+                                  placeholder="Shown on the payment line"
+                                  value={draft.name}
+                                  onChange={(e) =>
+                                    setBillDraftById((prev) => ({
+                                      ...prev,
+                                      [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), name: e.target.value },
+                                    }))
+                                  }
+                                  className="h-8 rounded-md text-sm"
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-
-                        {row.bucket === "completed" ? (
-                          <p className="mt-3 text-xs text-muted">
-                            This work order is completed.{row.scheduled && row.scheduled !== "—" ? ` Visit was on ${row.scheduled}.` : ""} Billing history is in Payments.
+                        ) : (
+                          <p className="mt-4 text-xs text-muted">
+                            Payment: {linkedCharge.status === "paid" ? "Paid" : "Pending"} · {linkedCharge.amountLabel} · {linkedCharge.residentEmail}
                           </p>
-                        ) : null}
+                        )}
 
                         <PortalTableDetailActions>
                           {!linkedCharge ? (
