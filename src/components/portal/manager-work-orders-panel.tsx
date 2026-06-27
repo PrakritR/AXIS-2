@@ -73,6 +73,14 @@ function formatScheduledLabel(iso: string): string {
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+/** Restrict photo links to http(s) or inline image data URLs (CodeQL xss-through-dom). */
+function safePhotoHref(src: string): string | null {
+  const trimmed = src.trim();
+  if (trimmed.startsWith("data:image/")) return trimmed;
+  if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) return trimmed;
+  return null;
+}
+
 export function ManagerWorkOrdersPanel({
   allRows,
   bucket,
@@ -170,14 +178,6 @@ export function ManagerWorkOrdersPanel({
     }
     return m;
   }, [rows, hcTick]);
-
-  const pendingByWoId = useMemo(() => {
-    const m = new Map<string, ReturnType<typeof findPendingWorkOrderCharge>>();
-    for (const [id, charge] of chargeByWoId) {
-      if (charge?.status === "pending") m.set(id, charge);
-    }
-    return m;
-  }, [chargeByWoId]);
 
   /** Schedule the visit (date required). Cost + email optional — only creates a billing charge if both are provided. */
   const saveScheduleFromOpen = (row: DemoManagerWorkOrderRow) => {
@@ -376,7 +376,6 @@ export function ManagerWorkOrdersPanel({
             {rows.map((row) => {
               const draft = billDraftById[row.id] ?? defaultBillDraft(row);
               const linkedCharge = chargeByWoId.get(row.id);
-              const pendingCharge = pendingByWoId.get(row.id);
               const visitAt = visitAtById[row.id] ?? "";
               const isExpanded = expandedId === row.id;
 
@@ -473,16 +472,19 @@ export function ManagerWorkOrdersPanel({
                           <div className="mt-4">
                             <p className="text-xs font-medium uppercase tracking-wide text-muted">Photos</p>
                             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                              {row.photoDataUrls.map((src, index) => (
+                              {row.photoDataUrls.map((src, index) => {
+                                const href = safePhotoHref(src);
+                                if (!href) return null;
+                                return (
                                 <a
                                   key={`${row.id}-photo-${index}`}
-                                  href={src}
+                                  href={href}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="block overflow-hidden rounded-xl border border-border bg-accent/30"
                                 >
                                   <Image
-                                    src={src}
+                                    src={href}
                                     alt={`Work order photo ${index + 1}`}
                                     width={240}
                                     height={180}
@@ -490,7 +492,8 @@ export function ManagerWorkOrdersPanel({
                                     unoptimized
                                   />
                                 </a>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         ) : null}
