@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { resolveManagerPurchaseForPricing } from "@/lib/auth/manager-pricing-selection";
 import { createManagerCheckoutSession } from "@/lib/stripe/manager-checkout";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
@@ -42,13 +45,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "billing must be \"monthly\" or \"annual\"." }, { status: 400 });
     }
 
+    const supabaseAuth = await createSupabaseServerClient();
+    const {
+      data: { user: authUser },
+    } = await supabaseAuth.auth.getUser();
+
+    let managerId: string | undefined;
+    let userId = typeof body.userId === "string" ? body.userId.trim() : "";
+    if (authUser?.id) {
+      userId = authUser.id;
+      const email = authUser.email?.trim().toLowerCase() ?? (typeof body.email === "string" ? body.email.trim().toLowerCase() : "");
+      if (email) {
+        const supabase = createSupabaseServiceRoleClient();
+        const purchaseState = await resolveManagerPurchaseForPricing(supabase, authUser.id, email);
+        if (purchaseState.kind === "complete") {
+          return NextResponse.json({ error: "A manager account already exists for this email." }, { status: 409 });
+        }
+        if (purchaseState.kind === "pending") {
+          managerId = purchaseState.managerId;
+        }
+      }
+    }
+
     const result = await createManagerCheckoutSession({
       tier: tierRaw,
       billing: billingRaw,
       email: body.email,
       fullName: body.fullName,
       phone: body.phone,
-      userId: body.userId,
+      userId: userId || undefined,
+      managerId,
       promo: body.promo,
       discountPercent: body.discountPercent,
       embedded: body.embedded,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { completeFreeManagerTierForUser, resolveManagerPurchaseForPricing } from "@/lib/auth/manager-pricing-selection";
 import { generateManagerId } from "@/lib/manager-id";
 import { newAxisIntentSessionId } from "@/lib/manager-signup-intent";
 import { createManagerCheckoutSession } from "@/lib/stripe/manager-checkout";
@@ -66,8 +67,8 @@ export async function POST(req: Request) {
     const fullName = oauthFullName(user.user_metadata);
 
     const supabase = createSupabaseServiceRoleClient();
-    const { data: purchasesForEmail } = await supabase.from("manager_purchases").select("user_id").eq("email", email);
-    if (purchasesForEmail?.some((r) => r.user_id != null)) {
+    const purchaseState = await resolveManagerPurchaseForPricing(supabase, user.id, email);
+    if (purchaseState.kind === "complete") {
       return NextResponse.json(
         { error: "A manager account already exists for this email. Sign in instead." },
         { status: 409 },
@@ -80,6 +81,22 @@ export async function POST(req: Request) {
     const skipStripeForOnboardOffer = tierRaw !== "free" && onboardDiscount === 100;
 
     if (skipStripeForFree || skipStripeForPromo || skipStripeForOnboardOffer) {
+      if (purchaseState.kind === "pending") {
+        await completeFreeManagerTierForUser(supabase, {
+          userId: user.id,
+          email,
+          fullName,
+          tier: tierRaw,
+          billing: billingRaw,
+          promo: skipStripeForPromo
+            ? promo
+            : skipStripeForOnboardOffer
+              ? `ONBOARD_FREE_${tierRaw.toUpperCase()}`
+              : null,
+        });
+        return NextResponse.json({ action: "portal", managerId: purchaseState.managerId });
+      }
+
       const sessionId = newAxisIntentSessionId();
       const managerId = generateManagerId();
 
@@ -112,6 +129,7 @@ export async function POST(req: Request) {
       fullName,
       phone,
       userId: user.id,
+      managerId: purchaseState.kind === "pending" ? purchaseState.managerId : undefined,
       promo,
       discountPercent: onboardDiscount ?? undefined,
       embedded: true,
@@ -125,7 +143,7 @@ export async function POST(req: Request) {
     try {
       const stripe = getStripe();
       const session = await stripe.checkout.sessions.retrieve(checkout.sessionId);
-      const managerId = session.metadata?.manager_id?.trim();
+      const managerId = session.metadata?.manager_id?.trim() ?? (purchaseState.kind === "pending" ? purchaseState.managerId : "");
       if (managerId) {
         const { error: reserveErr } = await supabase.from("manager_purchases").upsert(
           {
@@ -135,6 +153,7 @@ export async function POST(req: Request) {
             tier: tierRaw,
             billing: billingRaw,
             full_name: fullName || null,
+            user_id: purchaseState.kind === "pending" ? user.id : null,
           },
           { onConflict: "manager_id" },
         );

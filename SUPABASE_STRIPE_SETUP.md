@@ -15,7 +15,8 @@ This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription
    - `{your-domain}/auth/callback`
    - `{your-domain}/auth/callback/partner-pricing` (Google signup from Partner pricing)
    - `{your-domain}/auth/callback/resident-signup` (Google signup from Create account → Resident)
-   - `http://localhost:3000/auth/callback` and `http://localhost:3000/auth/callback/partner-pricing` for local dev
+   - `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/callback/partner-pricing`, and `http://localhost:3000/auth/callback/resident-signup` for local dev (exact paths — no `?next=` query on OAuth redirect URLs)
+   - Optional: `http://localhost:3000/**` wildcard if you use older callback links with query params
 
 For shareable onboarding links and QR codes, set `NEXT_PUBLIC_CANONICAL_APP_URL` to your custom domain so links do not use the default `*.vercel.app` deployment URL.
 

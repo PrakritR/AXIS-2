@@ -1,4 +1,5 @@
 import { completeResidentSignupFromOAuth } from "@/lib/auth/complete-resident-signup-oauth";
+import { managerNeedsPricingSelection } from "@/lib/auth/manager-onboarding";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
 import type { AuthRole } from "@/components/auth/portal-switcher";
@@ -14,7 +15,8 @@ function isBypassOAuthGatePath(path: string): boolean {
     path.startsWith("/auth/resident-") ||
     path.startsWith("/partner/pricing") ||
     path.startsWith("/auth/create-account") ||
-    path.startsWith("/auth/callback/")
+    path.startsWith("/auth/callback/") ||
+    path === "/auth/manager-register-oauth"
   );
 }
 
@@ -45,11 +47,20 @@ export async function resolveOAuthPortalRedirect(
 
   const { data: roleRows } = await supabase.from("profile_roles").select("role").eq("user_id", user.id);
   const roles = (roleRows ?? []).map((row) => row.role).filter((role): role is AuthRole => isAuthRole(role));
+
+  const isManagerAccount = roles.includes("manager");
+  if (isManagerAccount && (await managerNeedsPricingSelection(supabase, user.id, email))) {
+    return "/partner/pricing";
+  }
+
   if (roles.length > 0) {
     return safeIntended;
   }
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (profile?.role === "manager" && (await managerNeedsPricingSelection(supabase, user.id, email))) {
+    return "/partner/pricing";
+  }
   if (profile?.role && isAuthRole(profile.role)) {
     return safeIntended;
   }

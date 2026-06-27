@@ -10,6 +10,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 export type ResumePartnerPricingOAuthResult =
   | { status: "checkout"; clientSecret: string }
   | { status: "finish"; sessionId: string }
+  | { status: "portal" }
   | { status: "error"; message: string };
 
 export async function resumePartnerPricingOAuth(): Promise<ResumePartnerPricingOAuthResult> {
@@ -45,6 +46,11 @@ export async function resumePartnerPricingOAuth(): Promise<ResumePartnerPricingO
   if (body.action === "finish" && body.sessionId) {
     clearManagerPricingOffer();
     return { status: "finish", sessionId: body.sessionId };
+  }
+
+  if (body.action === "portal") {
+    clearManagerPricingOffer();
+    return { status: "portal" };
   }
 
   if (body.action === "checkout" && body.clientSecret) {

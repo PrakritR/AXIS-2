@@ -119,6 +119,20 @@ function ContinueContent() {
         if (cancelled || didRedirectRef.current) return;
         didRedirectRef.current = true;
 
+        if (roles.length === 1 && roles[0] === "manager") {
+          const onboardingRes = await fetch("/api/auth/manager-onboarding-status", {
+            credentials: "include",
+            cache: "no-store",
+          });
+          if (onboardingRes.ok) {
+            const onboardingBody = (await onboardingRes.json()) as { needsPricing?: boolean };
+            if (onboardingBody.needsPricing) {
+              window.location.replace("/partner/pricing");
+              return;
+            }
+          }
+        }
+
         if (roles.length > 1) {
           const q = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
           window.location.replace(`/auth/choose-portal${q}`);

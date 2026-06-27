@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { completeFreeManagerTierForUser, resolveManagerPurchaseForPricing } from "@/lib/auth/manager-pricing-selection";
 import { generateManagerId } from "@/lib/manager-id";
 import { newAxisIntentSessionId } from "@/lib/manager-signup-intent";
 import { normalizeOnboardDiscountPercent } from "@/lib/stripe-onboard-discount";
 import { getPaymentWaiverCode } from "@/lib/server-env";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -68,14 +70,42 @@ export async function POST(req: Request) {
     }
 
     const supabase = createSupabaseServiceRoleClient();
+    const supabaseAuth = await createSupabaseServerClient();
+    const {
+      data: { user: authUser },
+    } = await supabaseAuth.auth.getUser();
 
-    const { data: purchasesForEmail } = await supabase.from("manager_purchases").select("user_id").eq("email", email);
-
-    if (purchasesForEmail?.some((r) => r.user_id != null)) {
-      return NextResponse.json(
-        { error: "A manager account already exists for this email. Sign in instead." },
-        { status: 409 },
-      );
+    if (authUser?.id && authUser.email?.trim().toLowerCase() === email) {
+      const purchaseState = await resolveManagerPurchaseForPricing(supabase, authUser.id, email);
+      if (purchaseState.kind === "complete") {
+        return NextResponse.json(
+          { error: "A manager account already exists for this email. Sign in instead." },
+          { status: 409 },
+        );
+      }
+      if (purchaseState.kind === "pending") {
+        await completeFreeManagerTierForUser(supabase, {
+          userId: authUser.id,
+          email,
+          fullName,
+          tier: tierRaw,
+          billing: billingRaw,
+          promo: skipStripeForPromo
+            ? promo
+            : skipStripeForOnboardOffer
+              ? `ONBOARD_FREE_${tierRaw.toUpperCase()}`
+              : null,
+        });
+        return NextResponse.json({ action: "portal", managerId: purchaseState.managerId });
+      }
+    } else {
+      const { data: purchasesForEmail } = await supabase.from("manager_purchases").select("user_id").eq("email", email);
+      if (purchasesForEmail?.some((r) => r.user_id != null)) {
+        return NextResponse.json(
+          { error: "A manager account already exists for this email. Sign in instead." },
+          { status: 409 },
+        );
+      }
     }
 
     const sessionId = newAxisIntentSessionId();

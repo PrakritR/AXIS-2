@@ -99,6 +99,7 @@ export default function PartnerPricingPage() {
         const res = await fetch("/api/manager/signup-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             tier: opts.tier,
             billing: opts.billing,
@@ -109,9 +110,9 @@ export default function PartnerPricingPage() {
             discountPercent: opts.discountPercent,
           }),
         });
-        let payload: { sessionId?: string; error?: string; code?: string };
+        let payload: { sessionId?: string; action?: string; error?: string; code?: string };
         try {
-          payload = (await res.json()) as { sessionId?: string; error?: string; code?: string };
+          payload = (await res.json()) as { sessionId?: string; action?: string; error?: string; code?: string };
         } catch {
           showToast("Invalid response from server. Try again.");
           return "error";
@@ -124,6 +125,10 @@ export default function PartnerPricingPage() {
           }
           showToast(typeof payload.error === "string" ? payload.error : "Could not start signup.");
           return "error";
+        }
+        if (payload.action === "portal") {
+          router.push("/portal/dashboard");
+          return "redirected";
         }
         if (payload.sessionId) {
           router.push(`/auth/manager-id?session_id=${encodeURIComponent(payload.sessionId)}`);
@@ -168,6 +173,10 @@ export default function PartnerPricingPage() {
         }
         if (result.status === "finish") {
           router.push(partnerPricingFinishPath(result.sessionId));
+          return;
+        }
+        if (result.status === "portal") {
+          router.push("/portal/dashboard");
           return;
         }
         showToast(result.message);
@@ -535,6 +544,7 @@ export default function PartnerPricingPage() {
                       const res = await fetch("/api/stripe/checkout", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
+                        credentials: "include",
                         body: JSON.stringify({
                           tier: selectedTierId,
                           billing,

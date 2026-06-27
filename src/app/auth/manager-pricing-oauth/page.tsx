@@ -10,7 +10,8 @@ import {
   persistManagerPricingOffer,
   readManagerPricingOffer,
 } from "@/lib/auth/manager-pricing-oauth-storage";
-import { authCallbackUrl } from "@/lib/auth/oauth-redirect";
+import { persistOAuthNextPath } from "@/lib/auth/oauth-next-cookie";
+import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { PlanTierId } from "@/data/manager-plan-tiers";
@@ -38,7 +39,8 @@ async function restartGoogleForPricingOffer(offer: {
   persistManagerPricingOffer(offer);
   const supabase = createSupabaseBrowserClient();
   const nextPath = managerPricingOauthPath(offer);
-  const redirectTo = authCallbackUrl(resolveOAuthBrowserOrigin(), nextPath);
+  persistOAuthNextPath(nextPath);
+  const redirectTo = bareAuthCallbackUrl(resolveOAuthBrowserOrigin());
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {

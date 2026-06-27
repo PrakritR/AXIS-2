@@ -74,13 +74,72 @@ export async function PATCH(req: Request) {
     if (!(await requireAdmin())) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
-    const { id, active } = (await req.json()) as { id: string; active: boolean };
+    const body = (await req.json()) as {
+      id?: string;
+      active?: boolean;
+      fullName?: string;
+      tier?: string;
+      billing?: string;
+    };
+    const id = body.id;
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const supabase = createSupabaseServiceRoleClient();
-    const { error } = await supabase.from("profiles").update({ application_approved: active }).eq("id", id);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (typeof body.active === "boolean") {
+      const { error } = await supabase.from("profiles").update({ application_approved: body.active }).eq("id", id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (typeof body.fullName === "string") {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: body.fullName.trim() || null })
+        .eq("id", id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (typeof body.tier === "string" || typeof body.billing === "string") {
+      const { data: profile } = await supabase.from("profiles").select("email, manager_id").eq("id", id).maybeSingle();
+      if (!profile?.email || !profile.manager_id) {
+        return NextResponse.json({ error: "Manager profile not found." }, { status: 404 });
+      }
+
+      const tier = typeof body.tier === "string" ? body.tier.trim().toLowerCase() : undefined;
+      const billing = typeof body.billing === "string" ? body.billing.trim().toLowerCase() : undefined;
+      if (tier && tier !== "free" && tier !== "pro" && tier !== "business" && tier !== "pending") {
+        return NextResponse.json({ error: "Invalid tier." }, { status: 400 });
+      }
+      if (billing && billing !== "monthly" && billing !== "annual" && billing !== "free") {
+        return NextResponse.json({ error: "Invalid billing." }, { status: 400 });
+      }
+
+      const { data: existingPurchase } = await supabase
+        .from("manager_purchases")
+        .select("id, stripe_checkout_session_id")
+        .eq("manager_id", profile.manager_id)
+        .maybeSingle();
+
+      const patch: Record<string, string | null> = {};
+      if (tier) patch.tier = tier === "pending" ? null : tier;
+      if (billing) patch.billing = billing === "free" ? "free" : billing;
+
+      if (existingPurchase) {
+        const { error } = await supabase.from("manager_purchases").update(patch).eq("id", existingPurchase.id);
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      } else {
+        const { error } = await supabase.from("manager_purchases").insert({
+          stripe_checkout_session_id: `admin_${profile.manager_id}`,
+          email: profile.email,
+          manager_id: profile.manager_id,
+          user_id: id,
+          tier: patch.tier ?? "free",
+          billing: patch.billing ?? "free",
+        });
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
