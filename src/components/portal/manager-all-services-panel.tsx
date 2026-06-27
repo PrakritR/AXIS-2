@@ -252,9 +252,9 @@ export function ManagerAllServicesPanel({
               onClose={() => setCreateWoOpen(false)}
               managerUserId={userId}
               defaultPropertyId={propertyFilter || undefined}
-              onSubmitted={() => {
+              onSubmitted={(bucket) => {
                 setDataTick((t) => t + 1);
-                setWoBucket("completed");
+                setWoBucket(bucket);
               }}
             />
           </>

@@ -136,7 +136,7 @@ export function ManagerCreateWorkOrderModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmitted: () => void;
+  onSubmitted: (bucket: ManagerWorkOrderBucket) => void;
   managerUserId: string | null;
   defaultPropertyId?: string;
 }) {
@@ -263,8 +263,6 @@ export function ManagerCreateWorkOrderModal({
         workDoneSummary: bucket === "completed" ? title.trim() : undefined,
       };
 
-      writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
-
       if (amt > 0 && paymentStatus !== "none") {
         const effectiveManagerId = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
         const charge = recordWorkOrderResidentCharge({
@@ -280,12 +278,12 @@ export function ManagerCreateWorkOrderModal({
           initialStatus: paymentStatus === "paid" ? "paid" : "pending",
         });
         if (!charge) {
-          showToast("Work order saved, but the payment line could not be created.");
-          onSubmitted();
-          onClose();
+          showToast("Could not create the payment line. The work order was not saved.");
           return;
         }
       }
+
+      writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
 
       showToast(
         amt > 0 && paymentStatus === "paid"
@@ -294,7 +292,7 @@ export function ManagerCreateWorkOrderModal({
             ? "Work order logged with a pending payment line."
             : "Work order logged.",
       );
-      onSubmitted();
+      onSubmitted(bucket);
       onClose();
     } finally {
       setBusy(false);

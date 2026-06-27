@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
+import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
 import {
   updateExtraListingFromSubmission,
   updatePendingManagerProperty,
@@ -17,6 +18,7 @@ import {
 type HouseSaveTarget =
   | { mode: "pending"; saveId: string }
   | { mode: "listing"; saveId: string }
+  | { mode: "requestChange"; saveId: string }
   | null;
 
 function HouseDetailRow({
@@ -67,7 +69,6 @@ export function ManagerPropertyHouseDetailsPanel({
   const [notesTick, setNotesTick] = useState(0);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<PortalListingNote>({});
-  const syncedNoteKeyRef = useRef<string | null>(null);
 
   const portalNote = useMemo(
     () => (noteKey ? getPortalListingNote(noteKey) : ({} as PortalListingNote)),
@@ -78,26 +79,6 @@ export function ManagerPropertyHouseDetailsPanel({
   const houseRulesText = sub.houseRulesText?.trim() || portalNote.houseRulesText?.trim() || "";
   const generalHouseInfo = sub.generalHouseInfo?.trim() || portalNote.generalHouseInfo?.trim() || "";
   const hasAny = Boolean(houseDescription || houseRulesText || generalHouseInfo);
-
-  useEffect(() => {
-    if (!noteKey || !saveTarget || !managerUserId || syncedNoteKeyRef.current === noteKey) return;
-    const localRules = portalNote.houseRulesText?.trim();
-    const localDesc = portalNote.houseDescription?.trim();
-    if (!localRules && !localDesc) return;
-    if (localRules === (sub.houseRulesText?.trim() || "") && localDesc === (sub.houseDescription?.trim() || "")) return;
-
-    syncedNoteKeyRef.current = noteKey;
-    const next = {
-      ...sub,
-      houseDescription: localDesc || sub.houseDescription || "",
-      houseRulesText: localRules || sub.houseRulesText || "",
-    };
-    const ok =
-      saveTarget.mode === "pending"
-        ? updatePendingManagerProperty(saveTarget.saveId, next, managerUserId)
-        : updateExtraListingFromSubmission(saveTarget.saveId, managerUserId, next);
-    if (ok) onUpdated();
-  }, [noteKey, saveTarget, managerUserId, portalNote.houseRulesText, portalNote.houseDescription, sub, onUpdated]);
 
   if (!noteKey) return null;
 
@@ -112,11 +93,6 @@ export function ManagerPropertyHouseDetailsPanel({
 
   const save = () => {
     if (!noteKey || !managerUserId) return;
-    savePortalListingNote(noteKey, {
-      houseDescription: draft.houseDescription,
-      houseRulesText: draft.houseRulesText,
-      generalHouseInfo: draft.generalHouseInfo,
-    });
     const next: ManagerListingSubmissionV1 = {
       ...sub,
       houseDescription: draft.houseDescription ?? "",
@@ -128,13 +104,18 @@ export function ManagerPropertyHouseDetailsPanel({
       ok = updatePendingManagerProperty(saveTarget.saveId, next, managerUserId);
     } else if (saveTarget?.mode === "listing") {
       ok = updateExtraListingFromSubmission(saveTarget.saveId, managerUserId, next);
-    } else {
-      ok = true;
+    } else if (saveTarget?.mode === "requestChange") {
+      ok = updateRequestChangeProperty(saveTarget.saveId, managerUserId, next);
     }
-    if (!ok && saveTarget) {
+    if (!ok) {
       showToast("Could not save house details.");
       return;
     }
+    savePortalListingNote(noteKey, {
+      houseDescription: draft.houseDescription,
+      houseRulesText: draft.houseRulesText,
+      generalHouseInfo: draft.generalHouseInfo,
+    });
     showToast("House details saved.");
     setEditing(false);
     setNotesTick((t) => t + 1);

@@ -140,7 +140,7 @@ export function ManagerWorkOrdersPanel({
     if (!authReady) return;
     for (const row of allRows) {
       if (row.bucket !== "scheduled") continue;
-      if (findPendingWorkOrderCharge(row.id)) continue;
+      if (findWorkOrderCharge(row.id)) continue;
       const draft = billDraftById[row.id] ?? defaultBillDraft(row);
       const amountInput = draft.cost.trim() ? draft.cost : row.cost;
       const amt = parseMoneyAmount(amountInput);
@@ -156,7 +156,7 @@ export function ManagerWorkOrdersPanel({
         amountInput,
         residentEmail: draft.email.trim() || (row.residentEmail ?? ""),
         residentName: draft.name.trim() || row.residentName || "",
-        initialStatus: "pending",
+        initialStatus: draft.paymentStatus,
       });
       if (created) {
         setHcTick((n) => n + 1);
@@ -221,7 +221,9 @@ export function ManagerWorkOrdersPanel({
     if (created) setHcTick((n) => n + 1);
     showToast(
       created
-        ? "Work order scheduled and pending payment created."
+        ? created.status === "paid"
+          ? "Work order scheduled and payment recorded as paid."
+          : "Work order scheduled and pending payment created."
         : "Work order scheduled. Add cost and resident email in Details to bill the resident.",
     );
     setExpandedId(null);
@@ -593,106 +595,100 @@ export function ManagerWorkOrdersPanel({
                         ) : null}
 
                         {/* Billing section */}
-                        {row.bucket !== "completed" ? (
-                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
-                            <p className="text-xs font-semibold text-foreground">Billing (optional)</p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                              Bill the resident for pass-through costs. Choose paid if they already paid you (e.g. lockout fee).
+                        <div className="mt-4 rounded-lg border border-border bg-card p-3">
+                          <p className="text-xs font-semibold text-foreground">Billing (optional)</p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-muted">
+                            Bill the resident for pass-through costs. Choose paid if they already paid you (e.g. lockout fee).
+                          </p>
+                          {linkedCharge ? (
+                            <p className="mt-2 rounded-md bg-accent/40 px-2.5 py-1.5 text-[11px] text-foreground ring-1 ring-border">
+                              {linkedCharge.status === "paid" ? (
+                                <>
+                                  Paid: <span className="font-semibold">{linkedCharge.amountLabel}</span>
+                                </>
+                              ) : (
+                                <>
+                                  Pending: <span className="font-semibold">{linkedCharge.balanceLabel}</span>
+                                </>
+                              )}{" "}
+                              · <span className="font-medium">{linkedCharge.residentEmail}</span>
+                              {linkedCharge.status === "pending" ? ". Mark paid in Payments before changing the amount." : ""}
                             </p>
-                            {linkedCharge ? (
-                              <p className="mt-2 rounded-md bg-accent/40 px-2.5 py-1.5 text-[11px] text-foreground ring-1 ring-border">
-                                {linkedCharge.status === "paid" ? (
-                                  <>
-                                    Paid: <span className="font-semibold">{linkedCharge.amountLabel}</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    Pending: <span className="font-semibold">{linkedCharge.balanceLabel}</span>
-                                  </>
-                                )}{" "}
-                                · <span className="font-medium">{linkedCharge.residentEmail}</span>
-                                {linkedCharge.status === "pending" ? ". Mark paid in Payments before changing the amount." : ""}
-                              </p>
-                            ) : null}
-                            <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
-                              <div>
-                                <p className="mb-1 text-[11px] font-medium text-muted">Cost</p>
-                                <Input
-                                  type="text"
-                                  inputMode="decimal"
-                                  placeholder="e.g. 75 or $75"
-                                  value={draft.cost}
-                                  onChange={(e) =>
-                                    setBillDraftById((prev) => ({
-                                      ...prev,
-                                      [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), cost: e.target.value },
-                                    }))
-                                  }
-                                  className="h-8 rounded-md text-sm"
-                                  disabled={!!linkedCharge}
-                                />
-                              </div>
-                              <div>
-                                <p className="mb-1 text-[11px] font-medium text-muted">Payment status</p>
-                                <Select
-                                  className="h-8 rounded-md text-sm"
-                                  value={draft.paymentStatus}
-                                  onChange={(e) =>
-                                    setBillDraftById((prev) => ({
-                                      ...prev,
-                                      [row.id]: {
-                                        ...(prev[row.id] ?? defaultBillDraft(row)),
-                                        paymentStatus: e.target.value as "pending" | "paid",
-                                      },
-                                    }))
-                                  }
-                                  disabled={!!linkedCharge}
-                                >
-                                  <option value="pending">Pending</option>
-                                  <option value="paid">Paid</option>
-                                </Select>
-                              </div>
-                              <div className="sm:col-span-1">
-                                <p className="mb-1 text-[11px] font-medium text-muted">Resident email</p>
-                                <Input
-                                  type="email"
-                                  autoComplete="email"
-                                  placeholder="resident@email.com"
-                                  value={draft.email}
-                                  onChange={(e) =>
-                                    setBillDraftById((prev) => ({
-                                      ...prev,
-                                      [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), email: e.target.value },
-                                    }))
-                                  }
-                                  className="h-8 rounded-md text-sm"
-                                  disabled={!!linkedCharge}
-                                />
-                              </div>
-                              <div className="sm:col-span-3">
-                                <p className="mb-1 text-[11px] font-medium text-muted">Resident name (optional)</p>
-                                <Input
-                                  type="text"
-                                  autoComplete="name"
-                                  placeholder="Shown on the payment line"
-                                  value={draft.name}
-                                  onChange={(e) =>
-                                    setBillDraftById((prev) => ({
-                                      ...prev,
-                                      [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), name: e.target.value },
-                                    }))
-                                  }
-                                  className="h-8 rounded-md text-sm"
-                                  disabled={!!linkedCharge}
-                                />
-                              </div>
+                          ) : null}
+                          <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
+                            <div>
+                              <p className="mb-1 text-[11px] font-medium text-muted">Cost</p>
+                              <Input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="e.g. 75 or $75"
+                                value={draft.cost}
+                                onChange={(e) =>
+                                  setBillDraftById((prev) => ({
+                                    ...prev,
+                                    [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), cost: e.target.value },
+                                  }))
+                                }
+                                className="h-8 rounded-md text-sm"
+                                disabled={!!linkedCharge}
+                              />
+                            </div>
+                            <div>
+                              <p className="mb-1 text-[11px] font-medium text-muted">Payment status</p>
+                              <Select
+                                className="h-8 rounded-md text-sm"
+                                value={draft.paymentStatus}
+                                onChange={(e) =>
+                                  setBillDraftById((prev) => ({
+                                    ...prev,
+                                    [row.id]: {
+                                      ...(prev[row.id] ?? defaultBillDraft(row)),
+                                      paymentStatus: e.target.value as "pending" | "paid",
+                                    },
+                                  }))
+                                }
+                                disabled={!!linkedCharge}
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="paid">Paid</option>
+                              </Select>
+                            </div>
+                            <div className="sm:col-span-1">
+                              <p className="mb-1 text-[11px] font-medium text-muted">Resident email</p>
+                              <Input
+                                type="email"
+                                autoComplete="email"
+                                placeholder="resident@email.com"
+                                value={draft.email}
+                                onChange={(e) =>
+                                  setBillDraftById((prev) => ({
+                                    ...prev,
+                                    [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), email: e.target.value },
+                                  }))
+                                }
+                                className="h-8 rounded-md text-sm"
+                                disabled={!!linkedCharge}
+                              />
+                            </div>
+                            <div className="sm:col-span-3">
+                              <p className="mb-1 text-[11px] font-medium text-muted">Resident name (optional)</p>
+                              <Input
+                                type="text"
+                                autoComplete="name"
+                                placeholder="Shown on the payment line"
+                                value={draft.name}
+                                onChange={(e) =>
+                                  setBillDraftById((prev) => ({
+                                    ...prev,
+                                    [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), name: e.target.value },
+                                  }))
+                                }
+                                className="h-8 rounded-md text-sm"
+                                disabled={!!linkedCharge}
+                              />
                             </div>
                           </div>
-                        ) : linkedCharge ? (
-                          <p className="mt-4 text-xs text-muted">
-                            Payment: {linkedCharge.status === "paid" ? "Paid" : "Pending"} · {linkedCharge.amountLabel} · {linkedCharge.residentEmail}
-                          </p>
-                        ) : null}
+                        </div>
 
                         {row.bucket === "completed" ? (
                           <p className="mt-3 text-xs text-muted">
@@ -701,7 +697,7 @@ export function ManagerWorkOrdersPanel({
                         ) : null}
 
                         <PortalTableDetailActions>
-                          {row.bucket !== "completed" && !linkedCharge ? (
+                          {!linkedCharge ? (
                             <>
                               <Button
                                 type="button"

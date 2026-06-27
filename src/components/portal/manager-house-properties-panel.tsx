@@ -217,6 +217,7 @@ function ManagerPropertyInlineDetails({
     if (!row) return null;
     if (portalSub?.saveMode === "pending") return { mode: "pending" as const, saveId: portalSub.saveId };
     if (portalSub?.saveMode === "listing") return { mode: "listing" as const, saveId: portalSub.saveId };
+    if (portalSub?.saveMode === "requestChange") return { mode: "requestChange" as const, saveId: portalSub.saveId };
     if (bucket === 0 && row.adminRefId) return { mode: "pending" as const, saveId: row.adminRefId };
     if (listingId?.trim()) return { mode: "listing" as const, saveId: listingId.trim() };
     return null;
