@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getManagerPurchaseSku, setManagerPurchaseTier, type ManagerSkuTier } from "@/lib/manager-access";
+import { type ManagerSkuTier } from "@/lib/manager-access";
+import { getManagerPurchaseSku, setManagerPurchaseTier } from "@/lib/manager-access-server";
 import {
   inferBillingFromStripePriceId,
   inferPaidTierFromStripePriceId,

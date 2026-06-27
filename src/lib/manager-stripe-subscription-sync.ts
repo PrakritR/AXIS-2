@@ -1,5 +1,5 @@
 import type Stripe from "stripe";
-import { getManagerPurchaseSku } from "@/lib/manager-access";
+import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 import {

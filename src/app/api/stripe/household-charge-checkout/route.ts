@@ -8,7 +8,8 @@ import {
   listingFromPropertyData,
   resolveListingForHouseholdCharge,
 } from "@/lib/household-charge-payment-eligibility";
-import { getManagerPurchaseSku, normalizeManagerSkuTier } from "@/lib/manager-access";
+import { normalizeManagerSkuTier } from "@/lib/manager-access";
+import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { axisPaymentsEnabledOnListing, type ResidentAxisPaymentMethod } from "@/lib/payment-policy";
 import { householdChargeAmountCents, HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE } from "@/lib/stripe-household-charge";
 import { createAxisAchCheckoutSession, stripeNotConfiguredError } from "@/lib/stripe-axis-ach-checkout";
