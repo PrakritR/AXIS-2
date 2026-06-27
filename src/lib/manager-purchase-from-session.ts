@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import { ADMIN_MANAGER_PURCHASE_PREFIX } from "@/lib/manager-admin-purchase";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 /**
@@ -85,6 +86,7 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
         .update(patch)
         .eq("user_id", metadataUserId)
         .or("paid_at.is.null,tier.is.null")
+        .not("stripe_checkout_session_id", "like", `${ADMIN_MANAGER_PURCHASE_PREFIX}%`)
         .select("id");
       if (e1) throw new Error(e1.message);
       if (byUser && byUser.length > 0) updated = true;
@@ -95,6 +97,7 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
         .update(patch)
         .eq("manager_id", managerId)
         .or("paid_at.is.null,tier.is.null")
+        .not("stripe_checkout_session_id", "like", `${ADMIN_MANAGER_PURCHASE_PREFIX}%`)
         .select("id");
       if (e2) throw new Error(e2.message);
       if (byMgr && byMgr.length > 0) updated = true;

@@ -40,10 +40,12 @@ describe("manager-purchase-from-session", () => {
     const updateBuilder = {
       eq: vi.fn(),
       or: vi.fn(),
+      not: vi.fn(),
       select: updateSelect,
     };
     updateBuilder.eq.mockReturnValue(updateBuilder);
     updateBuilder.or.mockReturnValue(updateBuilder);
+    updateBuilder.not.mockReturnValue(updateBuilder);
 
     const selectBuilder = {
       eq: vi.fn(),
@@ -81,6 +83,7 @@ describe("manager-purchase-from-session", () => {
     );
 
     expect(updateBuilder.or).toHaveBeenCalledWith("paid_at.is.null,tier.is.null");
+    expect(updateBuilder.not).toHaveBeenCalledWith("stripe_checkout_session_id", "like", "admin_%");
     expect(selectBuilder.maybeSingle).toHaveBeenCalled();
     expect(upsert).not.toHaveBeenCalled();
   });
@@ -93,10 +96,12 @@ describe("manager-purchase-from-session", () => {
     const updateBuilder = {
       eq: vi.fn(),
       or: vi.fn(),
+      not: vi.fn(),
       select: updateSelect,
     };
     updateBuilder.eq.mockReturnValue(updateBuilder);
     updateBuilder.or.mockReturnValue(updateBuilder);
+    updateBuilder.not.mockReturnValue(updateBuilder);
 
     const upsert = vi.fn().mockResolvedValue({ error: null });
 
@@ -121,7 +126,64 @@ describe("manager-purchase-from-session", () => {
     );
 
     expect(updateBuilder.or).toHaveBeenCalledWith("paid_at.is.null,tier.is.null");
+    expect(updateBuilder.not).toHaveBeenCalledWith("stripe_checkout_session_id", "like", "admin_%");
     expect(updateSelect).toHaveBeenCalledTimes(2);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("keeps admin-managed pending rows out of stale checkout fallback updates", async () => {
+    const updateSelect = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [], error: null });
+    const updateBuilder = {
+      eq: vi.fn(),
+      or: vi.fn(),
+      not: vi.fn(),
+      select: updateSelect,
+    };
+    updateBuilder.eq.mockReturnValue(updateBuilder);
+    updateBuilder.or.mockReturnValue(updateBuilder);
+    updateBuilder.not.mockReturnValue(updateBuilder);
+
+    const selectBuilder = {
+      eq: vi.fn(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: "purchase-1",
+          stripe_checkout_session_id: "admin_MGR-TEST",
+          paid_at: "2026-01-01T00:00:00.000Z",
+        },
+        error: null,
+      }),
+    };
+    selectBuilder.eq.mockReturnValue(selectBuilder);
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+      from: vi.fn(() => ({
+        update: vi.fn(() => updateBuilder),
+        select: vi.fn(() => selectBuilder),
+        upsert,
+      })),
+    } as never);
+
+    await recordPaidManagerCheckoutSession(
+      mockCheckoutSession({
+        id: "cs_test_stale",
+        customer_email: "manager@example.com",
+        metadata: {
+          tier: "pro",
+          billing: "monthly",
+          manager_id: "MGR-TEST",
+          userId: "user-1",
+        },
+      }),
+    );
+
+    expect(updateBuilder.not).toHaveBeenCalledWith("stripe_checkout_session_id", "like", "admin_%");
+    expect(selectBuilder.maybeSingle).toHaveBeenCalled();
     expect(upsert).not.toHaveBeenCalled();
   });
 });
