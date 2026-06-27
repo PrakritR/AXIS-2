@@ -84,11 +84,16 @@ export default function CreateAccountClient() {
   const effectivePreviewError = shouldLoadCheckout ? previewError : null;
   const effectivePreviewLoading = shouldLoadCheckout ? previewLoading : false;
 
-  useEffect(() => {
-    if (!shouldLoadCheckout) {
+  // Clear the confirm-password field when leaving checkout mode. Done during
+  // render (matching the role/axisId sync above) rather than in an effect, which
+  // would trigger an extra cascading render.
+  const [prevShouldLoadCheckout, setPrevShouldLoadCheckout] = useState(shouldLoadCheckout);
+  if (shouldLoadCheckout !== prevShouldLoadCheckout) {
+    setPrevShouldLoadCheckout(shouldLoadCheckout);
+    if (!shouldLoadCheckout && confirmPassword !== "") {
       setConfirmPassword("");
     }
-  }, [shouldLoadCheckout]);
+  }
 
   useEffect(() => {
     if (!isEmailCheckable) return;
