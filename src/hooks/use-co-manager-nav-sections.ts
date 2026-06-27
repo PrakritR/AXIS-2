@@ -30,13 +30,21 @@ export function useCoManagerNavSections(definition: PortalDefinition, userId: st
     }
   }, [userId]);
 
+  const navSectionsDisabled = !userId || (definition.kind !== "pro" && definition.kind !== "manager");
+
+  // Reset invites when leaving pro/manager context — done during render (not in
+  // an effect) to avoid a cascading setState-in-effect.
+  const [prevNavSectionsDisabled, setPrevNavSectionsDisabled] = useState(navSectionsDisabled);
+  if (navSectionsDisabled !== prevNavSectionsDisabled) {
+    setPrevNavSectionsDisabled(navSectionsDisabled);
+    if (navSectionsDisabled && invites !== null) setInvites(null);
+  }
+
   useEffect(() => {
-    if (!userId || (definition.kind !== "pro" && definition.kind !== "manager")) {
-      setInvites(null);
-      return;
-    }
-    void loadInvites();
-  }, [definition.kind, loadInvites, userId, tick]);
+    if (navSectionsDisabled) return;
+    const id = window.setTimeout(() => void loadInvites(), 0);
+    return () => window.clearTimeout(id);
+  }, [loadInvites, navSectionsDisabled, tick]);
 
   useEffect(() => {
     if (!userId || (definition.kind !== "pro" && definition.kind !== "manager")) return;

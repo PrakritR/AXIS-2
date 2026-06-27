@@ -299,7 +299,11 @@ export function ResidentPaymentsPanel() {
       selectedIds.has(expandedId) && selectedIds.size > 1 ? [...selectedIds] : [expandedId];
     const key = checkoutKey(ids, paymentMethod);
     if (checkout?.key === key && (checkout.loading || checkout.clientSecret || checkout.error)) return;
-    void loadCheckout(ids, paymentMethod);
+    // Defer the load a tick (matches the load-in-effect idiom used elsewhere) so
+    // the trigger isn't a synchronous setState. The key guard above prevents
+    // duplicate intent loads, and the cleanup cancels a superseded load.
+    const id = window.setTimeout(() => void loadCheckout(ids, paymentMethod), 0);
+    return () => window.clearTimeout(id);
   }, [
     charges,
     checkout?.key,
