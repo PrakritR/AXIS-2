@@ -27,6 +27,7 @@ describe("GET /api/cron/send-payment-reminders", () => {
   });
 
   it("runs with valid cron secret and no pending charges", async () => {
+    const outboundLimit = vi.fn().mockResolvedValue({ data: [] });
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
       from: vi.fn().mockImplementation((table: string) => {
         if (table === "portal_household_charge_records") {
@@ -44,7 +45,9 @@ describe("GET /api/cron/send-payment-reminders", () => {
         if (table === "portal_outbound_mail_records") {
           return {
             select: vi.fn().mockReturnValue({
-              or: vi.fn().mockResolvedValue({ data: [] }),
+              or: vi.fn().mockReturnValue({
+                limit: outboundLimit,
+              }),
             }),
           };
         }
@@ -73,5 +76,6 @@ describe("GET /api/cron/send-payment-reminders", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok?: boolean };
     expect(body.ok).toBe(true);
+    expect(outboundLimit).toHaveBeenCalledWith(10000);
   });
 });

@@ -68,7 +68,15 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
     ...(metadataUserId ? { user_id: metadataUserId } : {}),
   };
 
-  /** Logged-in portal upgrade: merge into the existing `manager_purchases` row for this account. */
+  const { data: bySession, error: sessionUpdateError } = await supabase
+    .from("manager_purchases")
+    .update(patch)
+    .eq("stripe_checkout_session_id", session.id)
+    .select("id");
+  if (sessionUpdateError) throw new Error(sessionUpdateError.message);
+  if (bySession && bySession.length > 0) return;
+
+  /** Fallback for older pending rows that were not reserved by Checkout session id. */
   if (metadataUserId || managerId) {
     let updated = false;
     if (metadataUserId) {
@@ -76,6 +84,7 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
         .from("manager_purchases")
         .update(patch)
         .eq("user_id", metadataUserId)
+        .is("paid_at", null)
         .select("id");
       if (e1) throw new Error(e1.message);
       if (byUser && byUser.length > 0) updated = true;
@@ -85,6 +94,7 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
         .from("manager_purchases")
         .update(patch)
         .eq("manager_id", managerId)
+        .is("paid_at", null)
         .select("id");
       if (e2) throw new Error(e2.message);
       if (byMgr && byMgr.length > 0) updated = true;
@@ -97,6 +107,19 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
    * prior updates missed (e.g. `user_id` was null on an older row).
    */
   if (managerId && email) {
+    const { data: existingManagerPurchase, error: existingErr } = await supabase
+      .from("manager_purchases")
+      .select("id, paid_at, stripe_checkout_session_id")
+      .eq("manager_id", managerId)
+      .maybeSingle();
+    if (existingErr) throw new Error(existingErr.message);
+    if (
+      existingManagerPurchase?.paid_at &&
+      existingManagerPurchase.stripe_checkout_session_id !== session.id
+    ) {
+      return;
+    }
+
     const { error: upErr } = await supabase.from("manager_purchases").upsert(
       {
         stripe_checkout_session_id: session.id,

@@ -33,6 +33,7 @@ const LATE_FEE_ELIGIBLE_KINDS = new Set<HouseholdCharge["kind"]>([
   "prorated_utilities",
   "move_in_fee",
 ]);
+const SENT_DEDUP_ID_LIMIT = 10000;
 
 function isAuthorized(req: Request): boolean {
   const cronSecret = process.env.CRON_SECRET?.trim();
@@ -100,7 +101,8 @@ export async function GET(req: Request) {
   const { data: outboundRows } = await db
     .from("portal_outbound_mail_records")
     .select("id")
-    .or("id.like.payment_reminder_%,id.like.late_fee_notice_%");
+    .or("id.like.payment_reminder_%,id.like.late_fee_notice_%")
+    .limit(SENT_DEDUP_ID_LIMIT);
   const sentDedupIds = new Set((outboundRows ?? []).map((r) => String(r.id)));
 
   let sent = 0;
