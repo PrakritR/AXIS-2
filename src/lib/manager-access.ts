@@ -1,4 +1,5 @@
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { generateManagerId } from "@/lib/manager-id";
 import { cache } from "react";
 
 /** Property caps by plan (houses / listings in the portal). Legacy unknown tier → no numeric cap (`null`). */
@@ -205,15 +206,7 @@ export async function setManagerPurchaseTier(
   tier: ManagerSkuTier,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createSupabaseServiceRoleClient();
-  const { data: existing } = await supabase.from("manager_purchases").select("id").eq("user_id", userId).maybeSingle();
-
   const billing = tier === "free" ? "free" : "portal";
-
-  if (existing) {
-    const { error } = await supabase.from("manager_purchases").update({ tier, billing }).eq("user_id", userId);
-    if (error) return { ok: false, error: error.message };
-    return { ok: true };
-  }
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -224,15 +217,49 @@ export async function setManagerPurchaseTier(
   if (!profile?.email?.trim()) {
     return { ok: false, error: "Account email not found." };
   }
-  if (!profile.manager_id?.trim()) {
-    return { ok: false, error: "Manager profile is incomplete." };
+
+  const email = profile.email.trim().toLowerCase();
+
+  const { data: purchaseByUserId } = await supabase
+    .from("manager_purchases")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  let purchaseId = purchaseByUserId?.id ?? null;
+  if (!purchaseId) {
+    const { data: purchaseByEmail } = await supabase
+      .from("manager_purchases")
+      .select("id")
+      .ilike("email", email)
+      .maybeSingle();
+    purchaseId = purchaseByEmail?.id ?? null;
   }
 
-  const sessionId = `portal_${tier}_${userId}`;
+  if (purchaseId) {
+    const { error } = await supabase
+      .from("manager_purchases")
+      .update({ tier, billing, user_id: userId })
+      .eq("id", purchaseId);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  }
+
+  let managerId = profile.manager_id?.trim() ?? "";
+  if (!managerId) {
+    managerId = generateManagerId();
+    const { error: profileErr } = await supabase
+      .from("profiles")
+      .update({ manager_id: managerId, updated_at: new Date().toISOString() })
+      .eq("id", userId);
+    if (profileErr) return { ok: false, error: profileErr.message };
+  }
+
+  const sessionId = `admin_portal_${tier}_${userId}`;
   const { error: insErr } = await supabase.from("manager_purchases").insert({
     stripe_checkout_session_id: sessionId,
-    email: profile.email.trim().toLowerCase(),
-    manager_id: profile.manager_id.trim(),
+    email,
+    manager_id: managerId,
     tier,
     billing,
     user_id: userId,
@@ -242,8 +269,8 @@ export async function setManagerPurchaseTier(
     if (insErr.code === "23505") {
       const { error: upErr } = await supabase
         .from("manager_purchases")
-        .update({ tier, billing, user_id: userId })
-        .eq("stripe_checkout_session_id", sessionId);
+        .update({ tier, billing, user_id: userId, manager_id: managerId })
+        .ilike("email", email);
       if (upErr) return { ok: false, error: upErr.message };
       return { ok: true };
     }
