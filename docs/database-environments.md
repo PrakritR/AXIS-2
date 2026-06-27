@@ -25,12 +25,22 @@ Rules:
 
 `assertNonProdDatabase()` in `src/lib/server-env.ts` throws if a non-production
 runtime (local dev, tests, Vercel preview) has `NEXT_PUBLIC_SUPABASE_URL`
-pointing at the production project. It is wired into both server-side client
-factories — the anon SSR client (`src/lib/supabase/server.ts`, the read path)
-and the service-role client (`src/lib/supabase/service.ts`, privileged writes) —
-so a misconfigured local env fails loudly instead of silently touching
-production. The browser client cannot run this server-only check, but it has no
-elevated access.
+pointing at the production project. It is wired into every server-side path that
+opens a connection: the anon SSR client (`src/lib/supabase/server.ts`, reads),
+the service-role client (`src/lib/supabase/service.ts`, privileged writes), the
+password-verify helper (`src/lib/auth/verify-auth-password.ts`), and the OAuth
+callback route (`src/app/auth/callback/route.ts`, which performs a real auth
+exchange). So a misconfigured local env fails loudly instead of silently
+touching production. The browser client cannot run this server-only check but
+has no elevated access. `src/middleware.ts` is intentionally not guarded: it
+only does a cookie-based `getSession` with no network round-trip, and importing
+the `server-only` module into the middleware bundle is avoided.
+
+> **The guard protects the app runtime only — not the Supabase CLI.** `db:push`,
+> `db:pull`, and `db:reset --linked` act on whichever project is currently
+> linked. A `supabase link` to production followed by `db:reset` would wipe
+> production. Always confirm the linked project (keep dev/test linked by
+> default) before any reset/push.
 
 The production project ref is supplied out-of-band via the optional
 `AXIS_PROD_SUPABASE_REF` env var (so the ref is not hardcoded in source). Set it
