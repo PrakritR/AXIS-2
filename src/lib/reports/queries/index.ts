@@ -250,13 +250,14 @@ export async function queryExpenses(
     vendorId: e.vendor_id ?? "",
     memo: e.memo ?? "",
     propertyId: e.property_id ?? "",
+    workOrderId: e.source_work_order_id ?? "",
   }));
 
   const totalCents = (data ?? []).reduce((sum, e) => sum + Number(e.amount_cents), 0);
 
   return {
     id: "expenses",
-    title: "Expenses",
+    title: "Expense documents",
     columns: [
       { key: "date", label: "Date", format: "date" },
       { key: "category", label: "Category" },
@@ -264,9 +265,10 @@ export async function queryExpenses(
       { key: "vendorId", label: "Vendor ID" },
       { key: "memo", label: "Memo" },
       { key: "propertyId", label: "Property" },
+      { key: "workOrderId", label: "Work order" },
     ],
     rows,
-    totals: { date: "Total", category: "", amount: centsToUsd(totalCents), vendorId: "", memo: "", propertyId: "" },
+    totals: { date: "Total", category: "", amount: centsToUsd(totalCents), vendorId: "", memo: "", propertyId: "", workOrderId: "" },
     meta: { from, to },
   };
 }
@@ -355,6 +357,7 @@ export async function queryRentalDays(
         leaseStart: leaseStart.toISOString().slice(0, 10),
         leaseEnd: p.leaseEnd?.trim() || "—",
         daysRented,
+        daysAvailable: daysInclusive(rangeStart, rangeEnd),
         period: `${from} – ${to}`,
       };
     })
@@ -373,6 +376,7 @@ export async function queryRentalDays(
       { key: "leaseStart", label: "Lease start", format: "date" },
       { key: "leaseEnd", label: "Lease end", format: "date" },
       { key: "daysRented", label: "Days rented", align: "right", format: "number" },
+      { key: "daysAvailable", label: "Days available", align: "right", format: "number" },
     ],
     rows,
     totals: {
@@ -382,6 +386,7 @@ export async function queryRentalDays(
       leaseStart: "",
       leaseEnd: "",
       daysRented: totalDays,
+      daysAvailable: rows.length * daysInclusive(rangeStart, rangeEnd),
     },
     meta: { from, to, totalDaysRented: totalDays },
   };

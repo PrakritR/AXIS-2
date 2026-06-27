@@ -6,6 +6,7 @@ import {
   maxAccountLinksForTier,
   maxPropertiesForManagerTier,
   normalizeManagerSkuTier,
+  resolveManagerSubscriptionTierFromPurchase,
 } from "@/lib/manager-access";
 
 describe("manager-access", () => {
@@ -37,8 +38,40 @@ describe("manager-access", () => {
     expect(managerSectionAllowedForTier("services", "free")).toBe(false);
     expect(managerSectionAllowedForTier("inbox", "free")).toBe(false);
     expect(managerSectionAllowedForTier("documents", "free")).toBe(false);
+    expect(managerSectionAllowedForTier("financials", "free")).toBe(false);
     expect(managerSectionAllowedForTier("documents", "paid")).toBe(true);
     expect(managerSectionAllowedForTier("inbox", "paid")).toBe(true);
+  });
+
+  it("resolves subscription tier from purchase rows", () => {
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: "free",
+        stripeSubscriptionId: null,
+        hasPurchaseRow: true,
+      }),
+    ).toBe("free");
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: null,
+        stripeSubscriptionId: null,
+        hasPurchaseRow: true,
+      }),
+    ).toBe("free");
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: null,
+        stripeSubscriptionId: "sub_123",
+        hasPurchaseRow: true,
+      }),
+    ).toBe("paid");
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: null,
+        stripeSubscriptionId: null,
+        hasPurchaseRow: false,
+      }),
+    ).toBeNull();
   });
 
   it("formats monthly labels", () => {

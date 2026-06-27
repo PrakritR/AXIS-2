@@ -28,6 +28,17 @@ export type ManagerReportFilters = {
   daysAhead?: number;
   taxYear?: number;
   vendorId?: string;
+  scope?: DocumentScope;
+  residentEmail?: string;
+  roomLabel?: string;
+};
+
+export type DocumentScope = "portfolio" | "property" | "tenant" | "room";
+export type FormalDocumentKind = "rent_receipt" | "days_rented" | "property_rent_receipt";
+
+export type FormalDocumentFilters = ManagerReportFilters & {
+  scope: DocumentScope;
+  includeFields?: string[];
 };
 
 export type ResidentReportFilters = {

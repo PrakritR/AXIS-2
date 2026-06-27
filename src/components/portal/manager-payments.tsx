@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -33,6 +34,12 @@ import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
+import {
+  ScheduledMessageEditModal,
+  useScheduledPaymentMessages,
+} from "@/components/portal/payment-schedule-ui";
+import { upcomingScheduledForCharge } from "@/lib/scheduled-payment-messages";
+import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
@@ -68,6 +75,8 @@ export function ManagerPayments() {
   const [residentFilter, setResidentFilter] = useState("");
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
+  const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
+  const { messages: scheduledMessages, reload: reloadSchedule } = useScheduledPaymentMessages();
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
 
   useEffect(() => {
@@ -301,6 +310,13 @@ export function ManagerPayments() {
       }
       filterRow={filterRow}
     >
+      <div className="mb-4 rounded-2xl border border-border bg-accent/20 px-4 py-3 text-sm text-muted">
+        Automated rent and overdue reminders appear in{" "}
+        <Link href={`${portalBase}/inbox/schedule`} className="font-semibold text-primary hover:underline">
+          Inbox → Schedule
+        </Link>
+        . Configure timing, visibility, and message copy there.
+      </div>
       <div className="mb-8">
         <PortalStripeConnectPanel basePath="/portal" variant="embedded" />
       </div>
@@ -308,7 +324,16 @@ export function ManagerPayments() {
         rows={rowsForBucket}
         managerUserId={userId ?? null}
         activeBucket={bucket}
+        scheduledMessages={scheduledMessages}
+        schedulePortalBase={portalBase}
+        onScheduleEdit={setScheduleEdit}
         onRowsChanged={() => setHcTick((n) => n + 1)}
+      />
+      <ScheduledMessageEditModal
+        open={Boolean(scheduleEdit)}
+        message={scheduleEdit}
+        onClose={() => setScheduleEdit(null)}
+        onSaved={() => void reloadSchedule()}
       />
       <ManagerAddPaymentModal
         open={addOpen}

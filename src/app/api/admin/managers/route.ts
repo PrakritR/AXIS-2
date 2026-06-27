@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { deleteManagerAccount } from "@/lib/auth/delete-portal-account";
+import { applyAdminManagerPurchaseTier, type AdminManagerTier } from "@/lib/manager-admin-purchase";
+import { resolveEffectiveManagerTier, syncManagerPurchaseTierState } from "@/lib/manager-tier-sync";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -39,24 +41,42 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Also get tier info from manager_purchases
-    const emails = (data ?? []).map((p) => p.email).filter(Boolean);
-    const { data: purchases } = await supabase
-      .from("manager_purchases")
-      .select("email, tier, billing, paid_at")
-      .in("email", emails);
+    await Promise.all(
+      (data ?? []).map(async (profile) => {
+        try {
+          await syncManagerPurchaseTierState(profile.id);
+        } catch {
+          /* keep serving last known DB state */
+        }
+      }),
+    );
 
-    const purchaseByEmail = new Map(purchases?.map((p) => [p.email, p]) ?? []);
+    // Tier info from manager_purchases (keyed by manager_id — unique per purchase row)
+    const managerIds = (data ?? []).map((p) => p.manager_id).filter(Boolean) as string[];
+    const { data: purchases } =
+      managerIds.length > 0
+        ? await supabase
+            .from("manager_purchases")
+            .select("manager_id, tier, billing, paid_at, stripe_subscription_id, stripe_checkout_session_id")
+            .in("manager_id", managerIds)
+        : { data: [] as never[] };
+
+    const purchaseByManagerId = new Map(purchases?.map((p) => [p.manager_id, p]) ?? []);
 
     const managers = (data ?? []).map((profile) => {
-      const purchase = purchaseByEmail.get(profile.email);
+      const purchase = profile.manager_id ? purchaseByManagerId.get(profile.manager_id) : undefined;
+      const effectiveTier = purchase
+        ? resolveEffectiveManagerTier(purchase) ?? "free"
+        : "free";
+      const billing =
+        effectiveTier === "free" ? "free" : purchase?.billing ?? "free";
       return {
         id: profile.id,
         email: profile.email ?? "",
         fullName: profile.full_name ?? "",
         managerId: profile.manager_id ?? "",
-        tier: purchase?.tier ?? "free",
-        billing: purchase?.billing ?? "free",
+        tier: effectiveTier,
+        billing,
         active: profile.application_approved !== false,
         joinedAt: profile.created_at ?? purchase?.paid_at ?? null,
       };
@@ -105,42 +125,55 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ error: "Manager profile not found." }, { status: 404 });
       }
 
-      const tier = typeof body.tier === "string" ? body.tier.trim().toLowerCase() : undefined;
-      const billing = typeof body.billing === "string" ? body.billing.trim().toLowerCase() : undefined;
-      if (tier && tier !== "free" && tier !== "pro" && tier !== "business" && tier !== "pending") {
+      const tierRaw = typeof body.tier === "string" ? body.tier.trim().toLowerCase() : undefined;
+      const billingRaw = typeof body.billing === "string" ? body.billing.trim().toLowerCase() : undefined;
+
+      if (
+        tierRaw &&
+        tierRaw !== "free" &&
+        tierRaw !== "pro" &&
+        tierRaw !== "business" &&
+        tierRaw !== "pending"
+      ) {
         return NextResponse.json({ error: "Invalid tier." }, { status: 400 });
       }
-      if (billing && billing !== "monthly" && billing !== "annual" && billing !== "free") {
+      if (
+        billingRaw &&
+        billingRaw !== "monthly" &&
+        billingRaw !== "annual" &&
+        billingRaw !== "free" &&
+        billingRaw !== "portal"
+      ) {
         return NextResponse.json({ error: "Invalid billing." }, { status: 400 });
       }
 
       const { data: existingPurchase } = await supabase
         .from("manager_purchases")
-        .select("id, stripe_checkout_session_id")
+        .select("tier")
         .eq("manager_id", profile.manager_id)
         .maybeSingle();
 
-      const patch: Record<string, string | null> = {};
-      if (tier) patch.tier = tier === "pending" ? null : tier;
-      if (billing) patch.billing = billing === "free" ? "free" : billing;
-      if (tier && tier !== "pending") {
-        patch.paid_at = new Date().toISOString();
+      let tier: AdminManagerTier;
+      if (tierRaw === "free" || tierRaw === "pro" || tierRaw === "business" || tierRaw === "pending") {
+        tier = tierRaw;
+      } else {
+        const existing = existingPurchase?.tier?.toLowerCase();
+        if (existing === "pro" || existing === "business" || existing === "free") {
+          tier = existing;
+        } else {
+          tier = "pending";
+        }
       }
 
-      if (existingPurchase) {
-        const { error } = await supabase.from("manager_purchases").update(patch).eq("id", existingPurchase.id);
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      } else {
-        const { error } = await supabase.from("manager_purchases").insert({
-          stripe_checkout_session_id: `admin_${profile.manager_id}`,
-          email: profile.email,
-          manager_id: profile.manager_id,
-          user_id: id,
-          tier: patch.tier ?? "free",
-          billing: patch.billing ?? "free",
-          paid_at: patch.paid_at ?? new Date().toISOString(),
-        });
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      const result = await applyAdminManagerPurchaseTier(supabase, {
+        userId: id,
+        email: profile.email,
+        managerId: profile.manager_id,
+        tier,
+        billing: billingRaw,
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 500 });
       }
     }
 

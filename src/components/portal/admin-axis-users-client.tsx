@@ -37,6 +37,14 @@ type CategoryFilter = "management" | "resident";
 type StatusTab = "active" | "disabled";
 type TierFilter = "all" | "free" | "pro" | "business";
 
+function normalizeManagerBilling(tier: string, billing: string): string {
+  if (tier === "free" || tier === "pending") return "free";
+  if (billing === "monthly" || billing === "annual" || billing === "portal" || billing === "free") {
+    return billing === "free" ? "portal" : billing;
+  }
+  return "portal";
+}
+
 function UsersEmptyIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -109,13 +117,13 @@ function ManagerDetailRow({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editFullName, setEditFullName] = useState(row.fullName);
   const [editTier, setEditTier] = useState(row.tier);
-  const [editBilling, setEditBilling] = useState(row.billing);
+  const [editBilling, setEditBilling] = useState(() => normalizeManagerBilling(row.tier, row.billing));
 
   useEffect(() => {
     void Promise.resolve().then(() => {
       setEditFullName(row.fullName);
       setEditTier(row.tier);
-      setEditBilling(row.billing);
+      setEditBilling(normalizeManagerBilling(row.tier, row.billing));
     });
   }, [row.fullName, row.tier, row.billing]);
 
@@ -205,7 +213,15 @@ function ManagerDetailRow({
                 id={`mgr-tier-${row.id}`}
                 className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm"
                 value={editTier}
-                onChange={(e) => setEditTier(e.target.value)}
+                onChange={(e) => {
+                  const nextTier = e.target.value;
+                  setEditTier(nextTier);
+                  if (nextTier === "free" || nextTier === "pending") {
+                    setEditBilling("free");
+                  } else if (editBilling === "free") {
+                    setEditBilling("portal");
+                  }
+                }}
               >
                 <option value="pending">Pending</option>
                 <option value="free">Free</option>
@@ -222,10 +238,12 @@ function ManagerDetailRow({
                 className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm"
                 value={editBilling}
                 onChange={(e) => setEditBilling(e.target.value)}
+                disabled={editTier === "free" || editTier === "pending"}
               >
                 <option value="free">Free</option>
-                <option value="monthly">Monthly</option>
-                <option value="annual">Annual</option>
+                <option value="portal">Admin grant (no payment)</option>
+                <option value="monthly">Monthly (expires in 1 month)</option>
+                <option value="annual">Annual (expires in 1 year)</option>
               </select>
             </div>
             <Button type="button" className="rounded-full" onClick={() => void saveEdits()} disabled={busy}>

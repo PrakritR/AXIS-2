@@ -488,6 +488,23 @@ export function buildPortalWorkspaceModel(
     };
   }
 
+  if (portal === "resident" && section === "documents") {
+    return {
+      eyebrow,
+      title: "Documents",
+      subtitle: "",
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: actionsFor(portal, section),
+      columns: [
+        { key: "document", label: "Document" },
+        { key: "status", label: "Status" },
+        { key: "updated", label: "Updated" },
+      ],
+      rows: demoResidentLeaseRows as unknown as Record<string, string>[],
+    };
+  }
+
   if (portal === "resident" && section === "lease") {
     return {
       eyebrow,

@@ -23,6 +23,9 @@ import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markMana
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
+import { ScheduledReminderChips } from "@/components/portal/manager-inbox-schedule-panel";
+import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
+import { upcomingScheduledForCharge } from "@/lib/scheduled-payment-messages";
 
 function statusTone(label: string) {
   const l = label.toLowerCase();
@@ -36,11 +39,17 @@ export function ManagerPaymentsLedgerPanel({
   rows,
   managerUserId,
   activeBucket,
+  scheduledMessages = [],
+  schedulePortalBase = "/portal",
+  onScheduleEdit,
   onRowsChanged,
 }: {
   rows: DemoManagerPaymentLedgerRow[];
   managerUserId: string | null;
   activeBucket: ManagerPaymentBucket;
+  scheduledMessages?: ScheduledPaymentMessage[];
+  schedulePortalBase?: string;
+  onScheduleEdit?: (message: ScheduledPaymentMessage) => void;
   onRowsChanged?: () => void;
 }) {
   const { showToast } = useAppUi();
@@ -220,7 +229,15 @@ export function ManagerPaymentsLedgerPanel({
                   <td className={PORTAL_TABLE_TD}>{row.chargeTitle}</td>
                   <td className={`${PORTAL_TABLE_TD} tabular-nums text-muted`}>{row.amountPaid}</td>
                   <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground`}>{row.balanceDue}</td>
-                  <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.dueDate}</td>
+                  <td className={`${PORTAL_TABLE_TD} text-muted`}>
+                    <div>{row.dueDate}</div>
+                    {row.householdChargeId ? (
+                      <ScheduledReminderChips
+                        messages={upcomingScheduledForCharge(scheduledMessages, row.householdChargeId)}
+                        onEdit={onScheduleEdit}
+                      />
+                    ) : null}
+                  </td>
                   <td className={PORTAL_TABLE_TD}>
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}>
                       {row.statusLabel}
@@ -278,6 +295,25 @@ export function ManagerPaymentsLedgerPanel({
                         >
                           {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
                         </Button>
+                        {row.householdChargeId && upcomingScheduledForCharge(scheduledMessages, row.householdChargeId)[0] ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={PORTAL_DETAIL_BTN}
+                            onClick={() => onScheduleEdit?.(upcomingScheduledForCharge(scheduledMessages, row.householdChargeId!)[0]!)}
+                          >
+                            Edit schedule
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={PORTAL_DETAIL_BTN}
+                            onClick={() => window.location.assign(`${schedulePortalBase}/inbox/schedule`)}
+                          >
+                            Reminder settings
+                          </Button>
+                        )}
                         {activeBucket !== "pending" ? (
                           <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => moveToPending(row)}>
                             Move to pending

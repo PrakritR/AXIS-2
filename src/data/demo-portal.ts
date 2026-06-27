@@ -159,6 +159,13 @@ export type DemoManagerWorkOrderRow = {
   vendorId?: string;
   vendorName?: string;
   vendorAssignedAt?: string;
+  category?: "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general";
+  vendorCostCents?: number;
+  materialsCostCents?: number;
+  materialsMemo?: string;
+  workDoneSummary?: string;
+  completedAt?: string;
+  expenseEntryIds?: string[];
 };
 
 export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];

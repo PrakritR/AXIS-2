@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react";
 import { ManagerPortalPageShell, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { ReportExportButtons } from "@/components/portal/reports/report-filter-bar";
 import { ReportTable } from "@/components/portal/reports/report-table";
-import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import type { ReportResult } from "@/lib/reports/types";
 
 function defaultStatementRange() {
@@ -17,9 +16,14 @@ function defaultStatementRange() {
 export function ResidentFinancialsPanel({
   tabId,
   basePath = "/resident",
+  tabs = [
+    { id: "summary", label: "Summary" },
+    { id: "statements", label: "Rent statements" },
+  ],
 }: {
   tabId: string;
   basePath?: string;
+  tabs?: ReadonlyArray<{ id: string; label: string }>;
 }) {
   const [balanceReport, setBalanceReport] = useState<ReportResult | null>(null);
   const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
@@ -56,18 +60,14 @@ export function ResidentFinancialsPanel({
     });
   }, [tabId, loadSummary, loadLedger]);
 
-  const tabs = [
-    { id: "summary", label: "Summary" },
-    { id: "statements", label: "Rent statements" },
-    { id: "lease", label: "Lease" },
-  ];
+  const tabsList = tabs;
 
   const ledgerQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();
 
   return (
-    <ManagerPortalPageShell title="Financials" subtitle="Balance, rent statements, and lease summary.">
+    <ManagerPortalPageShell title="Finances" subtitle="Balance and rent statements.">
       <div className="mb-4 flex flex-wrap gap-2">
-        {tabs.map((tab) => (
+        {tabsList.map((tab) => (
           <Link
             key={tab.id}
             href={`${basePath}/financials/${tab.id}`}
@@ -129,8 +129,6 @@ export function ResidentFinancialsPanel({
           <ReportTable report={ledgerReport} loading={loading} />
         </div>
       ) : null}
-
-      {tabId === "lease" ? <ResidentLeasePanel /> : null}
     </ManagerPortalPageShell>
   );
 }

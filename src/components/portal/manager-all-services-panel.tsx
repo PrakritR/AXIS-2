@@ -223,6 +223,7 @@ export function ManagerAllServicesPanel({
             items={[
               { id: "requests", label: "Requests", href: `${basePath}/services/requests` },
               { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
+              { id: "work-done", label: "Work done", href: `${basePath}/services/work-done` },
               { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors` },
             ]}
           />

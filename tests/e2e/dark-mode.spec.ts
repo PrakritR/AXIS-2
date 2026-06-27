@@ -109,7 +109,7 @@ test.describe("Dark mode — resident portal", () => {
     await signInAsResident(page);
   });
 
-  const routes = ["/resident/dashboard", "/resident/lease", "/resident/payments"] as const;
+  const routes = ["/resident/dashboard", "/resident/documents/lease", "/resident/payments"] as const;
 
   for (const route of routes) {
     test(`${route} has no light-themed main content`, async ({ page }) => {

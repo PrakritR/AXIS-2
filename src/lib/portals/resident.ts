@@ -12,8 +12,13 @@ const residentPortalLimited: PortalDefinition = {
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "payments", label: "Payments", tabs: [] },
     {
+      section: "documents",
+      label: "Documents",
+      tabs: [{ id: "receipts", label: "Rent receipts" }],
+    },
+    {
       section: "financials",
-      label: "Financials",
+      label: "Finances",
       tabs: [
         { id: "summary", label: "Summary" },
         { id: "statements", label: "Rent statements" },
@@ -44,15 +49,21 @@ const residentPortalApproved: PortalDefinition = {
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "payments", label: "Payments", tabs: [] },
     {
+      section: "documents",
+      label: "Documents",
+      tabs: [
+        { id: "lease", label: "Lease" },
+        { id: "receipts", label: "Rent receipts" },
+      ],
+    },
+    {
       section: "financials",
-      label: "Financials",
+      label: "Finances",
       tabs: [
         { id: "summary", label: "Summary" },
         { id: "statements", label: "Rent statements" },
-        { id: "lease", label: "Lease" },
       ],
     },
-    { section: "lease", label: "Lease", tabs: [] },
     { section: "move-in", label: "Move-in", tabs: [] },
     {
       section: "services",
