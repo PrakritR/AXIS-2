@@ -19,9 +19,12 @@ function postgresConnectionString(): string | null {
   if (!password || !url) return null;
 
   const ref = new URL(url).hostname.split(".")[0];
-  const host = process.env.SUPABASE_DB_HOST?.trim() || `db.${ref}.supabase.co`;
-  const port = process.env.SUPABASE_DB_PORT?.trim() || "5432";
-  const user = process.env.SUPABASE_DB_USER?.trim() || "postgres";
+  const host =
+    process.env.SUPABASE_DB_HOST?.trim() ||
+    process.env.SUPABASE_POOLER_HOST?.trim() ||
+    `aws-1-us-west-2.pooler.supabase.com`;
+  const port = process.env.SUPABASE_DB_PORT?.trim() || "6543";
+  const user = process.env.SUPABASE_DB_USER?.trim() || `postgres.${ref}`;
   const database = process.env.SUPABASE_DB_NAME?.trim() || "postgres";
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
 }
