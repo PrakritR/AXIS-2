@@ -54,10 +54,23 @@ export async function GET() {
     const purchaseByUserId = new Map((purchasesByUserId ?? []).map((p) => [p.user_id, p]));
     const purchaseByEmail = new Map((purchasesByEmail ?? []).map((p) => [String(p.email ?? "").toLowerCase(), p]));
 
+    const tierRank = (tier: string | null | undefined) => {
+      const n = normalizeManagerSkuTier(tier);
+      if (n === "business") return 3;
+      if (n === "pro") return 2;
+      if (n === "free") return 1;
+      return 0;
+    };
+
     const managers = (data ?? []).map((profile) => {
+      const byUser = purchaseByUserId.get(profile.id);
+      const byEmail = purchaseByEmail.get(String(profile.email ?? "").toLowerCase());
       const purchase =
-        purchaseByUserId.get(profile.id) ??
-        purchaseByEmail.get(String(profile.email ?? "").toLowerCase());
+        byUser && byEmail
+          ? tierRank(byUser.tier) >= tierRank(byEmail.tier)
+            ? byUser
+            : byEmail
+          : byUser ?? byEmail;
       return {
         id: profile.id,
         email: profile.email ?? "",
@@ -101,7 +114,7 @@ export async function PATCH(req: Request) {
       if (!normalizedTier) {
         return NextResponse.json({ error: "tier must be free, pro, or business." }, { status: 400 });
       }
-      const result = await setManagerPurchaseTier(id, normalizedTier);
+      const result = await setManagerPurchaseTier(id, normalizedTier, { adminOverride: true });
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: 500 });
       }

@@ -43,4 +43,13 @@ describe("manager-access", () => {
     expect(formatManagerMonthlyLabel("free")).toBe("$0/mo");
     expect(formatManagerMonthlyLabel("pro")).toBe("$20/mo");
   });
+
+  it("detects stripe-managed billing intervals", async () => {
+    const { isStripeManagedBilling } = await import("@/lib/manager-access");
+    expect(isStripeManagedBilling("monthly")).toBe(true);
+    expect(isStripeManagedBilling("annual")).toBe(true);
+    expect(isStripeManagedBilling("admin")).toBe(false);
+    expect(isStripeManagedBilling("portal")).toBe(false);
+    expect(isStripeManagedBilling("free")).toBe(false);
+  });
 });

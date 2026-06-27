@@ -1,5 +1,5 @@
 import type Stripe from "stripe";
-import { getManagerPurchaseSku } from "@/lib/manager-access";
+import { getManagerPurchaseSku, isStripeManagedBilling } from "@/lib/manager-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 import {
@@ -90,8 +90,10 @@ export async function reconcileManagerPurchaseByStripeSubscriptionId(subscriptio
  * `stripe_subscription_id`. Fixes drift when webhooks lag or metadata was incomplete.
  */
 export async function reconcileManagerPurchaseWithStripe(userId: string): Promise<void> {
-  const { stripeSubscriptionId } = await getManagerPurchaseSku(userId);
-  const sid = stripeSubscriptionId?.trim();
+  const purchase = await getManagerPurchaseSku(userId);
+  if (!isStripeManagedBilling(purchase.billing)) return;
+
+  const sid = purchase.stripeSubscriptionId?.trim();
   if (!sid) return;
 
   const stripe = getStripe();

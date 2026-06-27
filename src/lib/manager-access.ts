@@ -127,28 +127,81 @@ export function paidWorkspacePortalTitle(tierRaw: string | null | undefined, str
   return "Axis";
 }
 
+export function isStripeManagedBilling(billing: string | null | undefined): boolean {
+  const b = String(billing ?? "").toLowerCase();
+  return b === "monthly" || b === "annual";
+}
+
+const TIER_RANK: Record<string, number> = {
+  business: 3,
+  pro: 2,
+  free: 1,
+};
+
+function tierRank(tier: string | null | undefined): number {
+  return TIER_RANK[String(tier ?? "").toLowerCase()] ?? 0;
+}
+
+type ManagerPurchaseRowRecord = {
+  id: string;
+  tier: string | null;
+  billing: string | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  updated_at: string | null;
+};
+
+async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPurchaseRowRecord[]> {
+  const supabase = createSupabaseServiceRoleClient();
+  const { data: profile } = await supabase.from("profiles").select("email").eq("id", userId).maybeSingle();
+  const email = profile?.email?.trim().toLowerCase() ?? "";
+
+  const select = "id, tier, billing, stripe_customer_id, stripe_subscription_id, updated_at";
+  const [{ data: byUserId }, { data: byEmail }] = await Promise.all([
+    supabase.from("manager_purchases").select(select).eq("user_id", userId),
+    email
+      ? supabase.from("manager_purchases").select(select).ilike("email", email)
+      : Promise.resolve({ data: [] as ManagerPurchaseRowRecord[] }),
+  ]);
+
+  const merged = new Map<string, ManagerPurchaseRowRecord>();
+  for (const row of [...(byUserId ?? []), ...(byEmail ?? [])]) {
+    merged.set(String(row.id), row as ManagerPurchaseRowRecord);
+  }
+  return [...merged.values()];
+}
+
+function pickBestManagerPurchaseRow(rows: ManagerPurchaseRowRecord[]): ManagerPurchaseRowRecord | null {
+  if (rows.length === 0) return null;
+  return [...rows].sort((a, b) => {
+    const tierDiff = tierRank(b.tier) - tierRank(a.tier);
+    if (tierDiff !== 0) return tierDiff;
+    const aTime = a.updated_at ? Date.parse(a.updated_at) : 0;
+    const bTime = b.updated_at ? Date.parse(b.updated_at) : 0;
+    return bTime - aTime;
+  })[0]!;
+}
+
 const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
   tier: string | null;
   billing: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
 }> => {
-  const supabase = createSupabaseServiceRoleClient();
-  const { data } = await supabase
-    .from("manager_purchases")
-    .select("tier, billing, stripe_customer_id, stripe_subscription_id")
-    .eq("user_id", userId)
-    .maybeSingle();
+  const best = pickBestManagerPurchaseRow(await loadManagerPurchaseRowsForUser(userId));
+  if (!best) {
+    return { tier: null, billing: null, stripeCustomerId: null, stripeSubscriptionId: null };
+  }
   return {
-    tier: data?.tier != null ? String(data.tier) : null,
-    billing: data?.billing != null ? String(data.billing) : null,
+    tier: best.tier != null ? String(best.tier) : null,
+    billing: best.billing != null ? String(best.billing) : null,
     stripeCustomerId:
-      data?.stripe_customer_id != null && String(data.stripe_customer_id).trim() !== ""
-        ? String(data.stripe_customer_id).trim()
+      best.stripe_customer_id != null && String(best.stripe_customer_id).trim() !== ""
+        ? String(best.stripe_customer_id).trim()
         : null,
     stripeSubscriptionId:
-      data?.stripe_subscription_id != null && String(data.stripe_subscription_id).trim() !== ""
-        ? String(data.stripe_subscription_id).trim()
+      best.stripe_subscription_id != null && String(best.stripe_subscription_id).trim() !== ""
+        ? String(best.stripe_subscription_id).trim()
         : null,
   };
 });
@@ -199,14 +252,17 @@ export async function getManagerPurchaseSku(userId: string): Promise<{
 
 /**
  * Sets `manager_purchases.tier` for the account (service role). Creates a row if needed (same rules as checkout completion).
- * Paid tiers use `billing: "portal"`; free uses `billing: "free"`.
+ * Admin overrides use `billing: "admin"` and clear any stale Stripe subscription id.
  */
 export async function setManagerPurchaseTier(
   userId: string,
   tier: ManagerSkuTier,
+  opts?: { adminOverride?: boolean },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createSupabaseServiceRoleClient();
-  const billing = tier === "free" ? "free" : "portal";
+  const billing =
+    tier === "free" ? "free" : opts?.adminOverride ? "admin" : "portal";
+  const clearStripeSubscription = tier === "free" || opts?.adminOverride || billing === "portal";
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -219,29 +275,22 @@ export async function setManagerPurchaseTier(
   }
 
   const email = profile.email.trim().toLowerCase();
-
-  const { data: purchaseByUserId } = await supabase
-    .from("manager_purchases")
-    .select("id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  let purchaseId = purchaseByUserId?.id ?? null;
-  if (!purchaseId) {
-    const { data: purchaseByEmail } = await supabase
-      .from("manager_purchases")
-      .select("id")
-      .ilike("email", email)
-      .maybeSingle();
-    purchaseId = purchaseByEmail?.id ?? null;
+  const existingRows = await loadManagerPurchaseRowsForUser(userId);
+  const updatePatch: Record<string, unknown> = {
+    tier,
+    billing,
+    user_id: userId,
+    updated_at: new Date().toISOString(),
+  };
+  if (clearStripeSubscription) {
+    updatePatch.stripe_subscription_id = null;
   }
 
-  if (purchaseId) {
-    const { error } = await supabase
-      .from("manager_purchases")
-      .update({ tier, billing, user_id: userId })
-      .eq("id", purchaseId);
-    if (error) return { ok: false, error: error.message };
+  if (existingRows.length > 0) {
+    for (const row of existingRows) {
+      const { error } = await supabase.from("manager_purchases").update(updatePatch).eq("id", row.id);
+      if (error) return { ok: false, error: error.message };
+    }
     return { ok: true };
   }
 
@@ -269,7 +318,7 @@ export async function setManagerPurchaseTier(
     if (insErr.code === "23505") {
       const { error: upErr } = await supabase
         .from("manager_purchases")
-        .update({ tier, billing, user_id: userId, manager_id: managerId })
+        .update({ ...updatePatch, manager_id: managerId })
         .ilike("email", email);
       if (upErr) return { ok: false, error: upErr.message };
       return { ok: true };
