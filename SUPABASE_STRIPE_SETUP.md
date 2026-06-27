@@ -36,6 +36,31 @@ For shareable onboarding links and QR codes, set `NEXT_PUBLIC_CANONICAL_APP_URL`
 5. Ensure `{your-domain}/auth/callback` is listed under Supabase **Authentication → URL configuration → Redirect URLs** (not in Google Cloud redirect URIs).
 6. Users sign in at `/auth/sign-in` via **Continue with Google**. Existing Axis accounts match by email; new Google users without a profile are sent through `/auth/continue` (create an account first if you are not already provisioned).
 
+### Google “Continue to …” branding (show Axis, not supabase.co)
+
+Google’s account picker shows **“to continue to {domain}”** based on your OAuth client’s **redirect URI host**. With Supabase Auth, that host is `*.supabase.co`, so users may see `qahnczmilgptcedaqype.supabase.co` until you brand the consent screen.
+
+**In [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → OAuth consent screen:**
+
+1. Set **App name** to `Axis` (or `Axis Seattle Housing`).
+2. Upload your **App logo** (square, at least 120×120 px — use your Axis mark).
+3. Set **User support email** and **Developer contact** to your team address.
+4. Under **Authorized domains**, add `axis-seattle-housing.com` (and `supabase.co` if not already present).
+5. Add **Application home page**: `https://www.axis-seattle-housing.com`
+6. Add **Privacy policy** and **Terms of service** URLs on your domain (required for production / verification).
+7. Publish the consent screen to **Production** when ready (Testing mode only allows listed test users).
+
+After saving, new sign-ins should show your **Axis** name and logo (like other apps’ “Continue to Yelp” screen). The subtitle may still mention the Supabase hostname in some cases; fully replacing it requires a [Supabase custom auth domain](https://supabase.com/docs/guides/auth/auth-helpers/auth-ui#custom-domains) (paid add-on) so the redirect host is `auth.axis-seattle-housing.com`.
+
+**Checklist:**
+
+| Where | What to set |
+|-------|-------------|
+| Google OAuth consent screen | App name **Axis**, logo, home page, privacy/terms |
+| Google Credentials → OAuth client | Redirect URI = `https://<project-ref>.supabase.co/auth/v1/callback` only |
+| Supabase → Auth → URL config | Site URL = `https://www.axis-seattle-housing.com`, redirect URLs include `/auth/callback` |
+| Supabase → Auth → Google provider | Same Google client ID + secret as Cloud Console |
+
 ### Tenant screening (Certn)
 
 1. Create a [Certn](https://certn.co) partner account with API access (pay-per-report).
