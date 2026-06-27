@@ -39,11 +39,11 @@ describe("manager-purchase-from-session", () => {
       .mockResolvedValueOnce({ data: [], error: null });
     const updateBuilder = {
       eq: vi.fn(),
-      is: vi.fn(),
+      or: vi.fn(),
       select: updateSelect,
     };
     updateBuilder.eq.mockReturnValue(updateBuilder);
-    updateBuilder.is.mockReturnValue(updateBuilder);
+    updateBuilder.or.mockReturnValue(updateBuilder);
 
     const selectBuilder = {
       eq: vi.fn(),
@@ -80,8 +80,48 @@ describe("manager-purchase-from-session", () => {
       }),
     );
 
-    expect(updateBuilder.is).toHaveBeenCalledWith("paid_at", null);
+    expect(updateBuilder.or).toHaveBeenCalledWith("paid_at.is.null,tier.is.null");
     expect(selectBuilder.maybeSingle).toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("updates pending purchase rows even when paid_at has a default value", async () => {
+    const updateSelect = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [{ id: "purchase-1" }], error: null });
+    const updateBuilder = {
+      eq: vi.fn(),
+      or: vi.fn(),
+      select: updateSelect,
+    };
+    updateBuilder.eq.mockReturnValue(updateBuilder);
+    updateBuilder.or.mockReturnValue(updateBuilder);
+
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+      from: vi.fn(() => ({
+        update: vi.fn(() => updateBuilder),
+        upsert,
+      })),
+    } as never);
+
+    await recordPaidManagerCheckoutSession(
+      mockCheckoutSession({
+        id: "cs_test_paid",
+        customer_email: "manager@example.com",
+        metadata: {
+          tier: "pro",
+          billing: "monthly",
+          manager_id: "MGR-TEST",
+          userId: "user-1",
+        },
+      }),
+    );
+
+    expect(updateBuilder.or).toHaveBeenCalledWith("paid_at.is.null,tier.is.null");
+    expect(updateSelect).toHaveBeenCalledTimes(2);
     expect(upsert).not.toHaveBeenCalled();
   });
 });

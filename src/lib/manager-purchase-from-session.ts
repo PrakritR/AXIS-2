@@ -84,7 +84,7 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
         .from("manager_purchases")
         .update(patch)
         .eq("user_id", metadataUserId)
-        .is("paid_at", null)
+        .or("paid_at.is.null,tier.is.null")
         .select("id");
       if (e1) throw new Error(e1.message);
       if (byUser && byUser.length > 0) updated = true;
@@ -94,7 +94,7 @@ export async function recordPaidManagerCheckoutSession(session: Stripe.Checkout.
         .from("manager_purchases")
         .update(patch)
         .eq("manager_id", managerId)
-        .is("paid_at", null)
+        .or("paid_at.is.null,tier.is.null")
         .select("id");
       if (e2) throw new Error(e2.message);
       if (byMgr && byMgr.length > 0) updated = true;
