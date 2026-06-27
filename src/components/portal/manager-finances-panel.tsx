@@ -17,6 +17,11 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
+import {
+  MANAGER_VENDORS_EVENT,
+  readActiveManagerVendorRows,
+  syncManagerVendorsFromServer,
+} from "@/lib/manager-vendors-storage";
 import type { ReportResult } from "@/lib/reports/types";
 
 const FINANCE_TABS = [
@@ -62,6 +67,7 @@ export function ManagerFinancesPanel({
   const { showToast } = useAppUi();
   const { userId, ready } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
+  const [vendorTick, setVendorTick] = useState(0);
   const [filters, setFilters] = useState(defaultFilters);
   const [report, setReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -81,9 +87,18 @@ export function ManagerFinancesPanel({
     return buildManagerPropertyFilterOptions(userId ?? null);
   }, [userId, propertyTick]);
 
+  const activeVendors = useMemo(() => {
+    void vendorTick;
+    return readActiveManagerVendorRows();
+  }, [userId, vendorTick]);
+
   useEffect(() => {
     if (!ready) return;
     void syncPropertyPipelineFromServer({ force: true }).then(() => setPropertyTick((n) => n + 1));
+    void syncManagerVendorsFromServer();
+    const onVendors = () => setVendorTick((n) => n + 1);
+    window.addEventListener(MANAGER_VENDORS_EVENT, onVendors);
+    return () => window.removeEventListener(MANAGER_VENDORS_EVENT, onVendors);
   }, [ready, userId]);
 
   const runReport = useCallback(async () => {
@@ -162,8 +177,8 @@ export function ManagerFinancesPanel({
       <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>
         {tabId === "expenses" ? (
           <p className="text-sm text-muted">
-            Log recurring property costs — utilities, Wi‑Fi, heating, cleaning, electricity, insurance, mortgage, and
-            other regular expenses. These feed Expense documents and your tax summary.
+            Log property costs — maintenance, utilities, cleaning, insurance, mortgage, vendor work, and other
+            expenses. These feed Expense documents and your tax summary.
           </p>
         ) : null}
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -180,7 +195,20 @@ export function ManagerFinancesPanel({
           />
           <div className="flex flex-wrap gap-2">
             {tabId === "expenses" ? (
-              <Button variant="outline" onClick={() => setExpenseModal(true)}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setExpenseDraft({
+                    categoryCode: "maintenance",
+                    amount: "",
+                    expenseDate: new Date().toISOString().slice(0, 10),
+                    memo: "",
+                    vendorId: "",
+                    propertyId: filters.propertyId,
+                  });
+                  setExpenseModal(true);
+                }}
+              >
                 Add expense
               </Button>
             ) : null}
@@ -192,6 +220,21 @@ export function ManagerFinancesPanel({
 
       <Modal open={expenseModal} onClose={() => setExpenseModal(false)} title="Add expense">
         <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
+            Property
+            <select
+              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+              value={expenseDraft.propertyId}
+              onChange={(e) => setExpenseDraft({ ...expenseDraft, propertyId: e.target.value })}
+            >
+              <option value="">All properties / unassigned</option>
+              {propertyOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             Category
             <select
@@ -219,8 +262,20 @@ export function ManagerFinancesPanel({
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-            Vendor ID (for 1099)
-            <Input value={expenseDraft.vendorId} onChange={(e) => setExpenseDraft({ ...expenseDraft, vendorId: e.target.value })} />
+            Vendor (optional, for 1099)
+            <select
+              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+              value={expenseDraft.vendorId}
+              onChange={(e) => setExpenseDraft({ ...expenseDraft, vendorId: e.target.value })}
+            >
+              <option value="">No vendor</option>
+              {activeVendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                  {v.trade ? ` · ${v.trade}` : ""}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
             Description / memo

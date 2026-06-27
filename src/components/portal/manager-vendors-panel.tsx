@@ -59,7 +59,12 @@ const EMPTY_DRAFT: VendorDraft = {
   sharedWithManagers: false,
 };
 
-export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
+export function ManagerVendorsPanel({
+  embedded = false,
+}: {
+  /** When true, render inside Services tab shell (no duplicate page header). */
+  embedded?: boolean;
+}) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
@@ -151,16 +156,8 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
     showToast("Vendor removed.");
   }
 
-  return (
-    <ManagerPortalPageShell
-      title="Vendors"
-      subtitle={`${activeCount} active vendor${activeCount === 1 ? "" : "s"} for work order assignment. Share your vendors with other managers if you want.`}
-      titleAside={
-        <Button type="button" onClick={() => { setShowAdd(true); setDraft(EMPTY_DRAFT); setEditingId(null); }}>
-          Add vendor
-        </Button>
-      }
-    >
+  const body = (
+    <>
       {showAdd ? (
         <div className="mb-6 rounded-2xl border border-border bg-card p-5">
           <p className="text-sm font-semibold text-foreground">New vendor</p>
@@ -284,6 +281,36 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
           </table>
         </div>
       </div>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">
+            {activeCount} active vendor{activeCount === 1 ? "" : "s"} for work order assignment.
+          </p>
+          <Button type="button" onClick={() => { setShowAdd(true); setDraft(EMPTY_DRAFT); setEditingId(null); }}>
+            Add vendor
+          </Button>
+        </div>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <ManagerPortalPageShell
+      title="Vendors"
+      subtitle={`${activeCount} active vendor${activeCount === 1 ? "" : "s"} for work order assignment. Share your vendors with other managers if you want.`}
+      titleAside={
+        <Button type="button" onClick={() => { setShowAdd(true); setDraft(EMPTY_DRAFT); setEditingId(null); }}>
+          Add vendor
+        </Button>
+      }
+    >
+      {body}
     </ManagerPortalPageShell>
   );
 }

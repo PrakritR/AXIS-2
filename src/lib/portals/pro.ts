@@ -53,7 +53,6 @@ export const proPortal: PortalDefinition = {
       tabs: [
         { id: "requests", label: "Requests" },
         { id: "work-orders", label: "Work orders" },
-        { id: "work-done", label: "Work done" },
         { id: "vendors", label: "Vendors" },
       ],
     },

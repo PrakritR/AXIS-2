@@ -28,6 +28,7 @@ import {
 } from "@/lib/service-requests-storage";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
+import { ManagerVendorsPanel } from "@/components/portal/manager-vendors-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { TabNav } from "@/components/ui/tabs";
@@ -42,7 +43,7 @@ import {
   PORTAL_TABLE_TR,
 } from "@/components/portal/portal-data-table";
 
-type FilterType = "requests" | "work-orders";
+type FilterType = "requests" | "work-orders" | "vendors";
 
 const STATUS_PILL: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 ring-amber-200",
@@ -72,7 +73,7 @@ export function ManagerAllServicesPanel({
   tabId,
   basePath,
 }: {
-  tabId: "requests" | "work-orders";
+  tabId: FilterType;
   basePath: string;
 }) {
   const { showToast } = useAppUi();
@@ -223,13 +224,14 @@ export function ManagerAllServicesPanel({
             items={[
               { id: "requests", label: "Requests", href: `${basePath}/services/requests` },
               { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
-              { id: "work-done", label: "Work done", href: `${basePath}/services/work-done` },
               { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors` },
             ]}
           />
         </div>
 
-        {typeFilter === "work-orders" ? (
+        {typeFilter === "vendors" ? (
+          <ManagerVendorsPanel embedded />
+        ) : typeFilter === "work-orders" ? (
           <>
             <div className="mb-4">
               <ManagerPortalStatusPills

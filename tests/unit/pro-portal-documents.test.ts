@@ -25,9 +25,9 @@ describe("pro portal documents section", () => {
     expect(financials?.tabs.map((t) => t.id)).toEqual(["income", "expenses"]);
   });
 
-  it("services includes work done tab", () => {
+  it("services tabs are requests, work orders, and vendors", () => {
     const services = proPortal.sections.find((s) => s.section === "services");
-    expect(services?.tabs.map((t) => t.id)).toContain("work-done");
+    expect(services?.tabs.map((t) => t.id)).toEqual(["requests", "work-orders", "vendors"]);
   });
 
   it("locks documents and financials for free tier", () => {

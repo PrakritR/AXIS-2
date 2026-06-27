@@ -43,6 +43,10 @@ const nextConfig: NextConfig = {
       { source: "/resident/settings/:path*", destination: "/resident/profile", permanent: false },
       { source: "/resident/support", destination: "/resident/dashboard", permanent: false },
       { source: "/resident/support/:path*", destination: "/resident/dashboard", permanent: false },
+      { source: "/portal/services/work-done", destination: "/portal/financials/expenses", permanent: false },
+      { source: "/portal/services/work-done/:path*", destination: "/portal/financials/expenses", permanent: false },
+      { source: "/portal/work-orders", destination: "/portal/services/work-orders", permanent: false },
+      { source: "/portal/work-orders/:path*", destination: "/portal/services/work-orders", permanent: false },
     ];
   },
 };
