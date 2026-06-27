@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { backfillOrphanGoogleOAuthManagers } from "@/lib/auth/provision-free-manager-oauth";
 import { deletePortalAccountCompletely } from "@/lib/auth/delete-portal-account";
-import { normalizeManagerSkuTier, setManagerPurchaseTier } from "@/lib/manager-access";
+import { normalizeManagerSkuTier, pickBestManagerPurchaseRow, setManagerPurchaseTier } from "@/lib/manager-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -22,6 +23,9 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
     const supabase = createSupabaseServiceRoleClient();
+    await backfillOrphanGoogleOAuthManagers(supabase).catch((err) => {
+      console.error("Google/Gmail manager backfill failed:", err);
+    });
     const { data: roleRows } = await supabase.from("profile_roles").select("user_id").eq("role", "manager");
     const idsFromRoles = [...new Set((roleRows ?? []).map((r) => r.user_id))];
     const { data: legacyRows } = await supabase.from("profiles").select("id").eq("role", "manager");
@@ -46,31 +50,43 @@ export async function GET() {
     const emails = (data ?? []).map((p) => p.email).filter(Boolean);
     const [{ data: purchasesByEmail }, { data: purchasesByUserId }] = await Promise.all([
       emails.length > 0
-        ? supabase.from("manager_purchases").select("email, user_id, tier, billing, paid_at").in("email", emails)
-        : Promise.resolve({ data: [] as { email: string; user_id: string | null; tier: string | null; billing: string | null; paid_at: string | null }[] }),
-      supabase.from("manager_purchases").select("email, user_id, tier, billing, paid_at").in("user_id", allIds),
+        ? supabase
+            .from("manager_purchases")
+            .select("id, email, user_id, tier, billing, paid_at, stripe_customer_id, stripe_subscription_id")
+            .in("email", emails)
+        : Promise.resolve({ data: [] as { id: string; email: string; user_id: string | null; tier: string | null; billing: string | null; paid_at: string | null; stripe_customer_id: string | null; stripe_subscription_id: string | null }[] }),
+      supabase
+        .from("manager_purchases")
+        .select("id, email, user_id, tier, billing, paid_at, stripe_customer_id, stripe_subscription_id")
+        .in("user_id", allIds),
     ]);
 
-    const purchaseByUserId = new Map((purchasesByUserId ?? []).map((p) => [p.user_id, p]));
-    const purchaseByEmail = new Map((purchasesByEmail ?? []).map((p) => [String(p.email ?? "").toLowerCase(), p]));
-
-    const tierRank = (tier: string | null | undefined) => {
-      const n = normalizeManagerSkuTier(tier);
-      if (n === "business") return 3;
-      if (n === "pro") return 2;
-      if (n === "free") return 1;
-      return 0;
-    };
+    const purchasesByProfileId = new Map<string, typeof purchasesByUserId>();
+    for (const profile of data ?? []) {
+      const email = String(profile.email ?? "").toLowerCase();
+      const rows = [
+        ...(purchasesByUserId ?? []).filter((p) => p.user_id === profile.id),
+        ...(purchasesByEmail ?? []).filter((p) => String(p.email ?? "").toLowerCase() === email),
+      ];
+      const merged = new Map<string, (typeof rows)[number]>();
+      for (const row of rows) merged.set(String(row.id), row);
+      purchasesByProfileId.set(profile.id, [...merged.values()]);
+    }
 
     const managers = (data ?? []).map((profile) => {
-      const byUser = purchaseByUserId.get(profile.id);
-      const byEmail = purchaseByEmail.get(String(profile.email ?? "").toLowerCase());
-      const purchase =
-        byUser && byEmail
-          ? tierRank(byUser.tier) >= tierRank(byEmail.tier)
-            ? byUser
-            : byEmail
-          : byUser ?? byEmail;
+      const rows = purchasesByProfileId.get(profile.id) ?? [];
+      const purchase = pickBestManagerPurchaseRow(
+        rows.map((r) => ({
+          id: String(r.id),
+          tier: r.tier,
+          billing: r.billing,
+          paid_at: r.paid_at,
+          user_id: r.user_id,
+          stripe_customer_id: r.stripe_customer_id,
+          stripe_subscription_id: r.stripe_subscription_id,
+        })),
+        profile.id,
+      );
       return {
         id: profile.id,
         email: profile.email ?? "",

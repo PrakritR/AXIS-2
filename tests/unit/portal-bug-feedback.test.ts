@@ -58,6 +58,17 @@ describe("portal bug feedback utils", () => {
     expect(row?.createdAt).toBe("2026-02-01T12:00:00.000Z");
   });
 
+  it("normalizes attachment urls", () => {
+    const row = normalizeBugFeedbackRow({
+      id: "bf-4",
+      type: "bug",
+      attachmentUrls: ["https://example.com/a.png"],
+      title: "Screenshot bug",
+      description: "See image",
+    });
+    expect(row?.attachmentUrls).toEqual(["https://example.com/a.png"]);
+  });
+
   it("rejects malformed rows", () => {
     expect(normalizeBugFeedbackRow(null)).toBeNull();
     expect(normalizeBugFeedbackRow({ type: "bug" })).toBeNull();

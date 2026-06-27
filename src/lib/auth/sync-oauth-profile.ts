@@ -1,5 +1,6 @@
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
+import { provisionFreeManagerFromOAuth } from "@/lib/auth/provision-free-manager-oauth";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 function oauthFullName(user: User): string | null {
@@ -10,8 +11,17 @@ function oauthFullName(user: User): string | null {
   return name || null;
 }
 
-/** Ensures profiles/profile_roles reflect an OAuth sign-in for known Axis accounts. */
-export async function syncOAuthProfile(supabase: SupabaseClient, user: User): Promise<void> {
+export type SyncOAuthProfileOptions = {
+  /** Skip auto free-manager provisioning (manager pricing / finish signup flows). */
+  skipAutoProvision?: boolean;
+};
+
+/** Ensures profiles/profile_roles reflect an OAuth sign-in. */
+export async function syncOAuthProfile(
+  supabase: SupabaseClient,
+  user: User,
+  opts?: SyncOAuthProfileOptions,
+): Promise<void> {
   const email = user.email?.trim().toLowerCase() ?? "";
   if (!email) return;
 
@@ -23,24 +33,32 @@ export async function syncOAuthProfile(supabase: SupabaseClient, user: User): Pr
     if (!existing.full_name?.trim() && fullName) patch.full_name = fullName;
     const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
     if (error) throw error;
+    if (!opts?.skipAutoProvision) {
+      await provisionFreeManagerFromOAuth(supabase, user);
+    }
     return;
   }
 
-  if (!isPrimaryAdminEmail(email)) return;
+  if (isPrimaryAdminEmail(email)) {
+    const { error: profileError } = await supabase.from("profiles").upsert(
+      {
+        id: user.id,
+        email,
+        role: "admin",
+        full_name: fullName,
+        manager_id: null,
+        application_approved: true,
+      },
+      { onConflict: "id" },
+    );
+    if (profileError) throw profileError;
 
-  const { error: profileError } = await supabase.from("profiles").upsert(
-    {
-      id: user.id,
-      email,
-      role: "admin",
-      full_name: fullName,
-      manager_id: null,
-      application_approved: true,
-    },
-    { onConflict: "id" },
-  );
-  if (profileError) throw profileError;
+    await ensureProfileRoleRow(supabase, user.id, "admin");
+    await ensureProfileRoleRow(supabase, user.id, "manager");
+    return;
+  }
 
-  await ensureProfileRoleRow(supabase, user.id, "admin");
-  await ensureProfileRoleRow(supabase, user.id, "manager");
+  if (!opts?.skipAutoProvision) {
+    await provisionFreeManagerFromOAuth(supabase, user);
+  }
 }

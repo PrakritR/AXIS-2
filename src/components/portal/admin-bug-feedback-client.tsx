@@ -19,6 +19,7 @@ import {
   readBugFeedbackRows,
   syncBugFeedbackFromServer,
   updateBugFeedbackRow,
+  deleteBugFeedbackRow,
   type BugFeedbackReporterRole,
   type BugFeedbackStatus,
   type PortalBugFeedbackRow,
@@ -109,6 +110,36 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
     }
   };
 
+  const resolveRow = async (row: PortalBugFeedbackRow) => {
+    setSavingId(row.id);
+    try {
+      await updateBugFeedbackRow(row.id, { status: "resolved" });
+      await refresh();
+      showToast("Marked resolved.");
+    } catch {
+      showToast("Could not resolve.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const deleteRow = async (row: PortalBugFeedbackRow) => {
+    if (!window.confirm(`Delete this ${row.type === "bug" ? "bug report" : "feedback item"}? This cannot be undone.`)) {
+      return;
+    }
+    setSavingId(row.id);
+    try {
+      await deleteBugFeedbackRow(row.id);
+      await refresh();
+      setExpandedId((cur) => (cur === row.id ? null : cur));
+      showToast("Deleted.");
+    } catch {
+      showToast("Could not delete.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <ManagerPortalPageShell
       title="Feedback"
@@ -185,6 +216,8 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
           savingId={savingId}
           onToggle={(id) => setExpandedId(expandedId === id ? null : id)}
           onSave={(row, status, notes) => void saveStatus(row, status, notes)}
+          onResolve={(row) => void resolveRow(row)}
+          onDelete={(row) => void deleteRow(row)}
         />
         <FeedbackRoleGroup
           title="Residents"
@@ -195,6 +228,8 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
           savingId={savingId}
           onToggle={(id) => setExpandedId(expandedId === id ? null : id)}
           onSave={(row, status, notes) => void saveStatus(row, status, notes)}
+          onResolve={(row) => void resolveRow(row)}
+          onDelete={(row) => void deleteRow(row)}
         />
       </div>
     </ManagerPortalPageShell>
@@ -210,6 +245,8 @@ function FeedbackRoleGroup({
   savingId,
   onToggle,
   onSave,
+  onResolve,
+  onDelete,
 }: {
   title: string;
   subtitle: string;
@@ -219,6 +256,8 @@ function FeedbackRoleGroup({
   savingId: string | null;
   onToggle: (id: string) => void;
   onSave: (row: PortalBugFeedbackRow, status: BugFeedbackStatus, notes: string) => void;
+  onResolve: (row: PortalBugFeedbackRow) => void;
+  onDelete: (row: PortalBugFeedbackRow) => void;
 }) {
   return (
     <details
@@ -312,10 +351,31 @@ function FeedbackRoleGroup({
                                 </a>
                               </p>
                             ) : null}
+                            {row.attachmentUrls && row.attachmentUrls.length > 0 ? (
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Attachments</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {row.attachmentUrls.map((url) => (
+                                    <a
+                                      key={url}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="block overflow-hidden rounded-lg border border-border bg-card"
+                                    >
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img src={url} alt="Feedback attachment" className="h-24 w-24 object-cover" />
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
                             <AdminRowEditor
                               row={row}
                               busy={savingId === row.id}
                               onSave={(status, notes) => onSave(row, status, notes)}
+                              onResolve={() => onResolve(row)}
+                              onDelete={() => onDelete(row)}
                             />
                           </div>
                         </td>
@@ -336,10 +396,14 @@ function AdminRowEditor({
   row,
   busy,
   onSave,
+  onResolve,
+  onDelete,
 }: {
   row: PortalBugFeedbackRow;
   busy: boolean;
   onSave: (status: BugFeedbackStatus, notes: string) => void;
+  onResolve: () => void;
+  onDelete: () => void;
 }) {
   const [status, setStatus] = useState<BugFeedbackStatus>(row.status);
   const [notes, setNotes] = useState(row.adminNotes ?? "");
@@ -370,6 +434,22 @@ function AdminRowEditor({
       <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={() => onSave(status, notes)}>
         {busy ? "Saving…" : "Save"}
       </Button>
+      <div className="flex flex-wrap gap-2 sm:col-span-3">
+        {row.status !== "resolved" && row.status !== "closed" ? (
+          <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={onResolve}>
+            Mark resolved
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+          disabled={busy}
+          onClick={onDelete}
+        >
+          Delete
+        </Button>
+      </div>
     </div>
   );
 }

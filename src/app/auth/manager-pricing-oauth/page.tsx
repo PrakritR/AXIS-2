@@ -18,9 +18,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
-function parseTier(raw: string | null, fallback: PlanTierId): PlanTierId {
+function parseTier(raw: string | null, fallback: PlanTierId | null): PlanTierId {
   if (raw === "pro" || raw === "business" || raw === "free") return raw;
-  return fallback;
+  return fallback ?? "free";
 }
 
 function parseBilling(raw: string | null, fallback: "monthly" | "annual"): "monthly" | "annual" {
@@ -63,7 +63,7 @@ async function restartGoogleForPricingOffer(offer: {
 function ManagerPricingOauthContent() {
   const searchParams = useSearchParams();
   const storedOffer = useMemo(() => readManagerPricingOffer(), []);
-  const tier = parseTier(searchParams.get("tier"), storedOffer?.tier ?? "pro");
+  const tier = parseTier(searchParams.get("tier"), storedOffer?.tier ?? null);
   const billing = parseBilling(searchParams.get("billing"), storedOffer?.billing ?? "monthly");
   const discountRaw = searchParams.get("d");
   const discountPercent =

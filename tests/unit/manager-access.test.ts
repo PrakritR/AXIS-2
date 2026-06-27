@@ -6,6 +6,7 @@ import {
   maxAccountLinksForTier,
   maxPropertiesForManagerTier,
   normalizeManagerSkuTier,
+  pickBestManagerPurchaseRow,
 } from "@/lib/manager-access";
 
 describe("manager-access", () => {
@@ -51,5 +52,32 @@ describe("manager-access", () => {
     expect(isStripeManagedBilling("admin")).toBe(false);
     expect(isStripeManagedBilling("portal")).toBe(false);
     expect(isStripeManagedBilling("free")).toBe(false);
+  });
+
+  it("prefers linked signup tier over stale higher-tier checkout rows", () => {
+    const userId = "user-1";
+    const rows = [
+      {
+        id: "old-pro",
+        tier: "pro",
+        billing: "monthly",
+        stripe_customer_id: null,
+        stripe_subscription_id: null,
+        paid_at: "2026-06-01T00:00:00.000Z",
+        user_id: null,
+      },
+      {
+        id: "new-free",
+        tier: "free",
+        billing: "free",
+        stripe_customer_id: null,
+        stripe_subscription_id: null,
+        paid_at: "2026-06-27T00:00:00.000Z",
+        user_id: userId,
+      },
+    ];
+    const picked = pickBestManagerPurchaseRow(rows, userId);
+    expect(picked?.id).toBe("new-free");
+    expect(picked?.tier).toBe("free");
   });
 });

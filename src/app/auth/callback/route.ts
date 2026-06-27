@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
 
   const redirectTarget = new URL(next, requestUrl.origin);
   let response = NextResponse.redirect(redirectTarget);
+  const skipAutoProvision =
+    next.includes("/auth/manager-pricing-oauth") || next.includes("/auth/manager-oauth-finish");
 
   const supabase = createServerClient(url, anon, {
     cookies: {
@@ -68,7 +70,7 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
     if (user) {
       const service = createSupabaseServiceRoleClient();
-      await syncOAuthProfile(service, user);
+      await syncOAuthProfile(service, user, { skipAutoProvision });
     }
   } catch (syncError) {
     console.error("OAuth profile sync failed:", syncError);
