@@ -9,6 +9,8 @@ import type { MockProperty } from "@/data/types";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
+import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
+import { ManagerPropertySubmissionSummary } from "@/components/portal/manager-property-submission-summary";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { MANAGER_TABLE_TH, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import {
@@ -206,6 +208,20 @@ function ManagerPropertyInlineDetails({
   const displaySub = portalSub?.sub ?? null;
   const [editorOpen, setEditorOpen] = useState(false);
 
+  const managerSubmission = useMemo(
+    () => (row ? displaySub ?? submissionForAdminRow(row) : null),
+    [displaySub, row],
+  );
+
+  const houseSaveTarget = useMemo(() => {
+    if (!row) return null;
+    if (portalSub?.saveMode === "pending") return { mode: "pending" as const, saveId: portalSub.saveId };
+    if (portalSub?.saveMode === "listing") return { mode: "listing" as const, saveId: portalSub.saveId };
+    if (bucket === 0 && row.adminRefId) return { mode: "pending" as const, saveId: row.adminRefId };
+    if (listingId?.trim()) return { mode: "listing" as const, saveId: listingId.trim() };
+    return null;
+  }, [portalSub, bucket, row, listingId]);
+
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
       showToast(err);
@@ -215,7 +231,7 @@ function ManagerPropertyInlineDetails({
     onUpdated();
   };
 
-  if (!row || !mock) return null;
+  if (!row || !mock || !managerSubmission) return null;
   const publicHref = publicListingHrefForPropertyRow(row);
 
   const footer = (
@@ -416,6 +432,19 @@ function ManagerPropertyInlineDetails({
 
   return (
     <div className="space-y-4">
+      <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5 [html[data-theme=dark]_&]:portal-surface-muted">
+        <ManagerPropertySubmissionSummary sub={managerSubmission} listingId={listingId} />
+      </div>
+
+      <ManagerPropertyHouseDetailsPanel
+        noteKey={noteKey}
+        sub={managerSubmission}
+        saveTarget={houseSaveTarget}
+        managerUserId={managerUserId}
+        onUpdated={onUpdated}
+        showToast={showToast}
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Rent with Axis preview</p>
         {publicHref ? (

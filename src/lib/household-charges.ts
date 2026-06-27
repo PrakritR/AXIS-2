@@ -893,8 +893,13 @@ function selectedRoomRentAmount(row: DemoApplicantRow): number {
   return room?.monthlyRent && room.monthlyRent > 0 ? room.monthlyRent : 0;
 }
 
+export function findWorkOrderCharge(workOrderId: string): HouseholdCharge | undefined {
+  return readAll().find((c) => c.workOrderId === workOrderId && c.kind === "work_order_charge");
+}
+
 export function findPendingWorkOrderCharge(workOrderId: string): HouseholdCharge | undefined {
-  return readAll().find((c) => c.workOrderId === workOrderId && c.kind === "work_order_charge" && c.status === "pending");
+  const charge = findWorkOrderCharge(workOrderId);
+  return charge?.status === "pending" ? charge : undefined;
 }
 
 /** Removes pending pass-through lines tied to a work order (e.g. when the manager deletes the work order). */
@@ -1063,6 +1068,9 @@ export function recordWorkOrderResidentCharge(input: {
   amountInput: string;
   residentEmail: string;
   residentName: string;
+  /** Actual property id for finances filtering; falls back to work-order pseudo id. */
+  propertyId?: string;
+  initialStatus?: "pending" | "paid";
   zelleContactSnapshot?: string | null;
 }): HouseholdCharge | null {
   const amt = parseMoneyAmount(input.amountInput);
@@ -1070,26 +1078,28 @@ export function recordWorkOrderResidentCharge(input: {
   const email = input.residentEmail.trim().toLowerCase();
   if (!email || !email.includes("@")) return null;
 
-  const existing = findPendingWorkOrderCharge(input.workOrderId);
-  if (existing) {
+  if (findWorkOrderCharge(input.workOrderId)) {
     return null;
   }
 
+  const isPaid = input.initialStatus === "paid";
   const balance = `$${amt.toFixed(2)}`;
+  const now = new Date().toISOString();
   const charge: HouseholdCharge = {
     id: `hc_wo_${input.workOrderId}_${Date.now()}`,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
     residentEmail: input.residentEmail.trim(),
     residentName: input.residentName.trim() || "Resident",
     residentUserId: null,
-    propertyId: `workorder:${input.workOrderId}`,
+    propertyId: input.propertyId?.trim() || `workorder:${input.workOrderId}`,
     propertyLabel: `${input.propertyLabel} · ${input.unit}`,
     managerUserId: input.managerUserId,
     kind: "work_order_charge",
     title: `Work order · ${input.workOrderTitle}`,
     amountLabel: balance,
-    balanceLabel: balance,
-    status: "pending",
+    balanceLabel: isPaid ? "$0.00" : balance,
+    status: isPaid ? "paid" : "pending",
+    paidAt: isPaid ? now : undefined,
     zelleContactSnapshot: input.zelleContactSnapshot ?? undefined,
     blocksLeaseUntilPaid: false,
     workOrderId: input.workOrderId,

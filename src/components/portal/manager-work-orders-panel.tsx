@@ -22,6 +22,7 @@ import {
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import {
   findPendingWorkOrderCharge,
+  findWorkOrderCharge,
   HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
   HOUSEHOLD_CHARGES_EVENT,
   parseMoneyAmount,
@@ -42,11 +43,11 @@ function priorityClass(p: string) {
   return "bg-accent/30 text-muted ring-1 ring-border";
 }
 
-type BillDraft = { cost: string; email: string; name: string };
+type BillDraft = { cost: string; email: string; name: string; paymentStatus: "pending" | "paid" };
 
 function defaultBillDraft(row: DemoManagerWorkOrderRow): BillDraft {
   const cost = row.cost !== "—" && row.cost.trim() ? row.cost : "";
-  return { cost, email: row.residentEmail ?? "", name: row.residentName ?? "" };
+  return { cost, email: row.residentEmail ?? "", name: row.residentName ?? "", paymentStatus: "pending" };
 }
 
 function pad2(n: number) {
@@ -140,12 +141,14 @@ export function ManagerWorkOrdersPanel({
       const created = recordWorkOrderResidentCharge({
         managerUserId: effectiveManagerId,
         workOrderId: row.id,
+        propertyId: row.propertyId || row.assignedPropertyId,
         propertyLabel: row.propertyName,
         unit: row.unit,
         workOrderTitle: row.title,
         amountInput,
         residentEmail: draft.email.trim() || (row.residentEmail ?? ""),
         residentName: draft.name.trim() || row.residentName || "",
+        initialStatus: "pending",
       });
       if (created) {
         setHcTick((n) => n + 1);
@@ -158,15 +161,23 @@ export function ManagerWorkOrdersPanel({
     return () => window.clearTimeout(t);
   }, [tryAutoChargeScheduled, hcTick]);
 
-  const pendingByWoId = useMemo(() => {
+  const chargeByWoId = useMemo(() => {
     void hcTick;
-    const m = new Map<string, ReturnType<typeof findPendingWorkOrderCharge>>();
+    const m = new Map<string, ReturnType<typeof findWorkOrderCharge>>();
     for (const r of rows) {
-      const c = findPendingWorkOrderCharge(r.id);
+      const c = findWorkOrderCharge(r.id);
       if (c) m.set(r.id, c);
     }
     return m;
   }, [rows, hcTick]);
+
+  const pendingByWoId = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof findPendingWorkOrderCharge>>();
+    for (const [id, charge] of chargeByWoId) {
+      if (charge?.status === "pending") m.set(id, charge);
+    }
+    return m;
+  }, [chargeByWoId]);
 
   /** Schedule the visit (date required). Cost + email optional — only creates a billing charge if both are provided. */
   const saveScheduleFromOpen = (row: DemoManagerWorkOrderRow) => {
@@ -197,12 +208,14 @@ export function ManagerWorkOrdersPanel({
       created = recordWorkOrderResidentCharge({
         managerUserId: effectiveManagerId,
         workOrderId: row.id,
+        propertyId: row.propertyId || row.assignedPropertyId,
         propertyLabel: row.propertyName,
         unit: row.unit,
         workOrderTitle: row.title,
         amountInput: draft.cost,
         residentEmail: draft.email,
         residentName: draft.name,
+        initialStatus: draft.paymentStatus,
       });
     }
     if (created) setHcTick((n) => n + 1);
@@ -241,10 +254,48 @@ export function ManagerWorkOrdersPanel({
     setExpandedId(null);
   };
 
+  const createBillingCharge = (row: DemoManagerWorkOrderRow) => {
+    const existing = findWorkOrderCharge(row.id);
+    if (existing) {
+      showToast("A payment line already exists for this work order.");
+      return;
+    }
+    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
+    const amt = parseMoneyAmount(draft.cost);
+    const email = draft.email.trim().toLowerCase();
+    if (!draft.cost.trim() || !Number.isFinite(amt) || amt <= 0) {
+      showToast("Enter a valid cost first.");
+      return;
+    }
+    if (!email.includes("@")) {
+      showToast("Enter the resident email.");
+      return;
+    }
+    const created = recordWorkOrderResidentCharge({
+      managerUserId: effectiveManagerId,
+      workOrderId: row.id,
+      propertyId: row.propertyId || row.assignedPropertyId,
+      propertyLabel: row.propertyName,
+      unit: row.unit,
+      workOrderTitle: row.title,
+      amountInput: draft.cost,
+      residentEmail: draft.email,
+      residentName: draft.name,
+      initialStatus: draft.paymentStatus,
+    });
+    if (!created) {
+      showToast("Could not create payment line.");
+      return;
+    }
+    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}`, residentEmail: draft.email.trim(), residentName: draft.name.trim() || r.residentName }));
+    setHcTick((n) => n + 1);
+    showToast(created.status === "paid" ? "Payment recorded as paid." : "Pending payment line created.");
+  };
+
   /** Persist cost without changing bucket. */
-  const saveLoggedCost = (row: DemoManagerWorkOrderRow, pendingCharge: ReturnType<typeof findPendingWorkOrderCharge>) => {
-    if (pendingCharge) {
-      showToast("Cost is locked while a pending payment exists.");
+  const saveLoggedCost = (row: DemoManagerWorkOrderRow, linkedCharge: ReturnType<typeof findWorkOrderCharge>) => {
+    if (linkedCharge) {
+      showToast("Cost is locked while a payment line exists.");
       return;
     }
     const draft = billDraftById[row.id] ?? defaultBillDraft(row);
@@ -324,6 +375,7 @@ export function ManagerWorkOrdersPanel({
           <tbody>
             {rows.map((row) => {
               const draft = billDraftById[row.id] ?? defaultBillDraft(row);
+              const linkedCharge = chargeByWoId.get(row.id);
               const pendingCharge = pendingByWoId.get(row.id);
               const visitAt = visitAtById[row.id] ?? "";
               const isExpanded = expandedId === row.id;
@@ -354,7 +406,20 @@ export function ManagerWorkOrdersPanel({
                         <span className="text-muted text-xs">—</span>
                       )}
                     </td>
-                    <td className={PORTAL_TABLE_TD}>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</td>
+                    <td className={PORTAL_TABLE_TD}>
+                      <div className="flex flex-col gap-1">
+                        <span>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>
+                        {linkedCharge?.status === "paid" ? (
+                          <span className="inline-flex w-fit rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                            Paid
+                          </span>
+                        ) : linkedCharge?.status === "pending" ? (
+                          <span className="inline-flex w-fit rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200/80">
+                            Pending
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className={`${PORTAL_TABLE_TD} text-right`}>
                       <div className="flex justify-end gap-1.5 flex-wrap">
                         {row.bucket === "open" ? (
@@ -529,12 +594,21 @@ export function ManagerWorkOrdersPanel({
                           <div className="mt-4 rounded-lg border border-border bg-card p-3">
                             <p className="text-xs font-semibold text-foreground">Billing (optional)</p>
                             <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                              Enter a pass-through cost and resident email to create a pending payment line. Leave blank if there is no charge.
+                              Bill the resident for pass-through costs. Choose paid if they already paid you (e.g. lockout fee).
                             </p>
-                            {pendingCharge ? (
-                              <p className="mt-2 rounded-md bg-emerald-50/90 px-2.5 py-1.5 text-[11px] text-emerald-900 ring-1 ring-emerald-200/70">
-                                Pending: <span className="font-semibold">{pendingCharge.balanceLabel}</span> ·{" "}
-                                <span className="font-medium">{pendingCharge.residentEmail}</span>. Mark paid in Payments before changing the amount.
+                            {linkedCharge ? (
+                              <p className="mt-2 rounded-md bg-accent/40 px-2.5 py-1.5 text-[11px] text-foreground ring-1 ring-border">
+                                {linkedCharge.status === "paid" ? (
+                                  <>
+                                    Paid: <span className="font-semibold">{linkedCharge.amountLabel}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    Pending: <span className="font-semibold">{linkedCharge.balanceLabel}</span>
+                                  </>
+                                )}{" "}
+                                · <span className="font-medium">{linkedCharge.residentEmail}</span>
+                                {linkedCharge.status === "pending" ? ". Mark paid in Payments before changing the amount." : ""}
                               </p>
                             ) : null}
                             <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
@@ -552,10 +626,30 @@ export function ManagerWorkOrdersPanel({
                                     }))
                                   }
                                   className="h-8 rounded-md text-sm"
-                                  disabled={!!pendingCharge}
+                                  disabled={!!linkedCharge}
                                 />
                               </div>
-                              <div className="sm:col-span-2">
+                              <div>
+                                <p className="mb-1 text-[11px] font-medium text-muted">Payment status</p>
+                                <Select
+                                  className="h-8 rounded-md text-sm"
+                                  value={draft.paymentStatus}
+                                  onChange={(e) =>
+                                    setBillDraftById((prev) => ({
+                                      ...prev,
+                                      [row.id]: {
+                                        ...(prev[row.id] ?? defaultBillDraft(row)),
+                                        paymentStatus: e.target.value as "pending" | "paid",
+                                      },
+                                    }))
+                                  }
+                                  disabled={!!linkedCharge}
+                                >
+                                  <option value="pending">Pending</option>
+                                  <option value="paid">Paid</option>
+                                </Select>
+                              </div>
+                              <div className="sm:col-span-1">
                                 <p className="mb-1 text-[11px] font-medium text-muted">Resident email</p>
                                 <Input
                                   type="email"
@@ -569,7 +663,7 @@ export function ManagerWorkOrdersPanel({
                                     }))
                                   }
                                   className="h-8 rounded-md text-sm"
-                                  disabled={!!pendingCharge}
+                                  disabled={!!linkedCharge}
                                 />
                               </div>
                               <div className="sm:col-span-3">
@@ -586,11 +680,15 @@ export function ManagerWorkOrdersPanel({
                                     }))
                                   }
                                   className="h-8 rounded-md text-sm"
-                                  disabled={!!pendingCharge}
+                                  disabled={!!linkedCharge}
                                 />
                               </div>
                             </div>
                           </div>
+                        ) : linkedCharge ? (
+                          <p className="mt-4 text-xs text-muted">
+                            Payment: {linkedCharge.status === "paid" ? "Paid" : "Pending"} · {linkedCharge.amountLabel} · {linkedCharge.residentEmail}
+                          </p>
                         ) : null}
 
                         {row.bucket === "completed" ? (
@@ -600,15 +698,25 @@ export function ManagerWorkOrdersPanel({
                         ) : null}
 
                         <PortalTableDetailActions>
-                          {row.bucket !== "completed" && !pendingCharge ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => saveLoggedCost(row, pendingCharge)}
-                            >
-                              Save cost
-                            </Button>
+                          {row.bucket !== "completed" && !linkedCharge ? (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => saveLoggedCost(row, linkedCharge)}
+                              >
+                                Save cost
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="primary"
+                                className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                                onClick={() => createBillingCharge(row)}
+                              >
+                                Create payment line
+                              </Button>
+                            </>
                           ) : null}
                           {row.bucket === "scheduled" ? (
                             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markComplete(row)}>

@@ -76,9 +76,9 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
     if (section === "work-orders") {
       return [
         {
-          label: "Create work order",
-          kind: "toast",
-          message: "Work order draft created.",
+          label: "Log work order",
+          kind: "modal",
+          message: "Open Services → Work orders, then click Log work order to record completed work with cost and payment status.",
         },
         {
           label: "Assign vendor",

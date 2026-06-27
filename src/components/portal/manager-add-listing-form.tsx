@@ -2181,7 +2181,7 @@ export function ManagerAddListingForm({
               <div>
                 <div className="mb-0.5 flex items-center gap-2">
                   <FieldLabel>House description</FieldLabel>
-                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600">Manager only</span>
+                  <span className="portal-badge-notice rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Manager only</span>
                 </div>
                 <Textarea
                   rows={4}

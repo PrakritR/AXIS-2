@@ -159,6 +159,15 @@ export type DemoManagerWorkOrderRow = {
   vendorId?: string;
   vendorName?: string;
   vendorAssignedAt?: string;
+  category?: "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general";
+  vendorCostCents?: number;
+  materialsCostCents?: number;
+  materialsMemo?: string;
+  workDoneSummary?: string;
+  completedAt?: string;
+  expenseEntryIds?: string[];
+  /** Logged by manager (not submitted by resident). */
+  managerInitiated?: boolean;
 };
 
 export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];

@@ -28,6 +28,7 @@ import {
 } from "@/lib/service-requests-storage";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
+import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { TabNav } from "@/components/ui/tabs";
@@ -82,6 +83,7 @@ export function ManagerAllServicesPanel({
   const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
+  const [createWoOpen, setCreateWoOpen] = useState(false);
   const typeFilter: FilterType = tabId;
 
   const propertyOptions = useMemo(() => {
@@ -230,17 +232,30 @@ export function ManagerAllServicesPanel({
 
         {typeFilter === "work-orders" ? (
           <>
-            <div className="mb-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <ManagerPortalStatusPills
                 tabs={woTabs}
                 activeId={woBucket}
                 onChange={(id) => setWoBucket(id as ManagerWorkOrderBucket)}
               />
+              <Button type="button" variant="primary" className="h-9 rounded-full px-4 text-sm" onClick={() => setCreateWoOpen(true)}>
+                Log work order
+              </Button>
             </div>
             <ManagerWorkOrdersPanel
               allRows={filteredWorkOrders}
               bucket={woBucket}
               onAfterSchedule={() => setWoBucket("scheduled")}
+            />
+            <ManagerCreateWorkOrderModal
+              open={createWoOpen}
+              onClose={() => setCreateWoOpen(false)}
+              managerUserId={userId}
+              defaultPropertyId={propertyFilter || undefined}
+              onSubmitted={() => {
+                setDataTick((t) => t + 1);
+                setWoBucket("completed");
+              }}
             />
           </>
         ) : unified.length === 0 ? (
