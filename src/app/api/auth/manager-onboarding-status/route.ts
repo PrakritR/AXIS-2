@@ -5,6 +5,13 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+function oauthFullName(meta: Record<string, unknown> | null | undefined): string | null {
+  const fullName = typeof meta?.full_name === "string" ? meta.full_name.trim() : "";
+  if (fullName) return fullName;
+  const name = typeof meta?.name === "string" ? meta.name.trim() : "";
+  return name || null;
+}
+
 export async function GET() {
   try {
     const supabaseAuth = await createSupabaseServerClient();
@@ -18,8 +25,19 @@ export async function GET() {
 
     const service = createSupabaseServiceRoleClient();
     const needsPricing = await managerNeedsPricingSelection(service, user.id, user.email);
+    const provider =
+      (typeof user.app_metadata?.provider === "string" ? user.app_metadata.provider : null) ??
+      (user.app_metadata?.providers as string[] | undefined)?.[0] ??
+      "google";
 
-    return NextResponse.json({ needsPricing, authenticated: true });
+    return NextResponse.json({
+      needsPricing,
+      authenticated: true,
+      email: user.email.trim().toLowerCase(),
+      fullName: oauthFullName(user.user_metadata),
+      provider,
+      isGoogle: provider === "google",
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });

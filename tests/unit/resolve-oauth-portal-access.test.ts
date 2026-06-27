@@ -9,6 +9,8 @@ vi.mock("@/lib/auth/complete-resident-signup-oauth", () => ({
 
 vi.mock("@/lib/auth/manager-onboarding", () => ({
   managerNeedsPricingSelection: vi.fn(async () => false),
+  findManagerPurchaseForAccount: vi.fn(async () => null),
+  isManagerOnboardingComplete: vi.fn(() => false),
 }));
 
 vi.mock("@/lib/auth/primary-admin", () => ({

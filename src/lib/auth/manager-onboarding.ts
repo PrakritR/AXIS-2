@@ -32,7 +32,13 @@ export type ManagerPurchaseRow = {
 export function isManagerOnboardingComplete(purchase: ManagerPurchaseRow | null | undefined): boolean {
   if (!purchase) return false;
   if (isAxisPendingSessionId(purchase.stripe_checkout_session_id)) return false;
-  return normalizeManagerSkuTier(purchase.tier) != null;
+  const tier = normalizeManagerSkuTier(purchase.tier);
+  if (!tier) return false;
+  if (!purchase.paid_at) return false;
+  if (tier === "free" || isAxisIntentSessionId(purchase.stripe_checkout_session_id)) {
+    return true;
+  }
+  return !isAxisIntentSessionId(purchase.stripe_checkout_session_id);
 }
 
 export async function findManagerPurchaseForAccount(

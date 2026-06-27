@@ -98,6 +98,24 @@ function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
   );
 }
 
+function NavLockIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
 function navLinkClass(active: boolean) {
   return [
     "relative flex min-h-10 items-center justify-between gap-2 rounded-[14px] px-3 py-2.5 text-[14px] font-medium transition duration-200",
@@ -119,6 +137,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         section: section.section,
         label: section.label,
         href: hrefForSection(definition, section.section),
+        tierLocked: section.tierLocked === true,
       })),
     [definition, visibleSections],
   );
@@ -194,6 +213,9 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     </span>
                   ) : null}
                   <span className={`min-w-0 truncate ${active && !showNavIcons ? "pl-2" : ""}`}>{s.label}</span>
+                  {s.tierLocked ? (
+                    <NavLockIcon className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
+                  ) : null}
                 </span>
                 <PortalNavCountBadge count={count} />
               </Link>
@@ -263,6 +285,9 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     </span>
                   ) : null}
                   {s.label}
+                  {s.tierLocked ? (
+                    <NavLockIcon className="h-3 w-3 shrink-0 text-muted" aria-hidden />
+                  ) : null}
                   <PortalNavCountBadge count={count} />
                 </Link>
               );

@@ -15,7 +15,7 @@ export async function reportToPdf(report: ReportResult): Promise<Uint8Array> {
     y -= size + 8;
   };
 
-  draw("Axis Financials", 10, bold);
+  draw("Axis Documents", 10, bold);
   draw(report.title, 16, bold);
   draw(`Generated ${new Date().toLocaleString()}`, 9);
   if (report.meta?.from && report.meta?.to) {

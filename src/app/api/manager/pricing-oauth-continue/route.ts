@@ -150,8 +150,6 @@ export async function POST(req: Request) {
             stripe_checkout_session_id: checkout.sessionId,
             email,
             manager_id: managerId,
-            tier: tierRaw,
-            billing: billingRaw,
             full_name: fullName || null,
             user_id: purchaseState.kind === "pending" ? user.id : null,
           },

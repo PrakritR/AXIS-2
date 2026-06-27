@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
 import { portalDashboardPath } from "@/components/auth/portal-switcher";
 import { clearResidentSignupAxisId, readResidentSignupAxisId } from "@/lib/auth/resident-oauth-storage";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
@@ -10,6 +11,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 
 function ResidentOauthFinishContent() {
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [googleEmail, setGoogleEmail] = useState<string | null>(null);
+  const [googleName, setGoogleName] = useState<string | null>(null);
   const didRunRef = useRef(false);
 
   useEffect(() => {
@@ -30,6 +33,14 @@ function ResidentOauthFinishContent() {
           setErrorText("Google sign-in did not complete. Try again.");
           return;
         }
+        setGoogleEmail(user.email ?? null);
+        setGoogleName(
+          typeof user.user_metadata?.full_name === "string"
+            ? user.user_metadata.full_name
+            : typeof user.user_metadata?.name === "string"
+              ? user.user_metadata.name
+              : null,
+        );
 
         const res = await fetch("/api/auth/register-resident-oauth", {
           method: "POST",
@@ -67,7 +78,15 @@ function ResidentOauthFinishContent() {
 
   return (
     <AuthCard>
-      <p className="text-center text-sm text-muted">Linking your resident account…</p>
+      {googleEmail ? (
+        <GoogleSignedInBanner
+          email={googleEmail}
+          fullName={googleName}
+          subtitle="Linking your resident portal to your Google account…"
+        />
+      ) : (
+        <p className="text-center text-sm text-muted">Linking your resident account…</p>
+      )}
     </AuthCard>
   );
 }

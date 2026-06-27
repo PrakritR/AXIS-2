@@ -73,9 +73,10 @@ export async function buildProPortalDefinition(): Promise<{
     previewLabel = p?.full_name?.trim() || p?.email || preview.targetUserId;
   }
 
-  const sections = isFree
-    ? proPortal.sections.filter((s) => FREE_SUBSCRIPTION_SECTIONS.has(s.section))
-    : proPortal.sections;
+  const sections = proPortal.sections.map((s) => ({
+    ...s,
+    tierLocked: isFree && !FREE_SUBSCRIPTION_SECTIONS.has(s.section),
+  }));
 
   return {
     definition: { ...proPortal, sections, title: portalTitle },

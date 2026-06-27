@@ -55,6 +55,7 @@ import {
   buildManagerTourUrl,
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
+import { PRIMARY_AXIS_ADMIN_LABEL } from "@/data/inbox-scoped-directory";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
@@ -122,7 +123,7 @@ const EMPTY_COPY: Record<ManagerStageKey, string> = {
 };
 
 const BANNER_COPY: Record<ManagerStageKey, string> = {
-  pending: "New submissions and listings that need updates appear here until prakritramachandran@gmail.com clears them to go live.",
+  pending: `New submissions and listings that need updates appear here until ${PRIMARY_AXIS_ADMIN_LABEL} clears them to go live.`,
   listed: "Active listings accept apply & tour links — use Send to prospect to email a concise summary.",
   unlisted: "These listings are off the public site. You can relist or delete them from your queue.",
   rejected: "Rejected submissions stay here until you restore them to pending or delete them permanently.",
@@ -234,7 +235,7 @@ function ManagerPropertyInlineDetails({
           <p className="text-xs text-muted">
             {row.adminRefId.startsWith("mgr-")
               ? "This listing was edited and is pending admin re-approval. Edit sections below."
-              : "Listing approval is handled by prakritramachandran@gmail.com. Edit sections below while your submission is reviewed."}
+              : `Listing approval is handled by ${PRIMARY_AXIS_ADMIN_LABEL}. Edit sections below while your submission is reviewed.`}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button

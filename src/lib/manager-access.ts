@@ -274,6 +274,8 @@ export async function upgradeManagerAccountToBusiness(
 
 export function managerSectionAllowedForTier(section: string, tier: "free" | "paid" | null): boolean {
   if (tier !== "free") return true;
+  // Legacy route id kept for redirects and API checks.
+  if (section === "financials" || section === "documents") return false;
   return FREE_SUBSCRIPTION_SECTIONS.has(section);
 }
 

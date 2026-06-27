@@ -11,9 +11,16 @@ function defaultDateRange(from?: string, to?: string): { from: string; to: strin
   const toDate = to?.trim() || now.toISOString().slice(0, 10);
   const fromDate =
     from?.trim() ||
-    new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10);
   return { from: fromDate, to: toDate };
 }
+
+function daysInclusive(from: Date, to: Date): number {
+  if (to < from) return 0;
+  return Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+}
+
+const RENT_RECEIPT_CATEGORIES = new Set(["rent_income", "late_fees", "pet_rent", "application_fee", "other_income"]);
 
 async function loadCharges(db: SupabaseClient, managerUserId: string, propertyId?: string) {
   let query = db
@@ -261,6 +268,236 @@ export async function queryExpenses(
     rows,
     totals: { date: "Total", category: "", amount: centsToUsd(totalCents), vendorId: "", memo: "", propertyId: "" },
     meta: { from, to },
+  };
+}
+
+export async function queryRentReceipts(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const { from, to } = defaultDateRange(filters.from, filters.to);
+
+  let query = db
+    .from("ledger_entries")
+    .select("posted_date, description, amount_cents, category_code, property_id, resident_email")
+    .eq("manager_user_id", managerUserId)
+    .eq("entry_type", "payment")
+    .gte("posted_date", from)
+    .lte("posted_date", to)
+    .order("posted_date", { ascending: false });
+  if (filters.propertyId) query = query.eq("property_id", filters.propertyId);
+
+  const { data } = await query;
+  const rows = (data ?? [])
+    .filter((row) => RENT_RECEIPT_CATEGORIES.has(String(row.category_code)))
+    .map((row) => ({
+      date: row.posted_date,
+      description: row.description?.trim() || chartAccountLabel(String(row.category_code)),
+      amount: centsToUsd(Number(row.amount_cents)),
+      category: chartAccountLabel(String(row.category_code)),
+      propertyId: row.property_id ?? "",
+      residentEmail: row.resident_email ?? "",
+    }));
+
+  const totalCents = (data ?? [])
+    .filter((row) => RENT_RECEIPT_CATEGORIES.has(String(row.category_code)))
+    .reduce((sum, row) => sum + Number(row.amount_cents), 0);
+
+  return {
+    id: "rent-receipts",
+    title: "Rent receipts",
+    columns: [
+      { key: "date", label: "Date received", format: "date" },
+      { key: "description", label: "Description" },
+      { key: "category", label: "Type" },
+      { key: "amount", label: "Amount", align: "right", format: "money" },
+      { key: "propertyId", label: "Property" },
+      { key: "residentEmail", label: "Resident" },
+    ],
+    rows,
+    totals: {
+      date: "Total rent collected",
+      description: "",
+      category: "",
+      amount: centsToUsd(totalCents),
+      propertyId: "",
+      residentEmail: "",
+    },
+    meta: { from, to, totalEarned: centsToUsd(totalCents) },
+  };
+}
+
+export async function queryRentalDays(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const { from, to } = defaultDateRange(filters.from, filters.to);
+  const rangeStart = new Date(from);
+  const rangeEnd = new Date(to);
+  const profiles = await loadRentProfiles(db, managerUserId, filters.propertyId);
+
+  const rows = profiles
+    .filter((p) => p.active !== false)
+    .map((p) => {
+      const leaseStart = p.startMonth?.trim()
+        ? new Date(`${p.startMonth.trim()}-01T12:00:00`)
+        : rangeStart;
+      const leaseEnd = p.leaseEnd?.trim() ? new Date(`${p.leaseEnd.trim()}T12:00:00`) : rangeEnd;
+      const overlapStart = leaseStart > rangeStart ? leaseStart : rangeStart;
+      const overlapEnd = leaseEnd < rangeEnd ? leaseEnd : rangeEnd;
+      const daysRented = daysInclusive(overlapStart, overlapEnd);
+      return {
+        property: p.propertyLabel,
+        unit: p.roomLabel || "—",
+        resident: p.residentName,
+        leaseStart: leaseStart.toISOString().slice(0, 10),
+        leaseEnd: p.leaseEnd?.trim() || "—",
+        daysRented,
+        period: `${from} – ${to}`,
+      };
+    })
+    .filter((row) => row.daysRented > 0)
+    .sort((a, b) => String(a.property).localeCompare(String(b.property)));
+
+  const totalDays = rows.reduce((sum, row) => sum + Number(row.daysRented), 0);
+
+  return {
+    id: "rental-days",
+    title: "Days rented",
+    columns: [
+      { key: "property", label: "Property" },
+      { key: "unit", label: "Unit" },
+      { key: "resident", label: "Resident" },
+      { key: "leaseStart", label: "Lease start", format: "date" },
+      { key: "leaseEnd", label: "Lease end", format: "date" },
+      { key: "daysRented", label: "Days rented", align: "right", format: "number" },
+    ],
+    rows,
+    totals: {
+      property: "Total occupied unit-days",
+      unit: "",
+      resident: "",
+      leaseStart: "",
+      leaseEnd: "",
+      daysRented: totalDays,
+    },
+    meta: { from, to, totalDaysRented: totalDays },
+  };
+}
+
+export async function queryTaxSummary(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const { from, to } = defaultDateRange(filters.from, filters.to);
+  const [incomeStatement, rentalDays, expensesReport] = await Promise.all([
+    queryIncomeStatement(db, managerUserId, filters),
+    queryRentalDays(db, managerUserId, filters),
+    queryExpenses(db, managerUserId, filters),
+  ]);
+
+  const profiles = await loadRentProfiles(db, managerUserId, filters.propertyId);
+  const propertyLabels = new Map<string, string>();
+  for (const profile of profiles) {
+    if (profile.propertyId?.trim()) {
+      propertyLabels.set(profile.propertyId.trim(), profile.propertyLabel.trim() || profile.propertyId.trim());
+    }
+  }
+  const labelForPropertyId = (propertyId: string) => {
+    if (propertyId === "Unassigned") return "Unassigned";
+    return propertyLabels.get(propertyId) ?? propertyId;
+  };
+
+  const incomeByProperty = new Map<string, number>();
+  let incomeQuery = db
+    .from("ledger_entries")
+    .select("property_id, amount_cents, category_code")
+    .eq("manager_user_id", managerUserId)
+    .eq("entry_type", "payment")
+    .gte("posted_date", from)
+    .lte("posted_date", to);
+  if (filters.propertyId) incomeQuery = incomeQuery.eq("property_id", filters.propertyId);
+  const { data: incomeRows } = await incomeQuery;
+  for (const row of incomeRows ?? []) {
+    if (!RENT_RECEIPT_CATEGORIES.has(String(row.category_code))) continue;
+    const key = labelForPropertyId(String(row.property_id ?? "Unassigned"));
+    incomeByProperty.set(key, (incomeByProperty.get(key) ?? 0) + Number(row.amount_cents));
+  }
+
+  const expenseByProperty = new Map<string, number>();
+  let expenseQuery = db
+    .from("manager_expense_entries")
+    .select("property_id, amount_cents")
+    .eq("manager_user_id", managerUserId)
+    .gte("expense_date", from)
+    .lte("expense_date", to);
+  if (filters.propertyId) expenseQuery = expenseQuery.eq("property_id", filters.propertyId);
+  const { data: expenseRows } = await expenseQuery;
+  for (const row of expenseRows ?? []) {
+    const key = labelForPropertyId(String(row.property_id ?? "Unassigned"));
+    expenseByProperty.set(key, (expenseByProperty.get(key) ?? 0) + Number(row.amount_cents));
+  }
+
+  const daysByProperty = new Map<string, number>();
+  for (const row of rentalDays.rows) {
+    const key = String(row.property ?? "Unassigned");
+    daysByProperty.set(key, (daysByProperty.get(key) ?? 0) + Number(row.daysRented ?? 0));
+  }
+
+  const propertyKeys = new Set([
+    ...incomeByProperty.keys(),
+    ...expenseByProperty.keys(),
+    ...daysByProperty.keys(),
+  ]);
+
+  const rows = [...propertyKeys].map((propertyKey) => {
+    const earnedCents = incomeByProperty.get(propertyKey) ?? 0;
+    const spentCents = expenseByProperty.get(propertyKey) ?? 0;
+    return {
+      property: propertyKey,
+      daysRented: daysByProperty.get(propertyKey) ?? 0,
+      rentEarned: centsToUsd(earnedCents),
+      houseSpent: centsToUsd(spentCents),
+      netIncome: centsToUsd(earnedCents - spentCents),
+    };
+  });
+
+  const totalIncomeCents = [...incomeByProperty.values()].reduce((sum, cents) => sum + cents, 0);
+  const totalExpenseCents = [...expenseByProperty.values()].reduce((sum, cents) => sum + cents, 0);
+  const totalDays = Number(rentalDays.meta?.totalDaysRented ?? 0);
+
+  return {
+    id: "tax-summary",
+    title: "Tax summary",
+    columns: [
+      { key: "property", label: "Property" },
+      { key: "daysRented", label: "Days rented", align: "right", format: "number" },
+      { key: "rentEarned", label: "Rent earned", align: "right", format: "money" },
+      { key: "houseSpent", label: "Repairs & expenses", align: "right", format: "money" },
+      { key: "netIncome", label: "Net", align: "right", format: "money" },
+    ],
+    rows,
+    totals: {
+      property: "Portfolio total",
+      daysRented: totalDays,
+      rentEarned: centsToUsd(totalIncomeCents),
+      houseSpent: centsToUsd(totalExpenseCents),
+      netIncome: centsToUsd(totalIncomeCents - totalExpenseCents),
+    },
+    meta: {
+      from,
+      to,
+      totalEarned: centsToUsd(totalIncomeCents),
+      totalSpent: centsToUsd(totalExpenseCents),
+      totalDaysRented: totalDays,
+      netIncome: centsToUsd(totalIncomeCents - totalExpenseCents),
+      totalIncome: incomeStatement.meta?.totalIncome ?? centsToUsd(totalIncomeCents),
+      totalExpense: incomeStatement.meta?.totalExpense ?? centsToUsd(totalExpenseCents),
+      expenseCount: expensesReport.rows.length,
+    },
   };
 }
 
@@ -591,6 +828,12 @@ export async function runManagerReport(
   filters: ManagerReportFilters,
 ): Promise<ReportResult | null> {
   switch (reportId) {
+    case "tax-summary":
+      return queryTaxSummary(db, managerUserId, filters);
+    case "rent-receipts":
+      return queryRentReceipts(db, managerUserId, filters);
+    case "rental-days":
+      return queryRentalDays(db, managerUserId, filters);
     case "rent-roll":
       return queryRentRoll(db, managerUserId, filters);
     case "delinquency":

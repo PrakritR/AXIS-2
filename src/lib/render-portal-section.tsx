@@ -6,7 +6,7 @@ import { ManagerInbox } from "@/components/portal/manager-inbox";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerPayments } from "@/components/portal/manager-payments";
-import { ManagerFinancialsPanel } from "@/components/portal/manager-financials-panel";
+import { ManagerDocumentsPanel } from "@/components/portal/manager-documents-panel";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
@@ -47,6 +47,43 @@ import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
+
+const LEGACY_FINANCIALS_TAB_MAP: Record<string, string> = {
+  "rent-roll": "rent-receipts",
+  delinquency: "summary",
+  "income-statement": "profit-loss",
+  "lease-expiration": "rental-days",
+  vendors: "expenses",
+};
+
+const DOCUMENTS_TABS = ["summary", "rent-receipts", "expenses", "rental-days", "profit-loss", "1099"] as const;
+
+function renderManagerDocumentsSection(
+  section: string,
+  tabParts: string[] | undefined,
+  basePath: string,
+  kind: PortalKind,
+  tier: "free" | "paid" | null,
+) {
+  if (section === "financials") {
+    const legacyTab = tabParts?.[0];
+    const nextTab = legacyTab ? (LEGACY_FINANCIALS_TAB_MAP[legacyTab] ?? legacyTab) : "summary";
+    redirect(`${basePath}/documents/${nextTab}`);
+  }
+  if (section !== "documents") return null;
+  if (!tabParts?.length) {
+    redirect(`${basePath}/documents/summary`);
+  }
+  if (tabParts.length > 1) notFound();
+  const docTab = tabParts[0]!;
+  if (!DOCUMENTS_TABS.includes(docTab as (typeof DOCUMENTS_TABS)[number])) notFound();
+  return subscriptionGated(
+    <ManagerDocumentsPanel tabId={docTab} basePath={basePath} />,
+    kind,
+    "documents",
+    tier,
+  );
+}
 
 function subscriptionGated(
   node: ReactNode,
@@ -280,29 +317,14 @@ export async function renderPortalSection(
       }
       return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
-    if (section === "financials") {
-      const financialsTabs = [
-        "rent-roll",
-        "delinquency",
-        "income-statement",
-        "expenses",
-        "lease-expiration",
-        "vendors",
-        "1099",
-      ];
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/${section}/rent-roll`);
-      }
-      if (tabParts.length > 1) notFound();
-      const finTab = tabParts[0]!;
-      if (!financialsTabs.includes(finTab)) notFound();
-      return subscriptionGated(
-        <ManagerFinancialsPanel tabId={finTab} basePath={def.basePath} />,
-        kind,
-        "financials",
-        managerOwnerSubscriptionTier,
-      );
-    }
+    const documentsView = renderManagerDocumentsSection(
+      section,
+      tabParts,
+      def.basePath,
+      kind,
+      managerOwnerSubscriptionTier,
+    );
+    if (documentsView) return documentsView;
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
       return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
@@ -409,29 +431,14 @@ export async function renderPortalSection(
       }
       return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
-    if (section === "financials") {
-      const financialsTabs = [
-        "rent-roll",
-        "delinquency",
-        "income-statement",
-        "expenses",
-        "lease-expiration",
-        "vendors",
-        "1099",
-      ];
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/${section}/rent-roll`);
-      }
-      if (tabParts.length > 1) notFound();
-      const finTab = tabParts[0]!;
-      if (!financialsTabs.includes(finTab)) notFound();
-      return subscriptionGated(
-        <ManagerFinancialsPanel tabId={finTab} basePath={def.basePath} />,
-        kind,
-        "financials",
-        managerOwnerSubscriptionTier,
-      );
-    }
+    const documentsView = renderManagerDocumentsSection(
+      section,
+      tabParts,
+      def.basePath,
+      kind,
+      managerOwnerSubscriptionTier,
+    );
+    if (documentsView) return documentsView;
     if (section === "leases") {
       if (tabParts?.length) {
         redirect(`${def.basePath}/${section}`);

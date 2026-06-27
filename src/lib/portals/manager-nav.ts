@@ -4,7 +4,7 @@ import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
 import { managerNeedsPricingSelection } from "@/lib/auth/manager-onboarding";
-import { getManagerSubscriptionTier } from "@/lib/manager-access";
+import { FREE_SUBSCRIPTION_SECTIONS, getManagerSubscriptionTier } from "@/lib/manager-access";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { proPortal } from "./pro";
@@ -48,7 +48,10 @@ export async function buildManagerPortalDefinition(): Promise<{
   const tier = await getManagerSubscriptionTier(effectiveUserId);
   const isFree = tier === "free";
 
-  const sections = proPortal.sections;
+  const sections = proPortal.sections.map((s) => ({
+    ...s,
+    tierLocked: isFree && !FREE_SUBSCRIPTION_SECTIONS.has(s.section),
+  }));
 
   const showPreviewBanner = hasAdminRole(ctx) && !!preview?.targetUserId;
 

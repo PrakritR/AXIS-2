@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -46,6 +46,7 @@ type VendorDraft = {
   email: string;
   notes: string;
   active: boolean;
+  sharedWithManagers: boolean;
 };
 
 const EMPTY_DRAFT: VendorDraft = {
@@ -55,6 +56,7 @@ const EMPTY_DRAFT: VendorDraft = {
   email: "",
   notes: "",
   active: true,
+  sharedWithManagers: false,
 };
 
 export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
@@ -82,9 +84,18 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
     return readManagerVendorRows().sort((a, b) => a.name.localeCompare(b.name));
   }, [tick]);
 
+  const isOwnVendor = useCallback(
+    (row: ManagerVendorRow) => !row.managerUserId || row.managerUserId === userId,
+    [userId],
+  );
+
   const activeCount = vendors.filter((v) => v.active !== false).length;
 
   function startEdit(row: ManagerVendorRow) {
+    if (!isOwnVendor(row)) {
+      showToast("This vendor was shared by another manager and can't be edited.");
+      return;
+    }
     setEditingId(row.id);
     setDraft({
       name: row.name,
@@ -93,6 +104,7 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
       email: row.email,
       notes: row.notes,
       active: row.active !== false,
+      sharedWithManagers: row.sharedWithManagers === true,
     });
     setExpandedId(row.id);
   }
@@ -106,18 +118,22 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
     const id = existingId ?? makeVendorId();
     const now = new Date().toISOString();
     const existing = vendors.find((v) => v.id === id);
-    upsertManagerVendor({
-      id,
-      managerUserId: userId ?? null,
-      name,
-      trade: draft.trade.trim() || TRADE_OPTIONS[0]!,
-      phone: draft.phone.trim(),
-      email: draft.email.trim(),
-      notes: draft.notes.trim(),
-      active: draft.active,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    });
+    upsertManagerVendor(
+      {
+        id,
+        managerUserId: userId ?? null,
+        name,
+        trade: draft.trade.trim() || TRADE_OPTIONS[0]!,
+        phone: draft.phone.trim(),
+        email: draft.email.trim(),
+        notes: draft.notes.trim(),
+        active: draft.active,
+        sharedWithManagers: draft.sharedWithManagers,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      },
+      userId,
+    );
     setEditingId(null);
     setShowAdd(false);
     setDraft(EMPTY_DRAFT);
@@ -125,7 +141,12 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
   }
 
   function removeVendor(id: string) {
-    if (!deleteManagerVendorRow(id)) return;
+    const row = vendors.find((v) => v.id === id);
+    if (row && !isOwnVendor(row)) {
+      showToast("This vendor was shared by another manager and can't be removed.");
+      return;
+    }
+    if (!deleteManagerVendorRow(id, userId)) return;
     if (expandedId === id) setExpandedId(null);
     showToast("Vendor removed.");
   }
@@ -133,7 +154,7 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
   return (
     <ManagerPortalPageShell
       title="Vendors"
-      subtitle={`${activeCount} active vendor${activeCount === 1 ? "" : "s"} for work order assignment`}
+      subtitle={`${activeCount} active vendor${activeCount === 1 ? "" : "s"} for work order assignment. Share your vendors with other managers if you want.`}
       titleAside={
         <Button type="button" onClick={() => { setShowAdd(true); setDraft(EMPTY_DRAFT); setEditingId(null); }}>
           Add vendor
@@ -172,6 +193,8 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
                 vendors.map((row) => {
                   const open = expandedId === row.id;
                   const editing = editingId === row.id;
+                  const own = isOwnVendor(row);
+                  const sharedByOther = !own;
                   return (
                     <Fragment key={row.id}>
                       <tr
@@ -183,15 +206,26 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
                         <td className={PORTAL_TABLE_TD}>{row.phone || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{row.email || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
-                              row.active !== false
-                                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                                : "bg-accent/30 text-muted ring-border"
-                            }`}
-                          >
-                            {row.active !== false ? "Active" : "Inactive"}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
+                                row.active !== false
+                                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                                  : "bg-accent/30 text-muted ring-border"
+                              }`}
+                            >
+                              {row.active !== false ? "Active" : "Inactive"}
+                            </span>
+                            {sharedByOther ? (
+                              <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-blue-200">
+                                Shared
+                              </span>
+                            ) : row.sharedWithManagers ? (
+                              <span className="inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-200">
+                                Shared with managers
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                       {open ? (
@@ -207,6 +241,11 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
                               </>
                             ) : (
                               <div className="space-y-3">
+                                {sharedByOther ? (
+                                  <p className="text-sm text-muted">
+                                    Shared by another manager on Axis. You can view contact details but can&apos;t edit or remove this vendor.
+                                  </p>
+                                ) : null}
                                 {row.notes ? <p className="text-sm text-muted">{row.notes}</p> : null}
                                 <div className="flex flex-wrap gap-2">
                                   {row.phone ? (
@@ -221,12 +260,16 @@ export function ManagerVendorsPanel({ basePath }: { basePath: string }) {
                                   ) : null}
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                  <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => startEdit(row)}>
-                                    Edit
-                                  </Button>
-                                  <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => removeVendor(row.id)}>
-                                    Remove
-                                  </Button>
+                                  {own ? (
+                                    <>
+                                      <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => startEdit(row)}>
+                                        Edit
+                                      </Button>
+                                      <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => removeVendor(row.id)}>
+                                        Remove
+                                      </Button>
+                                    </>
+                                  ) : null}
                                 </div>
                               </div>
                             )}
@@ -290,6 +333,20 @@ function VendorForm({
           onChange={(e) => setDraft({ ...draft, active: e.target.checked })}
         />
         <label htmlFor="vendor-active" className="text-sm text-foreground">Active (available for assignment)</label>
+      </div>
+      <div className="flex items-start gap-2 sm:col-span-2">
+        <input
+          id="vendor-shared"
+          type="checkbox"
+          checked={draft.sharedWithManagers}
+          onChange={(e) => setDraft({ ...draft, sharedWithManagers: e.target.checked })}
+        />
+        <label htmlFor="vendor-shared" className="text-sm leading-6 text-foreground">
+          Share with other managers on Axis
+          <span className="mt-0.5 block text-xs text-muted">
+            Other property managers can view and assign this vendor to work orders. You can turn this off anytime.
+          </span>
+        </label>
       </div>
     </div>
   );

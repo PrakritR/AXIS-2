@@ -1,5 +1,9 @@
 import { completeResidentSignupFromOAuth } from "@/lib/auth/complete-resident-signup-oauth";
-import { managerNeedsPricingSelection } from "@/lib/auth/manager-onboarding";
+import {
+  findManagerPurchaseForAccount,
+  isManagerOnboardingComplete,
+  managerNeedsPricingSelection,
+} from "@/lib/auth/manager-onboarding";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
 import type { AuthRole } from "@/components/auth/portal-switcher";
@@ -69,13 +73,14 @@ export async function resolveOAuthPortalRedirect(
     return safeIntended;
   }
 
-  const { data: linkedPurchase } = await supabase
-    .from("manager_purchases")
-    .select("stripe_checkout_session_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (linkedPurchase?.stripe_checkout_session_id) {
+  const linkedPurchase = await findManagerPurchaseForAccount(supabase, user.id, email);
+  if (linkedPurchase && isManagerOnboardingComplete(linkedPurchase)) {
     return safeIntended;
+  }
+  if (linkedPurchase && !isManagerOnboardingComplete(linkedPurchase)) {
+    if (safeIntended.startsWith("/auth/continue") || !isBypassOAuthGatePath(safeIntended)) {
+      return "/partner/pricing";
+    }
   }
 
   const { data: pendingPurchases } = await supabase

@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
@@ -69,6 +70,9 @@ export default function CreateAccountClient() {
   const [emailStatus, setEmailStatus] = useState<ExistingEmailStatus | null>(null);
   const [emailStatusLoading, setEmailStatusLoading] = useState(false);
   const [prevRoleFromUrl, setPrevRoleFromUrl] = useState(roleFromUrl);
+  const [googleSessionEmail, setGoogleSessionEmail] = useState<string | null>(null);
+  const [googleSessionName, setGoogleSessionName] = useState<string | null>(null);
+  const [googleSessionLoading, setGoogleSessionLoading] = useState(true);
 
   if (sessionIdFromUrl || axisIdFromUrl) {
     if (role !== urlDerivedRole) setRole(urlDerivedRole);
@@ -85,6 +89,31 @@ export default function CreateAccountClient() {
     setEmail(emailFromUrl);
   }
 
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      void fetch("/api/auth/manager-onboarding-status", { credentials: "include", cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) return null;
+          return (await res.json()) as {
+            authenticated?: boolean;
+            email?: string;
+            fullName?: string | null;
+            isGoogle?: boolean;
+          };
+        })
+        .then((body) => {
+          if (body?.authenticated && body.email) {
+            setGoogleSessionEmail(body.email);
+            setGoogleSessionName(body.fullName ?? null);
+            if (!email.trim()) setEmail(body.email);
+            if (!fullName.trim() && body.fullName) setFullName(body.fullName);
+          }
+        })
+        .finally(() => setGoogleSessionLoading(false));
+    });
+  }, [email, fullName]);
+
+  const googleSignedIn = Boolean(googleSessionEmail);
   const lockResidentEmail = role === "resident" && Boolean(axisIdFromUrl && emailFromUrl.includes("@"));
 
   const normalEmail = email.trim().toLowerCase();
@@ -498,17 +527,35 @@ export default function CreateAccountClient() {
           </>
         ) : managerNeedsPricing ? (
           <>
-            <GoogleSignInButton
-              label="Continue with Google"
-              nextPath="/auth/manager-register-oauth"
-              viaContinue={false}
-              disabled={busy}
-            />
-            <div className="my-4 flex items-center gap-3">
-              <div className="h-px flex-1 bg-border" aria-hidden />
-              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
-              <div className="h-px flex-1 bg-border" aria-hidden />
-            </div>
+            {googleSignedIn && googleSessionEmail ? (
+              <>
+                <GoogleSignedInBanner
+                  email={googleSessionEmail}
+                  fullName={googleSessionName}
+                  subtitle="Your Google account is linked. Choose Free, Pro, or Business on Partner pricing — no password needed."
+                />
+                <div className="mt-6 flex justify-center">
+                  <Link
+                    href="/partner/pricing"
+                    className="btn-cobalt inline-flex rounded-full px-6 py-3 text-sm font-semibold"
+                  >
+                    Continue to Partner pricing
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <GoogleSignInButton
+                  label="Continue with Google"
+                  nextPath="/auth/manager-register-oauth"
+                  viaContinue={false}
+                  disabled={busy || googleSessionLoading}
+                />
+                <div className="my-4 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" aria-hidden />
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
+                  <div className="h-px flex-1 bg-border" aria-hidden />
+                </div>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-name-input">
                 Full name <Req />
@@ -562,6 +609,8 @@ export default function CreateAccountClient() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
             </div>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -578,16 +627,31 @@ export default function CreateAccountClient() {
                   value={axisId}
                   onChange={(e) => setAxisId(e.target.value)}
                 />
+                {googleSignedIn && googleSessionEmail ? (
+                  <div className="mt-4">
+                    <GoogleSignedInBanner
+                      email={googleSessionEmail}
+                      fullName={googleSessionName}
+                      subtitle="Use Continue with Google below to link this Axis ID to your Google account."
+                    />
+                  </div>
+                ) : null}
                 <div className="mt-4">
                   <ResidentGoogleSignUpButton axisId={axisId} disabled={busy} />
                 </div>
-                <div className="my-4 flex items-center gap-3">
-                  <div className="h-px flex-1 bg-border" aria-hidden />
-                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
-                  <div className="h-px flex-1 bg-border" aria-hidden />
-                </div>
+                {!googleSignedIn ? (
+                  <>
+                    <div className="my-4 flex items-center gap-3">
+                      <div className="h-px flex-1 bg-border" aria-hidden />
+                      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
+                      <div className="h-px flex-1 bg-border" aria-hidden />
+                    </div>
+                  </>
+                ) : null}
               </div>
             ) : null}
+            {!googleSignedIn || role !== "resident" ? (
+              <>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
                 Email
@@ -623,6 +687,8 @@ export default function CreateAccountClient() {
               />
               {displayedEmailStatusLoading ? <p className="mt-1 text-xs text-muted/70">Checking for an existing Axis login…</p> : null}
             </div>
+              </>
+            ) : null}
           </>
         )}
       </div>
@@ -638,10 +704,19 @@ export default function CreateAccountClient() {
           onClick={() => void submit()}
           disabled={
             busy ||
+            googleSessionLoading ||
+            (googleSignedIn && managerNeedsPricing) ||
+            (googleSignedIn && role === "resident") ||
             (role === "manager" && !!sessionIdFromUrl && (effectivePreviewLoading || !!effectivePreviewError || !effectiveCheckoutPreview))
           }
         >
-          {busy ? "Working…" : "Create account"}
+          {busy
+            ? "Working…"
+            : googleSignedIn && managerNeedsPricing
+              ? "Continue on Partner pricing"
+              : googleSignedIn && role === "resident"
+                ? "Use Google above"
+                : "Create account"}
         </Button>
       )}
 

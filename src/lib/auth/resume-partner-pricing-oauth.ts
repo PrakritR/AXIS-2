@@ -1,9 +1,5 @@
-import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
-import {
-  clearManagerPricingOffer,
-  readManagerPricingOffer,
-  type ManagerPricingOffer,
-} from "@/lib/auth/manager-pricing-oauth-storage";
+import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
+import { continuePartnerPricingWithOffer } from "@/lib/auth/partner-pricing-google-flow";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -25,50 +21,13 @@ export async function resumePartnerPricingOAuth(): Promise<ResumePartnerPricingO
     return { status: "error", message: "Google sign-in did not complete. Try again." };
   }
 
-  const res = await fetch("/api/manager/pricing-oauth-continue", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(offerToRequestBody(offer)),
-  });
-
-  const body = (await res.json()) as {
-    action?: string;
-    sessionId?: string;
-    clientSecret?: string;
-    error?: string;
-  };
-
-  if (!res.ok) {
-    return { status: "error", message: body.error ?? "Could not continue signup." };
+  const result = await continuePartnerPricingWithOffer(offer);
+  if (result.status === "provisioned") {
+    return { status: "error", message: "Choose a plan and continue." };
   }
-
-  if (body.action === "finish" && body.sessionId) {
-    clearManagerPricingOffer();
-    return { status: "finish", sessionId: body.sessionId };
-  }
-
-  if (body.action === "portal") {
-    clearManagerPricingOffer();
-    return { status: "portal" };
-  }
-
-  if (body.action === "checkout" && body.clientSecret) {
-    return { status: "checkout", clientSecret: body.clientSecret };
-  }
-
-  return { status: "error", message: "Unexpected signup response." };
-}
-
-function offerToRequestBody(offer: ManagerPricingOffer) {
-  return {
-    tier: offer.tier,
-    billing: offer.billing,
-    promo: offer.promo,
-    discountPercent: offer.discountPercent,
-  };
+  return result;
 }
 
 export function partnerPricingFinishPath(sessionId: string): string {
-  return managerOauthFinishPath(sessionId);
+  return `/auth/manager-oauth-finish?session_id=${encodeURIComponent(sessionId)}`;
 }

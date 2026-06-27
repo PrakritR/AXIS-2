@@ -3,9 +3,10 @@ import { evaluateVendorTaxProfile } from "@/lib/reports/queries";
 import { managerSectionAllowedForTier } from "@/lib/manager-access";
 
 describe("reports access", () => {
-  it("gates financials to pro+ tiers", () => {
+  it("gates documents to pro+ tiers", () => {
+    expect(managerSectionAllowedForTier("documents", "free")).toBe(false);
+    expect(managerSectionAllowedForTier("documents", "paid")).toBe(true);
     expect(managerSectionAllowedForTier("financials", "free")).toBe(false);
-    expect(managerSectionAllowedForTier("financials", "paid")).toBe(true);
     expect(managerSectionAllowedForTier("payments", "free")).toBe(true);
   });
 

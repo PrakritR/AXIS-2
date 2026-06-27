@@ -79,8 +79,8 @@ export async function assertManagerFinancialsAccess(ctx: ReportsAuthContext): Pr
     return { ok: false, status: 403, error: "Forbidden." };
   }
   const tier = await getManagerSubscriptionTier(ctx.userId);
-  if (!managerSectionAllowedForTier("financials", tier)) {
-    return { ok: false, status: 402, error: "Financials requires Pro or Business." };
+  if (!managerSectionAllowedForTier("documents", tier)) {
+    return { ok: false, status: 402, error: "Documents requires Pro or Business." };
   }
   return { ok: true };
 }

@@ -6,6 +6,8 @@ export type PortalSection = {
   section: string;
   label: string;
   tabs: PortalTab[];
+  /** When true, nav shows the section but content is paywalled for the current plan. */
+  tierLocked?: boolean;
 };
 
 export type PortalDefinition = {

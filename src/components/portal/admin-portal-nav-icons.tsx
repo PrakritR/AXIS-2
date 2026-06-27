@@ -84,6 +84,7 @@ export function PortalNavIcon({ section }: { section: string }) {
           <path d="M6 15h2" />
         </svg>
       );
+    case "documents":
     case "financials":
       return (
         <svg className={cls} aria-hidden {...svgProps}>

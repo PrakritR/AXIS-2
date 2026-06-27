@@ -17,6 +17,9 @@ async function linkManagerPurchase(
   userEmail: string,
 ): Promise<CompleteManagerSignupResult> {
   if (purchase.user_id) {
+    if (purchase.user_id === userId) {
+      return { ok: true, managerId: purchase.manager_id };
+    }
     return { ok: false, status: 409, error: "This signup link was already used." };
   }
 

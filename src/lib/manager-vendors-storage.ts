@@ -8,6 +8,8 @@ export type ManagerVendorRow = {
   notes: string;
   active: boolean;
   propertyIds?: string[];
+  /** When true, other managers on Axis can use this vendor for work orders. */
+  sharedWithManagers?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -55,13 +57,19 @@ function emit() {
   window.dispatchEvent(new Event(MANAGER_VENDORS_EVENT));
 }
 
-function mirrorVendorsToServer(rows: ManagerVendorRow[]) {
+function ownVendorRows(rows: ManagerVendorRow[], managerUserId: string | null | undefined): ManagerVendorRow[] {
+  if (!managerUserId) return rows;
+  return rows.filter((r) => r.managerUserId === managerUserId || r.managerUserId == null);
+}
+
+function mirrorVendorsToServer(rows: ManagerVendorRow[], managerUserId?: string | null) {
   if (typeof window === "undefined") return;
+  const payload = managerUserId ? ownVendorRows(rows, managerUserId) : rows;
   void fetch("/api/portal-vendors", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ action: "replace", rows }),
+    body: JSON.stringify({ action: "replace", rows: payload }),
   }).catch(() => undefined);
 }
 
@@ -128,29 +136,38 @@ export function readActiveManagerVendorRows(fallback: ManagerVendorRow[] = EMPTY
   return readManagerVendorRows(fallback).filter((v) => v.active !== false);
 }
 
-export function writeManagerVendorRows(rows: ManagerVendorRow[]): void {
+export function writeManagerVendorRows(rows: ManagerVendorRow[], managerUserId?: string | null): void {
   if (!vendorRowsChanged(memoryRows, rows)) return;
   memoryRows = rows;
   persistVendorsToSession(rows);
   managerVendorsLastSyncedAt = Date.now();
   emit();
-  mirrorVendorsToServer(rows);
+  mirrorVendorsToServer(rows, managerUserId);
 }
 
-export function upsertManagerVendor(row: ManagerVendorRow): void {
+export function upsertManagerVendor(row: ManagerVendorRow, managerUserId?: string | null): void {
   const rows = readManagerVendorRows();
   const idx = rows.findIndex((r) => r.id === row.id);
   const next = idx === -1 ? [...rows, row] : rows.map((r, i) => (i === idx ? row : r));
-  writeManagerVendorRows(next);
+  writeManagerVendorRows(next, managerUserId ?? row.managerUserId);
   mirrorVendorRowToServer(row);
 }
 
-export function deleteManagerVendorRow(id: string): boolean {
+export function deleteManagerVendorRow(id: string, managerUserId?: string | null): boolean {
   const rows = readManagerVendorRows();
-  if (!rows.some((r) => r.id === id)) return false;
-  writeManagerVendorRows(rows.filter((r) => r.id !== id));
+  const target = rows.find((r) => r.id === id);
+  if (!target) return false;
+  if (managerUserId && target.managerUserId && target.managerUserId !== managerUserId) return false;
+  writeManagerVendorRows(rows.filter((r) => r.id !== id), managerUserId);
   deleteVendorFromServer(id);
   return true;
+}
+
+export function filterOwnVendorRowsForSync(
+  rows: ManagerVendorRow[],
+  managerUserId: string | null | undefined,
+): ManagerVendorRow[] {
+  return ownVendorRows(rows, managerUserId);
 }
 
 export function subscribeManagerVendors(cb: () => void) {
