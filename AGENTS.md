@@ -83,3 +83,11 @@ npm run seed:env -- --dry-run
 
 Note: the AI agent reads `ANTHROPIC_API_KEY` (via `new Anthropic()`); add it to
 `.env` if it isn't there yet. `POSTHOG_*` and `LANGFUSE_*` are optional.
+
+# Database environments
+
+Local dev and the automated tests share one **dev/test** Supabase project;
+**production is a separate project whose credentials live only in Vercel**.
+Never point a local `.env` at production. Schema parity between the two projects
+is maintained with the Supabase CLI (`npm run db:push`), not the SQL Editor. Full
+model and workflow: [`docs/database-environments.md`](docs/database-environments.md).

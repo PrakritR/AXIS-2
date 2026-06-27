@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { getAdminRegisterKey, getPaymentWaiverCode } from "@/lib/server-env";
+import { assertNonProdDatabase, getAdminRegisterKey, getPaymentWaiverCode } from "@/lib/server-env";
 import { isValidAdminRegisterKey } from "@/lib/auth/admin-register-key";
 
 describe("server-env and admin-register-key", () => {
@@ -9,6 +9,8 @@ describe("server-env and admin-register-key", () => {
     process.env = { ...originalEnv, NODE_ENV: "test", VERCEL_ENV: undefined };
     delete process.env.AXIS_ADMIN_REGISTER_KEY;
     delete process.env.AXIS_PAYMENT_WAIVER_CODE;
+    delete process.env.AXIS_PROD_SUPABASE_REF;
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
   });
 
   afterEach(() => {
@@ -25,5 +27,45 @@ describe("server-env and admin-register-key", () => {
   it("respects explicit env overrides", () => {
     process.env.AXIS_PAYMENT_WAIVER_CODE = "CUSTOM100";
     expect(getPaymentWaiverCode()).toBe("CUSTOM100");
+  });
+});
+
+describe("assertNonProdDatabase", () => {
+  const originalEnv = { ...process.env };
+  const PROD_REF = "qahnczmilgptcedaqype";
+  const DEV_REF = "emstjswhotsnyksqhqyf";
+
+  beforeEach(() => {
+    process.env = { ...originalEnv, NODE_ENV: "test", VERCEL_ENV: undefined };
+    delete process.env.AXIS_PROD_SUPABASE_REF;
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it("throws when a non-prod runtime targets the production project", () => {
+    process.env.AXIS_PROD_SUPABASE_REF = PROD_REF;
+    process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${PROD_REF}.supabase.co`;
+    expect(() => assertNonProdDatabase()).toThrow(/production/i);
+  });
+
+  it("does not throw when pointed at the dev/test project", () => {
+    process.env.AXIS_PROD_SUPABASE_REF = PROD_REF;
+    process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${DEV_REF}.supabase.co`;
+    expect(() => assertNonProdDatabase()).not.toThrow();
+  });
+
+  it("is a no-op when AXIS_PROD_SUPABASE_REF is unset", () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${PROD_REF}.supabase.co`;
+    expect(() => assertNonProdDatabase()).not.toThrow();
+  });
+
+  it("allows the production runtime to use the production project", () => {
+    process.env.VERCEL_ENV = "production";
+    process.env.AXIS_PROD_SUPABASE_REF = PROD_REF;
+    process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${PROD_REF}.supabase.co`;
+    expect(() => assertNonProdDatabase()).not.toThrow();
   });
 });
