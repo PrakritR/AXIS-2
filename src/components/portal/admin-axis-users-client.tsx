@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDate } from "@/lib/pacific-time";
 
@@ -36,6 +37,19 @@ type UnifiedRow =
 type CategoryFilter = "management" | "resident";
 type StatusTab = "active" | "disabled";
 type TierFilter = "all" | "free" | "pro" | "business";
+type ManagerPlan = "free" | "pro" | "business";
+
+const MANAGER_PLAN_OPTIONS: { value: ManagerPlan; label: string }[] = [
+  { value: "free", label: "Free" },
+  { value: "pro", label: "Pro" },
+  { value: "business", label: "Business" },
+];
+
+function normalizeManagerPlan(tier: string): ManagerPlan {
+  const t = tier.toLowerCase();
+  if (t === "pro" || t === "business") return t;
+  return "free";
+}
 
 function UsersEmptyIcon({ className }: { className?: string }) {
   return (
@@ -106,6 +120,35 @@ function ManagerDetailRow({
 }) {
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [plan, setPlan] = useState<ManagerPlan>(() => normalizeManagerPlan(row.tier));
+  const currentPlan = normalizeManagerPlan(row.tier);
+  const planDirty = plan !== currentPlan;
+
+  useEffect(() => {
+    setPlan(normalizeManagerPlan(row.tier));
+  }, [row.tier]);
+
+  const savePlan = async () => {
+    if (!planDirty) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/managers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: row.id, tier: plan }),
+      });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: "Could not update plan." }));
+        showToast((error as string) || "Could not update plan.");
+        return;
+      }
+      showToast(`Plan updated to ${plan === "free" ? "Free" : plan === "pro" ? "Pro" : "Business"}.`);
+      onRefresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggle = async () => {
     setBusy(true);
     try {
@@ -160,6 +203,35 @@ function ManagerDetailRow({
               </p>
             )}
           </div>
+          <div className="min-w-[200px] space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Plan</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                className="h-9 min-h-0 w-auto min-w-[8.5rem] rounded-full px-3 py-1.5 text-sm"
+                value={plan}
+                onChange={(e) => setPlan(e.target.value as ManagerPlan)}
+                disabled={busy}
+              >
+                {MANAGER_PLAN_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full px-3 text-xs"
+                onClick={() => void savePlan()}
+                disabled={busy || !planDirty}
+              >
+                {busy && planDirty ? "Saving…" : "Save plan"}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted">
+              Billing: {row.billing === "free" ? "Free" : row.billing || "—"}
+            </p>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -168,7 +240,7 @@ function ManagerDetailRow({
               onClick={() => void toggle()}
               disabled={busy}
             >
-              {busy && !confirmDelete ? "Updating…" : row.active ? "Disable account" : "Enable account"}
+              {busy && !confirmDelete && !planDirty ? "Updating…" : row.active ? "Disable account" : "Enable account"}
             </Button>
             {confirmDelete ? (
               <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5">

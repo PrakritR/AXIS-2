@@ -1,21 +1,24 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import { deleteManagerAccount } from "@/lib/auth/delete-portal-account";
+import { deletePortalAccountCompletely } from "@/lib/auth/delete-portal-account";
+import { normalizeManagerSkuTier, setManagerPurchaseTier } from "@/lib/manager-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-async function requireAdmin() {
+async function requireAdminActor(): Promise<{ ok: true; actorId: string } | { ok: false }> {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
-  return isAdminUser(user.id);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !(await isAdminUser(user.id))) return { ok: false };
+  return { ok: true, actorId: user.id };
 }
 
 export async function GET() {
   try {
-    if (!(await requireAdmin())) {
+    if (!(await requireAdminActor()).ok) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
     const supabase = createSupabaseServiceRoleClient();
@@ -41,15 +44,20 @@ export async function GET() {
 
     // Also get tier info from manager_purchases
     const emails = (data ?? []).map((p) => p.email).filter(Boolean);
-    const { data: purchases } = await supabase
-      .from("manager_purchases")
-      .select("email, tier, billing, paid_at")
-      .in("email", emails);
+    const [{ data: purchasesByEmail }, { data: purchasesByUserId }] = await Promise.all([
+      emails.length > 0
+        ? supabase.from("manager_purchases").select("email, user_id, tier, billing, paid_at").in("email", emails)
+        : Promise.resolve({ data: [] as { email: string; user_id: string | null; tier: string | null; billing: string | null; paid_at: string | null }[] }),
+      supabase.from("manager_purchases").select("email, user_id, tier, billing, paid_at").in("user_id", allIds),
+    ]);
 
-    const purchaseByEmail = new Map(purchases?.map((p) => [p.email, p]) ?? []);
+    const purchaseByUserId = new Map((purchasesByUserId ?? []).map((p) => [p.user_id, p]));
+    const purchaseByEmail = new Map((purchasesByEmail ?? []).map((p) => [String(p.email ?? "").toLowerCase(), p]));
 
     const managers = (data ?? []).map((profile) => {
-      const purchase = purchaseByEmail.get(profile.email);
+      const purchase =
+        purchaseByUserId.get(profile.id) ??
+        purchaseByEmail.get(String(profile.email ?? "").toLowerCase());
       return {
         id: profile.id,
         email: profile.email ?? "",
@@ -71,16 +79,34 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
   try {
-    if (!(await requireAdmin())) {
+    if (!(await requireAdminActor()).ok) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
-    const { id, active } = (await req.json()) as { id: string; active: boolean };
+    const body = (await req.json()) as { id?: string; active?: boolean; tier?: string };
+    const { id, active, tier } = body;
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    if (typeof active !== "boolean" && tier === undefined) {
+      return NextResponse.json({ error: "Provide active and/or tier to update." }, { status: 400 });
+    }
 
     const supabase = createSupabaseServiceRoleClient();
-    const { error } = await supabase.from("profiles").update({ application_approved: active }).eq("id", id);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (typeof active === "boolean") {
+      const { error } = await supabase.from("profiles").update({ application_approved: active }).eq("id", id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (tier !== undefined) {
+      const normalizedTier = normalizeManagerSkuTier(tier);
+      if (!normalizedTier) {
+        return NextResponse.json({ error: "tier must be free, pro, or business." }, { status: 400 });
+      }
+      const result = await setManagerPurchaseTier(id, normalizedTier);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 500 });
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
@@ -90,14 +116,18 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    if (!(await requireAdmin())) {
+    const auth = await requireAdminActor();
+    if (!auth.ok) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
     const { id } = (await req.json()) as { id?: string };
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    if (id === auth.actorId) {
+      return NextResponse.json({ error: "You cannot delete your own account while signed in." }, { status: 400 });
+    }
 
     const supabase = createSupabaseServiceRoleClient();
-    const result = await deleteManagerAccount(supabase, id);
+    const result = await deletePortalAccountCompletely(supabase, id);
     return NextResponse.json({ ok: true, mode: result.mode });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

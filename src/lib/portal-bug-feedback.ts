@@ -43,12 +43,16 @@ function writeLocal(rows: PortalBugFeedbackRow[]) {
 
 async function persistRow(row: PortalBugFeedbackRow) {
   if (!isBrowser()) return;
-  await fetch("/api/portal-bug-feedback", {
+  const res = await fetch("/api/portal-bug-feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify({ action: "upsert", row }),
   });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Could not save feedback.");
+  }
 }
 
 export function readBugFeedbackRows(): PortalBugFeedbackRow[] {

@@ -72,13 +72,6 @@ export async function deleteResidentAccount(
   const purgeData = input.purgeData !== false;
   const hasTarget = Boolean(userId || email || applicationId);
 
-  if (purgeData && email) {
-    const guard = await canHardDeleteResident(db, email);
-    if (!guard.ok) {
-      return { ok: false as const, error: guard.error };
-    }
-  }
-
   if (purgeData) {
     await purgeResidentPortalData(db, { email, userId: userId || null, applicationId: applicationId || null });
   }
@@ -92,6 +85,16 @@ export async function deleteResidentAccount(
   }
 
   if (purgeData && email) {
+    const canHardDelete = await canHardDeleteResident(db, email);
+    if (!canHardDelete.ok) {
+      const targetUserId = userId || (await findAuthUserIdByEmail(db, email));
+      if (!targetUserId) {
+        return { ok: true as const, mode: "purged_data_only" as const };
+      }
+      const result = await removePortalAccess(db, targetUserId, "resident");
+      return { ok: true as const, mode: "purged" as const, loginMode: result.mode };
+    }
+
     const loginDeleteResult = await deleteResidentAuthUser(db, email);
     if (!loginDeleteResult.ok) {
       return { ok: false as const, error: loginDeleteResult.error };
@@ -106,6 +109,29 @@ export async function deleteResidentAccount(
 
   const result = await removePortalAccess(db, targetUserId, "resident");
   return { ok: true as const, mode: result.mode };
+}
+
+/** Admin-only: purge all portal data and remove the auth user entirely. */
+export async function deletePortalAccountCompletely(db: ServiceDb, userId: string) {
+  const trimmedId = userId.trim();
+  if (!trimmedId) {
+    throw new Error("User id is required.");
+  }
+
+  const email = await profileEmail(db, trimmedId);
+  await purgeManagerPortalData(db, trimmedId);
+  await purgeResidentPortalData(db, { email, userId: trimmedId });
+
+  const { error: rolesErr } = await db.from("profile_roles").delete().eq("user_id", trimmedId);
+  if (rolesErr) throw new Error(rolesErr.message);
+
+  const { error: profileErr } = await db.from("profiles").delete().eq("id", trimmedId);
+  if (profileErr) throw new Error(profileErr.message);
+
+  const { error: authDeleteError } = await db.auth.admin.deleteUser(trimmedId);
+  if (authDeleteError) throw new Error(authDeleteError.message);
+
+  return { ok: true as const, mode: "deleted_auth_user" as const };
 }
 
 /** Cascade-delete manager properties, payments, leases, etc., then remove manager access / auth user. */

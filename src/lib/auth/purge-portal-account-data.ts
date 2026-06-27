@@ -3,6 +3,10 @@ import { purgeCoManagerReferencesToUser } from "@/lib/auth/purge-orphaned-co-man
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
 
+function normalizeEmail(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
 function looksLikeMissingTableError(err: { message?: string } | null | undefined): boolean {
   const m = (err?.message ?? "").toLowerCase();
   return (
@@ -73,9 +77,12 @@ export async function purgeResidentPortalData(
 export async function purgeManagerPortalData(db: ServiceDb, managerUserId: string): Promise<void> {
   if (!managerUserId) return;
 
+  const { data: profileRow } = await db.from("profiles").select("email").eq("id", managerUserId).maybeSingle();
+  const email = normalizeEmail(profileRow?.email);
+
   await purgeCoManagerReferencesToUser(db, managerUserId);
 
-  const results = await Promise.all([
+  const deleteOps: PromiseLike<{ error: { message: string } | null }>[] = [
     db.from("manager_property_records").delete().eq("manager_user_id", managerUserId),
     db.from("manager_application_records").delete().eq("manager_user_id", managerUserId),
     db.from("portal_household_charge_records").delete().eq("manager_user_id", managerUserId),
@@ -90,7 +97,14 @@ export async function purgeManagerPortalData(db: ServiceDb, managerUserId: strin
     db.from("account_link_invites").delete().eq("invitee_user_id", managerUserId),
     db.from("portal_bug_feedback_records").delete().eq("reporter_user_id", managerUserId),
     db.from("manager_purchases").delete().eq("user_id", managerUserId),
-  ]);
+    db.from("manager_vendor_records").delete().eq("manager_user_id", managerUserId),
+    db.from("cosigner_submission_records").delete().eq("manager_user_id", managerUserId),
+    db.from("screening_orders").delete().eq("manager_user_id", managerUserId),
+  ];
 
-  assertNoDeleteErrors(results);
+  if (email) {
+    deleteOps.push(db.from("manager_purchases").delete().ilike("email", email));
+  }
+
+  assertNoDeleteErrors(await Promise.all(deleteOps));
 }
