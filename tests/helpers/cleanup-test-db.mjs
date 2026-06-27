@@ -34,13 +34,19 @@ const tables = [
 
 try {
   for (const table of tables) {
-    const { data } = await supabase.from(table).select("id, row_data, manager_id");
+    // These tables all carry a jsonb row_data; test rows stamp it with testRunId.
+    // (manager_id was removed from manager_property_records, so don't select it.)
+    const { data, error } = await supabase.from(table).select("id, row_data");
+    if (error) {
+      console.warn(`Skipping ${table}: ${error.message}`);
+      continue;
+    }
     const toDelete = (data ?? []).filter((row) => {
       const rd = row.row_data;
       if (rd && typeof rd === "object" && "testRunId" in rd) {
         return String(rd.testRunId) === testRunId || String(rd.id ?? "").includes(testRunId);
       }
-      return String(row.manager_id ?? "").includes(testRunId);
+      return false;
     });
     if (toDelete.length) {
       await supabase.from(table).delete().in(

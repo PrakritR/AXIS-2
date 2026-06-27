@@ -75,15 +75,34 @@ try {
   );
 
   const propertyId = `test-prop-${testRunId}`;
-  await supabase.from("manager_property_records").insert({
-    manager_id: managerId,
-    row_data: {
+  // manager_property_records uses: id (text PK), manager_user_id (auth uid),
+  // status, and a MockProperty-shaped property_data. row_data carries testRunId
+  // so cleanup-test-db can find it.
+  const { error: propertyError } = await supabase.from("manager_property_records").insert({
+    id: propertyId,
+    manager_user_id: managerUserId,
+    status: "live",
+    property_data: {
       id: propertyId,
-      status: "live",
-      name: `Seed Property ${testRunId}`,
-      testRunId,
+      title: `Seed Property ${testRunId}`,
+      tagline: "Seeded listing",
+      address: "123 Seed St, Austin, TX",
+      zip: "78701",
+      neighborhood: "Downtown",
+      beds: 2,
+      baths: 1,
+      rentLabel: "$1,800/mo",
+      available: "Now",
+      petFriendly: true,
+      buildingId: `bld-${testRunId}`,
+      buildingName: "Seed Building",
+      unitLabel: "Unit 1",
+      managerUserId,
+      adminPublishLive: true,
     },
+    row_data: { id: propertyId, testRunId },
   });
+  if (propertyError) throw new Error(`Seed property insert failed: ${propertyError.message}`);
 
   console.log(JSON.stringify({ ok: true, testRunId, adminId, managerUserId, managerId, propertyId }));
 } catch (err) {
