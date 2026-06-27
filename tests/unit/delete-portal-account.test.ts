@@ -76,7 +76,7 @@ describe("delete-portal-account", () => {
     expect(guard.ok).toBe(false);
   });
 
-  it("revokes resident role when user also has manager role", async () => {
+  it("blocks resident purge when user also has manager role", async () => {
     const db = mockDb([{ role: "resident" }, { role: "manager" }]);
 
     const result = await deleteResidentAccount(db as never, {
@@ -84,9 +84,9 @@ describe("delete-portal-account", () => {
       purgeData: true,
     });
 
-    expect(result.ok).toBe(true);
-    expect(purgeResidentPortalData).toHaveBeenCalled();
-    expect(removePortalAccess).toHaveBeenCalledWith(db, "user-dual", "resident");
+    expect(result.ok).toBe(false);
+    expect(purgeResidentPortalData).not.toHaveBeenCalled();
+    expect(removePortalAccess).not.toHaveBeenCalled();
   });
 
   it("purges application-only deletes with purged_data_only mode", async () => {

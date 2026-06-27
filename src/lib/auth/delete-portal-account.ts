@@ -72,6 +72,11 @@ export async function deleteResidentAccount(
   const purgeData = input.purgeData !== false;
   const hasTarget = Boolean(userId || email || applicationId);
 
+  if (purgeData && email) {
+    const canHardDelete = await canHardDeleteResident(db, email);
+    if (!canHardDelete.ok) return canHardDelete;
+  }
+
   if (purgeData) {
     await purgeResidentPortalData(db, { email, userId: userId || null, applicationId: applicationId || null });
   }
@@ -85,16 +90,6 @@ export async function deleteResidentAccount(
   }
 
   if (purgeData && email) {
-    const canHardDelete = await canHardDeleteResident(db, email);
-    if (!canHardDelete.ok) {
-      const targetUserId = userId || (await findAuthUserIdByEmail(db, email));
-      if (!targetUserId) {
-        return { ok: true as const, mode: "purged_data_only" as const };
-      }
-      const result = await removePortalAccess(db, targetUserId, "resident");
-      return { ok: true as const, mode: "purged" as const, loginMode: result.mode };
-    }
-
     const loginDeleteResult = await deleteResidentAuthUser(db, email);
     if (!loginDeleteResult.ok) {
       return { ok: false as const, error: loginDeleteResult.error };
