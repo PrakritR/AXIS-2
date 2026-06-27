@@ -3,6 +3,11 @@
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
+import {
+  partnerPricingFinishPath,
+  resumePartnerPricingOAuth,
+} from "@/lib/auth/resume-partner-pricing-oauth";
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import {
   normalizeProMonthlyPromoInput,
@@ -32,6 +37,7 @@ export default function PartnerPricingPage() {
   const [code, setCode] = useState("");
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+  const [googleCheckoutBusy, setGoogleCheckoutBusy] = useState(false);
   const [onboardOffer, setOnboardOffer] = useState<ReturnType<typeof parseOnboardOfferSearchParams>>({});
 
   useEffect(() => {
@@ -136,12 +142,54 @@ export default function PartnerPricingPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+    if (params.get("google_checkout") !== "1") return;
+
+    window.history.replaceState({}, "", "/partner/pricing");
+
+    let cancelled = false;
+    void (async () => {
+      setGoogleCheckoutBusy(true);
+      try {
+        const stored = readManagerPricingOffer();
+        if (stored) {
+          setSelectedTierId(stored.tier);
+          setBilling(stored.billing);
+          if (stored.promo) setCode(stored.promo);
+        }
+
+        const result = await resumePartnerPricingOAuth();
+        if (cancelled) return;
+
+        if (result.status === "checkout") {
+          setCheckoutClientSecret(result.clientSecret);
+          return;
+        }
+        if (result.status === "finish") {
+          router.push(partnerPricingFinishPath(result.sessionId));
+          return;
+        }
+        showToast(result.message);
+      } finally {
+        if (!cancelled) setGoogleCheckoutBusy(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, showToast]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
     const sid = params.get("session_id");
     if (sid) {
       window.history.replaceState({}, "", "/partner/pricing");
       router.replace(`/auth/manager-id?session_id=${encodeURIComponent(sid)}`);
     }
   }, [router]);
+
+  const checkoutLocked = checkoutBusy || googleCheckoutBusy || Boolean(checkoutClientSecret);
 
   return (
     <div className="min-h-screen px-4 py-14 sm:px-5 sm:py-20">
@@ -315,10 +363,12 @@ export default function PartnerPricingPage() {
               billing={billing}
               promo={code.trim() || undefined}
               discountPercent={onboardIsFree ? 100 : onboardDiscountPercent}
-              disabled={checkoutBusy || Boolean(checkoutClientSecret)}
+              disabled={checkoutLocked}
             />
             <p className="mt-2 text-center text-xs text-muted sm:text-left">
-              Use Google to create your account first{selectedTierId === "free" || onboardIsFree ? "" : ", then pay"} — no form required.
+              {googleCheckoutBusy
+                ? "Opening secure checkout…"
+                : `Use Google to create your account first${selectedTierId === "free" || onboardIsFree ? "" : ", then pay"} — no form required.`}
             </p>
           </div>
 
@@ -426,7 +476,7 @@ export default function PartnerPricingPage() {
             </p>
             <button
               type="button"
-              disabled={checkoutBusy || Boolean(checkoutClientSecret)}
+              disabled={checkoutLocked}
               onClick={() => {
                 void (async () => {
                   try {

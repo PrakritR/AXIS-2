@@ -6,6 +6,7 @@ import { ManagerInbox } from "@/components/portal/manager-inbox";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerPayments } from "@/components/portal/manager-payments";
+import { ManagerFinancialsPanel } from "@/components/portal/manager-financials-panel";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
@@ -27,6 +28,7 @@ import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel"
 import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
+import { ResidentFinancialsPanel } from "@/components/portal/resident-financials-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { ResidentServicesPanel } from "@/components/portal/resident-services-panel";
@@ -278,6 +280,29 @@ export async function renderPortalSection(
       }
       return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
+    if (section === "financials") {
+      const financialsTabs = [
+        "rent-roll",
+        "delinquency",
+        "income-statement",
+        "expenses",
+        "lease-expiration",
+        "vendors",
+        "1099",
+      ];
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/rent-roll`);
+      }
+      if (tabParts.length > 1) notFound();
+      const finTab = tabParts[0]!;
+      if (!financialsTabs.includes(finTab)) notFound();
+      return subscriptionGated(
+        <ManagerFinancialsPanel tabId={finTab} basePath={def.basePath} />,
+        kind,
+        "financials",
+        managerOwnerSubscriptionTier,
+      );
+    }
     if (tabParts?.length) notFound();
     if (section === "dashboard") {
       return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
@@ -384,6 +409,29 @@ export async function renderPortalSection(
       }
       return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
+    if (section === "financials") {
+      const financialsTabs = [
+        "rent-roll",
+        "delinquency",
+        "income-statement",
+        "expenses",
+        "lease-expiration",
+        "vendors",
+        "1099",
+      ];
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/rent-roll`);
+      }
+      if (tabParts.length > 1) notFound();
+      const finTab = tabParts[0]!;
+      if (!financialsTabs.includes(finTab)) notFound();
+      return subscriptionGated(
+        <ManagerFinancialsPanel tabId={finTab} basePath={def.basePath} />,
+        kind,
+        "financials",
+        managerOwnerSubscriptionTier,
+      );
+    }
     if (section === "leases") {
       if (tabParts?.length) {
         redirect(`${def.basePath}/${section}`);
@@ -485,6 +533,20 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "payments") {
     if (tabParts?.length) notFound();
     return <ResidentPaymentsPanel />;
+  }
+
+  if (kind === "resident" && section === "financials") {
+    const allowedTabs = meta.tabs.map((t) => t.id);
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/${section}/${allowedTabs[0] ?? "summary"}`);
+    }
+    if (tabParts.length > 1) notFound();
+    const finTab = tabParts[0]!;
+    if (!allowedTabs.includes(finTab)) notFound();
+    if (finTab === "lease" && !residentWorkspaceUnlocked && !(residentAccess?.leaseAccessUnlocked ?? false)) {
+      return <ResidentFreeTierFeatureNotice title="Financials — Lease" />;
+    }
+    return <ResidentFinancialsPanel tabId={finTab} basePath={def.basePath} />;
   }
 
   if (kind === "resident" && section === "move-in") {

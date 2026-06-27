@@ -27,16 +27,7 @@ function parseBilling(raw: string | null, fallback: "monthly" | "annual"): "mont
   return raw === "annual" ? "annual" : fallback;
 }
 
-async function waitForAuthUser(supabase: ReturnType<typeof createSupabaseBrowserClient>, attempts = 8) {
-  for (let i = 0; i < attempts; i++) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) return user;
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
-  }
-  return null;
-}
+import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 
 async function restartGoogleForPricingOffer(offer: {
   tier: PlanTierId;

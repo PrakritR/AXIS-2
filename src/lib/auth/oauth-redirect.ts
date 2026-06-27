@@ -18,3 +18,15 @@ export function authCallbackUrl(origin: string, nextPath: string): string {
   const next = nextPath.startsWith("/") ? nextPath : "/auth/continue";
   return `${base}/auth/callback?next=${encodeURIComponent(next)}`;
 }
+
+/** Partner pricing Google signup — fixed path with no query params for Supabase allowlist matching. */
+export function partnerPricingOAuthCallbackUrl(origin: string): string {
+  const base = origin.trim().replace(/\/$/, "");
+  return `${base}/auth/callback/partner-pricing`;
+}
+
+/** Resident create-account Google signup — fixed callback for Supabase allowlist matching. */
+export function residentSignupOAuthCallbackUrl(origin: string): string {
+  const base = origin.trim().replace(/\/$/, "");
+  return `${base}/auth/callback/resident-signup`;
+}

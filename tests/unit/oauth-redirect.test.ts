@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authCallbackUrl, oauthContinuePath, usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
+import { authCallbackUrl, oauthContinuePath, partnerPricingOAuthCallbackUrl, usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
 
 describe("oauth redirect helpers", () => {
   it("builds continue path with safe next route", () => {
@@ -10,6 +10,12 @@ describe("oauth redirect helpers", () => {
   it("builds callback url for Supabase OAuth", () => {
     expect(authCallbackUrl("https://axis.example.com", "/auth/continue")).toBe(
       "https://axis.example.com/auth/callback?next=%2Fauth%2Fcontinue",
+    );
+  });
+
+  it("builds partner pricing callback without query params", () => {
+    expect(partnerPricingOAuthCallbackUrl("http://localhost:3000")).toBe(
+      "http://localhost:3000/auth/callback/partner-pricing",
     );
   });
 

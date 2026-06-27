@@ -114,7 +114,7 @@ export async function POST(req: Request) {
       userId: user.id,
       promo,
       discountPercent: onboardDiscount ?? undefined,
-      embedded: false,
+      embedded: true,
       req,
     });
 

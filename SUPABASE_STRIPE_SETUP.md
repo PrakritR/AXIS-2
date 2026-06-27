@@ -11,9 +11,11 @@ This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription
    - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (keep secret; server-only)
 3. Open **SQL Editor** and run the migration in `supabase/migrations/20250418140000_profiles_manager_purchases.sql`.
 4. **Authentication → Providers**: enable **Email** (password). Enable **Google** and add your Google OAuth client ID/secret (see below).
-5. **URL configuration** (Auth): set site URL to your production domain (`NEXT_PUBLIC_CANONICAL_APP_URL` or `NEXT_PUBLIC_APP_URL`) and add redirect URLs:
+5. **Authentication → URL configuration** (Auth): set site URL to your production domain (`NEXT_PUBLIC_CANONICAL_APP_URL` or `NEXT_PUBLIC_APP_URL`) and add redirect URLs:
    - `{your-domain}/auth/callback`
-   - `http://localhost:3000/auth/callback` for local dev (if using localhost)
+   - `{your-domain}/auth/callback/partner-pricing` (Google signup from Partner pricing)
+   - `{your-domain}/auth/callback/resident-signup` (Google signup from Create account → Resident)
+   - `http://localhost:3000/auth/callback` and `http://localhost:3000/auth/callback/partner-pricing` for local dev
 
 For shareable onboarding links and QR codes, set `NEXT_PUBLIC_CANONICAL_APP_URL` to your custom domain so links do not use the default `*.vercel.app` deployment URL.
 
@@ -70,8 +72,8 @@ Use these exact values when configuring Google + Supabase for the live site:
 | Supabase project URL | `https://qahnczmilgptcedaqype.supabase.co` |
 | Google **Authorized redirect URI** (Google Cloud only) | `https://qahnczmilgptcedaqype.supabase.co/auth/v1/callback` |
 | Supabase **Site URL** | `https://www.axis-seattle-housing.com` |
-| Supabase **Redirect URLs** | `https://www.axis-seattle-housing.com/auth/callback`, `https://www.axis-seattle-housing.com/**`, `http://localhost:3000/auth/callback` |
-| App OAuth callback (this website) | `https://www.axis-seattle-housing.com/auth/callback` |
+| Supabase **Redirect URLs** | `https://www.axis-seattle-housing.com/auth/callback`, `https://www.axis-seattle-housing.com/auth/callback/partner-pricing`, `https://www.axis-seattle-housing.com/auth/callback/resident-signup`, `https://www.axis-seattle-housing.com/**`, `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/callback/partner-pricing`, `http://localhost:3000/auth/callback/resident-signup` |
+| App OAuth callback (this website) | `https://www.axis-seattle-housing.com/auth/callback` and `/auth/callback/partner-pricing` for Partner pricing Google signup |
 
 Verify live config: open `https://www.axis-seattle-housing.com/api/auth/oauth-providers` — it should report `googleEnabled: true` and the redirect URIs above.
 

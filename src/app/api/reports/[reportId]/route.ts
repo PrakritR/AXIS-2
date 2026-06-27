@@ -1,0 +1,84 @@
+import { NextResponse } from "next/server";
+import {
+  assertManagerFinancialsAccess,
+  assertResidentFinancialsAccess,
+  getReportsAuthContext,
+} from "@/lib/reports/auth";
+import { backfillLedgerFromCharges } from "@/lib/reports/ledger-sync";
+import {
+  MANAGER_REPORT_IDS,
+  RESIDENT_REPORT_IDS,
+  type ManagerReportFilters,
+} from "@/lib/reports/types";
+import { runManagerReport, queryResidentBalance, queryResidentLedger } from "@/lib/reports/queries";
+
+export const runtime = "nodejs";
+
+function parseFilters(searchParams: URLSearchParams): ManagerReportFilters {
+  return {
+    propertyId: searchParams.get("propertyId")?.trim() || undefined,
+    from: searchParams.get("from")?.trim() || undefined,
+    to: searchParams.get("to")?.trim() || undefined,
+    daysAhead: searchParams.get("daysAhead") ? Number(searchParams.get("daysAhead")) : undefined,
+    taxYear: searchParams.get("taxYear") ? Number(searchParams.get("taxYear")) : undefined,
+    vendorId: searchParams.get("vendorId")?.trim() || undefined,
+  };
+}
+
+export async function GET(
+  req: Request,
+  ctx: { params: Promise<{ reportId: string }> },
+) {
+  try {
+    const { reportId } = await ctx.params;
+    const auth = await getReportsAuthContext();
+    if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const searchParams = new URL(req.url).searchParams;
+    const backfill = searchParams.get("backfill") === "1";
+
+    if (RESIDENT_REPORT_IDS.includes(reportId as (typeof RESIDENT_REPORT_IDS)[number])) {
+      const gate = await assertResidentFinancialsAccess(auth);
+      if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
+
+      if (backfill && auth.role === "manager") {
+        await backfillLedgerFromCharges(auth.db, auth.userId);
+      }
+
+      const filters = {
+        from: searchParams.get("from")?.trim() || undefined,
+        to: searchParams.get("to")?.trim() || undefined,
+      };
+
+      if (reportId === "resident-balance") {
+        const report = await queryResidentBalance(auth.db, auth.userId, auth.email);
+        return NextResponse.json(report);
+      }
+      if (reportId === "resident-ledger") {
+        const report = await queryResidentLedger(auth.db, auth.userId, auth.email, filters);
+        return NextResponse.json(report);
+      }
+      return NextResponse.json({ error: "Unknown report." }, { status: 404 });
+    }
+
+    if (!MANAGER_REPORT_IDS.includes(reportId as (typeof MANAGER_REPORT_IDS)[number])) {
+      return NextResponse.json({ error: "Unknown report." }, { status: 404 });
+    }
+
+    const gate = await assertManagerFinancialsAccess(auth);
+    if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
+
+    const managerUserId = auth.role === "admin" ? searchParams.get("managerUserId")?.trim() || auth.userId : auth.userId;
+
+    if (backfill) {
+      await backfillLedgerFromCharges(auth.db, managerUserId);
+    }
+
+    const report = await runManagerReport(auth.db, managerUserId, reportId, parseFilters(searchParams));
+    if (!report) return NextResponse.json({ error: "Unknown report." }, { status: 404 });
+    return NextResponse.json(report);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to load report.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

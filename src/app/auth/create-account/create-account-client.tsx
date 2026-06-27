@@ -2,6 +2,7 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
@@ -551,6 +552,14 @@ export default function CreateAccountClient() {
                   value={axisId}
                   onChange={(e) => setAxisId(e.target.value)}
                 />
+                <div className="mt-4">
+                  <ResidentGoogleSignUpButton axisId={axisId} disabled={busy} />
+                </div>
+                <div className="my-4 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" aria-hidden />
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
+                  <div className="h-px flex-1 bg-border" aria-hidden />
+                </div>
               </div>
             ) : null}
             <div>

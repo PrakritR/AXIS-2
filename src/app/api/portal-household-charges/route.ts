@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import { enrichHouseholdChargesFromPropertyRecords } from "@/lib/household-charge-payment-eligibility";
+import { syncLedgerChargeEntry } from "@/lib/reports/ledger-sync";
 
 export const runtime = "nodejs";
 
@@ -137,6 +138,9 @@ export async function POST(req: Request) {
       if (rows.length > 0) {
         const { error } = await db.from("portal_household_charge_records").upsert(rows, { onConflict: "id" });
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        for (const c of charges) {
+          if (c.id) await syncLedgerChargeEntry(db, c as HouseholdCharge);
+        }
       }
     }
 

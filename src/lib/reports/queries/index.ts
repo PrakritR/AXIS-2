@@ -1,0 +1,611 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { HouseholdCharge } from "@/lib/household-charges";
+import type { RecurringRentProfile } from "@/lib/household-charges";
+import { chartAccountLabel } from "@/lib/reports/categories";
+import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
+import type { ManagerReportFilters, ReportResult } from "@/lib/reports/types";
+import { parseMoneyAmount } from "@/lib/parse-money";
+
+function defaultDateRange(from?: string, to?: string): { from: string; to: string } {
+  const now = new Date();
+  const toDate = to?.trim() || now.toISOString().slice(0, 10);
+  const fromDate =
+    from?.trim() ||
+    new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  return { from: fromDate, to: toDate };
+}
+
+async function loadCharges(db: SupabaseClient, managerUserId: string, propertyId?: string) {
+  let query = db
+    .from("portal_household_charge_records")
+    .select("row_data")
+    .eq("manager_user_id", managerUserId)
+    .limit(2000);
+  if (propertyId) query = query.eq("property_id", propertyId);
+  const { data } = await query;
+  return (data ?? []).map((r) => r.row_data as HouseholdCharge).filter(Boolean);
+}
+
+async function loadRentProfiles(db: SupabaseClient, managerUserId: string, propertyId?: string) {
+  let query = db
+    .from("portal_recurring_rent_profile_records")
+    .select("row_data")
+    .eq("manager_user_id", managerUserId)
+    .limit(500);
+  if (propertyId) query = query.eq("property_id", propertyId);
+  const { data } = await query;
+  return (data ?? [])
+    .map((r) => r.row_data as RecurringRentProfile)
+    .filter((p) => p?.active !== false);
+}
+
+export async function queryRentRoll(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const profiles = await loadRentProfiles(db, managerUserId, filters.propertyId);
+  const charges = await loadCharges(db, managerUserId, filters.propertyId);
+
+  const depositByResident = new Map<string, number>();
+  for (const c of charges) {
+    if (c.kind !== "security_deposit" || c.status !== "paid") continue;
+    const key = c.residentEmail.toLowerCase();
+    depositByResident.set(key, (depositByResident.get(key) ?? 0) + dollarsToCents(parseMoneyAmount(c.amountLabel)));
+  }
+
+  const rows = profiles.map((p) => ({
+    property: p.propertyLabel,
+    unit: p.roomLabel || "—",
+    resident: p.residentName,
+    email: p.residentEmail,
+    monthlyRent: centsToUsd(Math.round((p.monthlyRent ?? 0) * 100)),
+    depositHeld: centsToUsd(depositByResident.get(p.residentEmail.toLowerCase()) ?? 0),
+    status: p.active ? "Occupied" : "Inactive",
+  }));
+
+  const totalRentCents = profiles.reduce((sum, p) => sum + Math.round((p.monthlyRent ?? 0) * 100), 0);
+
+  return {
+    id: "rent-roll",
+    title: "Rent roll",
+    columns: [
+      { key: "property", label: "Property" },
+      { key: "unit", label: "Unit" },
+      { key: "resident", label: "Resident" },
+      { key: "email", label: "Email" },
+      { key: "monthlyRent", label: "Monthly rent", align: "right", format: "money" },
+      { key: "depositHeld", label: "Deposit held", align: "right", format: "money" },
+      { key: "status", label: "Status" },
+    ],
+    rows,
+    totals: {
+      property: "Total",
+      unit: "",
+      resident: `${rows.length} units`,
+      email: "",
+      monthlyRent: centsToUsd(totalRentCents),
+      depositHeld: "",
+      status: "",
+    },
+  };
+}
+
+function agingBucket(daysPastDue: number): string {
+  if (daysPastDue <= 0) return "Current";
+  if (daysPastDue <= 30) return "1–30 days";
+  if (daysPastDue <= 60) return "31–60 days";
+  if (daysPastDue <= 90) return "61–90 days";
+  return "90+ days";
+}
+
+export async function queryDelinquency(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const charges = (await loadCharges(db, managerUserId, filters.propertyId)).filter((c) => c.status === "pending");
+  const today = new Date();
+
+  const rows = charges.map((c) => {
+    const due = c.dueDateLabel ? new Date(c.dueDateLabel) : new Date(c.createdAt);
+    const daysPastDue = Math.floor((today.getTime() - due.getTime()) / (1000 * 60 * 60 * 24));
+    const balanceCents = dollarsToCents(parseMoneyAmount(c.balanceLabel || c.amountLabel));
+    return {
+      resident: c.residentName,
+      property: c.propertyLabel,
+      charge: c.title,
+      dueDate: due.toISOString().slice(0, 10),
+      balance: centsToUsd(balanceCents),
+      bucket: agingBucket(daysPastDue),
+      daysPastDue,
+    };
+  }).sort((a, b) => Number(b.daysPastDue) - Number(a.daysPastDue));
+
+  const totalCents = rows.reduce((sum, r) => sum + dollarsToCents(r.balance as string), 0);
+
+  return {
+    id: "delinquency",
+    title: "Delinquency aging",
+    columns: [
+      { key: "resident", label: "Resident" },
+      { key: "property", label: "Property" },
+      { key: "charge", label: "Charge" },
+      { key: "dueDate", label: "Due date", format: "date" },
+      { key: "balance", label: "Balance", align: "right", format: "money" },
+      { key: "bucket", label: "Aging bucket" },
+    ],
+    rows: rows.map(({ daysPastDue: _, ...rest }) => rest),
+    totals: {
+      resident: "Total outstanding",
+      property: "",
+      charge: "",
+      dueDate: "",
+      balance: centsToUsd(totalCents),
+      bucket: "",
+    },
+  };
+}
+
+export async function queryIncomeStatement(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const { from, to } = defaultDateRange(filters.from, filters.to);
+
+  let incomeQuery = db
+    .from("ledger_entries")
+    .select("category_code, amount_cents")
+    .eq("manager_user_id", managerUserId)
+    .eq("entry_type", "payment")
+    .gte("posted_date", from)
+    .lte("posted_date", to);
+  if (filters.propertyId) incomeQuery = incomeQuery.eq("property_id", filters.propertyId);
+
+  let expenseQuery = db
+    .from("manager_expense_entries")
+    .select("category_code, amount_cents")
+    .eq("manager_user_id", managerUserId)
+    .gte("expense_date", from)
+    .lte("expense_date", to);
+  if (filters.propertyId) expenseQuery = expenseQuery.eq("property_id", filters.propertyId);
+
+  const [{ data: incomeRows }, { data: expenseRows }] = await Promise.all([incomeQuery, expenseQuery]);
+
+  const incomeByCat = new Map<string, number>();
+  for (const row of incomeRows ?? []) {
+    const code = String(row.category_code);
+    incomeByCat.set(code, (incomeByCat.get(code) ?? 0) + Number(row.amount_cents));
+  }
+
+  const expenseByCat = new Map<string, number>();
+  for (const row of expenseRows ?? []) {
+    const code = String(row.category_code);
+    expenseByCat.set(code, (expenseByCat.get(code) ?? 0) + Number(row.amount_cents));
+  }
+
+  const rows: Record<string, string>[] = [];
+  let totalIncome = 0;
+  let totalExpense = 0;
+
+  for (const [code, cents] of incomeByCat) {
+    totalIncome += cents;
+    rows.push({ section: "Income", category: chartAccountLabel(code), amount: centsToUsd(cents) });
+  }
+  for (const [code, cents] of expenseByCat) {
+    totalExpense += cents;
+    rows.push({ section: "Expense", category: chartAccountLabel(code), amount: centsToUsd(cents) });
+  }
+
+  rows.sort((a, b) => `${a.section}-${a.category}`.localeCompare(`${b.section}-${b.category}`));
+
+  return {
+    id: "income-statement",
+    title: "Profit & loss",
+    columns: [
+      { key: "section", label: "Section" },
+      { key: "category", label: "Category" },
+      { key: "amount", label: "Amount", align: "right", format: "money" },
+    ],
+    rows,
+    totals: {
+      section: "Net operating income",
+      category: "",
+      amount: centsToUsd(totalIncome - totalExpense),
+    },
+    meta: { from, to, totalIncome: centsToUsd(totalIncome), totalExpense: centsToUsd(totalExpense) },
+  };
+}
+
+export async function queryExpenses(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const { from, to } = defaultDateRange(filters.from, filters.to);
+
+  let query = db
+    .from("manager_expense_entries")
+    .select("*")
+    .eq("manager_user_id", managerUserId)
+    .gte("expense_date", from)
+    .lte("expense_date", to)
+    .order("expense_date", { ascending: false });
+  if (filters.propertyId) query = query.eq("property_id", filters.propertyId);
+
+  const { data } = await query;
+  const rows = (data ?? []).map((e) => ({
+    id: e.id,
+    date: e.expense_date,
+    category: chartAccountLabel(e.category_code),
+    amount: centsToUsd(Number(e.amount_cents)),
+    vendorId: e.vendor_id ?? "",
+    memo: e.memo ?? "",
+    propertyId: e.property_id ?? "",
+  }));
+
+  const totalCents = (data ?? []).reduce((sum, e) => sum + Number(e.amount_cents), 0);
+
+  return {
+    id: "expenses",
+    title: "Expenses",
+    columns: [
+      { key: "date", label: "Date", format: "date" },
+      { key: "category", label: "Category" },
+      { key: "amount", label: "Amount", align: "right", format: "money" },
+      { key: "vendorId", label: "Vendor ID" },
+      { key: "memo", label: "Memo" },
+      { key: "propertyId", label: "Property" },
+    ],
+    rows,
+    totals: { date: "Total", category: "", amount: centsToUsd(totalCents), vendorId: "", memo: "", propertyId: "" },
+    meta: { from, to },
+  };
+}
+
+export async function queryLeaseExpiration(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const daysAhead = filters.daysAhead ?? 90;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() + daysAhead);
+
+  let query = db
+    .from("portal_recurring_rent_profile_records")
+    .select("row_data")
+    .eq("manager_user_id", managerUserId)
+    .limit(500);
+  if (filters.propertyId) query = query.eq("property_id", filters.propertyId);
+
+  const { data } = await query;
+  const rows = (data ?? [])
+    .map((r) => r.row_data as RecurringRentProfile)
+    .filter((p) => p?.leaseEnd?.trim())
+    .filter((p) => {
+      const end = new Date(p.leaseEnd!);
+      return end <= cutoff && end >= new Date();
+    })
+    .map((p) => ({
+      resident: p.residentName,
+      property: p.propertyLabel,
+      unit: p.roomLabel || "—",
+      leaseEnd: p.leaseEnd!,
+      monthlyRent: centsToUsd(Math.round((p.monthlyRent ?? 0) * 100)),
+    }))
+    .sort((a, b) => String(a.leaseEnd).localeCompare(String(b.leaseEnd)));
+
+  return {
+    id: "lease-expiration",
+    title: "Lease expiration",
+    columns: [
+      { key: "resident", label: "Resident" },
+      { key: "property", label: "Property" },
+      { key: "unit", label: "Unit" },
+      { key: "leaseEnd", label: "Lease end", format: "date" },
+      { key: "monthlyRent", label: "Monthly rent", align: "right", format: "money" },
+    ],
+    rows,
+    meta: { daysAhead },
+  };
+}
+
+export async function queryVendorSpend(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const { from, to } = defaultDateRange(filters.from, filters.to);
+
+  let query = db
+    .from("manager_expense_entries")
+    .select("vendor_id, amount_cents")
+    .eq("manager_user_id", managerUserId)
+    .gte("expense_date", from)
+    .lte("expense_date", to)
+    .not("vendor_id", "is", null);
+  if (filters.propertyId) query = query.eq("property_id", filters.propertyId);
+  if (filters.vendorId) query = query.eq("vendor_id", filters.vendorId);
+
+  const { data: expenses } = await query;
+
+  const { data: vendorRecords } = await db
+    .from("manager_vendor_records")
+    .select("id, row_data")
+    .eq("manager_user_id", managerUserId);
+
+  const vendorNames = new Map<string, string>();
+  for (const v of vendorRecords ?? []) {
+    const row = v.row_data as { id?: string; name?: string } | null;
+    if (row?.id) vendorNames.set(row.id, row.name ?? row.id);
+  }
+
+  const spendByVendor = new Map<string, number>();
+  for (const e of expenses ?? []) {
+    const vid = String(e.vendor_id);
+    spendByVendor.set(vid, (spendByVendor.get(vid) ?? 0) + Number(e.amount_cents));
+  }
+
+  const rows = [...spendByVendor.entries()]
+    .map(([vendorId, cents]) => ({
+      vendor: vendorNames.get(vendorId) ?? vendorId,
+      vendorId,
+      totalSpend: centsToUsd(cents),
+    }))
+    .sort((a, b) => a.vendor.localeCompare(b.vendor));
+
+  const totalCents = [...spendByVendor.values()].reduce((a, b) => a + b, 0);
+
+  return {
+    id: "vendor-spend",
+    title: "Vendor spend",
+    columns: [
+      { key: "vendor", label: "Vendor" },
+      { key: "vendorId", label: "Vendor ID" },
+      { key: "totalSpend", label: "Total spend", align: "right", format: "money" },
+    ],
+    rows,
+    totals: { vendor: "Total", vendorId: "", totalSpend: centsToUsd(totalCents) },
+    meta: { from, to },
+  };
+}
+
+export type TaxProfileCompleteness = {
+  complete: boolean;
+  missingFields: string[];
+};
+
+export function evaluateVendorTaxProfile(profile: {
+  legal_name?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  tin_type?: string | null;
+  tin_ciphertext?: string | null;
+  w9_attestation?: boolean | null;
+} | null): TaxProfileCompleteness {
+  if (!profile) {
+    return { complete: false, missingFields: ["legal_name", "address", "tin", "w9_attestation"] };
+  }
+  const missing: string[] = [];
+  if (!profile.legal_name?.trim()) missing.push("legal_name");
+  if (!profile.address_line1?.trim() || !profile.city?.trim() || !profile.state?.trim() || !profile.zip?.trim()) {
+    missing.push("address");
+  }
+  if (!profile.tin_type?.trim() || !profile.tin_ciphertext?.trim()) missing.push("tin");
+  if (!profile.w9_attestation) missing.push("w9_attestation");
+  return { complete: missing.length === 0, missingFields: missing };
+}
+
+export async function query1099Candidates(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const taxYear = filters.taxYear ?? new Date().getFullYear() - 1;
+  const from = `${taxYear}-01-01`;
+  const to = `${taxYear}-12-31`;
+
+  const { data: expenses } = await db
+    .from("manager_expense_entries")
+    .select("vendor_id, amount_cents")
+    .eq("manager_user_id", managerUserId)
+    .gte("expense_date", from)
+    .lte("expense_date", to)
+    .not("vendor_id", "is", null);
+
+  const totals = new Map<string, number>();
+  for (const e of expenses ?? []) {
+    const vid = String(e.vendor_id);
+    totals.set(vid, (totals.get(vid) ?? 0) + Number(e.amount_cents));
+  }
+
+  const vendorIds = [...totals.keys()];
+  const [{ data: vendorRecords }, { data: taxProfiles }] = await Promise.all([
+    db.from("manager_vendor_records").select("id, row_data").eq("manager_user_id", managerUserId),
+    vendorIds.length > 0
+      ? db.from("vendor_tax_profiles").select("*").eq("manager_user_id", managerUserId).in("vendor_id", vendorIds)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+  ]);
+
+  const vendorNames = new Map<string, string>();
+  for (const v of vendorRecords ?? []) {
+    const row = v.row_data as { id?: string; name?: string } | null;
+    if (row?.id) vendorNames.set(row.id, row.name ?? row.id);
+  }
+
+  const profileByVendor = new Map((taxProfiles ?? []).map((p) => [String(p.vendor_id), p]));
+
+  const rows = vendorIds
+    .map((vendorId) => {
+      const totalCents = totals.get(vendorId) ?? 0;
+      const profile = profileByVendor.get(vendorId) ?? null;
+      const { complete, missingFields } = evaluateVendorTaxProfile(profile);
+      return {
+        vendorId,
+        vendorName: vendorNames.get(vendorId) ?? vendorId,
+        legalName: profile?.legal_name ?? "",
+        totalPaid: centsToUsd(totalCents),
+        totalPaidCents: totalCents,
+        meetsThreshold: totalCents >= 60_000,
+        w9Status: complete ? "Complete" : missingFields.includes("tin") ? "Missing TIN" : "Incomplete",
+        canDownload: complete && totalCents >= 60_000,
+        missingFields: missingFields.join(", "),
+      };
+    })
+    .filter((r) => Number(r.totalPaidCents) >= 60_000)
+    .sort((a, b) => String(a.vendorName).localeCompare(String(b.vendorName)));
+
+  return {
+    id: "1099-candidates",
+    title: `1099-NEC candidates (${taxYear})`,
+    columns: [
+      { key: "vendorName", label: "Vendor" },
+      { key: "legalName", label: "Legal name" },
+      { key: "totalPaid", label: "Total paid", align: "right", format: "money" },
+      { key: "w9Status", label: "W-9 status" },
+      { key: "missingFields", label: "Missing fields" },
+    ],
+    rows: rows.map(({ totalPaidCents: _, canDownload: __, meetsThreshold: ___, ...rest }) => rest),
+    meta: { taxYear, thresholdCents: 60_000 },
+  };
+}
+
+export async function queryResidentBalance(
+  db: SupabaseClient,
+  residentUserId: string,
+  residentEmail: string,
+): Promise<ReportResult> {
+  let query = db
+    .from("portal_household_charge_records")
+    .select("row_data")
+    .eq("status", "pending")
+    .limit(500);
+
+  query = query.or(`resident_user_id.eq.${residentUserId},resident_email.eq.${residentEmail}`);
+
+  const { data } = await query;
+  const pending = (data ?? []).map((r) => r.row_data as HouseholdCharge).filter(Boolean);
+
+  let balanceCents = 0;
+  let nextDue: string | null = null;
+  let nextTitle = "";
+
+  for (const c of pending) {
+    balanceCents += dollarsToCents(parseMoneyAmount(c.balanceLabel || c.amountLabel));
+    const due = c.dueDateLabel ?? c.createdAt;
+    if (!nextDue || due < nextDue) {
+      nextDue = due;
+      nextTitle = c.title;
+    }
+  }
+
+  const { data: paidRows } = await db
+    .from("ledger_entries")
+    .select("posted_date, description, amount_cents")
+    .eq("entry_type", "payment")
+    .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${residentEmail}`)
+    .order("posted_date", { ascending: false })
+    .limit(1);
+
+  const lastPayment = paidRows?.[0];
+
+  return {
+    id: "resident-balance",
+    title: "Balance summary",
+    columns: [
+      { key: "label", label: "Item" },
+      { key: "value", label: "Value" },
+    ],
+    rows: [
+      { label: "Balance due", value: centsToUsd(balanceCents) },
+      { label: "Next charge", value: nextTitle || "—" },
+      { label: "Next due date", value: nextDue ? nextDue.slice(0, 10) : "—" },
+      {
+        label: "Last payment",
+        value: lastPayment
+          ? `${centsToUsd(Number(lastPayment.amount_cents))} on ${lastPayment.posted_date}`
+          : "—",
+      },
+    ],
+    meta: { balanceCents },
+  };
+}
+
+export async function queryResidentLedger(
+  db: SupabaseClient,
+  residentUserId: string,
+  residentEmail: string,
+  filters: { from?: string; to?: string },
+): Promise<ReportResult> {
+  const now = new Date();
+  const from =
+    filters.from?.trim() ||
+    new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+  const to = filters.to?.trim() || now.toISOString().slice(0, 10);
+
+  const { data } = await db
+    .from("ledger_entries")
+    .select("*")
+    .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${residentEmail}`)
+    .gte("posted_date", from)
+    .lte("posted_date", to)
+    .order("posted_date", { ascending: true });
+
+  let running = 0;
+  const rows = (data ?? []).map((e) => {
+    const cents = Number(e.amount_cents);
+    if (e.entry_type === "charge") running += cents;
+    else running -= cents;
+    return {
+      date: e.posted_date,
+      description: e.description ?? "",
+      charge: e.entry_type === "charge" ? centsToUsd(cents) : "",
+      payment: e.entry_type === "payment" ? centsToUsd(cents) : "",
+      balance: centsToUsd(running),
+    };
+  });
+
+  return {
+    id: "resident-ledger",
+    title: "Rent statement",
+    columns: [
+      { key: "date", label: "Date", format: "date" },
+      { key: "description", label: "Description" },
+      { key: "charge", label: "Charge", align: "right", format: "money" },
+      { key: "payment", label: "Payment", align: "right", format: "money" },
+      { key: "balance", label: "Balance", align: "right", format: "money" },
+    ],
+    rows,
+    meta: { from, to },
+  };
+}
+
+export async function runManagerReport(
+  db: SupabaseClient,
+  managerUserId: string,
+  reportId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult | null> {
+  switch (reportId) {
+    case "rent-roll":
+      return queryRentRoll(db, managerUserId, filters);
+    case "delinquency":
+      return queryDelinquency(db, managerUserId, filters);
+    case "income-statement":
+      return queryIncomeStatement(db, managerUserId, filters);
+    case "expenses":
+      return queryExpenses(db, managerUserId, filters);
+    case "lease-expiration":
+      return queryLeaseExpiration(db, managerUserId, filters);
+    case "vendor-spend":
+      return queryVendorSpend(db, managerUserId, filters);
+    case "1099-candidates":
+      return query1099Candidates(db, managerUserId, filters);
+    default:
+      return null;
+  }
+}

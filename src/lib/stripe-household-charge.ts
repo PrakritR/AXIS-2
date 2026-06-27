@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { residentConnectApplicationFeeCents, type ResidentAxisPaymentMethod } from "@/lib/payment-policy";
 import type { HouseholdCharge } from "@/lib/household-charges";
+import { syncLedgerChargeEntry, syncLedgerPaymentEntry } from "@/lib/reports/ledger-sync";
 
 export const HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE = "household_charge";
 
@@ -119,6 +120,7 @@ export async function markHouseholdChargePaidFromStripeSession(
     );
 
     if (!upsertErr) marked += 1;
+    await syncLedgerPaymentEntry(db, nextCharge, now, session.id);
   }
 
   if (marked === 0) return { ok: false };

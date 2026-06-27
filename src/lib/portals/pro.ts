@@ -30,6 +30,19 @@ export const proPortal: PortalDefinition = {
       tabs: [],
     },
     {
+      section: "financials",
+      label: "Financials",
+      tabs: [
+        { id: "rent-roll", label: "Rent roll" },
+        { id: "delinquency", label: "Delinquency" },
+        { id: "income-statement", label: "P&L" },
+        { id: "expenses", label: "Expenses" },
+        { id: "lease-expiration", label: "Lease expiry" },
+        { id: "vendors", label: "Vendor spend" },
+        { id: "1099", label: "1099 forms" },
+      ],
+    },
+    {
       section: "services",
       label: "Services",
       tabs: [

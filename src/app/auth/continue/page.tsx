@@ -93,7 +93,27 @@ function ContinueContent() {
         }
         if (roles.length === 0) {
           const legacyRole = await fetchLegacyRole(supabase, user.id);
-          roles = legacyRole ? [legacyRole] : ["resident"];
+          if (legacyRole) {
+            roles = [legacyRole];
+          } else {
+            const accessRes = await fetch(
+              `/api/auth/oauth-portal-access?next=${encodeURIComponent(nextPath || "/auth/continue")}`,
+              { credentials: "include", cache: "no-store" },
+            );
+            if (accessRes.ok) {
+              const accessBody = (await accessRes.json()) as { redirectTo?: string };
+              if (accessBody.redirectTo?.startsWith("/")) {
+                if (cancelled || didRedirectRef.current) return;
+                didRedirectRef.current = true;
+                window.location.replace(accessBody.redirectTo);
+                return;
+              }
+            }
+            if (cancelled || didRedirectRef.current) return;
+            didRedirectRef.current = true;
+            window.location.replace("/partner/pricing");
+            return;
+          }
         }
 
         if (cancelled || didRedirectRef.current) return;

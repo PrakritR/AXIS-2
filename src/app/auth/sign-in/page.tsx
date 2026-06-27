@@ -2,7 +2,6 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
-import { GoogleSignInSetupNote } from "@/components/auth/google-sign-in-setup-note";
 import { usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
@@ -185,7 +184,6 @@ function SignInForm() {
           viaContinue={!usesDirectOAuthReturn(nextPath)}
           disabled={busy}
         />
-        <GoogleSignInSetupNote />
       </div>
 
       <div className="my-6 flex items-center gap-3">
