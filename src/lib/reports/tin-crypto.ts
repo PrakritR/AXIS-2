@@ -1,7 +1,10 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 function encryptionKey(): Buffer {
-  const raw = process.env.FINANCIALS_TIN_ENCRYPTION_KEY?.trim() || "axis-dev-tin-key-not-for-production";
+  const raw = process.env.FINANCIALS_TIN_ENCRYPTION_KEY?.trim();
+  if (!raw) {
+    throw new Error("FINANCIALS_TIN_ENCRYPTION_KEY is required for TIN encryption.");
+  }
   return createHash("sha256").update(raw).digest();
 }
 

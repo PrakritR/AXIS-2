@@ -23,7 +23,6 @@ export async function reportToPdf(report: ReportResult): Promise<Uint8Array> {
   }
   y -= 6;
 
-  const colWidth = (612 - margin * 2) / Math.max(report.columns.length, 1);
   draw(report.columns.map((c) => c.label).join("  |  "), 9, bold);
 
   for (const row of report.rows.slice(0, 40)) {

@@ -119,7 +119,7 @@ export function ManagerFinancialsPanel({
   }, [reportId, filters, showToast]);
 
   useEffect(() => {
-    void runReport();
+    void Promise.resolve().then(() => void runReport());
   }, [runReport, tabId]);
 
   async function saveExpense() {

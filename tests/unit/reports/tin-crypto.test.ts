@@ -9,4 +9,11 @@ describe("reports/tin-crypto", () => {
     expect(decryptTin(cipher)).toBe(plain);
     expect(tinLast4(plain)).toBe("6789");
   });
+
+  it("throws when FINANCIALS_TIN_ENCRYPTION_KEY is unset", () => {
+    const previous = process.env.FINANCIALS_TIN_ENCRYPTION_KEY;
+    delete process.env.FINANCIALS_TIN_ENCRYPTION_KEY;
+    expect(() => encryptTin("12-3456789")).toThrow(/FINANCIALS_TIN_ENCRYPTION_KEY/);
+    process.env.FINANCIALS_TIN_ENCRYPTION_KEY = previous;
+  });
 });

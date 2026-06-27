@@ -98,9 +98,11 @@ export default function CreateAccountClient() {
   const effectivePreviewLoading = shouldLoadCheckout ? previewLoading : false;
 
   useEffect(() => {
-    if (!shouldLoadCheckout) {
-      setConfirmPassword("");
-    }
+    void Promise.resolve().then(() => {
+      if (!shouldLoadCheckout) {
+        setConfirmPassword("");
+      }
+    });
   }, [shouldLoadCheckout]);
 
   useEffect(() => {

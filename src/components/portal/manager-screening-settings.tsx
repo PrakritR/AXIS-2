@@ -32,7 +32,7 @@ export function ManagerScreeningSettingsPanel() {
   }, []);
 
   useEffect(() => {
-    void load();
+    void Promise.resolve().then(() => void load());
   }, [load]);
 
   const saveMode = async (mode: ScreeningMode) => {

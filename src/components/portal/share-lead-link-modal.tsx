@@ -45,17 +45,19 @@ export function ShareLeadLinkModal({
 
   useEffect(() => {
     if (!open) return;
-    const initial =
-      preselectedPropertyId && properties.some((p) => p.id === preselectedPropertyId)
-        ? preselectedPropertyId
-        : properties[0]?.id ?? "";
-    setPropertyId(initial);
-    setRoomChoice("");
-    setProspectName("");
-    setProspectEmail("");
-    setNote("");
-    setSendPreviewOpen(false);
-    setSendBusy(false);
+    void Promise.resolve().then(() => {
+      const initial =
+        preselectedPropertyId && properties.some((p) => p.id === preselectedPropertyId)
+          ? preselectedPropertyId
+          : properties[0]?.id ?? "";
+      setPropertyId(initial);
+      setRoomChoice("");
+      setProspectName("");
+      setProspectEmail("");
+      setNote("");
+      setSendPreviewOpen(false);
+      setSendBusy(false);
+    });
   }, [open, kind, preselectedPropertyId, properties]);
 
   const propertyTitle = useMemo(() => {

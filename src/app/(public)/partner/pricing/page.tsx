@@ -53,16 +53,18 @@ export default function PartnerPricingPage() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tier = params.get("tier");
-    if (tier && isManagerOnboardTier(tier)) {
-      setSelectedTierId(tier);
-    }
+    void Promise.resolve().then(() => {
+      const params = new URLSearchParams(window.location.search);
+      const tier = params.get("tier");
+      if (tier && isManagerOnboardTier(tier)) {
+        setSelectedTierId(tier);
+      }
 
-    const offer = parseOnboardOfferSearchParams(params);
-    setOnboardOffer(offer);
-    if (offer.billing) setBilling(offer.billing);
-    if (offer.promo) setCode(offer.promo);
+      const offer = parseOnboardOfferSearchParams(params);
+      setOnboardOffer(offer);
+      if (offer.billing) setBilling(offer.billing);
+      if (offer.promo) setCode(offer.promo);
+    });
   }, []);
 
   const selected = useMemo(() => tierById(planTiers, selectedTierId), [planTiers, selectedTierId]);

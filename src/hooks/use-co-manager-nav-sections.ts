@@ -32,10 +32,10 @@ export function useCoManagerNavSections(definition: PortalDefinition, userId: st
 
   useEffect(() => {
     if (!userId || (definition.kind !== "pro" && definition.kind !== "manager")) {
-      setInvites(null);
+      void Promise.resolve().then(() => setInvites(null));
       return;
     }
-    void loadInvites();
+    void Promise.resolve().then(() => void loadInvites());
   }, [definition.kind, loadInvites, userId, tick]);
 
   useEffect(() => {

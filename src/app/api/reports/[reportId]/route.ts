@@ -4,7 +4,7 @@ import {
   assertResidentFinancialsAccess,
   getReportsAuthContext,
 } from "@/lib/reports/auth";
-import { backfillLedgerFromCharges } from "@/lib/reports/ledger-sync";
+import { backfillLedgerForResident, backfillLedgerFromCharges } from "@/lib/reports/ledger-sync";
 import {
   MANAGER_REPORT_IDS,
   RESIDENT_REPORT_IDS,
@@ -41,8 +41,8 @@ export async function GET(
       const gate = await assertResidentFinancialsAccess(auth);
       if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
-      if (backfill && auth.role === "manager") {
-        await backfillLedgerFromCharges(auth.db, auth.userId);
+      if (backfill) {
+        await backfillLedgerForResident(auth.db, auth.userId, auth.email);
       }
 
       const filters = {

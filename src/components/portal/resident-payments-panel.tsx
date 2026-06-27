@@ -299,7 +299,7 @@ export function ResidentPaymentsPanel() {
       selectedIds.has(expandedId) && selectedIds.size > 1 ? [...selectedIds] : [expandedId];
     const key = checkoutKey(ids, paymentMethod);
     if (checkout?.key === key && (checkout.loading || checkout.clientSecret || checkout.error)) return;
-    void loadCheckout(ids, paymentMethod);
+    void Promise.resolve().then(() => void loadCheckout(ids, paymentMethod));
   }, [
     charges,
     checkout?.key,

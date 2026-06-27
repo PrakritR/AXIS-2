@@ -78,17 +78,19 @@ export function PortalStripeConnectPanel({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const q = new URLSearchParams(window.location.search).get("connect");
-    if (q === "done") {
-      showToast("Bank account linked.");
-      setActionError(null);
-      void loadStatus();
-      window.history.replaceState({}, "", `${basePath}/payments`);
-    } else if (q === "refresh") {
-      showToast("Setup link expired — try again.");
-      void loadStatus();
-      window.history.replaceState({}, "", `${basePath}/payments`);
-    }
+    void Promise.resolve().then(() => {
+      const q = new URLSearchParams(window.location.search).get("connect");
+      if (q === "done") {
+        showToast("Bank account linked.");
+        setActionError(null);
+        void loadStatus();
+        window.history.replaceState({}, "", `${basePath}/payments`);
+      } else if (q === "refresh") {
+        showToast("Setup link expired — try again.");
+        void loadStatus();
+        window.history.replaceState({}, "", `${basePath}/payments`);
+      }
+    });
   }, [basePath, loadStatus, showToast]);
 
   const startConnect = useCallback(async () => {

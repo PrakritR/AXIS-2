@@ -141,3 +141,28 @@ export async function backfillLedgerFromCharges(
   }
   return { synced };
 }
+
+export async function backfillLedgerForResident(
+  db: SupabaseClient,
+  residentUserId: string,
+  residentEmail: string,
+): Promise<{ synced: number }> {
+  const email = residentEmail.trim().toLowerCase();
+  const { data, error } = await db
+    .from("portal_household_charge_records")
+    .select("row_data")
+    .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${email}`)
+    .order("updated_at", { ascending: false })
+    .limit(500);
+
+  if (error) throw new Error(error.message);
+
+  let synced = 0;
+  for (const record of data ?? []) {
+    const charge = record.row_data as HouseholdCharge | null;
+    if (!charge?.id) continue;
+    await syncLedgerChargeEntry(db, charge);
+    synced += 1;
+  }
+  return { synced };
+}

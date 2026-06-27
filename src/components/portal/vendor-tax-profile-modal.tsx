@@ -54,30 +54,32 @@ export function VendorTaxProfileModal({
 
   useEffect(() => {
     if (!open || !vendorId) return;
-    setLoading(true);
-    void fetch(`/api/vendors/${encodeURIComponent(vendorId)}/tax-profile`)
-      .then((r) => r.json())
-      .then((data) => {
-        const p = data.profile;
-        if (!p) {
-          setDraft({ ...EMPTY, legalName: vendorName ?? "" });
-          return;
-        }
-        setDraft({
-          legalName: p.legal_name ?? "",
-          businessName: p.business_name ?? "",
-          entityType: p.entity_type === "individual" ? "individual" : "business",
-          addressLine1: p.address_line1 ?? "",
-          addressLine2: p.address_line2 ?? "",
-          city: p.city ?? "",
-          state: p.state ?? "",
-          zip: p.zip ?? "",
-          tinType: p.tin_type === "ssn" ? "ssn" : "ein",
-          tin: "",
-          w9Attestation: p.w9_attestation === true,
-        });
-      })
-      .finally(() => setLoading(false));
+    void Promise.resolve().then(() => {
+      setLoading(true);
+      void fetch(`/api/vendors/${encodeURIComponent(vendorId)}/tax-profile`)
+        .then((r) => r.json())
+        .then((data) => {
+          const p = data.profile;
+          if (!p) {
+            setDraft({ ...EMPTY, legalName: vendorName ?? "" });
+            return;
+          }
+          setDraft({
+            legalName: p.legal_name ?? "",
+            businessName: p.business_name ?? "",
+            entityType: p.entity_type === "individual" ? "individual" : "business",
+            addressLine1: p.address_line1 ?? "",
+            addressLine2: p.address_line2 ?? "",
+            city: p.city ?? "",
+            state: p.state ?? "",
+            zip: p.zip ?? "",
+            tinType: p.tin_type === "ssn" ? "ssn" : "ein",
+            tin: "",
+            w9Attestation: p.w9_attestation === true,
+          });
+        })
+        .finally(() => setLoading(false));
+    });
   }, [open, vendorId, vendorName]);
 
   async function save() {

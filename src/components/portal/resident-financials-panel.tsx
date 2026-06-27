@@ -50,8 +50,10 @@ export function ResidentFinancialsPanel({
   }, [range.from, range.to]);
 
   useEffect(() => {
-    if (tabId === "summary") void loadSummary();
-    if (tabId === "statements") void loadLedger();
+    void Promise.resolve().then(() => {
+      if (tabId === "summary") void loadSummary();
+      if (tabId === "statements") void loadLedger();
+    });
   }, [tabId, loadSummary, loadLedger]);
 
   const tabs = [

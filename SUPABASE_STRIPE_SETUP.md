@@ -155,6 +155,7 @@ Restart `npm run dev` after changes.
 
 - [ ] Run SQL migration in Supabase.
 - [ ] Set all Supabase env vars in hosting (Vercel, etc.).
+- [ ] Set `FINANCIALS_TIN_ENCRYPTION_KEY` (32+ character random secret) before using manager Financials 1099 / vendor W-9 tax profiles. Required server-side; without it, TIN encrypt/decrypt endpoints fail closed.
 - [ ] Create Stripe prices and webhook; set Stripe env vars.
 - [ ] Set `NEXT_PUBLIC_APP_URL` to production origin.
 - [ ] Set a strong random `AXIS_ADMIN_REGISTER_KEY` in production (admin registration is disabled if unset). Remove any legacy `NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY` and rotate the previously exposed key.

@@ -4,6 +4,12 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+type PendingCookie = {
+  name: string;
+  value: string;
+  options?: Parameters<NextResponse["cookies"]["set"]>[2];
+};
+
 function authFailureRedirect(requestUrl: URL, reason: string): NextResponse {
   const params = new URLSearchParams({ error: "oauth", message: reason });
   return NextResponse.redirect(new URL(`/auth/sign-in?${params.toString()}`, requestUrl.origin));
@@ -34,8 +40,16 @@ export async function handleOAuthCallback(request: NextRequest, redirectPath: st
   }
 
   const safePath = redirectPath.startsWith("/") ? redirectPath : "/auth/continue";
-  let redirectTarget = new URL(safePath, requestUrl.origin);
+  const redirectTarget = new URL(safePath, requestUrl.origin);
+  const pendingCookies: PendingCookie[] = [];
   let response = NextResponse.redirect(redirectTarget);
+
+  function applyRedirect(target: URL) {
+    response = NextResponse.redirect(target);
+    pendingCookies.forEach(({ name, value, options }) => {
+      response.cookies.set(name, value, options);
+    });
+  }
 
   const supabase = createServerClient(url, anon, {
     cookies: {
@@ -44,6 +58,7 @@ export async function handleOAuthCallback(request: NextRequest, redirectPath: st
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value, options }) => {
+          pendingCookies.push({ name, value, options });
           response.cookies.set(name, value, options);
         });
       },
@@ -68,8 +83,7 @@ export async function handleOAuthCallback(request: NextRequest, redirectPath: st
       await syncOAuthProfile(service, user);
       const resolvedPath = await resolveOAuthPortalRedirect(service, user, safePath);
       if (resolvedPath !== safePath) {
-        redirectTarget = new URL(resolvedPath, requestUrl.origin);
-        response = NextResponse.redirect(redirectTarget);
+        applyRedirect(new URL(resolvedPath, requestUrl.origin));
       }
     }
   } catch (syncError) {

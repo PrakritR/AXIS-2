@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { residentConnectApplicationFeeCents, type ResidentAxisPaymentMethod } from "@/lib/payment-policy";
 import type { HouseholdCharge } from "@/lib/household-charges";
-import { syncLedgerChargeEntry, syncLedgerPaymentEntry } from "@/lib/reports/ledger-sync";
+import { syncLedgerPaymentEntry } from "@/lib/reports/ledger-sync";
 
 export const HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE = "household_charge";
 

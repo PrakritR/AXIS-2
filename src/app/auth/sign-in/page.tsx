@@ -91,13 +91,15 @@ function SignInForm() {
   const [errorText, setErrorText] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authError === "oauth" && oauthMessage) {
-      setErrorText(oauthMessage);
-      return;
-    }
-    if (authError === "auth" || authError === "oauth") {
-      setErrorText("Google sign-in could not be completed. Try again or use email and password.");
-    }
+    void Promise.resolve().then(() => {
+      if (authError === "oauth" && oauthMessage) {
+        setErrorText(oauthMessage);
+        return;
+      }
+      if (authError === "auth" || authError === "oauth") {
+        setErrorText("Google sign-in could not be completed. Try again or use email and password.");
+      }
+    });
   }, [authError, oauthMessage]);
 
   const handleSignIn = async () => {
