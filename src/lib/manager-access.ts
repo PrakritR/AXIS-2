@@ -148,7 +148,7 @@ type ManagerPurchaseRowRecord = {
   billing: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
-  updated_at: string | null;
+  paid_at: string | null;
 };
 
 async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPurchaseRowRecord[]> {
@@ -156,7 +156,7 @@ async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPu
   const { data: profile } = await supabase.from("profiles").select("email").eq("id", userId).maybeSingle();
   const email = profile?.email?.trim().toLowerCase() ?? "";
 
-  const select = "id, tier, billing, stripe_customer_id, stripe_subscription_id, updated_at";
+  const select = "id, tier, billing, stripe_customer_id, stripe_subscription_id, paid_at";
   const [{ data: byUserId }, { data: byEmail }] = await Promise.all([
     supabase.from("manager_purchases").select(select).eq("user_id", userId),
     email
@@ -176,8 +176,8 @@ function pickBestManagerPurchaseRow(rows: ManagerPurchaseRowRecord[]): ManagerPu
   return [...rows].sort((a, b) => {
     const tierDiff = tierRank(b.tier) - tierRank(a.tier);
     if (tierDiff !== 0) return tierDiff;
-    const aTime = a.updated_at ? Date.parse(a.updated_at) : 0;
-    const bTime = b.updated_at ? Date.parse(b.updated_at) : 0;
+    const aTime = a.paid_at ? Date.parse(a.paid_at) : 0;
+    const bTime = b.paid_at ? Date.parse(b.paid_at) : 0;
     return bTime - aTime;
   })[0]!;
 }
@@ -280,7 +280,6 @@ export async function setManagerPurchaseTier(
     tier,
     billing,
     user_id: userId,
-    updated_at: new Date().toISOString(),
   };
   if (clearStripeSubscription) {
     updatePatch.stripe_subscription_id = null;
