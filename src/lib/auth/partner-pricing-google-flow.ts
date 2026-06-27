@@ -39,7 +39,11 @@ export async function provisionPartnerPricingGoogleAccount(): Promise<{ ok: true
     });
     const body = (await res.json()) as { error?: string };
     if (!res.ok) {
-      return { ok: false, error: body.error ?? "Could not create your account." };
+      const message = body.error ?? "Could not create your account.";
+      if (res.status === 409 && message.toLowerCase().includes("already exists")) {
+        return { ok: true };
+      }
+      return { ok: false, error: message };
     }
     return { ok: true };
   } catch {

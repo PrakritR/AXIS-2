@@ -4,6 +4,8 @@ import {
   isManagerOnboardingComplete,
   managerNeedsPricingSelection,
 } from "@/lib/auth/manager-onboarding";
+import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
+import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
 import type { AuthRole } from "@/components/auth/portal-switcher";
@@ -74,13 +76,27 @@ export async function resolveOAuthPortalRedirect(
   }
 
   const linkedPurchase = await findManagerPurchaseForAccount(supabase, user.id, email);
-  if (linkedPurchase && isManagerOnboardingComplete(linkedPurchase)) {
-    return safeIntended;
-  }
   if (linkedPurchase && !isManagerOnboardingComplete(linkedPurchase)) {
-    if (safeIntended.startsWith("/auth/continue") || !isBypassOAuthGatePath(safeIntended)) {
-      return "/partner/pricing";
+    return "/partner/pricing";
+  }
+  if (linkedPurchase && isManagerOnboardingComplete(linkedPurchase)) {
+    const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    await supabase.from("profiles").upsert(
+      {
+        id: user.id,
+        email,
+        role: primaryRoleWhenAddingManager(existingProfile?.role as string | undefined),
+        manager_id: existingProfile?.manager_id?.trim() || linkedPurchase.manager_id,
+        full_name: existingProfile?.full_name ?? linkedPurchase.full_name ?? null,
+        application_approved: existingProfile?.application_approved ?? true,
+      },
+      { onConflict: "id" },
+    );
+    await ensureProfileRoleRow(supabase, user.id, "manager");
+    if (safeIntended.startsWith("/auth/continue")) {
+      return "/portal/dashboard";
     }
+    return safeIntended;
   }
 
   const { data: pendingPurchases } = await supabase

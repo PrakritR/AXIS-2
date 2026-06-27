@@ -24,8 +24,8 @@ vi.mock("@supabase/ssr", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/sync-oauth-profile", () => ({
-  syncOAuthProfile: vi.fn(async () => undefined),
+vi.mock("@/lib/auth/reconcile-auth-accounts-by-email", () => ({
+  reconcileAuthAccountsByEmail: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/auth/resolve-oauth-portal-access", () => ({

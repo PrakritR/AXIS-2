@@ -1,4 +1,4 @@
-import { syncOAuthProfile } from "@/lib/auth/sync-oauth-profile";
+import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { createServerClient } from "@supabase/ssr";
@@ -80,7 +80,7 @@ export async function handleOAuthCallback(request: NextRequest, redirectPath: st
     } = await supabase.auth.getUser();
     if (user) {
       const service = createSupabaseServiceRoleClient();
-      await syncOAuthProfile(service, user);
+      await reconcileAuthAccountsByEmail(service, user);
       const resolvedPath = await resolveOAuthPortalRedirect(service, user, safePath);
       if (resolvedPath !== safePath) {
         applyRedirect(new URL(resolvedPath, requestUrl.origin));

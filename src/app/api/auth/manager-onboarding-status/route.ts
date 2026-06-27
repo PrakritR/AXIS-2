@@ -28,7 +28,8 @@ export async function GET() {
     const provider =
       (typeof user.app_metadata?.provider === "string" ? user.app_metadata.provider : null) ??
       (user.app_metadata?.providers as string[] | undefined)?.[0] ??
-      "google";
+      user.identities?.[0]?.provider ??
+      "email";
 
     return NextResponse.json({
       needsPricing,

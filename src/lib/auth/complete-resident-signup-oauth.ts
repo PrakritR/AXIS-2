@@ -1,4 +1,5 @@
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
+import { migratePortalUserId } from "@/lib/auth/migrate-portal-user-id";
 import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { generateAxisId } from "@/lib/manager-id";
@@ -62,11 +63,7 @@ export async function completeResidentSignupFromOAuth(
 
   const existingAuthId = await findAuthUserIdByEmail(supabase, normalEmail);
   if (existingAuthId && existingAuthId !== userId) {
-    return {
-      ok: false,
-      status: 409,
-      error: "This email already has a different login. Use that account or contact support.",
-    };
+    await migratePortalUserId(supabase, existingAuthId, userId);
   }
 
   const { data: existingAuth } = await supabase.auth.admin.getUserById(userId);

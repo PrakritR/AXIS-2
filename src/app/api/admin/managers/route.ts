@@ -123,6 +123,9 @@ export async function PATCH(req: Request) {
       const patch: Record<string, string | null> = {};
       if (tier) patch.tier = tier === "pending" ? null : tier;
       if (billing) patch.billing = billing === "free" ? "free" : billing;
+      if (tier && tier !== "pending") {
+        patch.paid_at = new Date().toISOString();
+      }
 
       if (existingPurchase) {
         const { error } = await supabase.from("manager_purchases").update(patch).eq("id", existingPurchase.id);
@@ -135,6 +138,7 @@ export async function PATCH(req: Request) {
           user_id: id,
           tier: patch.tier ?? "free",
           billing: patch.billing ?? "free",
+          paid_at: patch.paid_at ?? new Date().toISOString(),
         });
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       }

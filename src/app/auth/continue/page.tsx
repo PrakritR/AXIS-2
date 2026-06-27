@@ -87,6 +87,16 @@ function ContinueContent() {
           return;
         }
 
+        try {
+          await fetch("/api/auth/reconcile-account", {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+          });
+        } catch {
+          // Non-blocking: portal routing still proceeds if linking fails.
+        }
+
         let roles = await fetchPortalRolesFast();
         if (!roles || roles.length === 0) {
           roles = fallbackRolesFromUser(user);
@@ -102,16 +112,19 @@ function ContinueContent() {
             );
             if (accessRes.ok) {
               const accessBody = (await accessRes.json()) as { redirectTo?: string };
-              if (accessBody.redirectTo?.startsWith("/")) {
+              const redirectTo = accessBody.redirectTo?.trim() ?? "";
+              const isContinueLoop =
+                redirectTo === "/auth/continue" || redirectTo.startsWith("/auth/continue?");
+              if (redirectTo.startsWith("/") && !isContinueLoop) {
                 if (cancelled || didRedirectRef.current) return;
                 didRedirectRef.current = true;
-                window.location.replace(accessBody.redirectTo);
+                window.location.replace(redirectTo);
                 return;
               }
             }
             if (cancelled || didRedirectRef.current) return;
             didRedirectRef.current = true;
-            window.location.replace("/partner/pricing");
+            window.location.replace("/auth/create-account");
             return;
           }
         }

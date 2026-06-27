@@ -1,13 +1,12 @@
-import { NextResponse } from "next/server";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
-import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-/** Resolve where an OAuth user may go after sign-in (portal vs pricing vs finish signup). */
-export async function GET(req: Request) {
+/** Merge portal data for duplicate auth users that share the signed-in email (Google + password). */
+export async function POST() {
   try {
     const supabaseAuth = await createSupabaseServerClient();
     const {
@@ -18,17 +17,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const url = new URL(req.url);
-    const next = url.searchParams.get("next")?.trim() ?? "/auth/continue";
-    const intendedPath = next.startsWith("/") ? next : "/auth/continue";
-
     const service = createSupabaseServiceRoleClient();
     await reconcileAuthAccountsByEmail(service, user);
-    const redirectTo = await resolveOAuthPortalRedirect(service, user, intendedPath);
 
-    return NextResponse.json({ redirectTo });
+    return NextResponse.json({ ok: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed";
+    const message = e instanceof Error ? e.message : "Failed to link accounts.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

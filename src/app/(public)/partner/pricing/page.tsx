@@ -178,9 +178,12 @@ export default function PartnerPricingPage() {
         discountPercent: onboardIsFree ? 100 : onboardDiscountPercent,
       }),
     );
-    if (checkoutClientSecret) {
+  }, [selectedTierId, billing, code, onboardIsFree, onboardDiscountPercent]);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => {
       setCheckoutClientSecret(null);
-    }
+    });
   }, [selectedTierId, billing, code, onboardIsFree, onboardDiscountPercent]);
 
   useEffect(() => {
@@ -259,7 +262,9 @@ export default function PartnerPricingPage() {
         router.push("/portal/dashboard");
         return;
       }
-      showToast(result.message);
+      if (result.status === "error") {
+        showToast(result.message);
+      }
     } finally {
       setCheckoutBusy(false);
     }
