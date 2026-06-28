@@ -2,7 +2,7 @@
 
 import { Fragment } from "react";
 import type { ReactNode } from "react";
-import type { PropertyRentReceiptDocument, RentReceiptDocument } from "@/lib/reports/formal-documents/spec";
+import type { OccupancyReport, PropertyRentReceiptDocument, RentReceiptDocument } from "@/lib/reports/formal-documents/spec";
 import type { ReportResult } from "@/lib/reports/types";
 
 function DocumentPaper({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -365,6 +365,110 @@ export function FinancialReportDocumentView({ report }: { report: ReportResult }
         </div>
       </div>
       <DocFooter certification="Prepared from Axis ledger records. This report is provided for property management and Schedule E (Form 1040) tax record-keeping. Verify totals against bank statements and consult your tax advisor." />
+    </DocumentPaper>
+  );
+}
+
+export function OccupancyDocumentView({ report }: { report: OccupancyReport }) {
+  const period = `${report.periodFrom} — ${report.periodTo}`;
+  return (
+    <DocumentPaper>
+      <DocHeader title="Occupancy Report" subtitle={`Portfolio · ${period}`} />
+      <div className="space-y-6 px-8 py-6">
+        <InfoBlock label="Property owner / manager" lines={[report.landlordName, ...report.landlordAddress.split("\n")]} />
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            { label: "Total units", value: String(report.totalUnits) },
+            { label: "Occupied units", value: `${report.occupiedUnits} / ${report.totalUnits}` },
+            { label: "Portfolio occupancy", value: `${report.portfolioOccupancyPct}%` },
+          ].map((item) => (
+            <div key={item.label} className="rounded-lg border border-[#e5e7eb] bg-[#f8fafc] px-3 py-3 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
+                {item.label}
+              </p>
+              <p className="mt-1 text-xl font-bold text-[#0f172a]">{item.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {report.properties.map((prop) => (
+          <div key={prop.propertyId}>
+            <div className="mb-2 flex items-center justify-between gap-4">
+              <p className="text-sm font-bold text-[#0f172a]" style={{ fontFamily: "system-ui, sans-serif" }}>
+                {prop.propertyLabel}
+              </p>
+              <div className="flex shrink-0 gap-4 text-xs text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
+                <span>{prop.occupiedUnits}/{prop.totalUnits} units occupied</span>
+                <span className="font-semibold text-[#0f172a]">{prop.occupancyPct}% occupancy</span>
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-lg border border-[#e5e7eb]">
+              <table className="w-full border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
+                <thead>
+                  <tr className="border-b border-[#e5e7eb] bg-[#f1f5f9] text-left text-xs uppercase tracking-wide text-[#475569]">
+                    <th className="px-4 py-2.5 font-semibold">Unit</th>
+                    <th className="px-4 py-2.5 font-semibold">Resident</th>
+                    <th className="px-4 py-2.5 font-semibold">Lease start</th>
+                    <th className="px-4 py-2.5 font-semibold">Lease end</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Days rented</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Days avail.</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Occupancy %</th>
+                    <th className="px-4 py-2.5 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {prop.units.map((unit) => (
+                    <tr key={`${unit.unit}-${unit.resident}`} className="border-b border-[#e5e7eb] last:border-0">
+                      <td className="px-4 py-2.5 font-medium text-[#0f172a]">{unit.unit}</td>
+                      <td className="px-4 py-2.5 text-[#0f172a]">{unit.resident}</td>
+                      <td className="px-4 py-2.5 tabular-nums text-[#64748b]">{unit.leaseStart}</td>
+                      <td className="px-4 py-2.5 tabular-nums text-[#64748b]">{unit.leaseEnd}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-[#0f172a]">{unit.daysRented}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-[#0f172a]">{unit.daysAvailable}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-medium text-[#0f172a]">{unit.occupancyPct}%</td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            unit.status === "occupied"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {unit.status === "occupied" ? "Occupied" : "Vacant"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-[#f8fafc] font-semibold">
+                    <td className="px-4 py-2.5 text-[#0f172a]" colSpan={4}>
+                      Property total ({prop.totalUnits} unit{prop.totalUnits === 1 ? "" : "s"})
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-[#0f172a]">{prop.daysRented}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-[#0f172a]">{prop.daysAvailable}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-[#0f172a]">{prop.occupancyPct}%</td>
+                    <td className="px-4 py-2.5 text-xs text-[#64748b]">{prop.occupiedUnits}/{prop.totalUnits} occupied</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        ))}
+
+        {report.properties.length === 0 ? (
+          <p className="py-6 text-center text-sm text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
+            No active leases found for the selected period.
+          </p>
+        ) : null}
+
+        <p className="text-xs leading-relaxed text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
+          Occupancy % = days rented ÷ days available in the reporting period. Use this metric for rental-use calculations
+          on IRS Schedule E and to assess property performance. Personal-use days reduce the rental-use percentage.
+        </p>
+      </div>
+      <DocFooter certification="This occupancy report is generated from Axis property management records and reflects active lease data for the stated period. Retain for investment analysis and tax recordkeeping. Consult a tax advisor regarding rental-use percentage calculations for Schedule E." />
     </DocumentPaper>
   );
 }

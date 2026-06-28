@@ -139,6 +139,42 @@ export type DaysRentedDocument = {
   unitCount: number;
 };
 
+export type OccupancyUnitRow = {
+  unit: string;
+  resident: string;
+  leaseStart: string;
+  leaseEnd: string;
+  daysRented: number;
+  daysAvailable: number;
+  occupancyPct: number;
+  status: "occupied" | "vacant";
+};
+
+export type OccupancyPropertyGroup = {
+  propertyId: string;
+  propertyLabel: string;
+  totalUnits: number;
+  occupiedUnits: number;
+  vacantUnits: number;
+  daysRented: number;
+  daysAvailable: number;
+  occupancyPct: number;
+  units: OccupancyUnitRow[];
+};
+
+export type OccupancyReport = {
+  id: string;
+  issueDate: string;
+  periodFrom: string;
+  periodTo: string;
+  landlordName: string;
+  landlordAddress: string;
+  properties: OccupancyPropertyGroup[];
+  portfolioOccupancyPct: number;
+  totalUnits: number;
+  occupiedUnits: number;
+};
+
 export function receiptNumberForLedgerEntry(ledgerId: string): string {
   return `RR-${ledgerId.slice(0, 8).toUpperCase()}`;
 }

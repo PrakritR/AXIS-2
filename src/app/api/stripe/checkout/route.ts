@@ -64,7 +64,8 @@ export async function POST(req: Request) {
           fullName: fullName || null,
         });
         if (prepared.kind === "complete") {
-          return NextResponse.json({ error: "A manager account already exists for this email." }, { status: 409 });
+          // Account already fully set up — client should send them to portal.
+          return NextResponse.json({ alreadyComplete: true, redirectTo: "/portal/dashboard" }, { status: 409 });
         }
         managerId = prepared.managerId;
       }

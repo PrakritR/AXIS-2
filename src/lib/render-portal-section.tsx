@@ -57,7 +57,7 @@ const LEGACY_FINANCIALS_TAB_MAP: Record<string, string> = {
   "profit-loss": "expenses",
 };
 
-const DOCUMENTS_TABS = ["expense-documents", "income-documents", "1099", "tax-summary"] as const;
+const DOCUMENTS_TABS = ["income-documents", "expense-documents", "occupancy", "1099", "tax-summary"] as const;
 
 const LEGACY_DOCUMENTS_TAB_MAP: Record<string, string> = {
   summary: "tax-summary",
@@ -112,7 +112,7 @@ function renderManagerDocumentsSection(
 ) {
   if (section !== "documents") return null;
   if (!tabParts?.length) {
-    redirect(`${basePath}/documents/expense-documents`);
+    redirect(`${basePath}/documents/income-documents`);
   }
   if (tabParts.length > 1) notFound();
   const docTab = tabParts[0]!;

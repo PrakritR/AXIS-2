@@ -6,15 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import {
   ReportExportButtons,
   ReportFilterBar,
   type ReportFilterState,
 } from "@/components/portal/reports/report-filter-bar";
-import { ReportTable } from "@/components/portal/reports/report-table";
-import { FinancialReportDocumentView } from "@/components/portal/reports/formal-document-preview";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
+import {
+  PORTAL_DATA_TABLE_WRAP,
+  PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TD,
+  PortalDataTableEmpty,
+} from "@/components/portal/portal-data-table";
+import type { ReportColumn, ReportResult } from "@/lib/reports/types";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
@@ -24,7 +31,92 @@ import {
   readActiveManagerVendorRows,
   syncManagerVendorsFromServer,
 } from "@/lib/manager-vendors-storage";
-import type { ReportResult } from "@/lib/reports/types";
+
+const HIDDEN_FINANCE_COLS = new Set(["scheduleERef", "id"]);
+
+function cellAlign(col: ReportColumn) {
+  return col.align === "right" ? "text-right tabular-nums" : "text-left";
+}
+
+function SortableFinancesTable({ report }: { report: ReportResult }) {
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const visibleCols = useMemo(
+    () => report.columns.filter((c) => !HIDDEN_FINANCE_COLS.has(c.key)),
+    [report.columns],
+  );
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey) return report.rows;
+    return [...report.rows].sort((a, b) => {
+      const av = String(a[sortKey] ?? "");
+      const bv = String(b[sortKey] ?? "");
+      const an = Number.parseFloat(av.replace(/[^0-9.-]/g, ""));
+      const bn = Number.parseFloat(bv.replace(/[^0-9.-]/g, ""));
+      const cmp = !Number.isNaN(an) && !Number.isNaN(bn) ? an - bn : av.localeCompare(bv);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [report.rows, sortKey, sortDir]);
+
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  if (report.rows.length === 0) {
+    return <PortalDataTableEmpty message="No data for the selected filters." />;
+  }
+
+  return (
+    <div className={PORTAL_DATA_TABLE_WRAP}>
+      <div className={PORTAL_DATA_TABLE_SCROLL}>
+        <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className={PORTAL_TABLE_HEAD_ROW}>
+              {visibleCols.map((col) => (
+                <th
+                  key={col.key}
+                  className={`${MANAGER_TABLE_TH} ${cellAlign(col)} cursor-pointer select-none hover:bg-accent/30 transition`}
+                  onClick={() => toggleSort(col.key)}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {col.label}
+                    <span className="text-[10px] text-muted/60">
+                      {sortKey === col.key ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+                    </span>
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sortedRows.map((row, idx) => (
+              <tr key={idx} className={PORTAL_TABLE_TR}>
+                {visibleCols.map((col) => (
+                  <td key={col.key} className={`${PORTAL_TABLE_TD} ${cellAlign(col)}`}>
+                    {String(row[col.key] ?? "—")}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+          {report.totals ? (
+            <tfoot>
+              <tr className="border-t-2 border-border bg-accent/10 font-semibold text-sm">
+                {visibleCols.map((col) => (
+                  <td key={col.key} className={`${PORTAL_TABLE_TD} ${cellAlign(col)}`}>
+                    {String(report.totals![col.key] ?? "")}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
+    </div>
+  );
+}
 
 const FINANCE_TABS = [
   { id: "income", label: "Income" },
@@ -219,13 +311,17 @@ export function ManagerFinancesPanel({
           <ReportGeneratePrompt title="Generating report…" description="Compiling ledger entries for the selected period." />
         ) : !generated ? (
           <ReportGeneratePrompt
-            title="Generate financial report"
-            description="Choose filters and click Generate report. Your income or expense statement will appear below for review and export."
+            title={tabId === "income" ? "Ready to generate" : "Ready to generate"}
+            description={
+              tabId === "income"
+                ? "Set your date range and property filter, then click Generate report to see all rent payments broken down by property and resident."
+                : "Set your date range and property filter, then click Generate report to see all expenses. Click any column header to sort."
+            }
           />
         ) : report ? (
-          <FinancialReportDocumentView report={report} />
+          <SortableFinancesTable report={report} />
         ) : (
-          <ReportTable report={report} loading={loading} generated={generated} />
+          <PortalDataTableEmpty message="No data for the selected filters." />
         )}
       </div>
 

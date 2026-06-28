@@ -3,8 +3,12 @@
  * Primary flow: `/api/pro/account-links` + `account_link_invites` table.
  */
 
-import type { CoManagerPermissions } from "@/lib/co-manager-permissions";
-import { coManagerPermissionsFromLegacy } from "@/lib/co-manager-permissions";
+import type { CoManagerPermissions, PropertyCoManagerPermissions } from "@/lib/co-manager-permissions";
+import {
+  coManagerPermissionsFromLegacy,
+  flatCoManagerPermissionsFromProperty,
+  normalizePropertyCoManagerPermissions,
+} from "@/lib/co-manager-permissions";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 
 export const AXIS_ID_LABEL = "Axis ID";
@@ -20,8 +24,10 @@ export type ProRelationshipRecord = {
   /** Amount of managed revenue this manager receives on the linked properties (0–100). */
   payoutPercentForManager: number;
   assignedPropertyIds: string[];
-  /** Permissions granted by the primary manager to this co-manager. */
+  /** Permissions granted by the primary manager to this co-manager (merged flat). */
   coManagerPermissions?: CoManagerPermissions;
+  /** Per-property permission grants. */
+  propertyCoManagerPermissions?: PropertyCoManagerPermissions;
   /** @deprecated Use coManagerPermissions.editListings */
   canEditListing?: boolean;
   createdAt: string;
@@ -44,17 +50,24 @@ export function normalizeProRelationshipRecord(raw: unknown): ProRelationshipRec
   const assigned = Array.isArray(r.assignedPropertyIds)
     ? (r.assignedPropertyIds as unknown[]).filter((x) => typeof x === "string")
     : [];
+  const assignedPropertyIds = assigned as string[];
+  const propertyCoManagerPermissions = normalizePropertyCoManagerPermissions(
+    r.propertyCoManagerPermissions ?? r.coManagerPermissions,
+    assignedPropertyIds,
+  );
+  const coManagerPermissions = coManagerPermissionsFromLegacy({
+    canEditListing: r.canEditListing === true,
+    coManagerPermissions: flatCoManagerPermissionsFromProperty(propertyCoManagerPermissions),
+  });
   return {
     id,
     linkedAxisId,
     linkedDisplayName: typeof r.linkedDisplayName === "string" ? r.linkedDisplayName : undefined,
     perspective,
     payoutPercentForManager: Number.isFinite(payout) ? payout : 15,
-    assignedPropertyIds: assigned as string[],
-    coManagerPermissions: coManagerPermissionsFromLegacy({
-      canEditListing: r.canEditListing === true,
-      coManagerPermissions: r.coManagerPermissions,
-    }),
+    assignedPropertyIds,
+    coManagerPermissions,
+    propertyCoManagerPermissions,
     canEditListing: r.canEditListing === true ? true : undefined,
     createdAt: typeof r.createdAt === "string" ? r.createdAt : new Date().toISOString(),
   };
@@ -90,8 +103,12 @@ export function proRelationshipRowsFromInvites(invites: AccountLinkInviteDto[]):
   return invites
     .filter((inv) => inv.status === "accepted")
     .map((inv) => {
+      const propertyCoManagerPermissions = normalizePropertyCoManagerPermissions(
+        inv.propertyCoManagerPermissions ?? inv.coManagerPermissions,
+        inv.assignedPropertyIds,
+      );
       const perms = coManagerPermissionsFromLegacy({
-        coManagerPermissions: inv.coManagerPermissions,
+        coManagerPermissions: flatCoManagerPermissionsFromProperty(propertyCoManagerPermissions),
       });
       return {
         id: inv.id,
@@ -101,6 +118,7 @@ export function proRelationshipRowsFromInvites(invites: AccountLinkInviteDto[]):
         payoutPercentForManager: inv.payoutPercentForManager,
         assignedPropertyIds: inv.assignedPropertyIds,
         coManagerPermissions: perms,
+        propertyCoManagerPermissions,
         canEditListing: perms.editListings ? true : undefined,
         createdAt: inv.createdAt,
       };

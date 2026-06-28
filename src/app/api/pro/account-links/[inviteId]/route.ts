@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { asStringArray, serializeInvite, type InviteRow } from "@/app/api/pro/account-links/route";
+import { asStringArray, readPropertyPermissionsFromRow, serializeInvite, type InviteRow } from "@/app/api/pro/account-links/route";
 import { looksLikeAccountLinksMissingTable } from "@/lib/account-links";
-import { normalizeCoManagerPermissions } from "@/lib/co-manager-permissions";
+import {
+  normalizePropertyCoManagerPermissions,
+  prunePropertyCoManagerPermissions,
+} from "@/lib/co-manager-permissions";
 import { scopedRelationshipDeletesForRevokedInvite } from "@/lib/pro-relationships";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -21,6 +24,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
       assignedPropertyIds?: unknown;
       payoutPercentForManager?: number;
       coManagerPermissions?: unknown;
+      propertyCoManagerPermissions?: unknown;
+      propertyId?: string;
+      permissions?: unknown;
     } | null;
 
     const supabase = await createSupabaseServerClient();
@@ -57,7 +63,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
     const actionNorm = body?.action != null ? String(body.action).toLowerCase().trim() : "";
     const patchProps = body?.assignedPropertyIds !== undefined;
     const patchPay = body?.payoutPercentForManager !== undefined;
-    const patchPerms = body?.coManagerPermissions !== undefined;
+    const patchPerms =
+      body?.coManagerPermissions !== undefined ||
+      body?.propertyCoManagerPermissions !== undefined ||
+      (body?.propertyId !== undefined && body?.permissions !== undefined);
 
     if (!actionNorm && !patchProps && !patchPay && !patchPerms) {
       return NextResponse.json({ error: "Provide action or fields to update." }, { status: 400 });
@@ -116,16 +125,35 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
         ? Math.min(100, Math.max(0, Math.round(Number(body?.payoutPercentForManager) * 10) / 10))
         : Number(invite.payout_percent_for_manager);
 
-      const nextPerms = patchPerms
-        ? normalizeCoManagerPermissions(body?.coManagerPermissions)
-        : normalizeCoManagerPermissions((invite as { co_manager_permissions?: unknown }).co_manager_permissions);
+      let nextPropertyPerms = readPropertyPermissionsFromRow(invite);
+      if (patchPerms) {
+        if (body?.propertyId && body?.permissions !== undefined) {
+          const propertyId = String(body.propertyId).trim();
+          if (!nextAssigned.includes(propertyId)) {
+            return NextResponse.json({ error: "Property is not in this link." }, { status: 400 });
+          }
+          nextPropertyPerms = {
+            ...nextPropertyPerms,
+            [propertyId]: normalizePropertyCoManagerPermissions(
+              { [propertyId]: body.permissions },
+              [propertyId],
+            )[propertyId],
+          };
+        } else {
+          nextPropertyPerms = normalizePropertyCoManagerPermissions(
+            body?.propertyCoManagerPermissions ?? body?.coManagerPermissions,
+            nextAssigned,
+          );
+        }
+      }
+      nextPropertyPerms = prunePropertyCoManagerPermissions(nextPropertyPerms, nextAssigned);
 
       const { data: updated, error: upErr } = await svc
         .from("account_link_invites")
         .update({
           assigned_property_ids: nextAssigned,
           payout_percent_for_manager: nextPayout,
-          co_manager_permissions: nextPerms,
+          property_co_manager_permissions: nextPropertyPerms,
         })
         .eq("id", id)
         .eq("status", "accepted")
@@ -179,6 +207,26 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
 
     if (upErr) {
       return NextResponse.json({ error: upErr.message }, { status: 500 });
+    }
+
+    if (actionNorm === "accept") {
+      void (async () => {
+        try {
+          const { notifyCoManagerInviteAccepted } = await import("@/lib/co-manager-notification.server");
+          const inviteeName =
+            invite.invitee_display_name?.trim() ||
+            (await svc.from("profiles").select("full_name, email").eq("id", invite.invitee_user_id).maybeSingle()).data
+              ?.full_name?.trim() ||
+            "Your co-manager";
+          await notifyCoManagerInviteAccepted({
+            inviterUserId: invite.inviter_user_id,
+            inviteeUserId: invite.invitee_user_id,
+            inviteeName,
+          });
+        } catch {
+          /* notification failure should not block accept */
+        }
+      })();
     }
 
     return NextResponse.json({ ok: true, invite: serializeInvite(updated as InviteRow, user.id) });

@@ -520,6 +520,81 @@ export async function loadFormalDocumentScopeOptions(
   };
 }
 
+export async function queryOccupancyReport(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: FormalDocumentFilters,
+): Promise<import("./spec").OccupancyReport> {
+  const { from, to } = defaultDateRange(filters.from, filters.to);
+  const scope = resolveScope(filters);
+  const rangeStart = new Date(from);
+  const rangeEnd = new Date(to);
+  const landlord = await loadManagerTaxProfile(db, managerUserId);
+  const allProfiles = await loadRentProfiles(db, managerUserId, scope === "property" ? filters.propertyId : undefined);
+  const profiles = allProfiles.filter((p) => profileMatchesScope(p, scope, filters));
+
+  const propertyGroups = new Map<string, { label: string; units: import("./spec").OccupancyUnitRow[] }>();
+
+  for (const p of profiles) {
+    const propertyId = p.propertyId?.trim() || "unassigned";
+    const propertyLabel = p.propertyLabel?.trim() || humanizePropertyId(propertyId);
+    const { daysRented, daysAvailable } = daysRentedForProfile(p, rangeStart, rangeEnd);
+    const leaseStartRaw = p.startMonth?.trim() ? `${p.startMonth.trim()}-01` : from;
+    const occupancyPct = daysAvailable > 0 ? Math.round((daysRented / daysAvailable) * 1000) / 10 : 0;
+
+    if (!propertyGroups.has(propertyId)) propertyGroups.set(propertyId, { label: propertyLabel, units: [] });
+    propertyGroups.get(propertyId)!.units.push({
+      unit: humanizeUnitLabel(p.roomLabel?.trim() || "") || "—",
+      resident: p.residentName?.trim() || "—",
+      leaseStart: leaseStartRaw,
+      leaseEnd: p.leaseEnd?.trim() || "—",
+      daysRented,
+      daysAvailable,
+      occupancyPct,
+      status: daysRented > 0 ? "occupied" : "vacant",
+    });
+  }
+
+  const propertyList: import("./spec").OccupancyPropertyGroup[] = [];
+  for (const [propertyId, group] of propertyGroups) {
+    const units = group.units.sort((a, b) => a.unit.localeCompare(b.unit));
+    const totalDaysRented = units.reduce((s, u) => s + u.daysRented, 0);
+    const totalDaysAvailable = units.reduce((s, u) => s + u.daysAvailable, 0);
+    const occupiedUnits = units.filter((u) => u.status === "occupied").length;
+    propertyList.push({
+      propertyId,
+      propertyLabel: group.label,
+      totalUnits: units.length,
+      occupiedUnits,
+      vacantUnits: units.length - occupiedUnits,
+      daysRented: totalDaysRented,
+      daysAvailable: totalDaysAvailable,
+      occupancyPct: totalDaysAvailable > 0 ? Math.round((totalDaysRented / totalDaysAvailable) * 1000) / 10 : 0,
+      units,
+    });
+  }
+
+  propertyList.sort((a, b) => a.propertyLabel.localeCompare(b.propertyLabel));
+
+  const totalUnits = propertyList.reduce((s, p) => s + p.totalUnits, 0);
+  const occupiedUnits = propertyList.reduce((s, p) => s + p.occupiedUnits, 0);
+  const totalDaysRented = propertyList.reduce((s, p) => s + p.daysRented, 0);
+  const totalDaysAvailable = propertyList.reduce((s, p) => s + p.daysAvailable, 0);
+
+  return {
+    id: `occupancy-${from}-${to}`,
+    issueDate: new Date().toISOString().slice(0, 10),
+    periodFrom: from,
+    periodTo: to,
+    landlordName: landlord.name,
+    landlordAddress: landlord.address,
+    properties: propertyList,
+    portfolioOccupancyPct: totalDaysAvailable > 0 ? Math.round((totalDaysRented / totalDaysAvailable) * 1000) / 10 : 0,
+    totalUnits,
+    occupiedUnits,
+  };
+}
+
 export function applyFormalDocumentScope(
   filters: Partial<FormalDocumentFilters> & ManagerReportFilters,
 ): FormalDocumentFilters {
