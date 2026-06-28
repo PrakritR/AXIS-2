@@ -60,6 +60,7 @@ export function PortalInboxEmptyState({ title, hint }: { title: string; hint?: R
 export const INBOX_TAB_DEFS = [
   { id: "unopened", label: "Unopened" },
   { id: "opened", label: "Opened" },
+  { id: "schedule", label: "Schedule" },
   { id: "sent", label: "Sent" },
   { id: "trash", label: "Trash" },
 ] as const;

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -27,6 +28,14 @@ import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview
 import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import {
+  ScheduledMessageEditModal,
+  useScheduledPaymentMessages,
+} from "@/components/portal/payment-schedule-ui";
+import { ScheduledReminderChips } from "@/components/portal/manager-inbox-schedule-panel";
+import { upcomingScheduledForCharge } from "@/lib/scheduled-payment-messages";
+import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import {
   createManagerCharge,
   chargeDueLabel,
@@ -44,9 +53,6 @@ import {
   syncHouseholdChargesFromServer,
   updateHouseholdChargeAmount,
   updatePendingRentAmountForResident,
-  cancelHouseholdChargeReminder,
-  uncancelHouseholdChargeReminder,
-  householdChargeDueDate,
   type HouseholdCharge,
 } from "@/lib/household-charges";
 import {
@@ -296,7 +302,10 @@ function chargeEditAmountValue(charge: HouseholdCharge): string {
 
 export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId }) {
   const { showToast } = useAppUi();
+  const portalBase = usePaidPortalBasePath();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
+  const { messages: scheduledMessages, reload: reloadSchedule } = useScheduledPaymentMessages();
+  const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
   const [hcTick, setHcTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
@@ -2005,6 +2014,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       {reminderBusy ? "Sending…" : "Send reminder"}
                                     </Button>
                                   ) : null}
+                                  <Link href={`${portalBase}/inbox/schedule`} className="rounded-full px-3 py-1 text-xs font-semibold text-primary hover:underline">
+                                    Reminder settings
+                                  </Link>
                                   <Button
                                     type="button"
                                     variant="primary"
@@ -2101,36 +2113,42 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                     Delete
                                                   </Button>
                                                   {(() => {
-                                                    const due = householdChargeDueDate(c);
-                                                    if (!due) return null;
-                                                    const hours = (due.getTime() - Date.now()) / 3_600_000;
-                                                    const slots: Array<"3d" | "12h"> = [];
-                                                    if (hours > 13) slots.push("3d");
-                                                    if (hours > 1) slots.push("12h");
-                                                    if (!slots.length) return null;
-                                                    return slots.map((slot) => {
-                                                      const isCancelled = (c.cancelledReminders ?? []).includes(slot);
-                                                      const label = slot === "3d" ? "3-day reminder" : "12-hr reminder";
-                                                      return (
-                                                        <Button
-                                                          key={slot}
-                                                          type="button"
-                                                          variant="outline"
-                                                          title={isCancelled ? `Re-enable ${label}` : `Cancel ${label}`}
-                                                          className={`rounded-full px-2 py-0.5 text-xs ${isCancelled ? "text-muted line-through" : "text-primary hover:border-primary/30"}`}
-                                                          onClick={() => {
-                                                            if (isCancelled) {
-                                                              uncancelHouseholdChargeReminder(c.id, slot, userId ?? null);
-                                                            } else {
-                                                              cancelHouseholdChargeReminder(c.id, slot, userId ?? null);
-                                                            }
-                                                            void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
-                                                          }}
-                                                        >
-                                                          {isCancelled ? `↺ ${label}` : `✕ ${label}`}
-                                                        </Button>
-                                                      );
-                                                    });
+                                                    const chargeSchedules = upcomingScheduledForCharge(scheduledMessages, c.id, 6);
+                                                    if (!chargeSchedules.length) return null;
+                                                    return (
+                                                      <>
+                                                        <ScheduledReminderChips messages={chargeSchedules} onEdit={setScheduleEdit} />
+                                                        {chargeSchedules.map((msg) => {
+                                                          const isCancelled = msg.status === "cancelled";
+                                                          return (
+                                                            <Button
+                                                              key={msg.id}
+                                                              type="button"
+                                                              variant="outline"
+                                                              title={isCancelled ? `Re-enable ${msg.typeLabel}` : `Cancel ${msg.typeLabel}`}
+                                                              className={`rounded-full px-2 py-0.5 text-xs ${isCancelled ? "text-muted line-through" : "text-primary hover:border-primary/30"}`}
+                                                              onClick={() => {
+                                                                void fetch(`/api/portal/scheduled-messages/${encodeURIComponent(msg.id)}`, {
+                                                                  method: "PATCH",
+                                                                  headers: { "Content-Type": "application/json" },
+                                                                  credentials: "include",
+                                                                  body: JSON.stringify({ cancelled: !isCancelled }),
+                                                                }).then(async (res) => {
+                                                                  if (!res.ok) {
+                                                                    showToast("Could not update reminder.");
+                                                                    return;
+                                                                  }
+                                                                  showToast(isCancelled ? "Reminder restored." : "Reminder cancelled.");
+                                                                  void reloadSchedule();
+                                                                });
+                                                              }}
+                                                            >
+                                                              {isCancelled ? `↺ ${msg.typeLabel}` : `✕ ${msg.typeLabel}`}
+                                                            </Button>
+                                                          );
+                                                        })}
+                                                      </>
+                                                    );
                                                   })()}
                                                 </>
                                               ) : (
@@ -2932,6 +2950,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         </div>
       </Modal>
       </ManagerPortalPageShell>
+
+      <ScheduledMessageEditModal
+        open={Boolean(scheduleEdit)}
+        message={scheduleEdit}
+        onClose={() => setScheduleEdit(null)}
+        onSaved={() => void reloadSchedule()}
+      />
     </>
   );
 }

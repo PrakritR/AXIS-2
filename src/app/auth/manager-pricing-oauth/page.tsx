@@ -10,7 +10,8 @@ import {
   persistManagerPricingOffer,
   readManagerPricingOffer,
 } from "@/lib/auth/manager-pricing-oauth-storage";
-import { authCallbackUrl } from "@/lib/auth/oauth-redirect";
+import { persistOAuthNextPath } from "@/lib/auth/oauth-next-cookie";
+import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { PlanTierId } from "@/data/manager-plan-tiers";
@@ -27,16 +28,7 @@ function parseBilling(raw: string | null, fallback: "monthly" | "annual"): "mont
   return raw === "annual" ? "annual" : fallback;
 }
 
-async function waitForAuthUser(supabase: ReturnType<typeof createSupabaseBrowserClient>, attempts = 8) {
-  for (let i = 0; i < attempts; i++) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) return user;
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
-  }
-  return null;
-}
+import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 
 async function restartGoogleForPricingOffer(offer: {
   tier: PlanTierId;
@@ -47,7 +39,8 @@ async function restartGoogleForPricingOffer(offer: {
   persistManagerPricingOffer(offer);
   const supabase = createSupabaseBrowserClient();
   const nextPath = managerPricingOauthPath(offer);
-  const redirectTo = authCallbackUrl(resolveOAuthBrowserOrigin(), nextPath);
+  persistOAuthNextPath(nextPath);
+  const redirectTo = bareAuthCallbackUrl(resolveOAuthBrowserOrigin());
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
@@ -142,7 +135,6 @@ function ManagerPricingOauthContent() {
         }
 
         if (body.action === "checkout" && body.clientSecret) {
-          clearManagerPricingOffer();
           setCheckoutClientSecret(body.clientSecret);
           return;
         }

@@ -1,7 +1,9 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
@@ -57,6 +59,7 @@ export default function CreateAccountClient() {
 
   const [role, setRole] = useState<CreateAccountRole>(urlDerivedRole);
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [axisId, setAxisId] = useState(axisIdFromUrl);
@@ -64,10 +67,12 @@ export default function CreateAccountClient() {
   const [checkoutPreview, setCheckoutPreview] = useState<ManagerCheckoutPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [managerIdInput, setManagerIdInput] = useState("");
   const [emailStatus, setEmailStatus] = useState<ExistingEmailStatus | null>(null);
   const [emailStatusLoading, setEmailStatusLoading] = useState(false);
   const [prevRoleFromUrl, setPrevRoleFromUrl] = useState(roleFromUrl);
+  const [googleSessionEmail, setGoogleSessionEmail] = useState<string | null>(null);
+  const [googleSessionName, setGoogleSessionName] = useState<string | null>(null);
+  const [googleSessionLoading, setGoogleSessionLoading] = useState(true);
 
   if (sessionIdFromUrl || axisIdFromUrl) {
     if (role !== urlDerivedRole) setRole(urlDerivedRole);
@@ -84,6 +89,31 @@ export default function CreateAccountClient() {
     setEmail(emailFromUrl);
   }
 
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      void fetch("/api/auth/manager-onboarding-status", { credentials: "include", cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) return null;
+          return (await res.json()) as {
+            authenticated?: boolean;
+            email?: string;
+            fullName?: string | null;
+            isGoogle?: boolean;
+          };
+        })
+        .then((body) => {
+          if (body?.authenticated && body.email) {
+            setGoogleSessionEmail(body.email);
+            setGoogleSessionName(body.fullName ?? null);
+            if (!email.trim()) setEmail(body.email);
+            if (!fullName.trim() && body.fullName) setFullName(body.fullName);
+          }
+        })
+        .finally(() => setGoogleSessionLoading(false));
+    });
+  }, [email, fullName]);
+
+  const googleSignedIn = Boolean(googleSessionEmail);
   const lockResidentEmail = role === "resident" && Boolean(axisIdFromUrl && emailFromUrl.includes("@"));
 
   const normalEmail = email.trim().toLowerCase();
@@ -97,9 +127,11 @@ export default function CreateAccountClient() {
   const effectivePreviewLoading = shouldLoadCheckout ? previewLoading : false;
 
   useEffect(() => {
-    if (!shouldLoadCheckout) {
-      setConfirmPassword("");
-    }
+    void Promise.resolve().then(() => {
+      if (!shouldLoadCheckout) {
+        setConfirmPassword("");
+      }
+    });
   }, [shouldLoadCheckout]);
 
   useEffect(() => {
@@ -235,10 +267,10 @@ export default function CreateAccountClient() {
       return;
     }
 
-    // Paid Axis Pro signup: activate via Axis ID (no checkout session)
+    // New manager signup — creates pending account, then pricing for tier selection.
     if (role === "manager" && !sessionIdFromUrl) {
-      if (!managerIdInput.trim() || !email.trim()) {
-        showToast("Enter your Axis ID and email.");
+      if (!fullName.trim() || !email.trim()) {
+        showToast("Enter your full name and email.");
         return;
       }
       if (password.length < 8) {
@@ -251,17 +283,33 @@ export default function CreateAccountClient() {
       }
       setBusy(true);
       try {
-        const res = await fetch("/api/auth/manager-activate", {
+        const res = await fetch("/api/auth/manager-register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ managerId: managerIdInput.trim(), email: email.trim(), password }),
+          body: JSON.stringify({ email: email.trim(), password, fullName: fullName.trim() }),
         });
-        const body = (await res.json()) as { error?: string; managerId?: string };
-        if (!res.ok) { showToast(body.error ?? "Could not activate account."); return; }
-        showToast(`Account activated. Axis ID: ${body.managerId ?? managerIdInput}. Sign in with your email.`);
-        router.push("/auth/sign-in");
-      } catch { showToast("Network error."); }
-      finally { setBusy(false); }
+        const body = (await res.json()) as { error?: string; redirectTo?: string };
+        if (!res.ok) {
+          showToast(body.error ?? "Could not create manager account.");
+          return;
+        }
+        const supabase = createSupabaseBrowserClient();
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (signInError) {
+          showToast("Account created. Sign in to choose your plan.");
+          router.push("/auth/sign-in");
+          return;
+        }
+        showToast("Account created. Choose your plan next.");
+        router.push(body.redirectTo?.startsWith("/") ? body.redirectTo : "/partner/pricing");
+      } catch {
+        showToast("Network error.");
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 
@@ -370,12 +418,11 @@ export default function CreateAccountClient() {
           </>
         ) : (
           <>
-            Start from{" "}
+            Create your manager login below, then choose Free, Pro, or Business on{" "}
             <Link className="font-semibold text-primary hover:opacity-90" href="/partner/pricing">
               Partner pricing
             </Link>
-            : choose <span className="font-semibold text-foreground">Free</span> (no payment) or a paid plan (checkout). You
-            will return here with your Axis ID to set your password.
+            . Free goes straight to your portal; Pro and Business open secure Stripe checkout.
           </>
         )}
       </div>
@@ -480,20 +527,47 @@ export default function CreateAccountClient() {
           </>
         ) : managerNeedsPricing ? (
           <>
+            {googleSignedIn && googleSessionEmail ? (
+              <>
+                <GoogleSignedInBanner
+                  email={googleSessionEmail}
+                  fullName={googleSessionName}
+                  subtitle="Your Google account is linked. Choose Free, Pro, or Business on Partner pricing — no password needed."
+                />
+                <div className="mt-6 flex justify-center">
+                  <Link
+                    href="/partner/pricing"
+                    className="btn-cobalt inline-flex rounded-full px-6 py-3 text-sm font-semibold"
+                  >
+                    Continue to Partner pricing
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <GoogleSignInButton
+                  label="Continue with Google"
+                  nextPath="/auth/manager-register-oauth"
+                  viaContinue={false}
+                  disabled={busy || googleSessionLoading}
+                />
+                <div className="my-4 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" aria-hidden />
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
+                  <div className="h-px flex-1 bg-border" aria-hidden />
+                </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-id-input">
-                Axis ID
+              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-name-input">
+                Full name <Req />
               </label>
               <Input
-                id="mgr-id-input"
-                className="mt-1.5 font-mono"
-                placeholder="AXIS-XXXXXXXX"
-                value={managerIdInput}
-                onChange={(e) => setManagerIdInput(e.target.value)}
+                id="mgr-name-input"
+                className="mt-1.5"
+                placeholder="Your name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                autoComplete="name"
               />
-              <p className="mt-1 text-xs text-muted/70">
-                From your account setup email or the Axis ID confirmation page after checkout.
-              </p>
             </div>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-email-input">
@@ -535,6 +609,8 @@ export default function CreateAccountClient() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
             </div>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -551,8 +627,31 @@ export default function CreateAccountClient() {
                   value={axisId}
                   onChange={(e) => setAxisId(e.target.value)}
                 />
+                {googleSignedIn && googleSessionEmail ? (
+                  <div className="mt-4">
+                    <GoogleSignedInBanner
+                      email={googleSessionEmail}
+                      fullName={googleSessionName}
+                      subtitle="Use Continue with Google below to link this Axis ID to your Google account."
+                    />
+                  </div>
+                ) : null}
+                <div className="mt-4">
+                  <ResidentGoogleSignUpButton axisId={axisId} disabled={busy} />
+                </div>
+                {!googleSignedIn ? (
+                  <>
+                    <div className="my-4 flex items-center gap-3">
+                      <div className="h-px flex-1 bg-border" aria-hidden />
+                      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
+                      <div className="h-px flex-1 bg-border" aria-hidden />
+                    </div>
+                  </>
+                ) : null}
               </div>
             ) : null}
+            {!googleSignedIn || role !== "resident" ? (
+              <>
             <div>
               <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
                 Email
@@ -588,6 +687,8 @@ export default function CreateAccountClient() {
               />
               {displayedEmailStatusLoading ? <p className="mt-1 text-xs text-muted/70">Checking for an existing Axis login…</p> : null}
             </div>
+              </>
+            ) : null}
           </>
         )}
       </div>
@@ -603,10 +704,19 @@ export default function CreateAccountClient() {
           onClick={() => void submit()}
           disabled={
             busy ||
+            googleSessionLoading ||
+            (googleSignedIn && managerNeedsPricing) ||
+            (googleSignedIn && role === "resident") ||
             (role === "manager" && !!sessionIdFromUrl && (effectivePreviewLoading || !!effectivePreviewError || !effectiveCheckoutPreview))
           }
         >
-          {busy ? "Working…" : "Create account"}
+          {busy
+            ? "Working…"
+            : googleSignedIn && managerNeedsPricing
+              ? "Continue on Partner pricing"
+              : googleSignedIn && role === "resident"
+                ? "Use Google above"
+                : "Create account"}
         </Button>
       )}
 

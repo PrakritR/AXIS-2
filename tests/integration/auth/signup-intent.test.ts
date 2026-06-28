@@ -5,12 +5,20 @@ vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: vi.fn(),
 }));
 
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseServerClient: vi.fn(),
+}));
+
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { POST as signupIntent } from "@/app/api/manager/signup-intent/route";
 
 describe("POST /api/manager/signup-intent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(createSupabaseServerClient).mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+    } as never);
   });
 
   it("rejects paid tier without promo waiver", async () => {

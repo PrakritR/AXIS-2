@@ -10,7 +10,7 @@ export const adminPortal: PortalDefinition = {
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "onboard", label: "Onboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
-    { section: "axis-users", label: "Axis users", tabs: [] },
+    { section: "axis-users", label: "Accounts", tabs: [] },
     { section: "leases", label: "Leases", tabs: [] },
     { section: "events", label: "Meetings", tabs: [] },
     {

@@ -27,6 +27,7 @@ import {
   type InboxThreadMessage,
 } from "@/lib/portal-inbox-storage";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
+import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
 import { readManagerApplicationRows, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
 import { readProRelationships } from "@/lib/pro-relationships";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -67,6 +68,7 @@ function countThreads(threads: InboxThread[]) {
   return {
     unopened: threads.filter((t) => t.folder === "inbox" && t.unread).length,
     opened: threads.filter((t) => t.folder === "inbox" && !t.unread).length,
+    schedule: 0,
     sent: threads.filter((t) => t.folder === "sent").length,
     trash: threads.filter((t) => t.folder === "trash").length,
   };
@@ -440,7 +442,9 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         liveContacts={liveContacts}
       />
 
-      {rowsForTab.length === 0 ? (
+      {tabId === "schedule" ? (
+        <ManagerInboxSchedulePanel portalBase={portalBase} />
+      ) : rowsForTab.length === 0 ? (
         <PortalInboxEmptyState
           title={emptyCopy}
           hint={
