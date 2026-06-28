@@ -1,24 +1,28 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { AuthFooterLink, AuthPageHeader, AuthRoleTabs } from "@/components/auth/auth-mobile-primitives";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
+import type { AuthRoleIconName } from "@/components/auth/auth-role-icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
-const ROLE_META: Record<AuthRole, { label: string; description: string }> = {
+const ROLE_META: Record<AuthRole, { label: string; icon: AuthRoleIconName; tone: "blue" | "steel" }> = {
   admin: {
-    label: "Admin portal",
-    description: "Platform operations, review queues, and user management.",
+    label: "Admin",
+    icon: "admin",
+    tone: "steel",
   },
   manager: {
-    label: "Property portal",
-    description: "Manage listings, leases, residents, and property workflows.",
+    label: "Property",
+    icon: "manager",
+    tone: "blue",
   },
   resident: {
-    label: "Resident portal",
-    description: "Your lease, payments, maintenance, and move-in status.",
+    label: "Resident",
+    icon: "resident",
+    tone: "blue",
   },
 };
 
@@ -54,6 +58,17 @@ function ChoosePortalForm() {
     };
   }, []);
 
+  const tabOptions = useMemo(
+    () =>
+      (roles ?? []).map((role) => ({
+        id: role,
+        label: ROLE_META[role].label,
+        icon: ROLE_META[role].icon,
+        tone: ROLE_META[role].tone,
+      })),
+    [roles],
+  );
+
   const choose = async (role: AuthRole) => {
     setBusy(role);
     setError(null);
@@ -88,69 +103,45 @@ function ChoosePortalForm() {
 
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-semibold tracking-tight text-foreground">Choose a portal</h1>
+      <AuthPageHeader title="Choose a portal" accent={false} />
 
       {error ? <p className="mt-4 text-center text-sm text-rose-600">{error}</p> : null}
 
-      <div className="mt-8 space-y-3">
-        {roles === null ? (
-          <p className="text-center text-sm text-muted">Loading…</p>
-        ) : roles.length === 0 ? (
-          <p className="text-center text-sm text-muted">No portal roles found.</p>
-        ) : (
-          roles.map((r) => {
-            const meta = ROLE_META[r];
-            const selected = busy === r;
-            return (
-              <button
-                key={r}
-                type="button"
-                disabled={busy !== null}
-                onClick={() => void choose(r)}
-                className="group w-full rounded-[18px] text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <div
-                  className={`rounded-[18px] transition-all duration-200 ${
-                    selected
-                      ? "bg-[linear-gradient(135deg,var(--primary),var(--sky))] p-[2px] shadow-[0_12px_32px_-12px_rgba(47,107,255,0.35)]"
-                      : "glass-card hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)]"
-                  }`}
-                >
-                  <div className={`${selected ? "rounded-[16px] bg-[var(--glass-fill)] p-4 backdrop-blur-[24px]" : "p-4"}`}>
-                    <div className="flex items-start gap-3">
-                      <span
-                        className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary shadow-[0_0_8px_rgba(47,107,255,0.55)]"
-                        aria-hidden
-                      />
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground">{busy === r ? "Opening…" : meta.label}</p>
-                        <p className="mt-0.5 text-sm leading-relaxed text-muted">{meta.description}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </button>
-            );
-          })
-        )}
-      </div>
+      {roles === null ? (
+        <p className="auth-role-tabs mt-5 text-center text-sm text-muted">Loading…</p>
+      ) : roles.length === 0 ? (
+        <p className="auth-role-tabs mt-5 text-center text-sm text-muted">No portal roles found.</p>
+      ) : (
+        <AuthRoleTabs
+          options={tabOptions}
+          onSelect={(id) => void choose(id as AuthRole)}
+          disabled={busy !== null}
+          busyId={busy}
+        />
+      )}
 
-      <button type="button" className="mt-6 w-full text-center text-sm font-semibold text-muted hover:text-foreground" onClick={() => void signOut()}>
+      <button
+        type="button"
+        className="auth-back-link mt-5 block w-full text-center text-[13px] font-semibold text-muted hover:text-foreground sm:mt-6 sm:text-sm"
+        onClick={() => void signOut()}
+      >
         Sign out
       </button>
 
-      <p className="mt-6 text-center text-sm text-muted">
-        <Link className="font-semibold text-primary hover:opacity-90" href="/auth/sign-in">
-          Back to sign-in
-        </Link>
-      </p>
+      <AuthFooterLink href="/auth/sign-in">Back to sign-in</AuthFooterLink>
     </AuthCard>
   );
 }
 
 export default function ChoosePortalPage() {
   return (
-    <Suspense fallback={<AuthCard><p className="text-center text-sm text-muted">Loading…</p></AuthCard>}>
+    <Suspense
+      fallback={
+        <AuthCard>
+          <p className="text-center text-sm text-muted">Loading…</p>
+        </AuthCard>
+      }
+    >
       <ChoosePortalForm />
     </Suspense>
   );

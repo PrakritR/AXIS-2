@@ -200,15 +200,6 @@ export function PortalSidebar({
     };
   }, [accountOpen]);
 
-  const mobileBrandTitle =
-    definition.kind === "admin"
-      ? "Axis · Admin"
-      : definition.kind === "resident"
-        ? "Resident portal"
-        : definition.title.trim().toLowerCase() === "axis"
-          ? "Axis"
-          : definition.title;
-
   const showManagerTierLocks =
     (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
   const showResidentTierLocks = definition.kind === "resident" && subscriptionTier === "free";
@@ -291,29 +282,10 @@ export function PortalSidebar({
 
       <div className="shrink-0 lg:hidden">
         <div className={PORTAL_MOBILE_CHROME_CLASS}>
-          <div className="flex items-center gap-2.5 px-3 pt-2 sm:px-4">
-            <div className="h-11 w-1 shrink-0 rounded-full bg-primary shadow-[0_0_10px_rgba(47,107,255,0.45)]" aria-hidden />
-            <div className="min-w-0 flex-1 py-1">
-              {mobileBrandTitle === "Axis" ? (
-                <p className="truncate text-sm font-semibold leading-snug text-foreground">Axis</p>
-              ) : (
-                <>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Axis</p>
-                  <p className="truncate text-sm font-semibold leading-snug text-foreground">{mobileBrandTitle}</p>
-                </>
-              )}
-            </div>
-            {hasSignOut ? (
-              <button
-                type="button"
-                className="min-h-11 shrink-0 rounded-full border border-border bg-card px-3.5 text-sm font-semibold text-foreground shadow-[var(--shadow-sm)]"
-                onClick={() => setAccountOpen(true)}
-              >
-                Account
-              </button>
-            ) : null}
-          </div>
-          <nav className="mt-1.5 flex gap-1.5 overflow-x-auto px-3 pb-2 pt-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden" aria-label="Portal sections">
+          <nav
+            className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
+            aria-label="Portal sections"
+          >
             {navItems.map((s) => {
               const active = activeSection === s.section;
               const locked = isSectionLocked(s.section);
@@ -353,6 +325,19 @@ export function PortalSidebar({
                 </Link>
               );
             })}
+            {hasSignOut ? (
+              <button
+                type="button"
+                className={`inline-flex shrink-0 items-center rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
+                  accountOpen
+                    ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
+                    : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
+                }`}
+                onClick={() => setAccountOpen(true)}
+              >
+                Account
+              </button>
+            ) : null}
           </nav>
         </div>
 

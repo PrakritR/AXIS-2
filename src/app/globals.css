@@ -1034,18 +1034,57 @@ html[data-native="ios"] .portal-native-account-sheet {
   padding-bottom: max(1.25rem, calc(var(--native-safe-bottom) + 0.25rem));
 }
 
+/* Auth shell — vertically center every onboarding card (native + mobile + desktop). */
+.auth-layout {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.auth-layout-main {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 0.75rem 1rem;
+}
+
+.auth-layout-panel {
+  margin-inline: auto;
+}
+
+@media (min-width: 640px) {
+  .auth-layout-main {
+    padding: 2.5rem 1.25rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .auth-layout-main {
+    padding: 3.5rem 1.25rem;
+  }
+}
+
 /* Auth onboarding — lightweight on phone and in the native app */
 html[data-native] .auth-layout-footer {
   display: none;
 }
 
-html[data-native] .auth-layout-main {
-  justify-content: center;
-  padding-top: max(0.75rem, var(--native-safe-top));
-  padding-bottom: max(0.75rem, var(--native-safe-bottom));
+html[data-native] .auth-layout {
+  padding-top: var(--native-safe-top);
+  padding-bottom: var(--native-safe-bottom);
+  padding-left: var(--native-safe-left);
+  padding-right: var(--native-safe-right);
 }
 
-html[data-native] .axis-page-frame > main {
+html[data-native] .auth-layout-main {
+  padding-left: max(1rem, var(--native-safe-left));
+  padding-right: max(1rem, var(--native-safe-right));
+}
+
+html[data-native] .axis-page-frame > main:not(.auth-layout-main) {
   padding-top: max(0.75rem, var(--native-safe-top));
 }
 
@@ -1079,6 +1118,8 @@ html[data-native] .auth-role-tab-hint {
 
 html[data-native] .auth-role-tabs {
   gap: 0.625rem;
+  justify-content: center;
+  margin-inline: auto;
 }
 
 html[data-native] .auth-role-tab {
@@ -1132,14 +1173,13 @@ html[data-native] #axis-public-navbar {
 }
 
 @media (max-width: 639px) {
-  .auth-layout-main {
-    justify-content: center;
-    padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
-    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
-  }
-
   .auth-layout-footer {
     display: none;
+  }
+
+  .auth-role-tabs {
+    justify-content: center;
+    margin-inline: auto;
   }
 
   .auth-page-subtitle {
