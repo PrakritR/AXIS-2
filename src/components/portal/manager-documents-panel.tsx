@@ -196,10 +196,12 @@ export function ManagerDocumentsPanel({
   }, [tabId, filters, scopeFilters, showToast]);
 
   useEffect(() => {
-    setReport(null);
-    setPropertyDocuments(null);
-    setOccupancyReport(null);
-    setGenerated(false);
+    queueMicrotask(() => {
+      setReport(null);
+      setPropertyDocuments(null);
+      setOccupancyReport(null);
+      setGenerated(false);
+    });
   }, [tabId]);
 
   const incomeReceiptExportHref =

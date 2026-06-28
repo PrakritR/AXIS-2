@@ -84,12 +84,14 @@ export function PortalStripeConnectPanel({
     handledConnectParam.current = true;
     if (q === "done") {
       showToast("Bank account linked.");
-      setActionError(null);
     } else {
       showToast("Setup link expired — try again.");
     }
-    void loadStatus();
     window.history.replaceState({}, "", `${basePath}/payments`);
+    queueMicrotask(() => {
+      if (q === "done") setActionError(null);
+      void loadStatus();
+    });
   }, [basePath, loadStatus, showToast]);
 
   const startConnect = useCallback(async () => {

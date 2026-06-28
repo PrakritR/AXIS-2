@@ -53,21 +53,23 @@ export function ScheduleInboxComposeModal({
 
   useEffect(() => {
     if (!open) return;
-    if (editMessage) {
-      setSubject(editMessage.subject);
-      setBody(editMessage.body);
-      setSendAtLocal(toLocalInputValue(editMessage.sendAt));
-      setDeliverViaEmail(editMessage.deliverViaEmail);
-      if (editMessage.broadcastCategories?.includes("resident")) setRecipientKey("broadcast:resident");
-      else if (editMessage.broadcastCategories?.includes("management")) setRecipientKey("broadcast:management");
-      else setRecipientKey(editMessage.recipientUserId ? `id:${editMessage.recipientUserId}` : `email:${editMessage.recipientEmail}`);
-      return;
-    }
-    setSubject("");
-    setBody("");
-    setSendAtLocal(defaultSendAtLocal());
-    setRecipientKey(sortedContacts[0] ? `id:${sortedContacts[0].id}` : "");
-    setDeliverViaEmail(true);
+    queueMicrotask(() => {
+      if (editMessage) {
+        setSubject(editMessage.subject);
+        setBody(editMessage.body);
+        setSendAtLocal(toLocalInputValue(editMessage.sendAt));
+        setDeliverViaEmail(editMessage.deliverViaEmail);
+        if (editMessage.broadcastCategories?.includes("resident")) setRecipientKey("broadcast:resident");
+        else if (editMessage.broadcastCategories?.includes("management")) setRecipientKey("broadcast:management");
+        else setRecipientKey(editMessage.recipientUserId ? `id:${editMessage.recipientUserId}` : `email:${editMessage.recipientEmail}`);
+        return;
+      }
+      setSubject("");
+      setBody("");
+      setSendAtLocal(defaultSendAtLocal());
+      setRecipientKey(sortedContacts[0] ? `id:${sortedContacts[0].id}` : "");
+      setDeliverViaEmail(true);
+    });
   }, [open, editMessage, sortedContacts]);
 
   const submit = async () => {

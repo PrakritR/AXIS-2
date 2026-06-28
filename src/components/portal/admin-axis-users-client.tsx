@@ -126,7 +126,7 @@ function ManagerDetailRow({
   const planDirty = plan !== currentPlan;
 
   useEffect(() => {
-    setPlan(normalizeManagerPlan(row.tier));
+    queueMicrotask(() => setPlan(normalizeManagerPlan(row.tier)));
   }, [row.tier]);
 
   const savePlan = async () => {
