@@ -96,7 +96,7 @@ export async function POST(req: Request) {
 
     const sessionBase = {
       mode: "subscription" as const,
-      payment_method_types: ["card"] as const,
+      payment_method_types: ["card"] as string[],
       line_items: [{ price, quantity: 1 }],
       customer_email: email,
       client_reference_id: user.id,
