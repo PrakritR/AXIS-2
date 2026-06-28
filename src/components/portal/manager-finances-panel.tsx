@@ -59,7 +59,7 @@ function uniqueRowValues(rows: ReportRow[], key: string): string[] {
 }
 
 function parseMoneyAmount(raw: unknown): number {
-  return dollarsToCents(raw);
+  return dollarsToCents(typeof raw === "string" || typeof raw === "number" ? raw : null);
 }
 
 function filterFinanceReport(report: ReportResult, tabId: string, rowFilters: RowFilterState): ReportResult {
