@@ -27,11 +27,13 @@ function persistSignedIn(value: boolean) {
 
 export function PublicNavbar() {
   const pathname = usePathname();
-  // Initialize from localStorage so client-side navigation (e.g. portal → home) is instant.
-  // During SSR window is undefined so this returns false — hydration matches the server render.
-  const [signedIn, setSignedIn] = useState<boolean>(() => readSignedInFromStorage());
+  // Always false on server and first client paint so SSR markup matches hydration.
+  // Auth state is applied in useEffect after mount (localStorage + Supabase session).
+  const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
+    setSignedIn(readSignedInFromStorage());
+
     const supabase = createSupabaseBrowserClient();
     void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
       const isSignedIn = !!result.data.session;

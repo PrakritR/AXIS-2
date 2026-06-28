@@ -40,8 +40,12 @@ export function collectAccessiblePropertyIds(userId: string): Set<string> {
 /** Refresh co-manager relationships and property pipeline (includes linked owner listings). */
 export async function syncManagerPortfolioFromServer(userId: string, opts?: { force?: boolean }): Promise<void> {
   if (!userId.trim()) return;
-  await syncProRelationshipsFromServer(userId);
-  await syncPropertyPipelineFromServer({ force: opts?.force === true });
+  try {
+    await syncProRelationshipsFromServer(userId, { force: opts?.force === true });
+    await syncPropertyPipelineFromServer({ force: opts?.force === true });
+  } catch {
+    /* offline or dev server recompiling */
+  }
 }
 
 /** Whether an application row should appear for this portal user. */

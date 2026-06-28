@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HouseholdCharge } from "@/lib/household-charges";
+import {
+  dedupeHouseholdCharges,
+  duplicateHouseholdChargeIds,
+} from "@/lib/household-charges";
 import { categoryCodeForChargeKind } from "@/lib/reports/categories";
 import { dollarsToCents } from "@/lib/reports/money";
 import { parseMoneyAmount } from "@/lib/parse-money";
@@ -27,6 +31,57 @@ function dueDateFromCharge(charge: HouseholdCharge): string | null {
 
 function throwIfLedgerError(error: { message: string } | null): void {
   if (error) throw new Error(`Ledger sync failed: ${error.message}`);
+}
+
+async function removeLedgerEntriesForChargeIds(db: SupabaseClient, chargeIds: string[]): Promise<void> {
+  if (chargeIds.length === 0) return;
+  const { error } = await db.from("ledger_entries").delete().in("source_charge_id", chargeIds);
+  throwIfLedgerError(error);
+}
+
+async function removeDuplicateHouseholdChargeRecords(db: SupabaseClient, chargeIds: string[]): Promise<void> {
+  if (chargeIds.length === 0) return;
+  const { error } = await db.from("portal_household_charge_records").delete().in("id", chargeIds);
+  throwIfLedgerError(error);
+}
+
+/** Removes duplicate application-fee charge rows and their ledger entries (prevents doubled income). */
+export async function reconcileDuplicateHouseholdChargeRecords(
+  db: SupabaseClient,
+  managerUserId?: string,
+): Promise<{ removedChargeIds: string[] }> {
+  let query = db
+    .from("portal_household_charge_records")
+    .select("id, row_data")
+    .order("updated_at", { ascending: false })
+    .limit(2000);
+  if (managerUserId) query = query.eq("manager_user_id", managerUserId);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const raw = (data ?? [])
+    .map((row) => row.row_data as HouseholdCharge)
+    .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
+  const duplicateIds = duplicateHouseholdChargeIds(raw);
+  if (duplicateIds.length === 0) return { removedChargeIds: [] };
+
+  await removeLedgerEntriesForChargeIds(db, duplicateIds);
+  await removeDuplicateHouseholdChargeRecords(db, duplicateIds);
+  return { removedChargeIds: duplicateIds };
+}
+
+async function syncDedupedCharges(
+  db: SupabaseClient,
+  rawCharges: HouseholdCharge[],
+): Promise<number> {
+  const charges = dedupeHouseholdCharges(rawCharges);
+  let synced = 0;
+  for (const charge of charges) {
+    await syncLedgerChargeEntry(db, charge);
+    synced += 1;
+  }
+  return synced;
 }
 
 export async function syncLedgerChargeEntry(
@@ -126,7 +181,9 @@ export async function syncLedgerPaymentEntry(
 export async function backfillLedgerFromCharges(
   db: SupabaseClient,
   managerUserId?: string,
-): Promise<{ synced: number }> {
+): Promise<{ synced: number; removedDuplicates: number }> {
+  await reconcileDuplicateHouseholdChargeRecords(db, managerUserId);
+
   let query = db
     .from("portal_household_charge_records")
     .select("row_data")
@@ -140,21 +197,18 @@ export async function backfillLedgerFromCharges(
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 
-  let synced = 0;
-  for (const record of data ?? []) {
-    const charge = record.row_data as HouseholdCharge | null;
-    if (!charge?.id) continue;
-    await syncLedgerChargeEntry(db, charge);
-    synced += 1;
-  }
-  return { synced };
+  const raw = (data ?? [])
+    .map((record) => record.row_data as HouseholdCharge | null)
+    .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
+  const synced = await syncDedupedCharges(db, raw);
+  return { synced, removedDuplicates: 0 };
 }
 
 export async function backfillLedgerForResident(
   db: SupabaseClient,
   residentUserId: string,
   residentEmail: string,
-): Promise<{ synced: number }> {
+): Promise<{ synced: number; removedDuplicates: number }> {
   const email = residentEmail.trim().toLowerCase();
   const { data, error } = await db
     .from("portal_household_charge_records")
@@ -165,12 +219,14 @@ export async function backfillLedgerForResident(
 
   if (error) throw new Error(error.message);
 
-  let synced = 0;
-  for (const record of data ?? []) {
-    const charge = record.row_data as HouseholdCharge | null;
-    if (!charge?.id) continue;
-    await syncLedgerChargeEntry(db, charge);
-    synced += 1;
+  const raw = (data ?? [])
+    .map((record) => record.row_data as HouseholdCharge | null)
+    .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
+  const managerIds = [...new Set(raw.map((charge) => charge.managerUserId).filter(Boolean))] as string[];
+  for (const managerUserId of managerIds) {
+    await reconcileDuplicateHouseholdChargeRecords(db, managerUserId);
   }
-  return { synced };
+
+  const synced = await syncDedupedCharges(db, raw);
+  return { synced, removedDuplicates: 0 };
 }

@@ -2,6 +2,7 @@ import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
+import { cache } from "react";
 
 const residentPortalLimited: PortalDefinition = {
   kind: "resident",
@@ -88,7 +89,7 @@ const residentPortalApproved: PortalDefinition = {
   ],
 };
 
-export async function getResidentPortalDefinition(): Promise<PortalDefinition> {
+export const getResidentPortalDefinition = cache(async (): Promise<PortalDefinition> => {
   const { profile, user } = await getEffectiveSessionForPortal("resident");
   const managerSubscriptionTier = profile?.manager_id?.trim()
     ? await getManagerSubscriptionTierByManagerId(profile.manager_id.trim())
@@ -101,4 +102,4 @@ export async function getResidentPortalDefinition(): Promise<PortalDefinition> {
   });
   if (access.leaseAccessUnlocked) return residentPortalApproved;
   return residentPortalLimited;
-}
+});

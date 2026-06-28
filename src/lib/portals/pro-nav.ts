@@ -1,4 +1,4 @@
-import { portalDashboardPath } from "@/components/auth/portal-switcher";
+import { portalDashboardPath } from "@/lib/auth/portal-roles";
 import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
@@ -50,13 +50,13 @@ export const getProPortalRenderContext = cache(async () => {
   };
 });
 
-export async function buildProPortalDefinition(): Promise<{
+export const buildProPortalDefinition = cache(async (): Promise<{
   definition: PortalDefinition;
   showPlanBanner: boolean;
   showPreviewBanner: boolean;
   previewLabel: string | null;
   subscriptionTier: "free" | "paid" | null;
-}> {
+}> => {
   const { ctx, preview, portalTitle, isFree, subscriptionTier } = await getProPortalRenderContext();
 
   const showPreviewBanner = hasAdminRole(ctx) && !!preview?.targetUserId;
@@ -79,4 +79,4 @@ export async function buildProPortalDefinition(): Promise<{
     previewLabel,
     subscriptionTier,
   };
-}
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   INBOX_TAB_DEFS,
   PORTAL_INBOX_TABLE_WRAP,
@@ -322,7 +322,7 @@ function ComposeModal({
 
 export function AdminInboxClient({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
-  const router = useRouter();
+  const navigate = usePortalNavigate();
   const [tick, setTick] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
@@ -416,12 +416,12 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
 
   const emptyCopy =
     tabId === "sent"
-      ? "No sent messages yet"
+      ? "No sent messages yet."
       : tabId === "trash"
-        ? "Trash is empty"
+        ? "No trash messages yet."
         : tabId === "opened" && rows.length === 0
-          ? "No opened messages yet"
-          : "No messages yet";
+          ? "No opened messages yet."
+          : "No messages yet.";
 
   const fromOrToHeader = tabId === "sent" ? "To" : "From";
 
@@ -468,7 +468,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           activeTone="primary"
           tabs={inboxTabs}
           activeId={tabId}
-          onChange={(id) => router.push(`/admin/inbox/${id}`)}
+          onChange={(id) => navigate(`/admin/inbox/${id}`)}
         />
       }
     >
@@ -481,14 +481,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
         />
 
         {rows.length === 0 ? (
-          <PortalInboxEmptyState
-            title={emptyCopy}
-            hint={
-              tabId === "unopened" ? (
-                <p className="max-w-md">Partner inquiries from the public site and portal mail appear here.</p>
-              ) : undefined
-            }
-          />
+          <PortalInboxEmptyState title={emptyCopy} />
         ) : (
           <div className={PORTAL_INBOX_TABLE_WRAP}>
             <div className="overflow-x-auto">

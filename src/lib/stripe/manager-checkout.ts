@@ -8,6 +8,7 @@ import {
 import { resolveStripePriceIdForPaidTier } from "@/lib/stripe/resolve-manager-price";
 import type { PaidTier, StripeBilling } from "@/lib/stripe-price-ids";
 import { getStripe } from "@/lib/stripe";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export type ManagerCheckoutInput = {
   tier: PaidTier;
@@ -118,6 +119,26 @@ export async function createManagerCheckoutSession(input: ManagerCheckoutInput):
     const clientSecret = session.client_secret;
     if (!clientSecret) {
       return { ok: false, status: 500, error: "Stripe did not return a client secret for embedded checkout." };
+    }
+
+    // Pre-save a pending manager_purchases row so manager-checkout-preview can find the session
+    // from the DB fallback even if Stripe API retrieval fails (key mismatch, webhook delay, etc.).
+    try {
+      const db = createSupabaseServiceRoleClient();
+      await db.from("manager_purchases").upsert(
+        {
+          stripe_checkout_session_id: session.id,
+          email: email || null,
+          manager_id: metadata.manager_id,
+          tier,
+          billing,
+          full_name: fullName || null,
+          ...(userId ? { user_id: userId } : {}),
+        },
+        { onConflict: "manager_id" },
+      );
+    } catch {
+      // Non-fatal: checkout can still proceed; webhook will write the row when payment completes.
     }
 
     return { ok: true, embedded: true, clientSecret, sessionId: session.id };

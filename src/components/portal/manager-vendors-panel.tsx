@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -59,12 +59,19 @@ const EMPTY_DRAFT: VendorDraft = {
   sharedWithManagers: false,
 };
 
-export function ManagerVendorsPanel({
-  embedded = false,
-}: {
-  /** When true, render inside Services tab shell (no duplicate page header). */
-  embedded?: boolean;
-}) {
+export type ManagerVendorsPanelHandle = {
+  openAdd: () => void;
+};
+
+export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
+  {
+    embedded = false,
+  }: {
+    /** When true, render inside Services tab shell (no duplicate page header). */
+    embedded?: boolean;
+  },
+  ref: React.Ref<ManagerVendorsPanelHandle>,
+) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
@@ -94,7 +101,13 @@ export function ManagerVendorsPanel({
     [userId],
   );
 
-  const activeCount = vendors.filter((v) => v.active !== false).length;
+  const openAddForm = useCallback(() => {
+    setShowAdd(true);
+    setDraft(EMPTY_DRAFT);
+    setEditingId(null);
+  }, []);
+
+  useImperativeHandle(ref, () => ({ openAdd: openAddForm }), [openAddForm]);
 
   function startEdit(row: ManagerVendorRow) {
     if (!isOwnVendor(row)) {
@@ -172,7 +185,7 @@ export function ManagerVendorsPanel({
       ) : null}
 
       {vendors.length === 0 ? (
-        <PortalDataTableEmpty message="No vendors yet. Add contractors you use for maintenance." />
+        <PortalDataTableEmpty message="No vendors yet." icon="vendor" />
       ) : (
         <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className={PORTAL_DATA_TABLE_SCROLL}>
@@ -286,27 +299,15 @@ export function ManagerVendorsPanel({
   );
 
   if (embedded) {
-    return (
-      <div>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted">
-            {activeCount} active vendor{activeCount === 1 ? "" : "s"} for work order assignment.
-          </p>
-          <Button type="button" onClick={() => { setShowAdd(true); setDraft(EMPTY_DRAFT); setEditingId(null); }}>
-            Add vendor
-          </Button>
-        </div>
-        {body}
-      </div>
-    );
+    return <div>{body}</div>;
   }
 
   return (
     <ManagerPortalPageShell
       title="Vendors"
-      subtitle={`${activeCount} active vendor${activeCount === 1 ? "" : "s"} for work order assignment. Share your vendors with other managers if you want.`}
+      subtitle="Share your vendors with other managers if you want."
       titleAside={
-        <Button type="button" onClick={() => { setShowAdd(true); setDraft(EMPTY_DRAFT); setEditingId(null); }}>
+        <Button type="button" onClick={openAddForm}>
           Add vendor
         </Button>
       }
@@ -314,7 +315,7 @@ export function ManagerVendorsPanel({
       {body}
     </ManagerPortalPageShell>
   );
-}
+});
 
 function VendorForm({
   draft,

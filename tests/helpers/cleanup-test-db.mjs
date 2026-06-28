@@ -30,26 +30,49 @@ const tables = [
   "portal_inbox_thread_records",
   "portal_schedule_records",
   "portal_work_order_records",
+  "portal_outbound_mail_records",
+  "manager_purchases",
 ];
 
 try {
   for (const table of tables) {
-    const { data } = await supabase.from(table).select("id, row_data, manager_id");
-    const toDelete = (data ?? []).filter((row) => {
-      const rd = row.row_data;
-      if (rd && typeof rd === "object" && "testRunId" in rd) {
-        return String(rd.testRunId) === testRunId || String(rd.id ?? "").includes(testRunId);
+    try {
+      const { data } = await supabase.from(table).select("id, row_data, manager_id, stripe_checkout_session_id");
+      const toDelete = (data ?? []).filter((row) => {
+        const rd = row.row_data;
+        if (rd && typeof rd === "object" && "testRunId" in rd) {
+          return String(rd.testRunId) === testRunId || String(rd.id ?? "").includes(testRunId);
+        }
+        if (String(row.manager_id ?? "").includes(testRunId)) return true;
+        if (String(row.stripe_checkout_session_id ?? "").includes(testRunId)) return true;
+        return false;
+      });
+      if (toDelete.length) {
+        await supabase.from(table).delete().in(
+          "id",
+          toDelete.map((r) => r.id),
+        );
+        console.log(`Deleted ${toDelete.length} from ${table}`);
       }
-      return String(row.manager_id ?? "").includes(testRunId);
-    });
-    if (toDelete.length) {
-      await supabase.from(table).delete().in(
-        "id",
-        toDelete.map((r) => r.id),
-      );
-      console.log(`Deleted ${toDelete.length} from ${table}`);
+    } catch {
+      // Table may not have all expected columns; skip gracefully.
     }
   }
+
+  // Remove test auth users (resident@test.axis.local pattern or testRunId in email)
+  try {
+    const { data: users } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    const testUsers = (users?.users ?? []).filter(
+      (u) => u.email?.includes("@test.axis.local") || u.email?.includes(testRunId),
+    );
+    for (const u of testUsers) {
+      await supabase.auth.admin.deleteUser(u.id);
+      console.log(`Deleted auth user ${u.email}`);
+    }
+  } catch {
+    // Auth cleanup is best-effort.
+  }
+
   console.log(JSON.stringify({ ok: true, testRunId }));
 } catch (err) {
   console.error(err);

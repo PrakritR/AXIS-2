@@ -9,11 +9,11 @@ describe("pro portal documents section", () => {
     expect(sections).toContain("financials");
   });
 
-  it("documents tabs are expense/income docs, 1099, and tax summary", () => {
+  it("documents tabs are income/expense docs, 1099, and tax summary", () => {
     const documents = proPortal.sections.find((s) => s.section === "documents");
     expect(documents?.tabs.map((t) => t.id)).toEqual([
-      "expense-documents",
       "income-documents",
+      "expense-documents",
       "1099",
       "tax-summary",
     ]);

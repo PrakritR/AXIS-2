@@ -1,0 +1,28 @@
+"use client";
+
+import { Button } from "@/components/ui/button";
+
+export default function PortalError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <div className="mx-auto max-w-lg rounded-2xl border px-5 py-6 text-sm portal-banner-danger shadow-sm">
+      <p className="font-semibold text-rose-950">This portal page failed to load.</p>
+      <p className="mt-2 leading-relaxed text-rose-900/90">
+        {error.message || "An unexpected error occurred. Try again or return to the dashboard."}
+      </p>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Button type="button" variant="primary" className="rounded-full" onClick={() => reset()}>
+          Try again
+        </Button>
+        <Button type="button" variant="outline" className="rounded-full" onClick={() => (window.location.href = "/portal/dashboard")}>
+          Portal dashboard
+        </Button>
+      </div>
+    </div>
+  );
+}

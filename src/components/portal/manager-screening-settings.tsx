@@ -14,8 +14,6 @@ const MODE_OPTIONS: { value: ScreeningMode; label: string; description: string }
 export function ManagerScreeningSettingsPanel() {
   const { showToast } = useAppUi();
   const [settings, setSettings] = useState<ManagerScreeningSettings | null>(null);
-  const [configured, setConfigured] = useState(false);
-  const [costCents, setCostCents] = useState(3999);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -23,12 +21,8 @@ export function ManagerScreeningSettingsPanel() {
     if (!res.ok) return;
     const body = (await res.json()) as {
       settings?: ManagerScreeningSettings;
-      configured?: boolean;
-      costCents?: number;
     };
     if (body.settings) setSettings(body.settings);
-    setConfigured(Boolean(body.configured));
-    if (typeof body.costCents === "number") setCostCents(body.costCents);
   }, []);
 
   useEffect(() => {
@@ -44,7 +38,7 @@ export function ManagerScreeningSettingsPanel() {
         credentials: "include",
         body: JSON.stringify({ mode }),
       });
-      const body = (await res.json()) as { error?: string; settings?: ManagerScreeningSettings; configured?: boolean };
+      const body = (await res.json()) as { error?: string; settings?: ManagerScreeningSettings };
       if (!res.ok) {
         const message = body.error ?? "Could not save screening settings.";
         showToast(
@@ -55,8 +49,6 @@ export function ManagerScreeningSettingsPanel() {
         return;
       }
       if (body.settings) setSettings(body.settings);
-      const certnReady = Boolean(body.configured ?? configured);
-      setConfigured(certnReady);
       showToast("Screening settings saved.");
     } catch {
       showToast("Network error saving screening settings.");
@@ -91,11 +83,6 @@ export function ManagerScreeningSettingsPanel() {
           </Select>
         </div>
       </div>
-      {configured ? (
-        <p className="mt-3 text-xs text-muted">
-          {`Pay-as-you-go via Certn — about $${(costCents / 100).toFixed(2)} per applicant report, charged to your plan card.`}
-        </p>
-      ) : null}
     </div>
   );
 }

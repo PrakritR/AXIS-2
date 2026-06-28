@@ -52,7 +52,7 @@ export function PublicFooter() {
                     href="https://www.google.com/maps/search/?api=1&query=5259+Brooklyn+Ave+NE%2C+98105"
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-grid max-w-full grid-cols-[auto,minmax(0,1fr)] items-center gap-x-2 text-end text-[15px] font-normal text-primary transition-opacity duration-200 hover:opacity-90"
+                    className="inline-flex max-w-full items-center gap-2 text-[15px] font-normal text-primary transition-opacity duration-200 hover:opacity-90"
                   >
                     <PinIcon />
                     <span className="min-w-0 leading-snug">View on Google Maps</span>
@@ -61,23 +61,23 @@ export function PublicFooter() {
               </div>
             </div>
 
-            {/* Contact — grid aligns icon column + shared text column for clean right edge */}
+            {/* Contact */}
             <div className="min-w-0 lg:text-end">
               <p className={sectionHeading}>Contact</p>
-              <div className="ml-auto mt-3 inline-grid max-w-full grid-cols-[auto,minmax(0,18rem)] items-center gap-x-2 gap-y-2.5 text-end">
-                <PhoneIcon />
+              <div className="mt-3 flex flex-col items-end gap-2.5">
                 <a
                   href="tel:+15103098345"
-                  className="min-w-0 text-[15px] font-normal tabular-nums text-muted transition-colors hover:text-primary"
+                  className="inline-flex max-w-full items-center gap-2 text-[15px] font-normal tabular-nums text-muted transition-colors hover:text-primary"
                 >
-                  (510) 309-8345
+                  <PhoneIcon />
+                  <span className="min-w-0">(510) 309-8345</span>
                 </a>
-                <MailIcon />
                 <a
                   href="mailto:info@axis-seattle-housing.com"
-                  className="min-w-0 break-all text-[15px] font-normal leading-snug text-muted transition-colors hover:text-primary"
+                  className="inline-flex max-w-full items-center gap-2 text-[15px] font-normal text-muted transition-colors hover:text-primary"
                 >
-                  info@axis-seattle-housing.com
+                  <MailIcon />
+                  <span className="min-w-0 break-all leading-snug">info@axis-seattle-housing.com</span>
                 </a>
               </div>
             </div>

@@ -29,12 +29,14 @@ export function ScheduleInboxComposeModal({
   onSaved,
   contacts,
   editMessage,
+  onToggleCancelled,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
   contacts: InboxScopedContact[];
   editMessage?: ScheduledInboxMessageRecord | null;
+  onToggleCancelled?: (cancelled: boolean) => void | Promise<void>;
 }) {
   const { showToast } = useAppUi();
   const [subject, setSubject] = useState("");
@@ -217,8 +219,31 @@ export function ScheduleInboxComposeModal({
           <Button type="button" variant="primary" className="rounded-full" disabled={busy} onClick={() => void submit()}>
             {busy ? "Saving…" : editMessage ? "Save changes" : "Schedule message"}
           </Button>
+          {editMessage && onToggleCancelled && editMessage.status !== "sent" ? (
+            editMessage.status === "cancelled" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                disabled={busy}
+                onClick={() => void onToggleCancelled(false)}
+              >
+                Restore send
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full text-rose-700"
+                disabled={busy}
+                onClick={() => void onToggleCancelled(true)}
+              >
+                Cancel send
+              </Button>
+            )
+          ) : null}
           <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={onClose}>
-            Cancel
+            Close
           </Button>
         </div>
       </div>

@@ -20,3 +20,5 @@ export const E2E_ACCOUNTS = {
     password: process.env.E2E_RESIDENT_PASSWORD ?? "TestResident123!",
   },
 };
+
+export const E2E_RESIDENT_AXIS_ID = process.env.E2E_RESIDENT_AXIS_ID ?? "AXIS-TESTRSID";

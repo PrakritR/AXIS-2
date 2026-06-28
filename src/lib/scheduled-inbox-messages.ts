@@ -2,6 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type ScheduledInboxMessageStatus = "scheduled" | "sent" | "cancelled";
 
+export function isUpcomingScheduledInboxMessage(sendAt: string, status: string): boolean {
+  if (status === "sent") return false;
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  return new Date(sendAt).getTime() >= startOfToday.getTime();
+}
+
 export type ScheduledInboxMessageRecord = {
   id: string;
   managerUserId: string;

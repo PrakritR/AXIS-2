@@ -52,12 +52,24 @@ export async function GET() {
       emails.length > 0
         ? supabase
             .from("manager_purchases")
-            .select("id, email, user_id, tier, billing, paid_at, stripe_customer_id, stripe_subscription_id")
+            .select("id, email, user_id, tier, billing, paid_at, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id")
             .in("email", emails)
-        : Promise.resolve({ data: [] as { id: string; email: string; user_id: string | null; tier: string | null; billing: string | null; paid_at: string | null; stripe_customer_id: string | null; stripe_subscription_id: string | null }[] }),
+        : Promise.resolve({
+            data: [] as {
+              id: string;
+              email: string;
+              user_id: string | null;
+              tier: string | null;
+              billing: string | null;
+              paid_at: string | null;
+              stripe_customer_id: string | null;
+              stripe_subscription_id: string | null;
+              stripe_checkout_session_id: string | null;
+            }[],
+          }),
       supabase
         .from("manager_purchases")
-        .select("id, email, user_id, tier, billing, paid_at, stripe_customer_id, stripe_subscription_id")
+        .select("id, email, user_id, tier, billing, paid_at, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id")
         .in("user_id", allIds),
     ]);
 
@@ -84,6 +96,7 @@ export async function GET() {
           user_id: r.user_id,
           stripe_customer_id: r.stripe_customer_id,
           stripe_subscription_id: r.stripe_subscription_id,
+          stripe_checkout_session_id: r.stripe_checkout_session_id ?? null,
         })),
         profile.id,
       );

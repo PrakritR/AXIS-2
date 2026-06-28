@@ -282,12 +282,9 @@ export function ManagerDocumentsPanel({
         {tabId === "income-documents" ? (
           <div>
             {loading ? (
-              <ReportGeneratePrompt title="Generating documents…" description="Building rent receipt statements for the selected period." />
+              <ReportGeneratePrompt loading loadingTitle="Generating documents…" />
             ) : !generated ? (
-              <ReportGeneratePrompt
-                title="Generate rent receipt documents"
-                description="Set your date range and scope, then click Generate report. Formal receipts appear here for review and PDF export."
-              />
+              <ReportGeneratePrompt title="No rent receipt documents yet." />
             ) : propertyDocuments && propertyDocuments.length > 0 ? (
               <FormalDocumentsPreview propertyDocuments={propertyDocuments} />
             ) : (
@@ -297,7 +294,7 @@ export function ManagerDocumentsPanel({
         ) : tabId === "1099" && report ? (
           <div>
             {report.rows.length === 0 ? (
-              <PortalDataTableEmpty message="No 1099 candidates for this tax year." />
+              <PortalDataTableEmpty message="No 1099 candidates yet." icon="document" />
             ) : (
               <div className={PORTAL_DATA_TABLE_WRAP}>
                 <div className={PORTAL_DATA_TABLE_SCROLL}>
@@ -373,14 +370,11 @@ export function ManagerDocumentsPanel({
             <OccupancyDocumentView report={occupancyReport} />
           </div>
         ) : tabId === "occupancy" && generated && !occupancyReport ? (
-          <ReportGeneratePrompt title="No occupancy data" description="No active leases found for the selected period and property filter." />
+          <ReportGeneratePrompt title="No occupancy data yet." />
         ) : tabId === "expense-documents" && generated && report ? (
           <FinancialReportDocumentView report={report} />
         ) : tabId === "expense-documents" && !generated ? (
-          <ReportGeneratePrompt
-            title="Generate expense documents"
-            description="Set your date range and scope, then click Generate report. Schedule E expense records appear here for review and export."
-          />
+          <ReportGeneratePrompt title="No expense documents yet." />
         ) : tabId === "tax-summary" && generated && report ? (
           <FinancialReportDocumentView report={report} />
         ) : (

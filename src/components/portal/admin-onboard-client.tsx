@@ -140,7 +140,6 @@ export function AdminOnboardClient() {
                 </span>
               ) : null}
             </div>
-            <p className="mt-3 text-sm leading-6 text-muted">{tier.description}</p>
 
             <div className="mt-5 flex-1">
               {!tier.noCard ? (

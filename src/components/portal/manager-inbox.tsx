@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -30,6 +30,10 @@ import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type Po
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
 import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
 import { readManagerApplicationRows, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
+import {
+  isUpcomingScheduledInboxMessage,
+  type ScheduledInboxMessageRecord,
+} from "@/lib/scheduled-inbox-messages";
 import { readProRelationships } from "@/lib/pro-relationships";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
@@ -77,13 +81,32 @@ function countThreads(threads: InboxThread[], scheduleCount: number) {
 
 export function ManagerInbox({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
-  const router = useRouter();
+  const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
-  const { messages: scheduledMessages } = useScheduledPaymentMessages({ includeHidden: true });
-  const scheduleCount = useMemo(
-    () => scheduledMessages.filter((m) => m.status === "scheduled").length,
-    [scheduledMessages],
-  );
+  const { messages: scheduledMessages } = useScheduledPaymentMessages({ includeHidden: false });
+  const [manualScheduledMessages, setManualScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch("/api/portal/scheduled-inbox-messages", { credentials: "include", cache: "no-store" });
+      if (!res.ok || cancelled) return;
+      const body = (await res.json()) as { messages?: ScheduledInboxMessageRecord[] };
+      setManualScheduledMessages(Array.isArray(body.messages) ? body.messages : []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const scheduleCount = useMemo(() => {
+    const upcoming = (status: string, sendAt: string) =>
+      status === "scheduled" && isUpcomingScheduledInboxMessage(sendAt, status);
+    return (
+      manualScheduledMessages.filter((m) => upcoming(m.status, m.sendAt)).length +
+      scheduledMessages.filter((m) => upcoming(m.status, m.sendAt)).length
+    );
+  }, [manualScheduledMessages, scheduledMessages]);
   const { userId } = useManagerUserId();
   const [local, setLocal] = useState<InboxThread[]>(() => loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
   const [inboxSynced, setInboxSynced] = useState(false);
@@ -388,25 +411,25 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
               ? "Message sent to Axis admin."
               : "Message sent via inbox and email.",
           );
-          router.push(`${portalBase}/inbox/sent`);
+          navigate(`${portalBase}/inbox/sent`);
         } catch {
           showToast("Message could not be sent.");
         }
       })();
     },
-    [router, showToast, portalBase],
+    [navigate, showToast, portalBase],
   );
 
   const emptyCopy =
     tabId === "sent" && rowsForTab.length === 0
-      ? "No sent messages yet"
+      ? "No sent messages yet."
       : tabId === "trash" && rowsForTab.length === 0
-        ? "Trash is empty"
+        ? "No trash messages yet."
         : tabId === "opened" && rowsForTab.length === 0
-          ? "No opened messages yet"
+          ? "No opened messages yet."
           : tabId === "unopened" && rowsForTab.length === 0
-            ? "No unopened messages"
-            : "No messages yet";
+            ? "No unopened messages yet."
+            : "No messages yet.";
 
   return (
     <ManagerPortalPageShell
@@ -433,7 +456,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           <ManagerPortalStatusPills
             tabs={tabs}
             activeId={tabId}
-            onChange={(id) => router.push(`${portalBase}/inbox/${id}`)}
+            onChange={(id) => navigate(`${portalBase}/inbox/${id}`)}
           />
         </ManagerPortalFilterRow>
       }
@@ -451,14 +474,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       {tabId === "schedule" ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
       ) : rowsForTab.length === 0 ? (
-        <PortalInboxEmptyState
-          title={emptyCopy}
-          hint={
-            tabId === "unopened" ? (
-              <p className="max-w-md">Messages from applicants, residents, and vendors appear here.</p>
-            ) : undefined
-          }
-        />
+        <PortalInboxEmptyState title={emptyCopy} />
       ) : (
         <PortalInboxMessageTable
           rows={toRows(rowsForTab, tabId)}

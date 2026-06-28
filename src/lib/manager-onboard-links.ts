@@ -3,7 +3,6 @@ import type { PlanTierId } from "@/data/manager-plan-tiers";
 export type ManagerOnboardTier = {
   id: PlanTierId;
   label: string;
-  description: string;
   noCard: boolean;
 };
 
@@ -11,19 +10,16 @@ export const MANAGER_ONBOARD_TIERS: ManagerOnboardTier[] = [
   {
     id: "free",
     label: "Free",
-    description: "One property listing, applications, tours, and payments. No card required.",
     noCard: true,
   },
   {
     id: "pro",
     label: "Pro",
-    description: "Residents, leases, services, inbox, and up to two co-managers.",
     noCard: false,
   },
   {
     id: "business",
     label: "Business",
-    description: "Portfolio scale — 20 properties, 20 co-managers, and priority support.",
     noCard: false,
   },
 ];

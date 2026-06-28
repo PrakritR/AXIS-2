@@ -65,7 +65,11 @@ describe("GET /api/cron/send-payment-reminders", () => {
             }),
           };
         }
-        return { select: vi.fn().mockResolvedValue({ data: [] }) };
+        return {
+          select: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+          }),
+        };
       }),
     } as never);
 

@@ -106,12 +106,9 @@ export function ResidentDocumentsPanel({
             {generated ? <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} /> : null}
           </div>
           {loading ? (
-            <ReportGeneratePrompt title="Generating receipts…" description="Compiling your payment history for the selected period." />
+            <ReportGeneratePrompt loading loadingTitle="Generating receipts…" />
           ) : !generated ? (
-            <ReportGeneratePrompt
-              title="Generate rent receipts"
-              description="Select a date range and click Generate receipts to produce official rent receipt documents for your records."
-            />
+            <ReportGeneratePrompt title="No rent receipts yet." />
           ) : ledgerReport ? (
             <FinancialReportDocumentView report={ledgerReport} />
           ) : (

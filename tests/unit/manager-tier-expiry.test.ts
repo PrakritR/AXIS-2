@@ -34,7 +34,7 @@ describe("manager-tier-expiry", () => {
     expect(resolveEffectiveManagerTier(input, endMs! - 1)).toBe("pro");
   });
 
-  it("does not expire portal billing without Stripe subscription id", () => {
+  it("does not grant paid access for portal billing without Stripe subscription id", () => {
     const input = {
       tier: "business",
       billing: "portal",

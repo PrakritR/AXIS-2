@@ -1,7 +1,7 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { AxisLogoMark } from "@/components/brand/axis-logo";
+import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { managerPricingOauthPath } from "@/lib/auth/manager-pricing-oauth-path";
@@ -193,28 +193,12 @@ function ManagerPricingOauthContent() {
     );
   }
 
-  return (
-    <div className="flex flex-col items-center gap-6 py-10">
-      <AxisLogoMark />
-      <div
-        className="h-8 w-8 animate-spin rounded-full border-2 border-steel-light/25 border-t-steel-light"
-        role="status"
-        aria-label={statusText}
-      />
-      <p className="text-sm text-muted">{statusText}</p>
-    </div>
-  );
+  return <AuthOAuthLoading label={statusText} caption={statusText} />;
 }
 
 export default function ManagerPricingOauthPage() {
   return (
-    <Suspense
-      fallback={
-        <AuthCard>
-          <p className="text-center text-sm text-muted">Loading…</p>
-        </AuthCard>
-      }
-    >
+    <Suspense fallback={<AuthOAuthLoading />}>
       <ManagerPricingOauthContent />
     </Suspense>
   );

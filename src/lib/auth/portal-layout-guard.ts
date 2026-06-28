@@ -1,4 +1,4 @@
-import { portalDashboardPath } from "@/components/auth/portal-switcher";
+import { portalDashboardPath } from "@/lib/auth/portal-roles";
 import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import type { PreviewPortal } from "@/lib/auth/preview-types";

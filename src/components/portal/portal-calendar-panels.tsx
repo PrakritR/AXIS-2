@@ -1039,9 +1039,6 @@ export function PortalCalendarPanels({
           ) : null}
 
           <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
-            <div className="border-b border-border bg-accent/30 px-3 py-2 [html[data-theme=dark]_&]:portal-calendar-week-banner">
-              <p className="text-xs font-semibold text-muted">Drag to define a time block, then edit it before saving. Use Create block for recurring schedules.</p>
-            </div>
             <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
               <div className={`grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
                 <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>

@@ -134,7 +134,7 @@ export function ManagerPaymentsLedgerPanel({
   const hasAnySource = useMemo(() => rows.length > 0, [rows]);
 
   if (!hasAnySource) {
-    return <PortalDataTableEmpty message="No payment lines in this bucket." />;
+    return <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />;
   }
 
   const removePayment = (row: DemoManagerPaymentLedgerRow) => {
@@ -163,6 +163,7 @@ export function ManagerPaymentsLedgerPanel({
         showToast(toastMessage);
         setExpandedId(null);
         onRowsChanged?.();
+        onScheduleChanged?.();
         return;
       }
       showToast("Could not update this line.");

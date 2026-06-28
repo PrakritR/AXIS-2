@@ -220,6 +220,10 @@ export function cachePublicExtraListings(listings: MockProperty[], opts?: { sile
   writeExtrasMap(map, opts);
 }
 
+export function hasCachedPropertyPipeline(): boolean {
+  return readPropertyPipelineSyncedAt() > 0;
+}
+
 export async function syncPropertyPipelineFromServer(opts?: { force?: boolean }): Promise<boolean> {
   if (!isBrowser()) return false;
   const force = opts?.force === true;

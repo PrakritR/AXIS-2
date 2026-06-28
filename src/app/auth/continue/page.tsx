@@ -1,6 +1,6 @@
 "use client";
 
-import { AxisLogoMark } from "@/components/brand/axis-logo";
+import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useSearchParams } from "next/navigation";
@@ -50,15 +50,7 @@ function fallbackRolesFromUser(user: { user_metadata?: Record<string, unknown> |
 }
 
 function AuthContinueLoading() {
-  return (
-    <div className="flex flex-col items-center gap-6 py-10" role="status" aria-live="polite">
-      <AxisLogoMark />
-      <div
-        className="h-8 w-8 animate-spin rounded-full border-2 border-steel-light/25 border-t-steel-light"
-        aria-hidden
-      />
-    </div>
-  );
+  return <AuthOAuthLoading />;
 }
 
 function ContinueContent() {
@@ -155,17 +147,16 @@ function ContinueContent() {
     };
   }, [nextPath]);
 
-  return (
-    <div className="flex flex-col items-center gap-6 py-10">
-      <AxisLogoMark />
-      <div
-        className="h-8 w-8 animate-spin rounded-full border-2 border-steel-light/25 border-t-steel-light"
-        role="status"
-        aria-label="Loading your portal"
-      />
-      {errorText ? <p className="max-w-sm text-center text-sm text-rose-600">{errorText}</p> : null}
-    </div>
-  );
+  if (errorText) {
+    return (
+      <div className="flex flex-col items-center gap-4 py-10">
+        <AuthOAuthLoading label="Loading your portal" />
+        <p className="max-w-sm text-center text-sm text-rose-600">{errorText}</p>
+      </div>
+    );
+  }
+
+  return <AuthOAuthLoading />;
 }
 
 export default function AuthContinuePage() {

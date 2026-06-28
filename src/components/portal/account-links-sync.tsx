@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import {
   fetchAccountLinksCached,
-  invalidateAccountLinksCache,
 } from "@/lib/portal-data-store";
 import {
   proRelationshipRowsFromInvites,
@@ -70,17 +69,10 @@ export function AccountLinksSync() {
       void sync();
     };
 
-    const rerunAfterMutation = () => {
-      invalidateAccountLinksCache();
-      void sync(true);
-    };
-
     window.addEventListener("focus", rerun);
-    window.addEventListener("axis-pro-relationships", rerunAfterMutation);
     return () => {
       cancelled = true;
       window.removeEventListener("focus", rerun);
-      window.removeEventListener("axis-pro-relationships", rerunAfterMutation);
     };
   }, [session.userId]);
 

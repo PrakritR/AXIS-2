@@ -1,6 +1,7 @@
 import {
   chargeDueLabel,
   householdChargeDueDate,
+  isUnpaidHouseholdCharge,
   type HouseholdCharge,
 } from "@/lib/household-charges";
 import { lateFeePolicyFromSubmission } from "@/lib/payment-policy";
@@ -105,7 +106,30 @@ export function inboxScheduleTypeLabel(kind: PaymentReminderKind, daysBeforeDue:
 
 function isUpcomingScheduleMessage(message: ScheduledPaymentMessage, now: Date): boolean {
   if (message.status === "sent") return false;
+  if (message.status === "scheduled" && startOfLocalDay(new Date(message.sendAt)).getTime() < startOfLocalDay(now).getTime()) {
+    return false;
+  }
   return startOfLocalDay(new Date(message.sendAt)).getTime() >= startOfLocalDay(now).getTime();
+}
+
+/** Whether a projected payment reminder should appear in the manager schedule tab right now. */
+export function isScheduledPaymentMessageVisibleInTab(
+  message: ScheduledPaymentMessage,
+  settings: ManagerAutomationSettings,
+  now = new Date(),
+): boolean {
+  if (!isUpcomingScheduleMessage(message, now)) return false;
+  if (message.status !== "scheduled" && message.status !== "cancelled") return false;
+  if (settings.scheduleVisibilityMode === "all") return true;
+  return startOfLocalDay(now).getTime() >= startOfLocalDay(new Date(message.visibleFrom)).getTime();
+}
+
+export function filterScheduledPaymentMessagesForVisibility(
+  messages: ScheduledPaymentMessage[],
+  settings: ManagerAutomationSettings,
+  now = new Date(),
+): ScheduledPaymentMessage[] {
+  return messages.filter((message) => isScheduledPaymentMessageVisibleInTab(message, settings, now));
 }
 
 function isVisible(
@@ -159,7 +183,7 @@ export function projectScheduledPaymentMessages(input: {
   const rows: ScheduledPaymentMessage[] = [];
 
   for (const charge of input.charges) {
-    if (charge.status === "paid") continue;
+    if (!isUnpaidHouseholdCharge(charge)) continue;
     if (charge.residentEmail.trim().toLowerCase().endsWith("@axis.local")) continue;
 
     const dueDate = householdChargeDueDate(charge);
@@ -366,6 +390,18 @@ export function projectScheduledPaymentMessages(input: {
 
   const visibleRows = input.includeHidden ? rows : rows.filter((row) => isUpcomingScheduleMessage(row, now));
   return visibleRows.sort((a, b) => a.sendAt.localeCompare(b.sendAt));
+}
+
+/** Drop projected reminders for charges that are no longer unpaid (e.g. just marked paid in-session). */
+export function filterScheduledPaymentMessagesForUnpaidCharges(
+  messages: ScheduledPaymentMessage[],
+  charges: HouseholdCharge[],
+): ScheduledPaymentMessage[] {
+  const paidChargeIds = new Set(
+    charges.filter((charge) => !isUnpaidHouseholdCharge(charge)).map((charge) => charge.id),
+  );
+  if (paidChargeIds.size === 0) return messages;
+  return messages.filter((message) => !paidChargeIds.has(message.chargeId));
 }
 
 export function shouldSendScheduledMessage(message: ScheduledPaymentMessage, now = new Date()): boolean {

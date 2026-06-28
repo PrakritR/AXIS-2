@@ -36,7 +36,7 @@ export function ReportTable({
     return <ReportGeneratePrompt />;
   }
   if (!report || report.rows.length === 0) {
-    return <PortalDataTableEmpty message="No data for the selected filters." />;
+    return <PortalDataTableEmpty message="No report data yet." icon="data" />;
   }
 
   return (

@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
@@ -19,6 +19,7 @@ import { PortalPropertyFilterPill } from "@/components/portal/manager-section-sh
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_TABLE_DETAIL_CELL,
@@ -52,7 +53,7 @@ import {
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
-import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
 import {
   computeLeaseEndDate,
@@ -605,28 +606,25 @@ function ManagerApplicationPlacementEditor({
 }
 
 export function ManagerApplications() {
-  return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted">Loading applications…</div>}>
-      <ManagerApplicationsContent />
-    </Suspense>
-  );
-}
-
-function ManagerApplicationsContent() {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
-  const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
+  const openHandled = useRef(false);
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
   const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [rows, setRows] = useState<DemoApplicantRow[]>([]);
-  const [portfolioTick, setPortfolioTick] = useState(0);
+  const [rows, setRows] = useState<DemoApplicantRow[]>(() =>
+    typeof window === "undefined" ? [] : readManagerApplicationRows(),
+  );
+  const [portfolioTick, setPortfolioTick] = useState(() =>
+    typeof window === "undefined" ? 0 : hasCachedPropertyPipeline() ? 1 : 0,
+  );
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   useEffect(() => {
+    if (!authReady) return;
     const sync = () => setRows(readManagerApplicationRows());
     sync();
     void syncManagerApplicationsFromServer({ managerUserId: userId }).then(sync);
@@ -634,15 +632,16 @@ function ManagerApplicationsContent() {
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
     };
-  }, [userId]);
+  }, [authReady, userId]);
 
   useEffect(() => {
     if (!authReady || !userId) return;
     let cancelled = false;
-    syncPropertyPipelineFromServer()
+    void syncPropertyPipelineFromServer()
+      .catch(() => undefined)
       .finally(() => {
         if (cancelled) return;
-        setPortfolioTick((n) => n + 1);
+        setPortfolioTick((n) => (n > 0 ? n : 1));
       });
     return () => {
       cancelled = true;
@@ -666,15 +665,14 @@ function ManagerApplicationsContent() {
     writeManagerApplicationRows(next);
   }, []);
 
-  const propertyDataLoading = authReady && Boolean(userId) && portfolioTick === 0;
   const propertyOptions = buildManagerPropertyFilterOptions(userId);
   const shareableProperties = useMemo(() => buildManagerShareablePropertyOptions(userId), [userId, portfolioTick]);
   const placementPropertyOptions = propertyOptions;
 
   const scopedRows = useMemo(() => {
-    if (!authReady) return [];
+    if (!userId) return [];
     return rows.filter((r) => applicationVisibleToPortalUser(r, userId));
-  }, [rows, userId, authReady]);
+  }, [rows, userId]);
 
   const counts = useMemo(() => countByBucket(scopedRows), [scopedRows]);
   const tabs = useMemo(
@@ -696,11 +694,14 @@ function ManagerApplicationsContent() {
   }, [scopedRows, bucket, propertyFilter]);
 
   useEffect(() => {
-    const raw = (searchParams.get("open") ?? searchParams.get("axisId") ?? "").trim();
-    if (!raw || scopedRows.length === 0) return;
+    if (openHandled.current || scopedRows.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const raw = (params.get("open") ?? params.get("axisId") ?? "").trim();
+    if (!raw) return;
     const id = normalizeApplicationAxisId(raw).toUpperCase();
     const hit = scopedRows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === id);
     if (!hit) return;
+    openHandled.current = true;
     queueMicrotask(() => {
       setBucket(hit.bucket);
       setExpandedId(hit.id);
@@ -708,12 +709,11 @@ function ManagerApplicationsContent() {
     requestAnimationFrame(() => {
       document.getElementById(`portal-application-${hit.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.delete("open");
-    nextParams.delete("axisId");
-    const qs = nextParams.toString();
+    params.delete("open");
+    params.delete("axisId");
+    const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [searchParams, scopedRows, pathname, router]);
+  }, [scopedRows, pathname, router]);
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
     const row = rows.find((r) => r.id === id);
@@ -924,13 +924,28 @@ function ManagerApplicationsContent() {
       filterRow={
         <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-          {propertyDataLoading ? <p className="text-xs text-muted">Loading properties from backend…</p> : null}
         </ManagerPortalFilterRow>
       }
     >
       <div className="mb-4">
         <ManagerScreeningSettingsPanel />
       </div>
+      {!authReady && rows.length === 0 ? (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
+          <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
+        </div>
+      ) : rowsForBucket.length === 0 ? (
+        <PortalDataTableEmpty
+          icon="application"
+          message={
+            scopedRows.length === 0
+              ? "No applications yet."
+              : propertyFilter.trim()
+                ? "No applications for this property yet."
+                : "No applications in this tab yet."
+          }
+        />
+      ) : (
       <div className={PORTAL_DATA_TABLE_WRAP}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className="w-full min-w-[640px] border-collapse text-left text-sm">
@@ -942,24 +957,7 @@ function ManagerApplicationsContent() {
               </tr>
             </thead>
             <tbody>
-              {!authReady ? (
-                <tr>
-                  <td colSpan={3} className="px-4 py-12 text-center text-sm text-muted">
-                    Loading applications…
-                  </td>
-                </tr>
-              ) : rowsForBucket.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="px-4 py-12 text-center text-sm text-muted">
-                    {scopedRows.length === 0
-                      ? "No applications yet. Use Invite to apply to send prospects a link when you are ready."
-                      : propertyFilter.trim()
-                        ? "No applications for this property in this tab."
-                        : "No applications in this tab."}
-                  </td>
-                </tr>
-              ) : (
-                rowsForBucket.map((row) => (
+              {rowsForBucket.map((row) => (
                   <Fragment key={row.id}>
                     <tr
                       id={`portal-application-${row.id}`}
@@ -1087,12 +1085,12 @@ function ManagerApplicationsContent() {
                       </tr>
                     ) : null}
                   </Fragment>
-                ))
-              )}
+                ))}
             </tbody>
           </table>
         </div>
       </div>
+      )}
     </ManagerPortalPageShell>
       <PortalNotificationPreviewModal
         open={approvePreviewRow !== null}

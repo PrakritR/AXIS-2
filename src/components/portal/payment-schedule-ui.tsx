@@ -1,12 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ManagerAutomationSettings } from "@/lib/payment-automation-settings";
+import { PAYMENT_AUTOMATION_SETTINGS_EVENT } from "@/lib/payment-automation-settings";
+import { HOUSEHOLD_CHARGES_EVENT, readHouseholdCharges } from "@/lib/household-charges";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
+import {
+  filterScheduledPaymentMessagesForUnpaidCharges,
+  filterScheduledPaymentMessagesForVisibility,
+} from "@/lib/scheduled-payment-messages";
 
 function ScheduledMessageEditForm({
   message,
@@ -161,13 +167,13 @@ const SCHEDULE_SETTINGS_COPY: Record<
   },
   payments: {
     savedToast: "Payment reminder settings saved.",
-    title: "Payment reminder settings",
-    description: "Configure when rent and overdue charge reminders are scheduled and sent.",
+    title: "Automated payment reminders",
+    description: "Choose when reminders are sent for unpaid charges. Residents receive these automatically; you can edit individual messages from the ledger or Inbox → Schedule.",
     daysBeforeLabel: "Remind before due date",
-    sameDayLabel: "Same-day reminder",
-    followUpLabel: "Daily overdue reminders",
-    templateLabel: "Default pre-due template",
-    saveLabel: "Save settings",
+    sameDayLabel: "Due-date reminder (day payment is due)",
+    followUpLabel: "Overdue reminder every day",
+    templateLabel: "Default pre-due message template",
+    saveLabel: "Save reminder schedule",
   },
 };
 
@@ -184,23 +190,36 @@ function PaymentAutomationSettingsForm({
   const copy = SCHEDULE_SETTINGS_COPY[variant];
   const [draft, setDraft] = useState(initialSettings);
   const [customDay, setCustomDay] = useState("");
+  const [visibilityDaysInput, setVisibilityDaysInput] = useState(String(initialSettings.scheduleVisibilityDays));
   const [busy, setBusy] = useState(false);
+
+  const parseVisibilityDays = (raw: string) =>
+    Math.max(0, Math.min(30, Math.round(Number(raw)) || initialSettings.scheduleVisibilityDays));
 
   const save = async () => {
     setBusy(true);
     try {
+      const payload = {
+        ...draft,
+        scheduleVisibilityDays: parseVisibilityDays(visibilityDaysInput),
+      };
       const res = await fetch("/api/portal/automation-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(draft),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const payload = (await res.json()) as { error?: string };
         throw new Error(payload.error ?? "Could not save settings.");
       }
       const body = (await res.json()) as { settings: ManagerAutomationSettings };
+      setDraft(body.settings);
+      setVisibilityDaysInput(String(body.settings.scheduleVisibilityDays));
       onSaved(body.settings);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(PAYMENT_AUTOMATION_SETTINGS_EVENT));
+      }
       showToast(copy.savedToast);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not save settings.");
@@ -231,12 +250,14 @@ function PaymentAutomationSettingsForm({
     <div className="rounded-2xl border border-border bg-accent/20 p-4 space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-foreground">{copy.title}</h3>
+        {copy.description ? <p className="mt-1 text-xs text-muted">{copy.description}</p> : null}
       </div>
 
-      {variant === "payments" ? (
-        <>
       <div>
         <p className="text-xs font-semibold text-muted">{copy.daysBeforeLabel}</p>
+        {variant === "payments" ? (
+          <p className="mt-0.5 text-[11px] text-muted">Tap to turn each reminder on or off. Add a custom number of days if needed.</p>
+        ) : null}
         <div className="mt-2 flex flex-wrap gap-2">
           {[7, 5, 3, 2, 1].map((day) => (
             <Button
@@ -247,13 +268,13 @@ function PaymentAutomationSettingsForm({
               onClick={() => toggleDay(day)}
               disabled={busy}
             >
-              {day} day{day === 1 ? "" : "s"}
+              {day} day{day === 1 ? "" : "s"} before
             </Button>
           ))}
           <div className="flex items-center gap-1">
             <Input className="h-8 w-16 text-xs" placeholder="N" value={customDay} onChange={(e) => setCustomDay(e.target.value)} disabled={busy} />
             <Button type="button" variant="outline" className="rounded-full px-2 py-1 text-xs" onClick={addCustomDay} disabled={busy}>
-              Add
+              Add day
             </Button>
           </div>
         </div>
@@ -268,16 +289,38 @@ function PaymentAutomationSettingsForm({
           <input type="checkbox" checked={draft.overdueDailyEnabled} onChange={(e) => setDraft({ ...draft, overdueDailyEnabled: e.target.checked })} disabled={busy} />
           {copy.followUpLabel}
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm sm:col-span-2">
           <input type="checkbox" checked={draft.lateFeeNoticeEnabled} onChange={(e) => setDraft({ ...draft, lateFeeNoticeEnabled: e.target.checked })} disabled={busy} />
           Late fee notices
         </label>
       </div>
-        </>
+
+      {draft.overdueDailyEnabled ? (
+        <label className="block text-xs font-semibold text-muted">
+          Start daily overdue reminders after
+          <div className="mt-1 flex items-center gap-2">
+            <Input
+              className="h-8 w-16 text-xs"
+              inputMode="numeric"
+              value={String(draft.overdueDailyStartDays)}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  overdueDailyStartDays: Math.max(1, Math.min(30, Math.round(Number(e.target.value)) || 1)),
+                })
+              }
+              disabled={busy}
+            />
+            <span className="text-sm font-normal text-foreground">day(s) past due</span>
+          </div>
+        </label>
       ) : null}
 
       <div>
-        <p className="text-xs font-semibold text-muted">Schedule tab visibility</p>
+        <p className="text-xs font-semibold text-muted">Inbox schedule visibility</p>
+        <p className="mt-0.5 text-[11px] text-muted">
+          Controls which automated reminders appear in Inbox → Schedule and the tab count.
+        </p>
         <div className="mt-2 space-y-2">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -298,14 +341,17 @@ function PaymentAutomationSettingsForm({
               disabled={busy}
             />
             Show only
+          </label>
+          <div className="flex flex-wrap items-center gap-1 pl-6 text-sm">
             <Input
-              className="mx-1 h-8 w-14 text-xs"
-              value={String(draft.scheduleVisibilityDays)}
-              onChange={(e) => setDraft({ ...draft, scheduleVisibilityDays: Number(e.target.value) || 2 })}
+              className="h-8 w-14 text-xs"
+              inputMode="numeric"
+              value={visibilityDaysInput}
+              onChange={(e) => setVisibilityDaysInput(e.target.value)}
               disabled={busy || draft.scheduleVisibilityMode !== "days_before_send"}
             />
-            days before send date
-          </label>
+            <span>days before send date</span>
+          </div>
         </div>
       </div>
 
@@ -420,11 +466,13 @@ export function ReminderSettingsModal({
 }
 
 export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) {
-  const includeHidden = opts?.includeHidden ?? false;
-  const query = includeHidden ? "?includeHidden=1" : "";
+  const applyVisibilityFilter = !(opts?.includeHidden ?? false);
+  const query = "?includeHidden=1";
   const [settings, setSettings] = useState<ManagerAutomationSettings | null>(null);
-  const [messages, setMessages] = useState<ScheduledPaymentMessage[]>([]);
+  const [rawMessages, setRawMessages] = useState<ScheduledPaymentMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [chargeRevision, setChargeRevision] = useState(0);
+  const [settingsRevision, setSettingsRevision] = useState(0);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -433,11 +481,22 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
       if (!res.ok) return;
       const body = (await res.json()) as { settings: ManagerAutomationSettings; messages: ScheduledPaymentMessage[] };
       setSettings(body.settings);
-      setMessages(body.messages);
+      setRawMessages(body.messages);
     } finally {
       setLoading(false);
     }
   }, [query]);
+
+  useEffect(() => {
+    const onChargesChanged = () => setChargeRevision((n) => n + 1);
+    const onSettingsChanged = () => setSettingsRevision((n) => n + 1);
+    window.addEventListener(HOUSEHOLD_CHARGES_EVENT, onChargesChanged);
+    window.addEventListener(PAYMENT_AUTOMATION_SETTINGS_EVENT, onSettingsChanged);
+    return () => {
+      window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, onChargesChanged);
+      window.removeEventListener(PAYMENT_AUTOMATION_SETTINGS_EVENT, onSettingsChanged);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -448,7 +507,7 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
         if (!res.ok || cancelled) return;
         const body = (await res.json()) as { settings: ManagerAutomationSettings; messages: ScheduledPaymentMessage[] };
         setSettings(body.settings);
-        setMessages(body.messages);
+        setRawMessages(body.messages);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -457,6 +516,20 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
       cancelled = true;
     };
   }, [query]);
+
+  useEffect(() => {
+    void reload();
+  }, [chargeRevision, settingsRevision, reload]);
+
+  const messages = useMemo(() => {
+    void chargeRevision;
+    void settingsRevision;
+    let list = filterScheduledPaymentMessagesForUnpaidCharges(rawMessages, readHouseholdCharges());
+    if (applyVisibilityFilter && settings) {
+      list = filterScheduledPaymentMessagesForVisibility(list, settings);
+    }
+    return list;
+  }, [rawMessages, chargeRevision, settingsRevision, settings, applyVisibilityFilter]);
 
   return { settings, messages, loading, reload, setSettings };
 }

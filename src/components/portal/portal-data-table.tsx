@@ -74,12 +74,17 @@ export const PORTAL_DETAIL_BTN =
 export const PORTAL_DETAIL_BTN_PRIMARY =
   "h-8 min-h-0 !rounded-lg !border-emerald-600 !bg-emerald-600 px-3 py-0 text-xs font-medium !text-white hover:!border-emerald-700 hover:!bg-emerald-700 !shadow-none hover:!translate-y-0";
 
-export function PortalDataTableEmpty({ message }: { message: string }) {
-  return (
-    <div className={PORTAL_DATA_TABLE_WRAP}>
-      <div className="flex flex-col items-center justify-center bg-accent/20 px-4 py-14 text-center sm:py-16">
-        <p className="text-sm text-muted">{message}</p>
-      </div>
-    </div>
-  );
+import type { PortalEmptyIconKind } from "@/components/portal/portal-empty-state";
+import { PortalEmptyState } from "@/components/portal/portal-empty-state";
+
+export function PortalDataTableEmpty({
+  message,
+  icon = "default",
+}: {
+  message: string;
+  icon?: PortalEmptyIconKind;
+  /** @deprecated Empty states use a single title line. */
+  detail?: string;
+}) {
+  return <PortalEmptyState title={message} icon={icon} />;
 }

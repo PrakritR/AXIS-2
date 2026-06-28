@@ -63,14 +63,6 @@ const EMPTY_COPY: Record<AdminPropertyBucketIndex, string> = {
   4: "No rejected properties.",
 };
 
-const ADMIN_TAB_BANNER: Record<AdminPropertyBucketIndex, string> = {
-  0: "New manager submissions and edited live listings re-enter the queue here until you approve, request changes, or reject them.",
-  1: "Managers should revise and resubmit. When ready, you can return items to the pending review queue or close them out from the property detail view.",
-  2: "These listings are on the public Rent with Axis catalog. Unlist, request edits, or open the detail view for full review actions.",
-  3: "Listings the manager took off the public site. You can request changes, reject, or work from the detail view if needed.",
-  4: "Declined or removed from the catalog. Use the detail view to move back to pending or clear from the queue.",
-};
-
 function HouseIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -420,10 +412,6 @@ export function AdminPropertiesClient() {
             </span>
           </button>
         ))}
-      </div>
-
-      <div className="mt-4 glass-card rounded-2xl px-4 py-3 text-sm text-muted">
-        {ADMIN_TAB_BANNER[activeKpi]}
       </div>
 
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>

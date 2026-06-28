@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -305,6 +306,7 @@ function chargeEditAmountValue(charge: HouseholdCharge): string {
 
 export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId }) {
   const { showToast } = useAppUi();
+  const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages();
@@ -1452,7 +1454,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     if (markHouseholdChargePaid(chargeId, userId ?? null)) {
       showToast("Marked as paid.");
       setHcTick((n) => n + 1);
-      void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
+      void reloadSchedule();
+      void syncHouseholdChargesFromServer(true).then(() => {
+        setHcTick((n) => n + 1);
+        void reloadSchedule();
+      });
     }
   }
 
@@ -1570,19 +1576,24 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                 { id: "previous", label: "Previous", count: previousResidentsCount },
               ]}
               activeId={residentsTab}
-              onChange={(id) => setResidentsTab(id as ResidentsTabId)}
+              onChange={(id) => {
+                const next = id as ResidentsTabId;
+                setResidentsTab(next);
+                navigate(`${portalBase}/residents/${next}`);
+              }}
             />
           </ManagerPortalFilterRow>
         }
       >
       {filtered.length === 0 ? (
         <PortalDataTableEmpty
+          icon="residents"
           message={
             residents.length === 0
-              ? "No residents yet. Residents appear here after approval and once they create an Axis resident account."
+              ? "No residents yet."
               : residentsTab === "current"
-                ? "No current residents match the current filter."
-                : "No previous residents match the current filter."
+                ? "No current residents yet."
+                : "No previous residents yet."
           }
         />
       ) : (

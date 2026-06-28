@@ -106,12 +106,9 @@ export function ResidentFinancialsPanel({
             </button>
           </div>
           {loading ? (
-            <ReportGeneratePrompt title="Generating summary…" description="Calculating your current balance and charges." />
+            <ReportGeneratePrompt loading loadingTitle="Generating summary…" />
           ) : !generated ? (
-            <ReportGeneratePrompt
-              title="Generate balance summary"
-              description="Click Generate summary to view your current rent balance and pending charges."
-            />
+            <ReportGeneratePrompt title="No balance summary yet." />
           ) : balanceReport ? (
             <FinancialReportDocumentView report={balanceReport} />
           ) : (
@@ -162,12 +159,9 @@ export function ResidentFinancialsPanel({
             {generated ? <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} /> : null}
           </div>
           {loading ? (
-            <ReportGeneratePrompt title="Generating statement…" description="Compiling your rent ledger for the selected period." />
+            <ReportGeneratePrompt loading loadingTitle="Generating statement…" />
           ) : !generated ? (
-            <ReportGeneratePrompt
-              title="Generate rent statement"
-              description="Select a date range and click Generate statement. Your official rent ledger appears below."
-            />
+            <ReportGeneratePrompt title="No rent statement yet." />
           ) : ledgerReport ? (
             <FinancialReportDocumentView report={ledgerReport} />
           ) : (

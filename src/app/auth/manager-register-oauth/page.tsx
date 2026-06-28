@@ -1,6 +1,6 @@
 "use client";
 
-import { AxisLogoMark } from "@/components/brand/axis-logo";
+import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
 
@@ -30,29 +30,12 @@ function FinishContent() {
     })();
   }, [router]);
 
-  return (
-    <div className="flex flex-col items-center gap-6 py-10">
-      <AxisLogoMark />
-      <div
-        className="h-8 w-8 animate-spin rounded-full border-2 border-steel-light/25 border-t-steel-light"
-        role="status"
-        aria-label="Setting up your manager account"
-      />
-      <p className="text-sm text-muted">Setting up your manager account…</p>
-    </div>
-  );
+  return <AuthOAuthLoading label="Setting up your manager account" caption="Setting up your manager account…" />;
 }
 
 export default function ManagerRegisterOauthPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex flex-col items-center gap-6 py-10">
-          <AxisLogoMark />
-          <p className="text-sm text-muted">Loading…</p>
-        </div>
-      }
-    >
+    <Suspense fallback={<AuthOAuthLoading />}>
       <FinishContent />
     </Suspense>
   );

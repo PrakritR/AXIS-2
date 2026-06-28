@@ -1,18 +1,14 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
-  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
 import { ScheduleInboxComposeModal } from "@/components/portal/schedule-inbox-compose-modal";
@@ -26,7 +22,10 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readProRelationships } from "@/lib/pro-relationships";
-import type { ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
+import {
+  isUpcomingScheduledInboxMessage,
+  type ScheduledInboxMessageRecord,
+} from "@/lib/scheduled-inbox-messages";
 import {
   inboxScheduleTypeLabel,
   scheduledReminderShortLabel,
@@ -36,16 +35,6 @@ import {
 function formatSendDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-function startOfToday(): Date {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-}
-
-function isUpcomingScheduled(sendAt: string, status: string): boolean {
-  if (status === "sent") return false;
-  return new Date(sendAt).getTime() >= startOfToday().getTime();
 }
 
 function messagePreview(body: string, max = 120): string {
@@ -81,7 +70,6 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
   const [editAutomation, setEditAutomation] = useState<ScheduledPaymentMessage | null>(null);
   const [editManual, setEditManual] = useState<ScheduledInboxMessageRecord | null>(null);
   const [showAutomationSettings, setShowAutomationSettings] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const reloadManual = useCallback(async () => {
     setManualLoading(true);
@@ -133,11 +121,9 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
 
   const rows = useMemo((): ScheduleRow[] => {
     const manual: ScheduleRow[] = manualMessages
-      .filter((message) => isUpcomingScheduled(message.sendAt, message.status))
+      .filter((message) => isUpcomingScheduledInboxMessage(message.sendAt, message.status))
       .map((message) => ({ kind: "manual", message }));
-    const automation: ScheduleRow[] = automationMessages
-      .filter((message) => isUpcomingScheduled(message.sendAt, message.status))
-      .map((message) => ({ kind: "automation", message }));
+    const automation: ScheduleRow[] = automationMessages.map((message) => ({ kind: "automation", message }));
     return [...manual, ...automation].sort((a, b) => {
       const aAt = a.kind === "manual" ? a.message.sendAt : a.message.sendAt;
       const bAt = b.kind === "manual" ? b.message.sendAt : b.message.sendAt;
@@ -146,10 +132,8 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
   }, [manualMessages, automationMessages]);
 
   const scheduledCount = useMemo(
-    () =>
-      manualMessages.filter((m) => m.status === "scheduled" && isUpcomingScheduled(m.sendAt, m.status)).length +
-      automationMessages.filter((m) => m.status === "scheduled" && isUpcomingScheduled(m.sendAt, m.status)).length,
-    [manualMessages, automationMessages],
+    () => rows.filter((row) => row.message.status === "scheduled").length,
+    [rows],
   );
 
   const loading = automationLoading || manualLoading;
@@ -173,6 +157,11 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not update.");
     }
+  };
+
+  const openRowEdit = (row: ScheduleRow) => {
+    if (row.kind === "manual") setEditManual(row.message);
+    else setEditAutomation(row.message);
   };
 
   return (
@@ -205,19 +194,7 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
       {loading ? (
         <p className="text-sm text-muted">Loading schedule…</p>
       ) : rows.length === 0 ? (
-        <PortalInboxEmptyState
-          title="No scheduled messages yet"
-          hint={
-            <p className="max-w-md">
-              Schedule a message with the button above, or let automated charge reminders appear here. Charge timing is
-              configured under{" "}
-              <Link href={`${portalBase}/payments`} className="font-semibold text-primary hover:underline">
-                Payments
-              </Link>
-              .
-            </p>
-          }
-        />
+        <PortalInboxEmptyState title="No scheduled messages yet." />
       ) : (
         <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className={PORTAL_DATA_TABLE_SCROLL}>
@@ -232,7 +209,6 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Subject</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Message</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                  <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -254,11 +230,8 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
                   return (
                     <Fragment key={id}>
                       <tr
-                        className={PORTAL_TABLE_TR_EXPANDABLE}
-                        onClick={createPortalRowExpandClick(() =>
-                          setExpandedId((cur) => (cur === id ? null : id)),
-                        )}
-                        aria-expanded={expandedId === id}
+                        className={`${PORTAL_TABLE_TR_EXPANDABLE} cursor-pointer`}
+                        onClick={() => openRowEdit(row)}
                       >
                         <td className={PORTAL_TABLE_TD}>{formatSendDate(sendAt)}</td>
                         <td className={PORTAL_TABLE_TD}>
@@ -285,52 +258,7 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
                           <p className="line-clamp-2 text-xs leading-relaxed text-muted">{messagePreview(body)}</p>
                         </td>
                         <td className={`${PORTAL_TABLE_TD} capitalize ${statusClass(status)}`}>{status}</td>
-                        <td className={`${PORTAL_TABLE_TD} text-right`}>
-                          <div className="inline-flex items-center gap-2">
-                            {status === "scheduled" || status === "cancelled" ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="rounded-full px-2 py-0.5 text-xs"
-                                onClick={() => {
-                                  if (isManual) setEditManual(row.message);
-                                  else setEditAutomation(row.message);
-                                }}
-                              >
-                                Edit
-                              </Button>
-                            ) : null}
-                            {isManual && status !== "sent" ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="rounded-full px-2 py-0.5 text-xs"
-                                onClick={() => void toggleManualCancelled(row.message, status !== "cancelled")}
-                              >
-                                {status === "cancelled" ? "Restore" : "Cancel"}
-                              </Button>
-                            ) : null}
-                          </div>
-                        </td>
                       </tr>
-                      {expandedId === id ? (
-                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={9} className={PORTAL_TABLE_DETAIL_CELL}>
-                            <div className="space-y-3">
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Subject</p>
-                                <p className="mt-1 text-sm font-medium text-foreground">{subject}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Message</p>
-                                <pre className="mt-1 whitespace-pre-wrap rounded-xl border border-border bg-accent/20 p-4 text-sm leading-relaxed text-muted">
-                                  {body}
-                                </pre>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : null}
                     </Fragment>
                   );
                 })}
@@ -352,6 +280,14 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
         onSaved={reloadAll}
         contacts={liveContacts}
         editMessage={editManual}
+        onToggleCancelled={
+          editManual
+            ? async (cancelled) => {
+                await toggleManualCancelled(editManual, cancelled);
+                setEditManual(null);
+              }
+            : undefined
+        }
       />
       <ScheduledMessageEditModal
         open={Boolean(editAutomation)}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
+import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -47,16 +47,8 @@ export function InboxEmptyIcon({ className }: { className?: string }) {
   );
 }
 
-export function PortalInboxEmptyState({ title, hint }: { title: string; hint?: ReactNode }) {
-  return (
-    <div className={PORTAL_INBOX_EMPTY_WRAP}>
-      <AxisHeaderMarkTile>
-        <InboxEmptyIcon className="h-[26px] w-[26px]" />
-      </AxisHeaderMarkTile>
-      <p className="mt-4 text-sm font-medium text-muted">{title}</p>
-      {hint ? <div className="mt-2 text-xs text-muted/70">{hint}</div> : null}
-    </div>
-  );
+export function PortalInboxEmptyState({ title }: { title: string; hint?: ReactNode }) {
+  return <PortalEmptyState title={title} icon="inbox" />;
 }
 
 export const INBOX_TAB_DEFS = [

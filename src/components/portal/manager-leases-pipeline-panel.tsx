@@ -416,9 +416,8 @@ export function ManagerLeasesPipelinePanel({
   if (bucketRows.length === 0) {
     return (
       <PortalDataTableEmpty
-        message={
-          rows.length === 0 ? "No lease drafts yet." : "No leases in this stage."
-        }
+        icon="lease"
+        message={rows.length === 0 ? "No lease drafts yet." : "No leases in this stage yet."}
       />
     );
   }

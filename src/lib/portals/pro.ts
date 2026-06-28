@@ -53,8 +53,8 @@ export const proPortal: PortalDefinition = {
       section: "documents",
       label: "Documents",
       tabs: [
-        { id: "expense-documents", label: "Expense documents" },
         { id: "income-documents", label: "Income documents" },
+        { id: "expense-documents", label: "Expense documents" },
         { id: "1099", label: "1099 forms" },
         { id: "tax-summary", label: "Tax summary" },
       ],

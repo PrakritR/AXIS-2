@@ -144,7 +144,7 @@ function FinancesDataTable({
   );
 
   if (report.rows.length === 0) {
-    return <PortalDataTableEmpty message="No entries for this period. Try widening the date range or clearing the property filter." />;
+    return <PortalDataTableEmpty message="No finance entries yet." icon="finance" />;
   }
 
   return (
@@ -462,14 +462,7 @@ export function ManagerFinancesPanel({
   })();
 
   return (
-    <ManagerPortalPageShell
-      title="Finances"
-      subtitle={
-        tabId === "income"
-          ? "Rent and income received — filter by resident or type."
-          : "Property expenses — filter by category or vendor."
-      }
-    >
+    <ManagerPortalPageShell title="Finances">
       <div className="mb-4 flex flex-wrap gap-2">
         {FINANCE_TABS.map((tab) => (
           <Link
@@ -498,7 +491,7 @@ export function ManagerFinancesPanel({
             onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
             onRun={() => void loadTable()}
             loading={loading}
-            runLabel="Refresh"
+            showRunButton={false}
           />
           <div className="flex flex-wrap gap-2">
             {tabId === "expenses" ? (
@@ -538,7 +531,7 @@ export function ManagerFinancesPanel({
           </div>
         ) : filteredReport ? (
           filteredReport.rows.length === 0 && report && report.rows.length > 0 ? (
-            <PortalDataTableEmpty message="No entries match these filters. Clear filters to see all rows." />
+            <PortalDataTableEmpty message="No finance entries match these filters yet." icon="finance" />
           ) : (
             <FinancesDataTable
               report={filteredReport}
@@ -548,7 +541,7 @@ export function ManagerFinancesPanel({
             />
           )
         ) : (
-          <PortalDataTableEmpty message="Could not load finances for this period." />
+          <PortalDataTableEmpty message="No finance entries yet." icon="finance" />
         )}
       </div>
 

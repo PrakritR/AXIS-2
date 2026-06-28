@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -134,14 +135,13 @@ export function ManagerServicesPanel() {
             {!resolvedPropertyId ? (
               <p className="py-8 text-center text-sm text-muted">Select a property to manage its request options.</p>
             ) : offers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-accent/30 py-16 text-center">
-                <p className="text-sm font-medium text-muted">No request options yet</p>
-                <p className="mt-1 max-w-xs text-xs text-muted">
-                  Add request options — like cleaning, linen sets, parking, or other amenities — that residents can choose directly from their portal.
-                </p>
-                <Button type="button" className="mt-5 rounded-full" onClick={openCreate}>
-                  Add first request
-                </Button>
+              <div className="space-y-5">
+                <PortalEmptyState title="No request options yet." icon="service" />
+                <div className="flex justify-center">
+                  <Button type="button" className="rounded-full" onClick={openCreate}>
+                    Add first request
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

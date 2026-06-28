@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isProductionRuntime } from "@/lib/server-env";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { type HouseholdCharge } from "@/lib/household-charges";
+import { type HouseholdCharge, type RecurringRentProfile, filterChargesEligibleForPaymentReminders, isUnpaidHouseholdCharge } from "@/lib/household-charges";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { lateFeePolicyFromSubmission } from "@/lib/payment-policy";
 import {
@@ -69,16 +69,31 @@ export async function GET(req: Request) {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
 
-  const { data: records, error } = await db
-    .from("portal_household_charge_records")
-    .select("id, row_data, manager_user_id")
-    .eq("status", "pending");
+  const [{ data: records, error }, { data: profileRecords, error: profileError }] = await Promise.all([
+    db
+      .from("portal_household_charge_records")
+      .select("id, row_data, manager_user_id")
+      .eq("status", "pending"),
+    db.from("portal_recurring_rent_profile_records").select("manager_user_id, row_data").limit(5000),
+  ]);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  if (profileError) {
+    return NextResponse.json({ error: profileError.message }, { status: 500 });
+  }
 
   const listingByPropertyId = await loadListingByPropertyId(db);
+
+  const profilesByManager = new Map<string, RecurringRentProfile[]>();
+  for (const row of profileRecords ?? []) {
+    const profile = row.row_data as RecurringRentProfile;
+    const managerId = (row.manager_user_id as string | null) ?? profile.managerUserId ?? "unknown";
+    const list = profilesByManager.get(managerId) ?? [];
+    list.push(profile);
+    profilesByManager.set(managerId, list);
+  }
 
   const allCharges = (records ?? [])
     .map((record) => ({
@@ -87,7 +102,7 @@ export async function GET(req: Request) {
       charge: record.row_data as HouseholdCharge | null,
     }))
     .filter((row): row is { recordId: string; managerUserId: string | null; charge: HouseholdCharge } =>
-      Boolean(row.charge?.id && row.charge.residentEmail),
+      Boolean(row.charge?.id && row.charge.residentEmail && isUnpaidHouseholdCharge(row.charge)),
     );
 
   const chargesByManager = new Map<string, HouseholdCharge[]>();
@@ -119,6 +134,9 @@ export async function GET(req: Request) {
   for (const [managerId, charges] of chargesByManager) {
     if (managerId === "unknown") continue;
 
+    const rentProfiles = profilesByManager.get(managerId) ?? [];
+    const eligibleCharges = filterChargesEligibleForPaymentReminders(charges, rentProfiles);
+
     const [settings, overrides] = await Promise.all([
       loadManagerAutomationSettings(db, managerId).catch(() => DEFAULT_MANAGER_AUTOMATION_SETTINGS),
       loadScheduledMessageOverrides(db, managerId).catch(() => new Map()),
@@ -134,7 +152,7 @@ export async function GET(req: Request) {
 
     const scheduled = projectScheduledPaymentMessages({
       managerUserId: managerId,
-      charges,
+      charges: eligibleCharges,
       settings,
       overrides,
       sentDedupIds,
@@ -144,7 +162,7 @@ export async function GET(req: Request) {
       includeHidden: true,
     });
 
-    const chargeById = new Map(charges.map((c) => [c.id, c]));
+    const chargeById = new Map(eligibleCharges.map((c) => [c.id, c]));
 
     for (const message of scheduled) {
       if (message.kind === "late_fee") continue;
@@ -192,7 +210,7 @@ export async function GET(req: Request) {
       }
     }
 
-    for (const charge of charges) {
+    for (const charge of eligibleCharges) {
       if (charge.residentEmail.trim().toLowerCase().endsWith("@axis.local")) continue;
       const dueDate = householdChargeDueDate(charge);
       if (!dueDate) continue;

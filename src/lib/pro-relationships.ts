@@ -20,6 +20,8 @@ export type ProRelationshipRecord = {
   id: string;
   linkedAxisId: string;
   linkedDisplayName?: string;
+  /** Auth user id for the linked co-manager (when known). */
+  linkedUserId?: string;
   perspective: ProRelationshipPerspective;
   /** Amount of managed revenue this manager receives on the linked properties (0–100). */
   payoutPercentForManager: number;
@@ -34,6 +36,13 @@ export type ProRelationshipRecord = {
 };
 
 const memoryByUser = new Map<string, ProRelationshipRecord[]>();
+const RELATIONSHIPS_SYNC_TTL_MS = 15_000;
+const relationshipsLastSyncedAt = new Map<string, number>();
+const relationshipsSyncPromises = new Map<string, Promise<ProRelationshipRecord[]>>();
+
+function relationshipsChanged(a: ProRelationshipRecord[], b: ProRelationshipRecord[]): boolean {
+  return JSON.stringify(a) !== JSON.stringify(b);
+}
 
 function migrateLegacyPerspective(p: string): ProRelationshipPerspective {
   return "manager_tab";
@@ -59,10 +68,12 @@ export function normalizeProRelationshipRecord(raw: unknown): ProRelationshipRec
     canEditListing: r.canEditListing === true,
     coManagerPermissions: flatCoManagerPermissionsFromProperty(propertyCoManagerPermissions),
   });
+  const linkedUserId = r.linkedUserId;
   return {
     id,
     linkedAxisId,
     linkedDisplayName: typeof r.linkedDisplayName === "string" ? r.linkedDisplayName : undefined,
+    linkedUserId: typeof linkedUserId === "string" ? linkedUserId : undefined,
     perspective,
     payoutPercentForManager: Number.isFinite(payout) ? payout : 15,
     assignedPropertyIds,
@@ -114,6 +125,7 @@ export function proRelationshipRowsFromInvites(invites: AccountLinkInviteDto[]):
         id: inv.id,
         linkedAxisId: inv.linkedAxisId,
         linkedDisplayName: inv.linkedDisplayName ?? undefined,
+        linkedUserId: inv.linkedUserId,
         perspective: "manager_tab" as const,
         payoutPercentForManager: inv.payoutPercentForManager,
         assignedPropertyIds: inv.assignedPropertyIds,
@@ -146,15 +158,46 @@ export function writeProRelationships(userId: string, rows: ProRelationshipRecor
   }).catch(() => undefined);
 }
 
-export async function syncProRelationshipsFromServer(userId: string): Promise<ProRelationshipRecord[]> {
+export async function syncProRelationshipsFromServer(
+  userId: string,
+  opts?: { force?: boolean },
+): Promise<ProRelationshipRecord[]> {
   if (typeof window === "undefined" || !userId.trim()) return [];
-  const res = await fetch("/api/portal-pro-relationships", { credentials: "include", cache: "no-store" });
-  if (!res.ok) return memoryByUser.get(userId) ?? [];
-  const body = (await res.json()) as { rows?: unknown[] };
-  const rows = (body.rows ?? []).map((x) => migrateRow(x as Record<string, unknown>)).filter(Boolean) as ProRelationshipRecord[];
-  memoryByUser.set(userId, rows);
-  window.dispatchEvent(new Event("axis-pro-relationships"));
-  return rows;
+  const force = opts?.force === true;
+  const inFlight = relationshipsSyncPromises.get(userId);
+  if (!force && inFlight) return inFlight;
+
+  const lastSyncedAt = relationshipsLastSyncedAt.get(userId) ?? 0;
+  if (!force && lastSyncedAt > 0 && Date.now() - lastSyncedAt < RELATIONSHIPS_SYNC_TTL_MS) {
+    return memoryByUser.get(userId) ?? [];
+  }
+
+  const promise = (async () => {
+    try {
+      const res = await fetch("/api/portal-pro-relationships", { credentials: "include", cache: "no-store" });
+      if (!res.ok) return memoryByUser.get(userId) ?? [];
+      const body = (await res.json()) as { rows?: unknown[] };
+      const rows = (body.rows ?? [])
+        .map((x) => migrateRow(x as Record<string, unknown>))
+        .filter(Boolean) as ProRelationshipRecord[];
+      const previous = memoryByUser.get(userId) ?? [];
+      memoryByUser.set(userId, rows);
+      relationshipsLastSyncedAt.set(userId, Date.now());
+      if (relationshipsChanged(previous, rows)) {
+        window.dispatchEvent(new Event("axis-pro-relationships"));
+      }
+      return rows;
+    } catch {
+      return memoryByUser.get(userId) ?? [];
+    }
+  })();
+
+  relationshipsSyncPromises.set(userId, promise);
+  try {
+    return await promise;
+  } finally {
+    relationshipsSyncPromises.delete(userId);
+  }
 }
 
 export function generateRelationshipId(): string {

@@ -89,7 +89,6 @@ function ChoosePortalForm() {
   return (
     <AuthCard>
       <h1 className="text-center text-[22px] font-semibold tracking-tight text-foreground">Choose a portal</h1>
-      <p className="mt-3 text-center text-sm text-muted">Your account has access to more than one portal. Pick where to go.</p>
 
       {error ? <p className="mt-4 text-center text-sm text-rose-600">{error}</p> : null}
 
@@ -108,7 +107,7 @@ function ChoosePortalForm() {
                 type="button"
                 disabled={busy !== null}
                 onClick={() => void choose(r)}
-                className="group w-full text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60"
+                className="group w-full rounded-[18px] text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <div
                   className={`rounded-[18px] transition-all duration-200 ${

@@ -76,6 +76,23 @@ describe("manager-access", () => {
     ).toBe("free");
     expect(
       resolveManagerSubscriptionTierFromPurchase({
+        tier: "pro",
+        billing: "portal",
+        stripeSubscriptionId: null,
+        hasPurchaseRow: true,
+      }),
+    ).toBe("free");
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: "business",
+        billing: "admin",
+        paidAt: "2026-06-01T00:00:00.000Z",
+        stripeSubscriptionId: null,
+        hasPurchaseRow: true,
+      }),
+    ).toBe("paid");
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
         tier: null,
         stripeSubscriptionId: null,
         hasPurchaseRow: true,

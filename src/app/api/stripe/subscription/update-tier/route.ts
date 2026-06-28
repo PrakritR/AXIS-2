@@ -97,11 +97,10 @@ export async function POST(req: Request) {
         }
         return NextResponse.json({ ok: true, stripeManaged: false, tier: "free" });
       }
-      const result = await setManagerPurchaseTier(user.id, targetTier);
-      if (!result.ok) {
-        return NextResponse.json({ error: result.error }, { status: 400 });
-      }
-      return NextResponse.json({ ok: true, stripeManaged: false, tier: targetTier });
+      return NextResponse.json(
+        { error: "Start checkout to subscribe to a paid plan." },
+        { status: 402 },
+      );
     }
 
     const stripe = getStripe();

@@ -713,12 +713,10 @@ export function ResidentServicesPanel({
       ) : null}
 
       {activeTab === "requests" ? (
+        serviceRequests.length === 0 ? (
+          <PortalDataTableEmpty message="No service requests yet." icon="service" />
+        ) : (
         <div className={PORTAL_DATA_TABLE_WRAP}>
-          {serviceRequests.length === 0 ? (
-            <PortalDataTableEmpty
-              message="No requests yet. Use Submit request to send one to your manager."
-            />
-          ) : (
             <div className={PORTAL_DATA_TABLE_SCROLL}>
               <table className="min-w-[860px] w-full border-collapse text-left text-sm">
                 <thead>
@@ -765,8 +763,8 @@ export function ResidentServicesPanel({
                 </tbody>
               </table>
             </div>
-          )}
         </div>
+        )
       ) : (
         <div>
           <div className="mb-3 flex items-center gap-3">
@@ -790,16 +788,15 @@ export function ResidentServicesPanel({
             </div>
           </div>
 
-          <div className={PORTAL_DATA_TABLE_WRAP}>
-            {rows.length === 0 ? (
-              <PortalDataTableEmpty
-                message={
-                  myRows.length === 0
-                    ? "No work orders yet. Use Report maintenance to get started."
-                    : "No work orders in this status."
-                }
-              />
-            ) : (
+          {rows.length === 0 ? (
+            <PortalDataTableEmpty
+              icon="work-order"
+              message={
+                myRows.length === 0 ? "No work orders yet." : "No work orders in this status yet."
+              }
+            />
+          ) : (
+            <div className={PORTAL_DATA_TABLE_WRAP}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
                 <table className="min-w-[700px] w-full border-collapse text-left text-sm">
                   <thead>
@@ -869,8 +866,8 @@ export function ResidentServicesPanel({
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 

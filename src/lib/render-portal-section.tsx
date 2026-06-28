@@ -24,6 +24,7 @@ import { ResidentDocumentsPanel } from "@/components/portal/resident-documents-p
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
 import {
@@ -195,6 +196,12 @@ export async function renderPortalSection(
 ) {
   const def = await getPortalDefinition(kind);
 
+  if (section === "finances") {
+    const defaultTab = kind === "resident" ? "summary" : "income";
+    const tab = tabParts?.[0] ?? defaultTab;
+    redirect(`${def.basePath}/financials/${tab}`);
+  }
+
   if (kind === "admin" && (section === "managers" || section === "owners")) {
     redirect(`${def.basePath}/axis-users`);
   }
@@ -254,7 +261,6 @@ export async function renderPortalSection(
       managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
     }
   }
-
   const managerPaywall =
     kind === "manager" || kind === "pro"
       ? managerTierPaywall(kind, section, managerOwnerSubscriptionTier, meta.label, def.basePath)
@@ -546,27 +552,11 @@ export async function renderPortalSection(
     const leaseSigned = moveInEmail ? await loadResidentLeaseSignedStatus(moveInEmail) : false;
     if (!leaseSigned) {
       return (
-        <ManagerPortalPageShell title="Move-in">
-          <div className="glass-card flex flex-col items-center rounded-2xl px-5 py-10 text-center">
-            <svg
-              className="h-10 w-10 text-muted"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <rect x="5" y="11" width="14" height="10" rx="2" />
-              <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-            </svg>
-            <p className="mt-4 text-base font-semibold text-foreground">Available once your lease is signed</p>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">
-              Your move-in details will appear here after your lease has been fully signed by you and your property
-              manager. Head to the <strong className="font-semibold text-foreground">Lease</strong> tab to review and sign.
-            </p>
-          </div>
+        <ManagerPortalPageShell
+          title="Move-in"
+          subtitle="Your move-in details will appear here after your lease has been fully signed by you and your property manager. Head to the Lease tab to review and sign."
+        >
+          <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
         </ManagerPortalPageShell>
       );
     }

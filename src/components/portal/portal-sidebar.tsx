@@ -1,8 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
@@ -12,7 +9,12 @@ import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
+import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
+import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import type { PortalDefinition } from "@/lib/portal-types";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 function hrefForSection(def: PortalDefinition, section: string) {
   const meta = def.sections.find((s) => s.section === section);
@@ -48,6 +50,7 @@ function PortalBrandLogoTile() {
 }
 
 function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
+  const router = useRouter();
   const isAdmin = definition.kind === "admin";
   const isResident = definition.kind === "resident";
   const brandTitle = definition.title.trim().toLowerCase() === "axis" ? "Axis" : definition.title;
@@ -64,8 +67,10 @@ function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
       />
       <Link
         href="/"
+        prefetch
         aria-label="Axis home"
         className={`relative flex gap-3 transition-opacity hover:opacity-90 ${isAdmin || isResident ? "items-start" : "items-center"}`}
+        onClick={portalNavClick(router, "/")}
       >
         <PortalBrandLogoTile />
         <div className={`min-w-0 ${isAdmin || isResident ? "pt-0.5" : ""}`}>
@@ -135,6 +140,7 @@ export function PortalSidebar({
   subscriptionTier?: "free" | "paid" | null;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
   const navCounts = usePortalNavCounts(definition.kind);
@@ -145,9 +151,16 @@ export function PortalSidebar({
         section: section.section,
         label: section.label,
         href: hrefForSection(definition, section.section),
+        prefetchHrefs: section.tabs.length
+          ? section.tabs.map((tab) => `${definition.basePath}/${section.section}/${tab.id}`)
+          : [`${definition.basePath}/${section.section}`],
       })),
     [definition, visibleSections],
   );
+
+  useEffect(() => {
+    prefetchPortalPanelChunks();
+  }, []);
 
   const activeSection = useMemo(() => {
     const parts = pathname.split("/").filter(Boolean);
@@ -212,6 +225,10 @@ export function PortalSidebar({
                 key={s.section}
                 href={s.href}
                 prefetch
+                onMouseEnter={() => {
+                  prefetchPortalHref(router, s.href);
+                  for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
+                }}
                 className={navLinkClass(active, locked)}
                 aria-label={
                   locked
@@ -284,7 +301,7 @@ export function PortalSidebar({
               </button>
             ) : null}
           </div>
-          <div className="mt-1.5 flex gap-1.5 overflow-x-auto px-3 pb-2 pt-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden">
+          <nav className="mt-1.5 flex gap-1.5 overflow-x-auto px-3 pb-2 pt-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden" aria-label="Portal sections">
             {navItems.map((s) => {
               const active = activeSection === s.section;
               const locked = isSectionLocked(s.section);
@@ -294,6 +311,10 @@ export function PortalSidebar({
                   key={s.section}
                   href={s.href}
                   prefetch
+                  onMouseEnter={() => {
+                    prefetchPortalHref(router, s.href);
+                    for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
+                  }}
                   className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
                     active
                       ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
@@ -320,7 +341,7 @@ export function PortalSidebar({
                 </Link>
               );
             })}
-          </div>
+          </nav>
         </div>
 
         {accountOpen && hasSignOut ? (

@@ -415,7 +415,8 @@ export function ManagerWorkOrdersPanel({
   if (rows.length === 0) {
     return (
       <PortalDataTableEmpty
-        message={allRows.length === 0 ? "No work orders yet." : "No work orders in this bucket."}
+        icon="work-order"
+        message={allRows.length === 0 ? "No work orders yet." : "No work orders in this bucket yet."}
       />
     );
   }

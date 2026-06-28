@@ -34,8 +34,8 @@ import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import {
+  PaymentAutomationSettingsPanel,
   ScheduledMessageEditModal,
-  ReminderSettingsModal,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
@@ -75,7 +75,6 @@ export function ManagerPayments() {
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
-  const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages();
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
 
@@ -313,6 +312,18 @@ export function ManagerPayments() {
       <div className="mb-8">
         <PortalStripeConnectPanel basePath="/portal" variant="embedded" />
       </div>
+      {reminderSettings ? (
+        <div id="payment-reminder-settings" className="mb-6">
+          <PaymentAutomationSettingsPanel
+            variant="payments"
+            settings={reminderSettings}
+            onSaved={(next) => {
+              setReminderSettings(next);
+              void reloadSchedule();
+            }}
+          />
+        </div>
+      ) : null}
       <ManagerPaymentsLedgerPanel
         rows={rowsForBucket}
         managerUserId={userId ?? null}
@@ -320,7 +331,9 @@ export function ManagerPayments() {
         scheduledMessages={scheduledMessages}
         schedulePortalBase={portalBase}
         onScheduleEdit={setScheduleEdit}
-        onReminderSettings={() => setReminderSettingsOpen(true)}
+        onReminderSettings={() => {
+          document.getElementById("payment-reminder-settings")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
         onScheduleChanged={() => void reloadSchedule()}
         onRowsChanged={() => setHcTick((n) => n + 1)}
       />
@@ -329,15 +342,6 @@ export function ManagerPayments() {
         message={scheduleEdit}
         onClose={() => setScheduleEdit(null)}
         onSaved={() => void reloadSchedule()}
-      />
-      <ReminderSettingsModal
-        open={reminderSettingsOpen}
-        onClose={() => setReminderSettingsOpen(false)}
-        settings={reminderSettings}
-        onSaved={(next) => {
-          setReminderSettings(next);
-          void reloadSchedule();
-        }}
       />
       <ManagerAddPaymentModal
         open={addOpen}

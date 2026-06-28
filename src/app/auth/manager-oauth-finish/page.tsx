@@ -1,7 +1,7 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { AxisLogoMark } from "@/components/brand/axis-logo";
+import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { portalDashboardPath } from "@/components/auth/portal-switcher";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
@@ -78,27 +78,13 @@ function ManagerOauthFinishContent() {
     );
   }
 
-  return (
-    <div className="flex flex-col items-center gap-6 py-10">
-      <AxisLogoMark />
-      <div
-        className="h-8 w-8 animate-spin rounded-full border-2 border-steel-light/25 border-t-steel-light"
-        role="status"
-        aria-label="Finishing account setup"
-      />
-      <p className="text-sm text-muted">Finishing your Axis account…</p>
-    </div>
-  );
+  return <AuthOAuthLoading label="Finishing account setup" caption="Finishing your Axis account…" />;
 }
 
 export default function ManagerOauthFinishPage() {
   return (
     <Suspense
-      fallback={
-        <AuthCard>
-          <p className="text-center text-sm text-muted">Loading…</p>
-        </AuthCard>
-      }
+      fallback={<AuthOAuthLoading />}
     >
       <ManagerOauthFinishContent />
     </Suspense>

@@ -15,8 +15,7 @@ export function LandingHero() {
           className="hero-title animate-fade-up mx-auto max-w-4xl text-[2.25rem] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[3.5rem] md:text-[4.25rem]"
           style={{ animationDelay: "60ms" }}
         >
-          AI-powered property management{" "}
-          <span className="text-gradient-accent">that runs itself</span>
+          AI-powered property management that runs itself
         </h1>
 
         <p

@@ -35,10 +35,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => null)) as Body | null;
+    const body = (await req.json().catch(() => null)) as Body & { embedded?: boolean } | null;
     const tierRaw = typeof body?.tier === "string" ? body.tier.toLowerCase().trim() : "";
     const billingRaw = typeof body?.billing === "string" ? body.billing.toLowerCase().trim() : "";
     const baseRaw = typeof body?.returnBasePath === "string" ? body.returnBasePath.trim() : "/portal";
+    const useEmbedded = body?.embedded !== false;
 
     if (!isPaidTier(tierRaw) || !isBilling(billingRaw)) {
       return NextResponse.json({ error: "tier must be pro or business; billing must be monthly or annual." }, { status: 400 });
@@ -61,6 +62,7 @@ export async function POST(req: Request) {
 
     void baseRaw;
     const basePath = "/portal";
+    const returnUrl = `${appUrl}${basePath}/plan?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
 
     const { data: profile, error: profileErr } = await supabaseAuth
       .from("profiles")
@@ -92,25 +94,42 @@ export async function POST(req: Request) {
     const fn = profile?.full_name?.trim();
     if (fn) metadata.full_name = fn;
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      /** Manager plans bill by card only — ACH is for resident portal payments (Connect). */
-      payment_method_types: ["card"],
-      ui_mode: "hosted_page",
+    const sessionBase = {
+      mode: "subscription" as const,
+      payment_method_types: ["card"] as const,
       line_items: [{ price, quantity: 1 }],
       customer_email: email,
       client_reference_id: user.id,
       metadata,
-      success_url: `${appUrl}${basePath}/plan?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}${basePath}/plan?checkout=cancelled`,
       allow_promotion_codes: tier === "pro" && billing === "monthly",
+    };
+
+    if (useEmbedded) {
+      const session = await stripe.checkout.sessions.create({
+        ui_mode: "embedded_page",
+        ...sessionBase,
+        return_url: returnUrl,
+      } as Parameters<typeof stripe.checkout.sessions.create>[0]);
+
+      if (!session.client_secret) {
+        return NextResponse.json({ error: "Stripe did not return a checkout client secret." }, { status: 500 });
+      }
+
+      return NextResponse.json({ clientSecret: session.client_secret, sessionId: session.id, embedded: true });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      ui_mode: "hosted_page",
+      ...sessionBase,
+      success_url: returnUrl,
+      cancel_url: `${appUrl}${basePath}/plan?checkout=cancelled`,
     } as Parameters<typeof stripe.checkout.sessions.create>[0]);
 
     if (!session.url) {
       return NextResponse.json({ error: "Stripe did not return a checkout URL." }, { status: 500 });
     }
 
-    return NextResponse.json({ url: session.url, sessionId: session.id });
+    return NextResponse.json({ url: session.url, sessionId: session.id, embedded: false });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Checkout failed";
     return NextResponse.json({ error: message }, { status: 500 });

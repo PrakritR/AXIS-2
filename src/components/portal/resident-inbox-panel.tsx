@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
@@ -75,7 +75,7 @@ function countThreads(threads: InboxThread[]) {
 
 export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
-  const router = useRouter();
+  const navigate = usePortalNavigate();
   const [local, setLocal] = useState<InboxThread[]>(
     () => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[],
   );
@@ -323,13 +323,13 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
               ? "Message sent to Axis admin."
               : "Message sent via inbox and email.",
           );
-          router.push("/resident/inbox/sent");
+          navigate("/resident/inbox/sent");
         } catch {
           showToast("Message could not be sent.");
         }
       })();
     },
-    [router, showToast],
+    [navigate, showToast],
   );
 
   const handleReply = useCallback(
@@ -422,12 +422,12 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const emptyCopy =
     tabId === "trash"
-      ? "Trash is empty"
+      ? "No trash messages yet."
       : tabId === "sent"
-        ? "No sent messages yet"
+        ? "No sent messages yet."
         : tabId === "opened"
-          ? "No opened messages yet"
-          : "No messages yet";
+          ? "No opened messages yet."
+          : "No messages yet.";
 
   return (
     <ManagerPortalPageShell
@@ -454,7 +454,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           activeTone="primary"
           tabs={tabs}
           activeId={tabId}
-          onChange={(id) => router.push(`/resident/inbox/${id}`)}
+          onChange={(id) => navigate(`/resident/inbox/${id}`)}
         />
       }
     >
@@ -468,14 +468,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       />
 
       {rowsForTab.length === 0 ? (
-        <PortalInboxEmptyState
-          title={emptyCopy}
-          hint={
-            tabId === "unopened" ? (
-              <p className="max-w-md">Notices from your property team and maintenance will appear here.</p>
-            ) : undefined
-          }
-        />
+        <PortalInboxEmptyState title={emptyCopy} />
       ) : (
         <PortalInboxMessageTable
           rows={toRows(rowsForTab, tabId)}

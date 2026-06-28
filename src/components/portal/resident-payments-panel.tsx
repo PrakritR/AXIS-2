@@ -469,12 +469,13 @@ export function ResidentPaymentsPanel() {
           ) : null}
           {rows.length === 0 ? (
             <PortalDataTableEmpty
+              icon="payment"
               message={
                 charges.length === 0
-                  ? "No charges yet. Submit a rental application to see your listing’s application fee and deposit lines here."
+                  ? "No charges yet."
                   : tab === "pending"
-                    ? "Nothing unpaid — you’re all caught up in this tab."
-                    : "No paid items yet."
+                    ? "No unpaid charges yet."
+                    : "No paid charges yet."
               }
             />
           ) : (

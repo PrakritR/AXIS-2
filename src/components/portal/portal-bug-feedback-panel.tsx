@@ -107,13 +107,12 @@ export function PortalBugFeedbackPanel({
     <>
       <ManagerPortalPageShell
         title="Feedback"
-        subtitle="We review every submission. Status updates appear in your list below."
         titleAside={
           <PortalSectionPrimaryButton onClick={() => setSubmitOpen(true)}>Add feedback</PortalSectionPrimaryButton>
         }
       >
         {myRows.length === 0 ? (
-          <PortalDataTableEmpty message="No feedback yet. Use Add feedback to send your first note to the Axis team." />
+          <PortalDataTableEmpty message="No feedback yet." icon="feedback" />
         ) : (
           <div className={PORTAL_DATA_TABLE_WRAP}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>

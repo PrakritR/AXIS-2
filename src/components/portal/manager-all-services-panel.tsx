@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
@@ -28,13 +28,17 @@ import {
 } from "@/lib/service-requests-storage";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
-import { ManagerVendorsPanel } from "@/components/portal/manager-vendors-panel";
+import {
+  ManagerVendorsPanel,
+  type ManagerVendorsPanelHandle,
+} from "@/components/portal/manager-vendors-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { TabNav } from "@/components/ui/tabs";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableEmpty,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -83,6 +87,7 @@ export function ManagerAllServicesPanel({
   const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
+  const vendorsPanelRef = useRef<ManagerVendorsPanelHandle>(null);
   const typeFilter: FilterType = tabId;
 
   const propertyOptions = useMemo(() => {
@@ -218,7 +223,7 @@ export function ManagerAllServicesPanel({
       filterRow={null}
     >
       <div className="mt-1">
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <TabNav
             activeId={typeFilter}
             items={[
@@ -227,10 +232,15 @@ export function ManagerAllServicesPanel({
               { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors` },
             ]}
           />
+          {typeFilter === "vendors" ? (
+            <Button type="button" onClick={() => vendorsPanelRef.current?.openAdd()}>
+              Add vendor
+            </Button>
+          ) : null}
         </div>
 
         {typeFilter === "vendors" ? (
-          <ManagerVendorsPanel embedded />
+          <ManagerVendorsPanel ref={vendorsPanelRef} embedded />
         ) : typeFilter === "work-orders" ? (
           <>
             <div className="mb-4">
@@ -247,10 +257,7 @@ export function ManagerAllServicesPanel({
             />
           </>
         ) : unified.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-accent/30 py-16 text-center">
-            <p className="text-sm font-medium text-muted">No services yet</p>
-            <p className="mt-1 max-w-xs text-xs text-muted">Service requests from residents will appear here.</p>
-          </div>
+          <PortalDataTableEmpty message="No service requests yet." icon="service" />
         ) : (
           <div className={PORTAL_DATA_TABLE_WRAP}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>

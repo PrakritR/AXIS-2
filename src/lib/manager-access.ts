@@ -1,5 +1,7 @@
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { generateManagerId } from "@/lib/manager-id";
+import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
+import { resolveEffectiveManagerTier } from "@/lib/manager-tier-expiry";
 import { cache } from "react";
 
 /** Property caps by plan (houses / listings in the portal). Legacy unknown tier → no numeric cap (`null`). */
@@ -138,6 +140,7 @@ type ManagerPurchaseRowRecord = {
   billing: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  stripe_checkout_session_id: string | null;
   paid_at: string | null;
   user_id: string | null;
 };
@@ -147,7 +150,8 @@ async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPu
   const { data: profile } = await supabase.from("profiles").select("email").eq("id", userId).maybeSingle();
   const email = profile?.email?.trim().toLowerCase() ?? "";
 
-  const select = "id, tier, billing, stripe_customer_id, stripe_subscription_id, paid_at, user_id";
+  const select =
+    "id, tier, billing, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, paid_at, user_id";
   const [{ data: byUserId }, { data: byEmail }] = await Promise.all([
     supabase.from("manager_purchases").select(select).eq("user_id", userId),
     email
@@ -184,10 +188,19 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
   billing: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  stripeCheckoutSessionId: string | null;
+  paidAt: string | null;
 }> => {
   const best = pickBestManagerPurchaseRow(await loadManagerPurchaseRowsForUser(userId), userId);
   if (!best) {
-    return { tier: null, billing: null, stripeCustomerId: null, stripeSubscriptionId: null };
+    return {
+      tier: null,
+      billing: null,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      stripeCheckoutSessionId: null,
+      paidAt: null,
+    };
   }
   return {
     tier: best.tier != null ? String(best.tier) : null,
@@ -200,6 +213,11 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
       best.stripe_subscription_id != null && String(best.stripe_subscription_id).trim() !== ""
         ? String(best.stripe_subscription_id).trim()
         : null,
+    stripeCheckoutSessionId:
+      best.stripe_checkout_session_id != null && String(best.stripe_checkout_session_id).trim() !== ""
+        ? String(best.stripe_checkout_session_id).trim()
+        : null,
+    paidAt: best.paid_at != null ? String(best.paid_at) : null,
   };
 });
 
@@ -208,20 +226,42 @@ export type ManagerSubscriptionTier = "free" | "paid" | null;
 /** Resolve subscription access from a purchase row (synced tier state). */
 export function resolveManagerSubscriptionTierFromPurchase(input: {
   tier: string | null | undefined;
-  stripeSubscriptionId: string | null | undefined;
+  billing?: string | null | undefined;
+  stripeSubscriptionId?: string | null | undefined;
+  stripeCheckoutSessionId?: string | null | undefined;
+  paidAt?: string | null | undefined;
   hasPurchaseRow: boolean;
+  nowMs?: number;
 }): ManagerSubscriptionTier {
+  if (!input.hasPurchaseRow) return null;
+
   const normalized = normalizeManagerSkuTier(input.tier);
   if (normalized === "free") return "free";
-  if (normalized === "pro" || normalized === "business") return "paid";
 
-  const stripeManaged = Boolean(input.stripeSubscriptionId?.trim());
-  const missingTier = input.tier == null || String(input.tier).trim() === "";
+  const hasStripe = Boolean(input.stripeSubscriptionId?.trim());
+  const billing = input.billing?.toLowerCase().trim() ?? "";
+  const isAdminGrant =
+    billing === "admin" || isAdminManagedManagerPurchase(input.stripeCheckoutSessionId);
 
-  if (!input.hasPurchaseRow) return null;
-  if (stripeManaged) return "paid";
-  if (missingTier) return "free";
-  return "paid";
+  if (normalized === "pro" || normalized === "business") {
+    if (hasStripe) return "paid";
+    if (isAdminGrant) {
+      const effective = resolveEffectiveManagerTier(
+        {
+          tier: normalized,
+          billing: input.billing,
+          paid_at: input.paidAt,
+          stripe_subscription_id: null,
+        },
+        input.nowMs,
+      );
+      return effective === "free" ? "free" : "paid";
+    }
+    return "free";
+  }
+
+  if (hasStripe) return "paid";
+  return "free";
 }
 
 export function isManagerFreePlan(tier: ManagerSubscriptionTier): boolean {
@@ -232,39 +272,61 @@ export function isManagerFreePlan(tier: ManagerSubscriptionTier): boolean {
  * Returns "free" if the manager's purchase row is tier free; "paid" if any paid tier;
  * null if no purchase row (legacy / unknown — treat as full access).
  */
-export async function getManagerSubscriptionTier(userId: string): Promise<ManagerSubscriptionTier> {
+const getManagerSubscriptionTierCached = cache(async (userId: string): Promise<ManagerSubscriptionTier> => {
   try {
+    const { syncManagerPurchaseTierState } = await import("@/lib/manager-tier-sync");
+    await syncManagerPurchaseTierState(userId);
     const purchase = await getManagerPurchaseRowByUserId(userId);
     const rows = await loadManagerPurchaseRowsForUser(userId);
     return resolveManagerSubscriptionTierFromPurchase({
       tier: purchase.tier,
+      billing: purchase.billing,
       stripeSubscriptionId: purchase.stripeSubscriptionId,
+      stripeCheckoutSessionId: purchase.stripeCheckoutSessionId,
+      paidAt: purchase.paidAt,
       hasPurchaseRow: rows.length > 0,
     });
   } catch {
     return null;
   }
+});
+
+export async function getManagerSubscriptionTier(userId: string): Promise<ManagerSubscriptionTier> {
+  return getManagerSubscriptionTierCached(userId);
 }
 
+const getManagerSubscriptionTierByManagerIdCached = cache(
+  async (managerId: string): Promise<ManagerSubscriptionTier> => {
+    const normalized = managerId.trim();
+    if (!normalized) return null;
+    try {
+      const supabase = createSupabaseServiceRoleClient();
+      const { data } = await supabase
+        .from("manager_purchases")
+        .select("user_id, tier, billing, stripe_subscription_id, stripe_checkout_session_id, paid_at")
+        .eq("manager_id", normalized)
+        .maybeSingle();
+      if (!data) return null;
+      const userId = data.user_id != null ? String(data.user_id) : "";
+      if (userId) {
+        return getManagerSubscriptionTier(userId);
+      }
+      return resolveManagerSubscriptionTierFromPurchase({
+        tier: data.tier != null ? String(data.tier) : null,
+        billing: data.billing != null ? String(data.billing) : null,
+        stripeSubscriptionId: data.stripe_subscription_id ?? null,
+        stripeCheckoutSessionId: data.stripe_checkout_session_id ?? null,
+        paidAt: data.paid_at ?? null,
+        hasPurchaseRow: true,
+      });
+    } catch {
+      return null;
+    }
+  },
+);
+
 export async function getManagerSubscriptionTierByManagerId(managerId: string): Promise<ManagerSubscriptionTier> {
-  const normalized = managerId.trim();
-  if (!normalized) return null;
-  try {
-    const supabase = createSupabaseServiceRoleClient();
-    const { data } = await supabase
-      .from("manager_purchases")
-      .select("tier, stripe_subscription_id")
-      .eq("manager_id", normalized)
-      .maybeSingle();
-    if (!data) return null;
-    return resolveManagerSubscriptionTierFromPurchase({
-      tier: data.tier != null ? String(data.tier) : null,
-      stripeSubscriptionId: data.stripe_subscription_id ?? null,
-      hasPurchaseRow: true,
-    });
-  } catch {
-    return null;
-  }
+  return getManagerSubscriptionTierByManagerIdCached(managerId);
 }
 
 /** Raw tier + billing from manager_purchases (service role). */
@@ -286,6 +348,10 @@ export async function setManagerPurchaseTier(
   tier: ManagerSkuTier,
   opts?: { adminOverride?: boolean },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!opts?.adminOverride && tier !== "free") {
+    return { ok: false, error: "Paid plans require Stripe checkout or an admin assignment." };
+  }
+
   const supabase = createSupabaseServiceRoleClient();
   const billing =
     tier === "free" ? "free" : opts?.adminOverride ? "admin" : "portal";
@@ -362,16 +428,7 @@ export async function setManagerPurchaseTier(
 export async function upgradeManagerAccountToBusiness(
   userId: string,
 ): Promise<{ ok: true; alreadyBusiness?: boolean } | { ok: false; error: string }> {
-  const supabase = createSupabaseServiceRoleClient();
-  const { data: existing } = await supabase.from("manager_purchases").select("id, tier").eq("user_id", userId).maybeSingle();
-
-  if (existing && isBusinessSkuTier(existing.tier)) {
-    return { ok: true, alreadyBusiness: true };
-  }
-
-  const result = await setManagerPurchaseTier(userId, "business");
-  if (!result.ok) return result;
-  return { ok: true };
+  return { ok: false, error: "Business upgrades require Stripe checkout or an admin assignment." };
 }
 
 export function managerSectionAllowedForTier(section: string, tier: "free" | "paid" | null): boolean {

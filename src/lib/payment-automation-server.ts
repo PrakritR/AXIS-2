@@ -1,5 +1,6 @@
 import { enrichHouseholdChargesFromPropertyRecords } from "@/lib/household-charge-payment-eligibility";
-import type { HouseholdCharge } from "@/lib/household-charges";
+import type { HouseholdCharge, RecurringRentProfile } from "@/lib/household-charges";
+import { filterChargesEligibleForPaymentReminders } from "@/lib/household-charges";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   loadManagerAutomationSettings,
@@ -19,19 +20,36 @@ function listingFromPropertyRow(propertyData: unknown): ManagerListingSubmission
   return normalizeManagerListingSubmissionV1(submission as ManagerListingSubmissionV1);
 }
 
+export async function loadManagerRentProfiles(
+  db: SupabaseClient,
+  managerUserId: string,
+): Promise<RecurringRentProfile[]> {
+  const { data, error } = await db
+    .from("portal_recurring_rent_profile_records")
+    .select("row_data")
+    .eq("manager_user_id", managerUserId)
+    .limit(1000);
+  if (error) throw error;
+  return (data ?? []).map((row) => row.row_data as RecurringRentProfile);
+}
+
 export async function loadManagerPendingCharges(
   db: SupabaseClient,
   managerUserId: string,
 ): Promise<HouseholdCharge[]> {
-  const { data, error } = await db
-    .from("portal_household_charge_records")
-    .select("id, row_data")
-    .eq("manager_user_id", managerUserId)
-    .eq("status", "pending")
-    .limit(1000);
+  const [{ data, error }, rentProfiles] = await Promise.all([
+    db
+      .from("portal_household_charge_records")
+      .select("id, row_data")
+      .eq("manager_user_id", managerUserId)
+      .eq("status", "pending")
+      .limit(1000),
+    loadManagerRentProfiles(db, managerUserId),
+  ]);
   if (error) throw error;
   const raw = (data ?? []).map((row) => row.row_data as HouseholdCharge);
-  return enrichHouseholdChargesFromPropertyRecords(db, raw);
+  const enriched = await enrichHouseholdChargesFromPropertyRecords(db, raw);
+  return filterChargesEligibleForPaymentReminders(enriched, rentProfiles);
 }
 
 export async function loadListingByPropertyId(db: SupabaseClient): Promise<Map<string, ManagerListingSubmissionV1>> {

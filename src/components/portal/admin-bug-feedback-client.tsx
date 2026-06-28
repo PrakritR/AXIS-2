@@ -18,6 +18,7 @@ import { Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
+  deleteBugFeedbackRow,
   readBugFeedbackRows,
   syncBugFeedbackFromServer,
   updateBugFeedbackRow,
@@ -68,6 +69,7 @@ export function AdminBugFeedbackClient() {
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("managers");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [schemaMissing, setSchemaMissing] = useState(false);
   const [applyingSchema, setApplyingSchema] = useState(false);
@@ -128,10 +130,24 @@ export function AdminBugFeedbackClient() {
     }
   };
 
+  const handleDelete = async (row: PortalBugFeedbackRow) => {
+    if (!window.confirm("Delete this feedback item? This cannot be undone.")) return;
+    setDeletingId(row.id);
+    try {
+      await deleteBugFeedbackRow(row.id, { admin: true });
+      if (expandedId === row.id) setExpandedId(null);
+      await refresh();
+      showToast("Deleted.");
+    } catch {
+      showToast("Could not delete.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <ManagerPortalPageShell
       title="Feedback"
-      subtitle="Submissions from manager and resident portals."
       filterRow={
         <ManagerPortalStatusPills
           tabs={roleTabs}
@@ -190,11 +206,8 @@ export function AdminBugFeedbackClient() {
 
       {visibleRows.length === 0 ? (
         <PortalDataTableEmpty
-          message={
-            roleFilter === "managers"
-              ? "No manager feedback yet."
-              : "No resident feedback yet."
-          }
+          icon="feedback"
+          message={roleFilter === "managers" ? "No manager feedback yet." : "No resident feedback yet."}
         />
       ) : (
         <div className={PORTAL_DATA_TABLE_WRAP}>
@@ -272,8 +285,10 @@ export function AdminBugFeedbackClient() {
                               ) : null}
                               <AdminRowEditor
                                 row={row}
-                                busy={savingId === row.id}
+                                saving={savingId === row.id}
+                                deleting={deletingId === row.id}
                                 onSave={(status, notes) => void saveStatus(row, status, notes)}
+                                onDelete={() => void handleDelete(row)}
                               />
                             </div>
                           </td>
@@ -293,15 +308,20 @@ export function AdminBugFeedbackClient() {
 
 function AdminRowEditor({
   row,
-  busy,
+  saving,
+  deleting,
   onSave,
+  onDelete,
 }: {
   row: PortalBugFeedbackRow;
-  busy: boolean;
+  saving: boolean;
+  deleting: boolean;
   onSave: (status: BugFeedbackStatus, notes: string) => void;
+  onDelete: () => void;
 }) {
   const [status, setStatus] = useState<BugFeedbackStatus>(row.status);
   const [notes, setNotes] = useState(row.adminNotes ?? "");
+  const busy = saving || deleting;
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -333,14 +353,20 @@ function AdminRowEditor({
             placeholder="Triage notes…"
           />
         </div>
-        <Button
-          type="button"
-          className="shrink-0 rounded-full sm:mb-0.5"
-          disabled={busy}
-          onClick={() => onSave(status, notes)}
-        >
-          {busy ? "Saving…" : "Save"}
-        </Button>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:mb-0.5">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+            disabled={busy}
+            onClick={onDelete}
+          >
+            {deleting ? "Deleting…" : "Delete"}
+          </Button>
+          <Button type="button" className="rounded-full" disabled={busy} onClick={() => onSave(status, notes)}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
       </div>
     </div>
   );

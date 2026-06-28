@@ -41,7 +41,11 @@ export function ManagerProperties() {
       setPropCount(0);
       return;
     }
-    await syncManagerPortfolioFromServer(userId, { force: true });
+    try {
+      await syncManagerPortfolioFromServer(userId, { force: true });
+    } catch {
+      /* offline or dev server recompiling */
+    }
     setPropCount(countManagerManagedPropertiesForUser(userId));
     setPendingCount(readPendingManagerPropertiesForUser(userId).length);
   }, [userId]);

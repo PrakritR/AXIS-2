@@ -156,6 +156,7 @@ export function PortalPropertyFilter({
  * Minimal portal workspace shell (admin-style): title row, optional filters,
  * pill actions, optional KPI strip, then body.
  */
+/** @deprecated Prefer {@link PortalListSectionShell} from portal-list-section.tsx for new list sections. */
 export function ManagerSectionShell({
   title,
   filters,

@@ -27,6 +27,8 @@ export type ManagerAutomationSettings = {
 
 export const DEFAULT_PRE_DUE_REMINDER_DAYS = [7, 3, 1] as const;
 
+export const PAYMENT_AUTOMATION_SETTINGS_EVENT = "axis:payment-automation-settings";
+
 export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
   preDueReminderDays: [...DEFAULT_PRE_DUE_REMINDER_DAYS],
   scheduleVisibilityMode: "days_before_send",
