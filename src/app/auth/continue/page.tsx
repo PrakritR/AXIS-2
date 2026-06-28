@@ -93,7 +93,36 @@ function ContinueContent() {
         }
         if (roles.length === 0) {
           const legacyRole = await fetchLegacyRole(supabase, user.id);
-          roles = legacyRole ? [legacyRole] : ["manager"];
+          if (legacyRole) {
+            roles = [legacyRole];
+          }
+        }
+
+        if (roles.length === 0) {
+          try {
+            const accessRes = await fetch(
+              `/api/auth/oauth-portal-access?next=${encodeURIComponent(nextPath || "/auth/continue")}`,
+              { credentials: "include", cache: "no-store" },
+            );
+            if (accessRes.ok) {
+              const body = (await accessRes.json()) as { redirectTo?: string };
+              if (body.redirectTo?.startsWith("/")) {
+                if (cancelled || didRedirectRef.current) return;
+                didRedirectRef.current = true;
+                window.location.replace(body.redirectTo);
+                return;
+              }
+            }
+          } catch {
+            /* fall through to sign-in message */
+          }
+          if (cancelled || didRedirectRef.current) return;
+          didRedirectRef.current = true;
+          window.location.replace(
+            "/auth/sign-in?error=oauth&message=" +
+              encodeURIComponent("No portal account found for this Google login. Create an account or use email and password."),
+          );
+          return;
         }
 
         if (cancelled || didRedirectRef.current) return;

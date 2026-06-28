@@ -44,14 +44,14 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
         Lease document
       </p>
       {showSynthetic ? (
-        <p className="border-b border-sky-100 bg-sky-50/90 px-3 py-2 text-xs text-sky-900">
+        <p className="border-b px-3 py-2 text-xs portal-banner-info">
           Draft preview from saved application answers — use Generate to save a version to the pipeline, or upload a PDF.
         </p>
       ) : null}
       {pdfSrc ? (
         <>
           {(row.residentSignature || row.managerSignature) && row.managerUploadedPdf?.dataUrl ? (
-            <p className="border-b border-emerald-100 bg-emerald-50/90 px-3 py-2 text-xs text-emerald-900">
+            <p className="border-b px-3 py-2 text-xs portal-banner-success">
               Signature certificate page appended to this PDF.
             </p>
           ) : null}

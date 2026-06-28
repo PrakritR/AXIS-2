@@ -238,7 +238,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
                 className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-full border-0 px-3.5 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
                   active
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-transparent text-[#4a5878] hover:bg-white/80 hover:text-[#0b1b3a]"
+                    : "bg-transparent text-muted hover:bg-card/80 hover:text-foreground"
                 }`}
                 onClick={() => {
                   setActiveId(item.id);

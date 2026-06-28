@@ -53,7 +53,7 @@ export function ResidentDocumentsPanel({
   const ledgerQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();
 
   return (
-    <ManagerPortalPageShell title="Documents" subtitle="Lease agreements and rent receipts.">
+    <ManagerPortalPageShell title="Documents" subtitle="Your active lease and official rent receipt documents.">
       <div className="mb-4 flex flex-wrap gap-2">
         {tabs.map((tab) => (
           <Link
@@ -110,7 +110,7 @@ export function ResidentDocumentsPanel({
           ) : !generated ? (
             <ReportGeneratePrompt
               title="Generate rent receipts"
-              description="Select a date range and click Generate receipts. Official receipt documents appear here for your records."
+              description="Select a date range and click Generate receipts to produce official rent receipt documents for your records."
             />
           ) : ledgerReport ? (
             <FinancialReportDocumentView report={ledgerReport} />

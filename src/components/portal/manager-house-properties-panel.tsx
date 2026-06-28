@@ -258,7 +258,7 @@ function ManagerPropertyInlineDetails({
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50 portal-danger-outline"
+              className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline"
               onClick={() => {
                 if (row.adminRefId.startsWith("mgr-")) {
                   if (!window.confirm("Permanently delete this listing from your catalog?")) return;
@@ -350,7 +350,7 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50 portal-danger-outline"
+            className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline"
             onClick={() => {
               if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
               deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(listingId, managerUserId)));
@@ -384,7 +384,7 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50 portal-danger-outline"
+            className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline"
             onClick={() => {
               if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
               deferCatalogMutation(() =>
@@ -414,7 +414,7 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50 portal-danger-outline"
+            className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline"
             onClick={() =>
               deferCatalogMutation(() => run("Property removed.", removeRejectedProperty(row.adminRefId, managerUserId)))
             }

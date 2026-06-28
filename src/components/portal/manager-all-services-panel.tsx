@@ -46,13 +46,13 @@ import {
 type FilterType = "requests" | "work-orders" | "vendors";
 
 const STATUS_PILL: Record<string, string> = {
-  pending: "bg-amber-50 text-amber-700 ring-amber-200",
-  approved: "bg-blue-50 text-blue-700 ring-blue-200",
-  denied: "bg-rose-50 text-rose-700 ring-rose-200",
-  returned: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  open: "bg-sky-50 text-sky-700 ring-sky-200",
-  scheduled: "bg-sky-50 text-sky-700 ring-sky-200",
-  completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  pending: "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+  approved: "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+  denied: "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+  returned: "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+  open: "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+  scheduled: "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+  completed: "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -320,7 +320,7 @@ export function ManagerAllServicesPanel({
                             <Button
                               type="button"
                               variant="outline"
-                              className="h-8 rounded-full border-rose-200 px-4 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                              className="h-8 rounded-full border-rose-200 px-4 text-xs font-semibold text-rose-700 hover:bg-[var(--status-overdue-bg)]"
                               onClick={() => { denyServiceRequest(req.id); setDataTick((t) => t + 1); showToast("Request denied."); }}
                             >
                               Deny
@@ -336,7 +336,7 @@ export function ManagerAllServicesPanel({
                                 <div className="flex items-center justify-between">
                                   <span className="text-xs text-foreground/80">Service fee · {req.price}</span>
                                   {req.servicePaid
-                                    ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Paid</span>
+                                    ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Paid</span>
                                     : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestServicePaid(req.id); setDataTick((t) => t + 1); showToast("Service charge marked paid."); }}>Mark paid</Button>
                                   }
                                 </div>
@@ -345,7 +345,7 @@ export function ManagerAllServicesPanel({
                                 <div className="flex items-center justify-between">
                                   <span className="text-xs text-foreground/80">Deposit · {req.deposit}</span>
                                   {req.depositPaid
-                                    ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Refunded</span>
+                                    ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Refunded</span>
                                     : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestDepositPaid(req.id); setDataTick((t) => t + 1); showToast("Deposit marked refunded."); }}>Mark refunded</Button>
                                   }
                                 </div>
@@ -358,7 +358,7 @@ export function ManagerAllServicesPanel({
                           <Button
                             type="button"
                             variant="outline"
-                            className="h-8 rounded-full border-rose-200 px-4 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                            className="h-8 rounded-full border-rose-200 px-4 text-xs font-semibold text-rose-700 hover:bg-[var(--status-overdue-bg)]"
                             onClick={() => {
                               if (!window.confirm("Delete this request? This cannot be undone.")) return;
                               deleteServiceRequest(req.id);

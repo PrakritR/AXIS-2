@@ -433,7 +433,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </div>
 
         {shortTermAllowed ? (
-          <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-5">
+          <div className="space-y-3 rounded-2xl border p-5 portal-banner-info">
             <Label required>Application type</Label>
             <div className={pillWrap}>
               {[
@@ -498,7 +498,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </Select>
           <FieldError msg={errors.leaseTerm} />
           {form.leaseTerm === "Month-to-Month" ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-sm text-amber-950">
+            <p className="rounded-lg border px-3 py-2 text-sm portal-banner-pending">
               Month-to-month leases include an additional <span className="font-semibold">$25</span> charge to rent.
             </p>
           ) : null}
@@ -553,13 +553,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           ) : null}
         </div>
         {showAvailabilityWarnings && room1ApprovedConflict ? (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
             Warning: your first-choice room does not appear available for the selected move-in dates, but you can still submit
             this application.
           </p>
         ) : null}
         {showAvailabilityWarnings && !room1ApprovedConflict && room1PendingConflict ? (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
             Warning: someone else has already applied for your first-choice room on these dates, but you can still submit this
             application.
           </p>
@@ -1186,7 +1186,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             ))}
           </Select>
           {Number(form.occupancyCount) > 1 && (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+            <p className="rounded-lg border px-3 py-2 text-xs leading-relaxed portal-banner-pending">
               <span className="font-semibold">Note:</span> More than 1 occupant may increase the total cost. Each additional occupant must submit their own application — make sure you set up a group in step 1 and share your Group ID so all applications are linked together.
             </p>
           )}
@@ -1513,7 +1513,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Application fee</p>
             <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">{appFeeLabel}</p>
             {applicationFeeGate.paid ? (
-              <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
+              <p className="mt-3 rounded-xl border px-4 py-3 text-sm font-medium portal-banner-success">
                 Paid
               </p>
             ) : null}
@@ -1602,13 +1602,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         ) : null}
         {applicationFeeGate.needsFee && isAchApplicationFeeChannel(payChannel) ? (
-          <div className="rounded-2xl border border-blue-200/80 bg-blue-50/60 px-4 py-4 text-sm text-blue-950">
+          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-info">
             Pay by bank transfer (ACH). Your application submits after payment is authorized; the fee is marked paid when
             the transfer clears (usually 3–5 business days).
           </div>
         ) : null}
         {showZelleInstructions ? (
-          <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/60 px-4 py-4 text-sm text-emerald-950">
+          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-success">
             <p className="font-semibold">Send by Zelle</p>
             <p className="mt-2 rounded-lg border border-emerald-300/80 bg-card px-3 py-2 font-mono text-base font-bold tracking-tight">
               {sub!.zelleContact!.trim()}
@@ -1619,7 +1619,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         ) : null}
         {showVenmoInstructions ? (
-          <div className="rounded-2xl border border-sky-200/80 bg-sky-50/70 px-4 py-4 text-sm text-sky-950">
+          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-info">
             <p className="font-semibold">Send by Venmo</p>
             <p className="mt-2 rounded-lg border border-sky-300/80 bg-card px-3 py-2 font-mono text-base font-bold tracking-tight">
               {sub!.venmoContact!.trim()}
@@ -1630,7 +1630,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         ) : null}
         {showOtherInstructions ? (
-          <div className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-4 py-4 text-sm text-amber-950">
+          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-pending">
             <p className="font-semibold">Payment instructions</p>
             <p className="mt-2 whitespace-pre-wrap leading-relaxed">{sub!.applicationFeeOtherInstructions!.trim()}</p>
             <p className="mt-2 leading-relaxed">

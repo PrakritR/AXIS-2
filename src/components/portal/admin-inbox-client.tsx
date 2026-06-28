@@ -442,7 +442,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              className="shrink-0 rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
               onClick={() => {
                 if (!window.confirm(`Delete all ${folderCounts.trash} trash message${folderCounts.trash === 1 ? "" : "s"}? This cannot be undone.`)) return;
                 void emptyAdminInboxTrash().then((ok) => {
@@ -539,7 +539,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-emerald-200 text-emerald-900 hover:bg-emerald-50`}
+                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-emerald-200 text-emerald-900 hover:bg-[var(--status-confirmed-bg)]`}
                                     onClick={() => {
                                       void restoreInboxMessageFromTrash(row.id).then((ok) => {
                                         if (ok) {
@@ -557,7 +557,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-rose-200 text-rose-800 hover:bg-rose-50`}
+                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                                     onClick={() => {
                                       void permanentlyDeleteInboxMessage(row.id).then((ok) => {
                                         if (ok) {

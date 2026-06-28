@@ -396,7 +396,7 @@ export function ResidentLeasePanel() {
                   {pipelineRow.thread.map((m) => (
                     <li
                       key={m.id}
-                      className={`rounded-xl px-3 py-2 text-sm ${m.role === "resident" ? "border border-blue-100 bg-blue-50" : "border border-border bg-accent/30"}`}
+                      className={`rounded-xl px-3 py-2 text-sm ${m.role === "resident" ? "border portal-banner-info" : "border border-border bg-accent/30"}`}
                     >
                       <span className="font-semibold text-foreground">{m.role === "resident" ? "You" : "Manager"}</span>
                       <span className="ml-1.5 text-xs text-muted">{safeFormatDateTime(m.at)}</span>

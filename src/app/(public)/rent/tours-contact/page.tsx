@@ -122,7 +122,7 @@ export default function ToursContactPage() {
   return (
     <div className="min-h-screen px-4 py-12 sm:py-16">
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-3xl font-bold tracking-tight text-[#0d1f4e]">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
           {tab === "tour" ? "Schedule tour" : "Message Axis"}
         </h1>
 
@@ -265,7 +265,7 @@ function TourFlow({
   if (submitted) {
     return (
       <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-card p-7 shadow-sm">
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-5">
+        <div className="rounded-2xl border px-5 py-5 portal-banner-success">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Tour request sent</p>
           <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Your tour request is in</h2>
           <p className="mt-3 text-sm leading-relaxed text-foreground">
@@ -626,11 +626,11 @@ function Step2({
   return (
     <div className="space-y-6">
       {availabilityLoading ? (
-        <p className="rounded-2xl border border-blue-200/80 bg-blue-50/90 px-4 py-3 text-sm text-blue-950">
+        <p className="rounded-2xl border px-4 py-3 text-sm portal-banner-info">
           Loading tour windows from the calendar...
         </p>
       ) : availability.size === 0 ? (
-        <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+        <p className="rounded-2xl border px-4 py-3 text-sm portal-banner-pending">
           No tour windows are published for this property yet. Send a message to Axis or ask your property manager.
         </p>
       ) : (

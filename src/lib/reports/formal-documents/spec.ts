@@ -87,6 +87,14 @@ export type PropertyRentReceiptUnitRow = {
   receiptCount: number;
 };
 
+export type IncomeCategoryRow = {
+  categoryCode: string;
+  label: string;
+  scheduleERef: string;
+  amountCents: number;
+  amount: string;
+};
+
 export type PropertyRentReceiptDocument = {
   id: string;
   propertyId: string;
@@ -102,6 +110,8 @@ export type PropertyRentReceiptDocument = {
   receiptCount: number;
   rentalUsePct: number;
   units: PropertyRentReceiptUnitRow[];
+  incomeByCategory?: IncomeCategoryRow[];
+  grossIncomeCents?: number;
 };
 
 export type DaysRentedRow = {

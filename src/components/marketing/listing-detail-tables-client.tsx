@@ -35,7 +35,7 @@ function AvailabilityPill({ text, variant = "default" }: { text: string; variant
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-xs ${
-        green ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80" : "bg-accent/30 text-muted ring-1 ring-border"
+        green ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]" : "bg-accent/30 text-muted ring-1 ring-border"
       }`}
     >
       <span className={`h-1 w-1 shrink-0 rounded-full sm:h-1.5 sm:w-1.5 ${green ? "bg-emerald-500" : "bg-slate-400"}`} />
@@ -188,8 +188,8 @@ function MiniAvailabilityCalendar({ windows }: { windows: RoomUnavailabilityWind
                 key={dateKey(cell)}
                 className={`flex h-7 items-center justify-center rounded-md text-[11px] font-medium ${
                   unavailable
-                    ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
-                    : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                    ? "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
+                    : "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
                 } ${isToday ? "ring-2 ring-primary/40" : ""}`}
               >
                 {cell.getDate()}
@@ -391,7 +391,7 @@ function ListingDetailModal({
               )}
             </div>
             {state.room.modal.includedTags.length > 0 ? (
-              <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
+              <div className="mt-6 rounded-2xl border p-5 portal-banner-info">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Highlights</p>
                 <p className="mt-1 text-sm text-muted">Bathroom setup and other notes not repeated below.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -409,14 +409,14 @@ function ListingDetailModal({
                 state.room.modal.roomAmenityLabels ?? [],
               );
               return furnishingDetail ? (
-              <div className="mt-5 rounded-2xl border border-sky-100 bg-sky-50/60 p-5">
+              <div className="mt-5 rounded-2xl border p-5 portal-banner-info">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-950/90">Furnishing</p>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{furnishingDetail}</p>
               </div>
               ) : null;
             })()}
             {state.room.modal.roomAmenityLabels?.length ? (
-              <div className="mt-5 rounded-2xl border border-sky-100 bg-sky-50/60 p-5">
+              <div className="mt-5 rounded-2xl border p-5 portal-banner-info">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-950/90">Room amenities</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {state.room.modal.roomAmenityLabels.map((t) => (
@@ -463,7 +463,7 @@ function ListingDetailModal({
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Setup</p>
               <p className="mt-2 text-sm font-medium leading-snug text-foreground">{state.row.modal.setupCard}</p>
             </div>
-            <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
+            <div className="mt-6 rounded-2xl border p-5 portal-banner-info">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Info</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {state.row.modal.includedTags.map((t) => (
@@ -536,7 +536,7 @@ function ListingDetailModal({
                 />
               )}
             </div>
-            <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
+            <div className="mt-6 rounded-2xl border p-5 portal-banner-info">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {state.row.modal.includedTags.map((t) => (
@@ -668,7 +668,7 @@ function ListingDetailModal({
               </span>
               <h2 className="pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.label}</h2>
             </div>
-            <div className="mt-6 rounded-2xl border border-sky-100 bg-sky-50/50 p-5">
+            <div className="mt-6 rounded-2xl border p-5 portal-banner-info">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">About</p>
               <p className="mt-2 text-sm leading-relaxed text-muted">
                 This feature is included with the listing as described. Confirm specifics with the leasing team before you apply.

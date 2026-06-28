@@ -16,18 +16,34 @@ function titleCasePart(part: string): string {
   return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
 }
 
-/** Turn internal seed ids like mgr-seed-4709b-8th-ave-ne into readable addresses. */
+/** Turn internal seed ids like mgr-seed-4709b-8th-ave-ne into readable addresses.
+ *  Also handles composite "propertyId::roomLabel" format by stripping the room suffix. */
 export function humanizePropertyId(propertyId: string): string {
   const trimmed = propertyId.trim();
   if (!trimmed) return "—";
-  if (!trimmed.startsWith("mgr-seed-")) return trimmed;
-
-  const slug = trimmed.replace(/^mgr-seed-/, "");
+  // Strip room suffix from composite IDs like "mgr-seed-4709b-8th-ave-ne::seed-4709b-room-3"
+  const addressPart = trimmed.includes("::") ? (trimmed.split("::")[0]?.trim() ?? trimmed) : trimmed;
+  if (!addressPart.startsWith("mgr-seed-")) return addressPart;
+  const slug = addressPart.replace(/^mgr-seed-/, "");
   return slug
     .split("-")
     .filter(Boolean)
     .map(titleCasePart)
     .join(" ");
+}
+
+/** Turn internal room/unit seed labels like "seed-4709b-room-3" into "Room 3".
+ *  Also handles composite "propertyId::roomLabel" by extracting the room portion. */
+export function humanizeUnitLabel(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed || trimmed === "—") return trimmed || "—";
+  // Extract room portion from composite "propertyId::roomLabel" format
+  const roomPart = trimmed.includes("::") ? (trimmed.split("::")[1]?.trim() ?? trimmed) : trimmed;
+  // Strip seed hash prefix: "seed-4709b-room-3" → "room-3"
+  const stripped = roomPart.replace(/^seed-[^-]+-/, "");
+  if (!stripped) return roomPart;
+  // "room-3" → "Room 3", "unit-a" → "Unit A"
+  return stripped.split("-").filter(Boolean).map(titleCasePart).join(" ");
 }
 
 function normalizeEmail(value: string | null | undefined): string {

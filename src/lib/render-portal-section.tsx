@@ -66,6 +66,12 @@ const LEGACY_DOCUMENTS_TAB_MAP: Record<string, string> = {
 };
 const FINANCIALS_TABS = ["income", "expenses"] as const;
 
+const MANAGER_INBOX_TABS = ["unopened", "opened", "schedule", "sent", "trash"] as const;
+
+function isManagerInboxTab(tab: string): tab is (typeof MANAGER_INBOX_TABS)[number] {
+  return (MANAGER_INBOX_TABS as readonly string[]).includes(tab);
+}
+
 const LEGACY_DOCUMENTS_TO_FINANCIALS: Record<string, string> = {
   expenses: "expenses",
   "profit-loss": "expenses",
@@ -343,7 +349,7 @@ export async function renderPortalSection(
         redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
       }
       const inboxTab = tabParts[0]!;
-      if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+      if (!isManagerInboxTab(inboxTab)) notFound();
       return subscriptionGated(
         <ManagerInbox tabId={inboxTab} />,
         kind,
@@ -465,7 +471,7 @@ export async function renderPortalSection(
         redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
       }
       const inboxTab = tabParts[0]!;
-      if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+      if (!isManagerInboxTab(inboxTab)) notFound();
       return subscriptionGated(
         <ManagerInbox tabId={inboxTab} />,
         kind,

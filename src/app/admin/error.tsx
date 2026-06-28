@@ -10,7 +10,7 @@ export default function AdminError({
   reset: () => void;
 }) {
   return (
-    <div className="mx-auto max-w-lg rounded-2xl border border-rose-200/90 bg-rose-50/90 px-5 py-6 text-sm text-rose-950 shadow-sm">
+    <div className="mx-auto max-w-lg rounded-2xl border px-5 py-6 text-sm portal-banner-danger shadow-sm">
       <p className="font-semibold text-rose-950">This admin page failed to load.</p>
       <p className="mt-2 leading-relaxed text-rose-900/90">
         {error.message || "An unexpected error occurred. Try again or return to the dashboard."}

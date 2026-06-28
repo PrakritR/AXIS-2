@@ -23,15 +23,16 @@ import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markMana
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
-import { ScheduledReminderChips } from "@/components/portal/manager-inbox-schedule-panel";
+import { ChargeReminderList } from "@/components/portal/manager-inbox-schedule-panel";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
-import { upcomingScheduledForCharge } from "@/lib/scheduled-payment-messages";
+import { manageableRemindersForCharge, upcomingScheduledForCharge } from "@/lib/scheduled-payment-messages";
+import { patchScheduledMessage } from "@/components/portal/payment-schedule-ui";
 
 function statusTone(label: string) {
   const l = label.toLowerCase();
-  if (l.includes("paid")) return "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80";
-  if (l.includes("overdue") || l.includes("partial")) return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
-  if (l.includes("soon")) return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
+  if (l.includes("paid")) return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  if (l.includes("overdue") || l.includes("partial")) return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  if (l.includes("soon")) return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   return "bg-accent/30 text-foreground ring-1 ring-border";
 }
 
@@ -42,7 +43,9 @@ export function ManagerPaymentsLedgerPanel({
   scheduledMessages = [],
   schedulePortalBase = "/portal",
   onScheduleEdit,
+  onReminderSettings,
   onRowsChanged,
+  onScheduleChanged,
 }: {
   rows: DemoManagerPaymentLedgerRow[];
   managerUserId: string | null;
@@ -50,7 +53,9 @@ export function ManagerPaymentsLedgerPanel({
   scheduledMessages?: ScheduledPaymentMessage[];
   schedulePortalBase?: string;
   onScheduleEdit?: (message: ScheduledPaymentMessage) => void;
+  onReminderSettings?: () => void;
   onRowsChanged?: () => void;
+  onScheduleChanged?: () => void;
 }) {
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -232,9 +237,18 @@ export function ManagerPaymentsLedgerPanel({
                   <td className={`${PORTAL_TABLE_TD} text-muted`}>
                     <div>{row.dueDate}</div>
                     {row.householdChargeId ? (
-                      <ScheduledReminderChips
-                        messages={upcomingScheduledForCharge(scheduledMessages, row.householdChargeId)}
+                      <ChargeReminderList
+                        messages={manageableRemindersForCharge(scheduledMessages, row.householdChargeId)}
                         onEdit={onScheduleEdit}
+                        onToggleCancel={async (msg, cancelled) => {
+                          try {
+                            await patchScheduledMessage(msg.id, { cancelled });
+                            showToast(cancelled ? "Reminder cancelled." : "Reminder restored.");
+                            onScheduleChanged?.();
+                          } catch (e) {
+                            showToast(e instanceof Error ? e.message : "Could not update reminder.");
+                          }
+                        }}
                       />
                     ) : null}
                   </td>
@@ -309,7 +323,7 @@ export function ManagerPaymentsLedgerPanel({
                             type="button"
                             variant="outline"
                             className={PORTAL_DETAIL_BTN}
-                            onClick={() => window.location.assign(`${schedulePortalBase}/inbox/schedule`)}
+                            onClick={() => (onReminderSettings ? onReminderSettings() : window.location.assign(`${schedulePortalBase}/inbox/schedule`))}
                           >
                             Reminder settings
                           </Button>

@@ -65,7 +65,7 @@ export function AdminNotificationBanners() {
         <Link
           key={b.id}
           href={b.href}
-          className="block rounded-2xl border border-amber-200/90 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/90"
+          className="block rounded-2xl border px-4 py-3 text-sm font-medium portal-banner-pending shadow-sm transition hover:opacity-90"
         >
           {b.text}
         </Link>

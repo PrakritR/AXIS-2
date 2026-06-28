@@ -17,14 +17,14 @@ import type { ManagerScreeningSettings, ScreeningRecommendation } from "@/lib/sc
 function recommendationClass(recommendation: ScreeningRecommendation): string {
   switch (recommendation) {
     case "strong_yes":
-      return "bg-emerald-50 text-emerald-800 ring-emerald-200/80";
+      return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
     case "concerns":
-      return "bg-amber-50 text-amber-900 ring-amber-200/80";
+      return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
     case "not_available":
-      return "bg-blue-50 text-blue-800 ring-blue-200/80";
+      return "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
     case "review":
     default:
-      return "bg-slate-100 text-slate-700 ring-slate-200/80";
+      return "bg-foreground/5 text-muted ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   }
 }
 
@@ -121,7 +121,7 @@ export function ApplicationScreeningPanel({
 
       {screening?.status === "complete" ? (
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/40 p-4">
+          <div className="rounded-xl border p-4 portal-banner-success">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-900">Pros</p>
             <ul className="mt-2 space-y-1.5 text-sm text-emerald-950">
               {(screening.pros.length ? screening.pros : ["No standout positives flagged."]).map((item) => (
@@ -129,7 +129,7 @@ export function ApplicationScreeningPanel({
               ))}
             </ul>
           </div>
-          <div className="rounded-xl border border-amber-200/70 bg-amber-50/40 p-4">
+          <div className="rounded-xl border p-4 portal-banner-pending">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-900">Cons</p>
             <ul className="mt-2 space-y-1.5 text-sm text-amber-950">
               {(screening.cons.length ? screening.cons : ["No major concerns flagged."]).map((item) => (
@@ -170,7 +170,7 @@ export function ApplicationScreeningPanel({
       ) : null}
 
       {screening?.adverseActionRequired ? (
-        <p className="mt-4 rounded-xl border border-amber-300/80 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+        <p className="mt-4 rounded-xl border px-3 py-2 text-xs portal-banner-pending">
           Adverse action may be required before denying based on this consumer report (FCRA).
         </p>
       ) : null}

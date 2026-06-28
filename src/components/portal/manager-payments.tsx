@@ -36,9 +36,9 @@ import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import {
   ScheduledMessageEditModal,
+  ReminderSettingsModal,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
-import { upcomingScheduledForCharge } from "@/lib/scheduled-payment-messages";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
@@ -76,7 +76,8 @@ export function ManagerPayments() {
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
-  const { messages: scheduledMessages, reload: reloadSchedule } = useScheduledPaymentMessages();
+  const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
+  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages();
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
 
   useEffect(() => {
@@ -159,11 +160,11 @@ export function ManagerPayments() {
         window.close();
         return;
       }
+      // Same-tab return: PortalStripeConnectPanel clears ?connect= and refreshes status.
+      return;
     }
     if (payouts === "1") {
       window.location.replace(`${portalBase}/payments`);
-    } else if (connect === "done" || connect === "refresh") {
-      window.location.replace(`${portalBase}/payments?connect=${encodeURIComponent(connect)}`);
     }
   }, [portalBase]);
 
@@ -172,7 +173,7 @@ export function ManagerPayments() {
       if (e.origin !== window.location.origin) return;
       if (e.data?.type !== "axis-stripe-connect") return;
       if (e.data?.connect === "done") {
-        showToast("Payout status updated.");
+        showToast("Bank account linked.");
       } else if (e.data?.connect === "refresh") {
         showToast("Setup link expired — open Payouts to try again.");
       }
@@ -311,11 +312,11 @@ export function ManagerPayments() {
       filterRow={filterRow}
     >
       <div className="mb-4 rounded-2xl border border-border bg-accent/20 px-4 py-3 text-sm text-muted">
-        Automated rent and overdue reminders appear in{" "}
+        Automated charge reminders appear in{" "}
         <Link href={`${portalBase}/inbox/schedule`} className="font-semibold text-primary hover:underline">
           Inbox → Schedule
         </Link>
-        . Configure timing, visibility, and message copy there.
+        . Configure payment timing and late fees under Reminder settings below.
       </div>
       <div className="mb-8">
         <PortalStripeConnectPanel basePath="/portal" variant="embedded" />
@@ -327,6 +328,8 @@ export function ManagerPayments() {
         scheduledMessages={scheduledMessages}
         schedulePortalBase={portalBase}
         onScheduleEdit={setScheduleEdit}
+        onReminderSettings={() => setReminderSettingsOpen(true)}
+        onScheduleChanged={() => void reloadSchedule()}
         onRowsChanged={() => setHcTick((n) => n + 1)}
       />
       <ScheduledMessageEditModal
@@ -334,6 +337,15 @@ export function ManagerPayments() {
         message={scheduleEdit}
         onClose={() => setScheduleEdit(null)}
         onSaved={() => void reloadSchedule()}
+      />
+      <ReminderSettingsModal
+        open={reminderSettingsOpen}
+        onClose={() => setReminderSettingsOpen(false)}
+        settings={reminderSettings}
+        onSaved={(next) => {
+          setReminderSettings(next);
+          void reloadSchedule();
+        }}
       />
       <ManagerAddPaymentModal
         open={addOpen}

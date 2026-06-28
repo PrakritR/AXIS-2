@@ -68,8 +68,8 @@ const STATUS_TABS: { id: ResidentWorkBucket; label: string }[] = [
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
-  if (x === "high") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
-  if (x === "medium") return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
+  if (x === "high") return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  if (x === "medium") return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   return "bg-accent/30 text-muted ring-1 ring-border";
 }
 
@@ -83,7 +83,7 @@ function formatDate(iso: string) {
 function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
   if (status === "pending")
     return (
-      <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
+      <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
         Awaiting approval
       </span>
     );
@@ -95,13 +95,13 @@ function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
     );
   if (status === "denied")
     return (
-      <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-[10px] font-semibold text-rose-700 ring-1 ring-rose-200">
+      <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
         Denied
       </span>
     );
   if (status === "returned")
     return (
-      <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+      <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
         Return submitted
       </span>
     );
@@ -182,7 +182,7 @@ function ServiceRequestCard({
           </span>
         ) : null}
         {needsReturn ? (
-          <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
+          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
             Deposit {req.deposit}
           </span>
         ) : null}
@@ -205,7 +205,7 @@ function ServiceRequestCard({
             {req.price ? (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted">Request fee</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.servicePaid ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.servicePaid ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]" : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"}`}>
                   {req.servicePaid ? `Paid · ${req.price}` : `Pending · ${req.price}`}
                 </span>
               </div>
@@ -213,7 +213,7 @@ function ServiceRequestCard({
             {needsReturn ? (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted">Deposit (refundable)</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.depositPaid ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.depositPaid ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]" : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"}`}>
                   {req.depositPaid ? `Paid · ${req.deposit}` : `Pending · ${req.deposit}`}
                 </span>
               </div>
@@ -268,7 +268,7 @@ function ServiceRequestCard({
 
       {/* Denied */}
       {req.status === "denied" ? (
-        <div className="mt-3 rounded-xl bg-rose-50 p-3 text-xs text-rose-700">
+        <div className="mt-3 rounded-xl border p-3 text-xs portal-banner-danger">
           {req.managerNote ? (
             <p>Manager note: <span className="font-medium">{req.managerNote}</span></p>
           ) : (
@@ -988,7 +988,7 @@ export function ResidentServicesPanel({
                         <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-xs font-semibold text-muted">{offer.price}</span>
                       ) : null}
                       {hasDeposit(offer.deposit) ? (
-                        <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {offer.deposit}</span>
+                        <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Deposit {offer.deposit}</span>
                       ) : null}
                     </div>
                   </div>

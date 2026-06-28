@@ -181,12 +181,6 @@ export function ManagerFinancesPanel({
       </div>
 
       <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>
-        {tabId === "expenses" ? (
-          <p className="text-sm text-muted">
-            Log property costs — maintenance, utilities, cleaning, insurance, mortgage, vendor work, and other
-            expenses. These feed Expense documents and your tax summary.
-          </p>
-        ) : null}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <ReportFilterBar
             showProperty

@@ -10,6 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { managerSignupFinishPhrase } from "@/lib/manager-access";
+import {
+  BANNER_INFO_CLASS,
+  BANNER_NEUTRAL_CLASS,
+  BANNER_WARNING_CLASS,
+  FIELD_LABEL_CLASS,
+  READONLY_INPUT_CLASS,
+} from "@/lib/ui-styles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -372,14 +379,14 @@ export default function CreateAccountClient() {
     }
   };
 
-  const readOnlyInputClass = "mt-1.5 bg-[#f1f5f9] text-foreground cursor-default";
+  const readOnlyInputClass = READONLY_INPUT_CLASS;
 
   return (
     <AuthCard>
       <h1 className="text-center text-[22px] font-bold tracking-tight text-foreground">Create account</h1>
 
       <div className="mt-7">
-        <label className="text-xs font-semibold text-[#334155]" htmlFor="account-type">
+        <label className={FIELD_LABEL_CLASS} htmlFor="account-type">
           Portal type
         </label>
         <Select
@@ -394,7 +401,7 @@ export default function CreateAccountClient() {
         </Select>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-[#e0e4ec] bg-[#f8fafc] p-4 text-sm leading-relaxed text-muted">
+      <div className={`mt-6 ${BANNER_NEUTRAL_CLASS}`}>
         {managerPostCheckout ? (
           <>
             {isAxisIntentSignup ? (
@@ -432,7 +439,7 @@ export default function CreateAccountClient() {
       ) : null}
 
       {role === "manager" && sessionIdFromUrl && effectivePreviewError ? (
-        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className={`mt-6 ${BANNER_WARNING_CLASS}`}>
           <p>{effectivePreviewError}</p>
           <Link className="mt-3 inline-block font-semibold text-primary hover:underline" href="/partner/pricing">
             Back to Partner pricing
@@ -442,7 +449,7 @@ export default function CreateAccountClient() {
 
       <div className="mt-6 space-y-4">
         {existingAccountHint ? (
-          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-medium leading-relaxed text-sky-950">
+          <div className={BANNER_INFO_CLASS}>
             {existingAccountHint}
           </div>
         ) : null}
@@ -463,7 +470,7 @@ export default function CreateAccountClient() {
               </div>
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="manager-id">
+              <label className={FIELD_LABEL_CLASS} htmlFor="manager-id">
                 Axis ID
               </label>
               <Input
@@ -476,14 +483,14 @@ export default function CreateAccountClient() {
             </div>
             {effectiveCheckoutPreview.fullName ? (
               <div>
-                <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-name">
+                <label className={FIELD_LABEL_CLASS} htmlFor="mgr-name">
                   Full name
                 </label>
                 <Input id="mgr-name" readOnly className={readOnlyInputClass} value={effectiveCheckoutPreview.fullName} tabIndex={-1} />
               </div>
             ) : null}
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-email">
+              <label className={FIELD_LABEL_CLASS} htmlFor="mgr-email">
                 Email
                 <Req />
               </label>
@@ -497,7 +504,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw">
+              <label className={FIELD_LABEL_CLASS} htmlFor="mgr-pw">
                 {passwordLabel}
                 <Req />
               </label>
@@ -511,7 +518,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw2">
+              <label className={FIELD_LABEL_CLASS} htmlFor="mgr-pw2">
                 Confirm password
                 <Req />
               </label>
@@ -557,7 +564,7 @@ export default function CreateAccountClient() {
                   <div className="h-px flex-1 bg-border" aria-hidden />
                 </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-name-input">
+              <label className={FIELD_LABEL_CLASS} htmlFor="mgr-name-input">
                 Full name <Req />
               </label>
               <Input
@@ -570,7 +577,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-email-input">
+              <label className={FIELD_LABEL_CLASS} htmlFor="mgr-email-input">
                 Email <Req />
               </label>
               <Input
@@ -584,7 +591,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw-activate">
+              <label className={FIELD_LABEL_CLASS} htmlFor="mgr-pw-activate">
                 {passwordLabel} <Req />
               </label>
               <PasswordInput
@@ -597,7 +604,7 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="mgr-pw2-activate">
+              <label className={FIELD_LABEL_CLASS} htmlFor="mgr-pw2-activate">
                 Confirm password <Req />
               </label>
               <PasswordInput
@@ -616,7 +623,7 @@ export default function CreateAccountClient() {
           <>
             {role === "resident" ? (
               <div>
-                <label className="text-xs font-semibold text-[#334155]" htmlFor="app">
+                <label className={FIELD_LABEL_CLASS} htmlFor="app">
                   Axis ID
                   <Req />
                 </label>
@@ -653,7 +660,7 @@ export default function CreateAccountClient() {
             {!googleSignedIn || role !== "resident" ? (
               <>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="email">
+              <label className={FIELD_LABEL_CLASS} htmlFor="email">
                 Email
                 <Req />
               </label>
@@ -673,7 +680,7 @@ export default function CreateAccountClient() {
               ) : null}
             </div>
             <div>
-              <label className="text-xs font-semibold text-[#334155]" htmlFor="pw">
+              <label className={FIELD_LABEL_CLASS} htmlFor="pw">
                 {passwordLabel}
                 <Req />
               </label>

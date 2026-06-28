@@ -163,14 +163,14 @@ export function ManagerServicesPanel() {
                           </span>
                         ) : null}
                         {offer.deposit ? (
-                          <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200/80">
+                          <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                             Deposit {offer.deposit}
                           </span>
                         ) : null}
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
                             offer.available
-                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200/80"
+                              ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
                               : "bg-accent/30 text-muted ring-border"
                           }`}
                         >
@@ -199,7 +199,7 @@ export function ManagerServicesPanel() {
                       <button
                         type="button"
                         onClick={() => handleDelete(offer)}
-                        className="rounded-full border border-rose-200 bg-card px-3 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-50"
+                        className="rounded-full border border-rose-200 bg-card px-3 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-[var(--status-overdue-bg)]"
                       >
                         Remove
                       </button>

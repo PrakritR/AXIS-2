@@ -378,7 +378,7 @@ export function ResidentPaymentsPanel() {
         {checkout.loading ? (
           <p className="text-sm text-muted">Loading secure checkout…</p>
         ) : checkout.error ? (
-          <p className="rounded-xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-900">{checkout.error}</p>
+          <p className="rounded-xl border px-4 py-3 text-sm portal-banner-danger">{checkout.error}</p>
         ) : checkout.clientSecret ? (
           <StripeEmbeddedCheckout clientSecret={checkout.clientSecret} />
         ) : null}

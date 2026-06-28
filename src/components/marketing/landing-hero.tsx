@@ -7,7 +7,7 @@ export function LandingHero() {
         <div className="hero-eyebrow animate-fade-up mb-5 inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-md sm:mb-6 sm:px-4">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--steel-light)] shadow-[0_0_10px_rgba(188,212,255,0.9)]" />
           <span className="text-xs font-semibold tracking-wide sm:text-[13px]">
-            Now in beta · Property management, simplified
+            Now in beta · AI-powered property management
           </span>
         </div>
 
@@ -15,15 +15,15 @@ export function LandingHero() {
           className="hero-title animate-fade-up mx-auto max-w-4xl text-[2.25rem] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[3.5rem] md:text-[4.25rem]"
           style={{ animationDelay: "60ms" }}
         >
-          Everything you need to{" "}
-          <span className="text-gradient-accent">run and fill your properties</span>
+          AI-powered property management{" "}
+          <span className="text-gradient-accent">that runs itself</span>
         </h1>
 
         <p
           className="hero-subtitle animate-fade-up mx-auto mt-5 max-w-2xl text-base leading-relaxed sm:text-lg"
           style={{ animationDelay: "90ms" }}
         >
-          Axis gives property managers applications, screening, leases, and rent collection in one platform — with apply and tour links you share when prospects are ready.
+          Axis uses AI to handle applications, screening, leases, and rent collection in one platform — so you spend less time managing and more time growing your portfolio.
         </p>
 
         <div

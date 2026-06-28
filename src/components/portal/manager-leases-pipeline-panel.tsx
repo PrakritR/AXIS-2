@@ -60,7 +60,7 @@ function ThreadView({ row }: { row: LeasePipelineRow }) {
             key={m.id}
             className={`rounded-lg px-2.5 py-1.5 text-xs shadow-sm ring-1 ${
               m.role === "admin"
-                ? "bg-sky-50/90 ring-sky-200/90"
+                ? "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
                 : "bg-card ring-slate-100"
             }`}
           >
@@ -533,7 +533,7 @@ export function ManagerLeasesPipelinePanel({
                       <p className="mt-1.5 text-xs text-muted">Version v{row.versionNumber ?? row.pdfVersion}</p>
                       <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted">{row.status ?? row.stageLabel}</p>
                       {row.managerSignature || row.residentSignature ? (
-                        <div className="mt-2 grid gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3 py-2.5 text-xs text-emerald-900 sm:grid-cols-2">
+                        <div className="mt-2 grid gap-2 rounded-xl border px-3 py-2.5 text-xs portal-banner-success sm:grid-cols-2">
                           <div>
                             <span className="font-semibold">Manager signature</span>
                             {row.managerSignature ? (
@@ -627,7 +627,7 @@ export function ManagerLeasesPipelinePanel({
                             <Button
                               type="button"
                               variant="outline"
-                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                               onClick={() => onDeleteLease(row)}
                             >
                               Delete lease
@@ -767,7 +767,7 @@ export function ManagerLeasesPipelinePanel({
                             <Button
                               type="button"
                               variant="outline"
-                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                               onClick={() => onDeleteLease(row)}
                             >
                               Delete lease

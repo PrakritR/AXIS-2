@@ -1,0 +1,227 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input, Textarea } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { useAppUi } from "@/components/providers/app-ui-provider";
+import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
+import type { ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
+
+function defaultSendAtLocal(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function toLocalInputValue(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return defaultSendAtLocal();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function ScheduleInboxComposeModal({
+  open,
+  onClose,
+  onSaved,
+  contacts,
+  editMessage,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+  contacts: InboxScopedContact[];
+  editMessage?: ScheduledInboxMessageRecord | null;
+}) {
+  const { showToast } = useAppUi();
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [sendAtLocal, setSendAtLocal] = useState(defaultSendAtLocal());
+  const [recipientKey, setRecipientKey] = useState<string>("");
+  const [deliverViaEmail, setDeliverViaEmail] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const sortedContacts = useMemo(
+    () => [...contacts].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
+    [contacts],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    if (editMessage) {
+      setSubject(editMessage.subject);
+      setBody(editMessage.body);
+      setSendAtLocal(toLocalInputValue(editMessage.sendAt));
+      setDeliverViaEmail(editMessage.deliverViaEmail);
+      if (editMessage.broadcastCategories?.includes("resident")) setRecipientKey("broadcast:resident");
+      else if (editMessage.broadcastCategories?.includes("management")) setRecipientKey("broadcast:management");
+      else setRecipientKey(editMessage.recipientUserId ? `id:${editMessage.recipientUserId}` : `email:${editMessage.recipientEmail}`);
+      return;
+    }
+    setSubject("");
+    setBody("");
+    setSendAtLocal(defaultSendAtLocal());
+    setRecipientKey(sortedContacts[0] ? `id:${sortedContacts[0].id}` : "");
+    setDeliverViaEmail(true);
+  }, [open, editMessage, sortedContacts]);
+
+  const submit = async () => {
+    const subjectTrim = subject.trim();
+    const bodyTrim = body.trim();
+    if (!subjectTrim || !bodyTrim) {
+      showToast("Subject and message are required.");
+      return;
+    }
+    const sendAt = new Date(sendAtLocal);
+    if (Number.isNaN(sendAt.getTime())) {
+      showToast("Choose a valid send date and time.");
+      return;
+    }
+    if (!editMessage && sendAt.getTime() < Date.now() - 60_000) {
+      showToast("Send time must be in the future.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      if (editMessage) {
+        const res = await fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(editMessage.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            subject: subjectTrim,
+            body: bodyTrim,
+            sendAt: sendAt.toISOString(),
+            deliverViaEmail,
+          }),
+        });
+        if (!res.ok) {
+          const payload = (await res.json()) as { error?: string };
+          throw new Error(payload.error ?? "Could not update scheduled message.");
+        }
+        showToast("Scheduled message updated.");
+      } else {
+        let payload: Record<string, unknown> = {
+          subject: subjectTrim,
+          body: bodyTrim,
+          sendAt: sendAt.toISOString(),
+          deliverViaEmail,
+        };
+        if (recipientKey.startsWith("broadcast:")) {
+          const category = recipientKey.replace("broadcast:", "");
+          if (category !== "resident" && category !== "management") {
+            showToast("Choose a recipient.");
+            return;
+          }
+          payload = { ...payload, broadcastCategories: [category] };
+        } else {
+          const contact =
+            recipientKey.startsWith("id:")
+              ? sortedContacts.find((c) => c.id === recipientKey.slice(3))
+              : sortedContacts.find((c) => c.email.toLowerCase() === recipientKey.replace("email:", ""));
+          if (!contact) {
+            showToast("Choose a recipient.");
+            return;
+          }
+          payload = {
+            ...payload,
+            recipientEmail: contact.email,
+            recipientName: contact.name,
+          };
+        }
+
+        const res = await fetch("/api/portal/scheduled-inbox-messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const data = (await res.json()) as { error?: string };
+          throw new Error(data.error ?? "Could not schedule message.");
+        }
+        showToast("Message scheduled.");
+      }
+      onSaved();
+      onClose();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not save.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={editMessage ? "Edit scheduled message" : "Schedule inbox message"}>
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          Compose a message to deliver later through the portal inbox{deliverViaEmail ? " and email" : ""}.
+        </p>
+
+        {!editMessage ? (
+          <div>
+            <label className="text-xs font-semibold text-muted">Recipient</label>
+            <select
+              className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary"
+              value={recipientKey}
+              onChange={(e) => setRecipientKey(e.target.value)}
+              disabled={busy}
+            >
+              <option value="broadcast:resident">All residents</option>
+              <option value="broadcast:management">All management</option>
+              {sortedContacts.length > 0 ? <option disabled value="">—— Individuals ——</option> : null}
+              {sortedContacts.map((c) => (
+                <option key={c.id} value={`id:${c.id}`}>
+                  {c.name} · {c.email}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <p className="rounded-xl border border-border bg-accent/20 px-3 py-2 text-sm text-muted">
+            To: <span className="font-medium text-foreground">{editMessage.recipientName}</span>
+          </p>
+        )}
+
+        <div>
+          <label className="text-xs font-semibold text-muted">Send date & time</label>
+          <Input
+            type="datetime-local"
+            className="mt-1"
+            value={sendAtLocal}
+            onChange={(e) => setSendAtLocal(e.target.value)}
+            disabled={busy}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-muted">Subject</label>
+          <Input className="mt-1" value={subject} onChange={(e) => setSubject(e.target.value)} disabled={busy} />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-muted">Message</label>
+          <Textarea className="mt-1 min-h-[160px]" value={body} onChange={(e) => setBody(e.target.value)} disabled={busy} />
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={deliverViaEmail} onChange={(e) => setDeliverViaEmail(e.target.checked)} disabled={busy} />
+          Also send by email
+        </label>
+
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="primary" className="rounded-full" disabled={busy} onClick={() => void submit()}>
+            {busy ? "Saving…" : editMessage ? "Save changes" : "Schedule message"}
+          </Button>
+          <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

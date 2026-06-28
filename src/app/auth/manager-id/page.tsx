@@ -125,7 +125,7 @@ function ManagerIdContent() {
       <div className="mt-7 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted">Your Axis ID</p>
         <div className="mt-2 flex items-center justify-between gap-3">
-          <p className="font-mono text-2xl font-bold tracking-wide text-[#0d1f4e]">{preview.managerId}</p>
+          <p className="font-mono text-2xl font-bold tracking-wide text-foreground">{preview.managerId}</p>
           <button
             type="button"
             onClick={copy}

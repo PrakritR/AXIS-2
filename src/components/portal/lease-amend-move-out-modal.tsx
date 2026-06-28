@@ -168,7 +168,7 @@ export function LeaseAmendMoveOutModal({
       {selectedDate && selectedDate !== currentEnd ? (
         <div className="mb-5 space-y-2">
           {direction === "decrease" ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
               Moving out earlier may result in an early termination fee. Confirm any charges with your property manager.
             </div>
           ) : null}
@@ -176,7 +176,7 @@ export function LeaseAmendMoveOutModal({
             <p className="text-sm text-muted">Checking room availability…</p>
           ) : null}
           {direction === "extend" && availability.status === "available" ? (
-            <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <p className="rounded-xl border px-4 py-3 text-sm portal-banner-success">
               Room is available through the new date.
             </p>
           ) : null}

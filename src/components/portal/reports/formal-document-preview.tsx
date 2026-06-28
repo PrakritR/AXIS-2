@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import type { ReactNode } from "react";
 import type { PropertyRentReceiptDocument, RentReceiptDocument } from "@/lib/reports/formal-documents/spec";
 import type { ReportResult } from "@/lib/reports/types";
@@ -7,6 +8,7 @@ import type { ReportResult } from "@/lib/reports/types";
 function DocumentPaper({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div
+      data-surface="light"
       className={`mx-auto w-full max-w-[820px] rounded-xl border border-border bg-white text-[#1a1a1a] shadow-[0_8px_30px_rgba(15,23,42,0.08)] ${className}`}
       style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
     >
@@ -142,19 +144,60 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
 
         <div className="grid gap-3 sm:grid-cols-4">
           {[
-            { label: "Days rented", value: String(doc.daysRented) },
-            { label: "Days available", value: String(doc.daysAvailable) },
-            { label: "Rental use", value: `${doc.rentalUsePct}%` },
-            { label: "Rent collected", value: doc.rentCollected },
+            { label: "Days rented", value: String(doc.daysRented), sub: undefined },
+            { label: "Days available", value: String(doc.daysAvailable), sub: undefined },
+            { label: "Rental use", value: `${doc.rentalUsePct}%`, sub: "Personal-use allocation" },
+            { label: "Gross Rents Received", value: doc.rentCollected, sub: "Sch. E, Line 3" },
           ].map((item) => (
             <div key={item.label} className="rounded-lg border border-[#e5e7eb] bg-[#f8fafc] px-3 py-3 text-center">
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
                 {item.label}
               </p>
               <p className="mt-1 text-lg font-bold text-[#0f172a]">{item.value}</p>
+              {item.sub ? (
+                <p className="mt-0.5 text-[10px] text-[#94a3b8]" style={{ fontFamily: "system-ui, sans-serif" }}>
+                  {item.sub}
+                </p>
+              ) : null}
             </div>
           ))}
         </div>
+
+        {doc.incomeByCategory && doc.incomeByCategory.length > 0 ? (
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
+              Income breakdown — Schedule E, Part I (Rents Received)
+            </p>
+            <div className="overflow-hidden rounded-lg border border-[#e5e7eb]">
+              <table className="w-full border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
+                <thead>
+                  <tr className="border-b border-[#e5e7eb] bg-[#f1f5f9] text-left text-xs uppercase tracking-wide text-[#475569]">
+                    <th className="px-4 py-2.5 font-semibold">Income category</th>
+                    <th className="px-4 py-2.5 font-semibold">Schedule E reference</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {doc.incomeByCategory.map((row) => (
+                    <tr key={row.categoryCode} className="border-b border-[#e5e7eb] last:border-0">
+                      <td className="px-4 py-2.5 text-[#0f172a]">{row.label}</td>
+                      <td className="px-4 py-2.5 text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>{row.scheduleERef} — Rents Received</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-medium text-[#0f172a]">{row.amount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-[#f0fdf4] font-semibold">
+                    <td className="px-4 py-2.5 text-[#0f172a]" colSpan={2}>
+                      Total Gross Income (Sch. E, Line 3 — Rents Received)
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-[#0f172a]">{doc.rentCollected}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        ) : null}
 
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
@@ -166,8 +209,8 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
                 <tr className="border-b border-[#e5e7eb] bg-[#f1f5f9] text-left text-xs uppercase tracking-wide text-[#475569]">
                   <th className="px-4 py-2.5 font-semibold">Unit</th>
                   <th className="px-4 py-2.5 font-semibold">Resident</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Days rented</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Rent collected</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Days rented / available</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Gross rents received</th>
                   <th className="px-4 py-2.5 text-right font-semibold">Receipts</th>
                 </tr>
               </thead>
@@ -177,7 +220,7 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
                     <td className="px-4 py-2.5 text-[#0f172a]">{unit.unit}</td>
                     <td className="px-4 py-2.5 text-[#0f172a]">{unit.resident}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-[#0f172a]">
-                      {unit.daysRented}/{unit.daysAvailable}
+                      {unit.daysRented} / {unit.daysAvailable}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums font-medium text-[#0f172a]">{unit.rentCollected}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-[#0f172a]">{unit.receiptCount}</td>
@@ -197,8 +240,14 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
             </table>
           </div>
         </div>
+
+        <p className="text-xs leading-relaxed text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
+          All rental income — including base rent, late fees, pet rent, and other charges — is reported on IRS Schedule E
+          (Form 1040), Part I, Line 3 (Rents Received). Days rented and rental-use percentage support the personal-use
+          allocation calculation on Schedule E, Part I.
+        </p>
       </div>
-      <DocFooter certification="This statement summarizes rent collected and occupancy for the property and period shown. Use for owner reporting, tax preparation, and audit support." />
+      <DocFooter certification="This statement is prepared for Schedule E (Form 1040) recordkeeping purposes. Rent received, days rented, and occupancy data support Part I of Schedule E. Retain this document with your tax records and consult your tax advisor for guidance specific to your situation." />
     </DocumentPaper>
   );
 }
@@ -206,6 +255,31 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
 export function FinancialReportDocumentView({ report }: { report: ReportResult }) {
   const period =
     report.meta?.from && report.meta?.to ? `${String(report.meta.from)} — ${String(report.meta.to)}` : undefined;
+
+  // Detect section grouping: if rows have a "section" column, render section headers
+  const hasSections = report.columns.some((c) => c.key === "section");
+  const dataColumns = hasSections ? report.columns.filter((c) => c.key !== "section") : report.columns;
+
+  // Build grouped rows: [{sectionLabel, rows}]
+  type GroupedSection = { label: string; rows: typeof report.rows };
+  const sections: GroupedSection[] = [];
+  if (hasSections) {
+    for (const row of report.rows) {
+      const label = String(row.section ?? "");
+      const isTotal = row._isTotal === true || row._isTotal === "true";
+      if (isTotal) {
+        // Net total rows get their own pseudo-section with empty label
+        sections.push({ label: "", rows: [row] });
+        continue;
+      }
+      const last = sections[sections.length - 1];
+      if (!last || last.label !== label) {
+        sections.push({ label, rows: [row] });
+      } else {
+        last.rows.push(row);
+      }
+    }
+  }
 
   return (
     <DocumentPaper>
@@ -215,7 +289,7 @@ export function FinancialReportDocumentView({ report }: { report: ReportResult }
           <table className="w-full border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
             <thead>
               <tr className="border-b border-[#e5e7eb] bg-[#f1f5f9] text-left text-xs uppercase tracking-wide text-[#475569]">
-                {report.columns.map((col) => (
+                {dataColumns.map((col) => (
                   <th
                     key={col.key}
                     className={`px-4 py-2.5 font-semibold ${col.align === "right" ? "text-right" : "text-left"}`}
@@ -226,23 +300,57 @@ export function FinancialReportDocumentView({ report }: { report: ReportResult }
               </tr>
             </thead>
             <tbody>
-              {report.rows.map((row, idx) => (
-                <tr key={idx} className="border-b border-[#e5e7eb] last:border-0">
-                  {report.columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={`px-4 py-2.5 text-[#0f172a] ${col.align === "right" ? "text-right tabular-nums" : "text-left"}`}
-                    >
-                      {String(row[col.key] ?? "—")}
-                    </td>
+              {hasSections
+                ? sections.map((section, si) => (
+                    <Fragment key={`${section.label}-${si}`}>
+                      {section.label ? (
+                        <tr className="bg-[#f8fafc]">
+                          <td
+                            colSpan={dataColumns.length}
+                            className="border-b border-t border-[#e5e7eb] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#475569]"
+                            style={{ fontFamily: "system-ui, sans-serif" }}
+                          >
+                            {section.label}
+                          </td>
+                        </tr>
+                      ) : null}
+                      {section.rows.map((row, idx) => {
+                        const isTotal = row._isTotal === true || row._isTotal === "true";
+                        return (
+                          <tr
+                            key={idx}
+                            className={`border-b border-[#e5e7eb] last:border-0 ${isTotal ? "bg-[#f0fdf4] font-bold" : ""}`}
+                          >
+                            {dataColumns.map((col) => (
+                              <td
+                                key={col.key}
+                                className={`px-4 py-2.5 text-[#0f172a] ${col.align === "right" ? "text-right tabular-nums" : "text-left"}`}
+                              >
+                                {String(row[col.key] ?? "—")}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </Fragment>
+                  ))
+                : report.rows.map((row, idx) => (
+                    <tr key={idx} className="border-b border-[#e5e7eb] last:border-0">
+                      {dataColumns.map((col) => (
+                        <td
+                          key={col.key}
+                          className={`px-4 py-2.5 text-[#0f172a] ${col.align === "right" ? "text-right tabular-nums" : "text-left"}`}
+                        >
+                          {String(row[col.key] ?? "—")}
+                        </td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              ))}
             </tbody>
             {report.totals ? (
               <tfoot>
                 <tr className="bg-[#f8fafc] font-semibold">
-                  {report.columns.map((col) => (
+                  {dataColumns.map((col) => (
                     <td
                       key={col.key}
                       className={`px-4 py-2.5 text-[#0f172a] ${col.align === "right" ? "text-right tabular-nums" : "text-left"}`}
@@ -256,7 +364,7 @@ export function FinancialReportDocumentView({ report }: { report: ReportResult }
           </table>
         </div>
       </div>
-      <DocFooter certification="Prepared from Axis ledger records. This report is provided for property management and tax record-keeping. Verify totals against bank statements and consult your tax advisor." />
+      <DocFooter certification="Prepared from Axis ledger records. This report is provided for property management and Schedule E (Form 1040) tax record-keeping. Verify totals against bank statements and consult your tax advisor." />
     </DocumentPaper>
   );
 }

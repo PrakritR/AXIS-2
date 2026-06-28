@@ -189,7 +189,6 @@ export function ProAccountLinksPanel({
   const [inviteeAtCap, setInviteeAtCap] = useState(false);
 
   const [selectedProps, setSelectedProps] = useState<Record<string, boolean>>({});
-  const [payoutDraft, setPayoutDraft] = useState(15);
   const [permissionsDraft, setPermissionsDraft] = useState<CoManagerPermissions>(EMPTY_CO_MANAGER_PERMISSIONS);
   const [skuTier, setSkuTier] = useState<string | null>(null);
 
@@ -263,7 +262,7 @@ export function ProAccountLinksPanel({
       setDraftAxisId(raw);
       setDraftName(body.displayName ?? raw);
       setDraftUserId(body.userId ?? null);
-      showToast("Account verified — assign properties and payout, then send invite.");
+      showToast("Account verified — assign properties, then send invite.");
     } catch {
       showToast("Network error.");
     } finally {
@@ -292,7 +291,7 @@ export function ProAccountLinksPanel({
       return;
     }
 
-    const payout = Math.min(100, Math.max(0, Math.round(payoutDraft * 10) / 10));
+    const payout = 15;
 
     if (useRemote && remoteLoaded) {
       try {
@@ -320,7 +319,6 @@ export function ProAccountLinksPanel({
         setDraftName(null);
         setDraftUserId(null);
         setSelectedProps({});
-        setPayoutDraft(15);
         setPermissionsDraft(EMPTY_CO_MANAGER_PERMISSIONS);
         showToast("Invite sent — waiting for their approval.");
         return;
@@ -352,7 +350,6 @@ export function ProAccountLinksPanel({
     setDraftName(null);
     setDraftUserId(null);
     setSelectedProps({});
-    setPayoutDraft(15);
     setPermissionsDraft(EMPTY_CO_MANAGER_PERMISSIONS);
     refreshLocal();
     showToast("Link saved locally (invite sync requires database migration).");
@@ -382,18 +379,6 @@ export function ProAccountLinksPanel({
       showToast("Network error.");
       return false;
     }
-  };
-
-  const updatePayout = async (id: string, pct: number) => {
-    const v = Math.min(100, Math.max(0, pct));
-    if (useRemote && remoteLoaded) {
-      await patchInvite(id, { payoutPercentForManager: v });
-      return;
-    }
-    const all = readProRelationships(userId);
-    const next = all.map((r) => (r.id === id ? { ...r, payoutPercentForManager: v } : r));
-    writeProRelationships(userId, next);
-    refreshLocal();
   };
 
   const toggleAssignedProp = async (relId: string, propId: string) => {
@@ -496,15 +481,10 @@ export function ProAccountLinksPanel({
             You have full access to your property portal. Link another manager by{" "}
             <span className="font-semibold text-foreground">{AXIS_ID_LABEL}</span> and choose which sections they can use on your assigned properties.
           </p>
-          {!useRemote && remoteLoaded ? (
-            <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900">
-              Invites need the database migration — links stay in this browser only until then.
-            </p>
-          ) : null}
           {linkCap != null ? (
             <div
               className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
-                atLinkCap ? "border-rose-200 bg-rose-50/90" : "border-border bg-accent/30"
+                atLinkCap ? "portal-banner-danger" : "border-border bg-accent/30"
               }`}
             >
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -589,25 +569,6 @@ export function ProAccountLinksPanel({
               </div>
 
               <div>
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Split amount</p>
-                  <span className="text-sm font-bold tabular-nums text-primary">{payoutDraft}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={0.5}
-                  value={payoutDraft}
-                  onChange={(e) => setPayoutDraft(Number(e.target.value))}
-                  className="mt-2 w-full accent-primary"
-                />
-                <p className="mt-2 text-xs leading-relaxed text-muted">
-                  This is the split amount for this linked workspace. It applies to the selected properties, and you can change it later after the link is active.
-                </p>
-              </div>
-
-              <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Co-manager permissions</p>
                 <p className="mt-1 text-xs leading-relaxed text-muted">
                   Choose what this co-manager can access. You always keep full permissions on your workspace.
@@ -638,7 +599,7 @@ export function ProAccountLinksPanel({
                       <p className="font-semibold text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
                       <p className="font-mono text-xs text-muted">{inv.linkedAxisId}</p>
                       <p className="mt-2 text-xs text-muted">
-                        {inv.assignedPropertyIds.length} propert{inv.assignedPropertyIds.length === 1 ? "y" : "ies"} · {inv.payoutPercentForManager}% payout
+                        {inv.assignedPropertyIds.length} propert{inv.assignedPropertyIds.length === 1 ? "y" : "ies"}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -703,22 +664,6 @@ export function ProAccountLinksPanel({
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void removeLink(r.id)}>
                     Remove
                   </Button>
-                </div>
-
-                <div className="mt-4">
-                  <p className="text-xs font-semibold text-muted">Split amount</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-4">
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={0.5}
-                      value={r.payoutPercentForManager}
-                      onChange={(e) => void updatePayout(r.id, Number(e.target.value))}
-                      className="h-2 w-full max-w-xs accent-primary"
-                    />
-                    <span className="text-lg font-bold tabular-nums text-primary">{r.payoutPercentForManager}%</span>
-                  </div>
                 </div>
 
                 <div className="mt-4">
@@ -801,22 +746,6 @@ export function ProAccountLinksPanel({
                   <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void removeLink(r.id)}>
                     Remove
                   </Button>
-                </div>
-
-                <div className="mt-4">
-                  <p className="text-xs font-semibold text-muted">Split amount</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-4">
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={0.5}
-                      value={r.payoutPercentForManager}
-                      onChange={(e) => void updatePayout(r.id, Number(e.target.value))}
-                      className="h-2 w-full max-w-xs accent-primary"
-                    />
-                    <span className="text-lg font-bold tabular-nums text-primary">{r.payoutPercentForManager}%</span>
-                  </div>
                 </div>
 
                 <div className="mt-4">

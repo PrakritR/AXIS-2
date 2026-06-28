@@ -42,8 +42,8 @@ import { syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-stora
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
-  if (x === "high") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
-  if (x === "medium") return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
+  if (x === "high") return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  if (x === "medium") return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   return "bg-accent/30 text-muted ring-1 ring-border";
 }
 
@@ -474,7 +474,7 @@ export function ManagerWorkOrdersPanel({
                             Paid
                           </span>
                         ) : linkedCharge?.status === "pending" ? (
-                          <span className="inline-flex w-fit rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200/80">
+                          <span className="inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                             Pending
                           </span>
                         ) : null}
@@ -486,7 +486,7 @@ export function ManagerWorkOrdersPanel({
                           <Button
                             type="button"
                             variant="outline"
-                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100`}
+                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] hover:opacity-90`}
                             onClick={() => openExpand(row)}
                           >
                             Schedule
@@ -496,7 +496,7 @@ export function ManagerWorkOrdersPanel({
                           <Button
                             type="button"
                             variant="outline"
-                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100`}
+                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] hover:opacity-90`}
                             onClick={() => markComplete(row)}
                           >
                             Complete
@@ -513,7 +513,7 @@ export function ManagerWorkOrdersPanel({
                         <Button
                           type="button"
                           variant="outline"
-                          className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                          className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                           onClick={() => onDeleteWorkOrder(row)}
                         >
                           Delete
@@ -765,7 +765,7 @@ export function ManagerWorkOrdersPanel({
                           <Button
                             type="button"
                             variant="outline"
-                            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                             onClick={() => onDeleteWorkOrder(row)}
                           >
                             Delete work order

@@ -28,6 +28,7 @@ import {
 } from "@/lib/portal-inbox-storage";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
+import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
 import { readManagerApplicationRows, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
 import { readProRelationships } from "@/lib/pro-relationships";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -64,11 +65,11 @@ function toRows(list: InboxThread[], tabId: string): PortalInboxTableRow[] {
   }));
 }
 
-function countThreads(threads: InboxThread[]) {
+function countThreads(threads: InboxThread[], scheduleCount: number) {
   return {
     unopened: threads.filter((t) => t.folder === "inbox" && t.unread).length,
     opened: threads.filter((t) => t.folder === "inbox" && !t.unread).length,
-    schedule: 0,
+    schedule: scheduleCount,
     sent: threads.filter((t) => t.folder === "sent").length,
     trash: threads.filter((t) => t.folder === "trash").length,
   };
@@ -78,6 +79,11 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const router = useRouter();
   const portalBase = usePaidPortalBasePath();
+  const { messages: scheduledMessages } = useScheduledPaymentMessages({ includeHidden: true });
+  const scheduleCount = useMemo(
+    () => scheduledMessages.filter((m) => m.status === "scheduled").length,
+    [scheduledMessages],
+  );
   const { userId } = useManagerUserId();
   const [local, setLocal] = useState<InboxThread[]>(() => loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
   const [inboxSynced, setInboxSynced] = useState(false);
@@ -148,7 +154,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     persistInbox(MANAGER_INBOX_STORAGE_KEY, local);
   }, [local, inboxSynced]);
 
-  const counts = useMemo(() => countThreads(local), [local]);
+  const counts = useMemo(() => countThreads(local, scheduleCount), [local, scheduleCount]);
   const tabs = useMemo(
     () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: counts[id as keyof typeof counts] })),
     [counts],
@@ -411,7 +417,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
             <Button
               type="button"
               variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
               onClick={deleteAllTrash}
             >
               Delete all trash
@@ -476,7 +482,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
                   <Button
                     type="button"
                     variant="outline"
-                    className="rounded-full border-rose-200 px-3 py-1.5 text-xs text-rose-800 hover:bg-rose-50"
+                    className="rounded-full border-rose-200 px-3 py-1.5 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
                     onClick={() => deleteForever(row.id)}
                   >
                     Delete

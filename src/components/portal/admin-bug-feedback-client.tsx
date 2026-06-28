@@ -162,7 +162,7 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
       </p>
 
       {schemaMissing ? (
-        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <div className="mb-5 rounded-2xl border px-4 py-3 text-sm portal-banner-pending">
           <p className="font-semibold">Feedback storage is not set up in Supabase yet.</p>
           <p className="mt-1 leading-relaxed">
             Manager and resident submissions cannot be saved until the{" "}
@@ -201,7 +201,7 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
           </div>
         </div>
       ) : loadError ? (
-        <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+        <div className="mb-5 rounded-2xl border px-4 py-3 text-sm portal-banner-danger">
           Could not load feedback: {loadError}
         </div>
       ) : null}

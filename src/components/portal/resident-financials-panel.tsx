@@ -66,14 +66,17 @@ export function ResidentFinancialsPanel({
     setBalanceReport(null);
     setLedgerReport(null);
     setGenerated(false);
-  }, [tabId]);
+    if (tabId === "summary") {
+      void loadSummary();
+    }
+  }, [tabId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabsList = tabs;
 
   const ledgerQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();
 
   return (
-    <ManagerPortalPageShell title="Finances" subtitle="Balance and rent statements.">
+    <ManagerPortalPageShell title="Finances" subtitle="Your current balance, payment history, and rent statements.">
       <div className="mb-4 flex flex-wrap gap-2">
         {tabsList.map((tab) => (
           <Link
@@ -99,7 +102,7 @@ export function ResidentFinancialsPanel({
               onClick={() => void loadSummary()}
               disabled={loading}
             >
-              {loading ? "Generating…" : "Generate summary"}
+              {loading ? "Generating…" : generated ? "Refresh" : "Generate summary"}
             </button>
           </div>
           {loading ? (

@@ -266,7 +266,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
         {step === 1 ? (
           <div className="space-y-6">
             {!hasAnyPublished ? (
-              <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+              <p className="rounded-2xl border px-4 py-3 text-sm portal-banner-pending">
                 {loadingAvailability ? (
                   "Loading meeting windows..."
                 ) : (

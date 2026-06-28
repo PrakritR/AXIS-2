@@ -9,7 +9,7 @@ export const MODAL_INSET_BOX_CLASS =
 export const MODAL_INSET_BOX_PRE_CLASS = `${MODAL_INSET_BOX_CLASS} whitespace-pre-wrap`;
 
 export const MODAL_WARNING_BOX_CLASS =
-  "rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950";
+  "rounded-xl border px-3 py-2 text-sm leading-relaxed portal-banner-pending";
 
 export const MODAL_FIELD_LABEL_CLASS = "text-xs font-semibold uppercase tracking-wide text-muted";
 

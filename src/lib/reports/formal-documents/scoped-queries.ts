@@ -1,10 +1,11 @@
-import { humanizePropertyId, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
+import { humanizePropertyId, humanizeUnitLabel, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import type { RecurringRentProfile } from "@/lib/household-charges";
-import { chartAccountLabel } from "@/lib/reports/categories";
+import { chartAccountLabel, chartAccountScheduleE, SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
 import {
   receiptNumberForLedgerEntry,
   scopeLabel,
   type DaysRentedDocument,
+  type IncomeCategoryRow,
   type PropertyRentReceiptDocument,
   type PropertyRentReceiptUnitRow,
   type RentReceiptDocument,
@@ -130,6 +131,7 @@ export async function queryFormalPropertyRentReceipts(
 
   const propertyLabels = new Map<string, string>();
   const unitsByProperty = new Map<string, Map<string, PropertyRentReceiptUnitRow>>();
+  const incomeByCategoryMap = new Map<string, Map<string, number>>(); // propertyId → categoryCode → amountCents
 
   for (const p of profiles) {
     const propertyId = p.propertyId?.trim() || "unassigned";
@@ -142,7 +144,7 @@ export async function queryFormalPropertyRentReceipts(
     if (!unitsByProperty.has(propertyId)) unitsByProperty.set(propertyId, new Map());
     const unitMap = unitsByProperty.get(propertyId)!;
     unitMap.set(unitKey, {
-      unit: p.roomLabel?.trim() || "—",
+      unit: humanizeUnitLabel(p.roomLabel?.trim() || "") || "—",
       resident: p.residentName?.trim() || display.residentLabel(p.residentEmail) || "—",
       daysRented,
       daysAvailable,
@@ -179,7 +181,7 @@ export async function queryFormalPropertyRentReceipts(
         ? daysRentedForProfile(profile, rangeStart, rangeEnd)
         : { daysRented: 0, daysAvailable: daysInclusive(rangeStart, rangeEnd) };
       unitMap.set(unitKey, {
-        unit: unitLabel || profile?.roomLabel?.trim() || "—",
+        unit: humanizeUnitLabel(unitLabel || profile?.roomLabel?.trim() || "") || "—",
         resident: profile?.residentName?.trim() || display.residentLabel(email) || "—",
         daysRented: days.daysRented,
         daysAvailable: days.daysAvailable,
@@ -193,7 +195,15 @@ export async function queryFormalPropertyRentReceipts(
     const prevCents = Math.round(Number.parseFloat(unit.rentCollected.replace(/[^0-9.]/g, "")) * 100) || 0;
     unit.rentCollected = centsToUsd(prevCents + amountCents);
     unit.receiptCount += 1;
+
+    // Track income by category for Schedule E breakdown
+    if (!incomeByCategoryMap.has(propertyId)) incomeByCategoryMap.set(propertyId, new Map());
+    const catMap = incomeByCategoryMap.get(propertyId)!;
+    const categoryCode = String(row.category_code ?? "other_income");
+    catMap.set(categoryCode, (catMap.get(categoryCode) ?? 0) + amountCents);
   }
+
+  const INCOME_CATEGORY_ORDER = ["rent_income", "late_fees", "pet_rent", "application_fee", "other_income"];
 
   const issueDate = new Date().toISOString().slice(0, 10);
   const documents: PropertyRentReceiptDocument[] = [];
@@ -208,6 +218,26 @@ export async function queryFormalPropertyRentReceipts(
     );
     const receiptCount = units.reduce((sum, u) => sum + u.receiptCount, 0);
     const propertyLabel = propertyLabels.get(propertyId) ?? humanizePropertyId(propertyId);
+
+    const catMap = incomeByCategoryMap.get(propertyId);
+    const incomeByCategory: IncomeCategoryRow[] = catMap
+      ? [...catMap.entries()]
+          .map(([code, cents]) => {
+            const acct = SYSTEM_CHART_ACCOUNTS.find((a) => a.code === code);
+            return {
+              categoryCode: code,
+              label: acct?.name ?? chartAccountLabel(code),
+              scheduleERef: acct?.scheduleERef ?? "Sch. E, Line 3",
+              amountCents: cents,
+              amount: centsToUsd(cents),
+            };
+          })
+          .sort(
+            (a, b) =>
+              (INCOME_CATEGORY_ORDER.indexOf(a.categoryCode) === -1 ? 99 : INCOME_CATEGORY_ORDER.indexOf(a.categoryCode)) -
+              (INCOME_CATEGORY_ORDER.indexOf(b.categoryCode) === -1 ? 99 : INCOME_CATEGORY_ORDER.indexOf(b.categoryCode)),
+          )
+      : [];
 
     documents.push({
       id: `property-${propertyId}-${from}-${to}`,
@@ -224,6 +254,8 @@ export async function queryFormalPropertyRentReceipts(
       receiptCount,
       rentalUsePct: daysAvailable > 0 ? Math.round((daysRented / daysAvailable) * 1000) / 10 : 0,
       units,
+      incomeByCategory,
+      grossIncomeCents: rentCents,
     });
   }
 

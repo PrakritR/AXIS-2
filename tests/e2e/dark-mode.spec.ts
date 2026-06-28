@@ -70,6 +70,27 @@ test.describe("Dark mode — public surfaces", () => {
     expect(cardBg).not.toMatch(/rgb\(255,\s*255,\s*255/);
   });
 
+  test("auth create-account labels and callouts are readable in dark mode", async ({ page }) => {
+    await page.goto("/auth/create-account");
+    await expect(page.getByRole("heading", { name: /create account/i })).toBeVisible();
+    await assertDarkThemeActive(page);
+
+    const portalTypeLabel = page.getByText("Portal type", { exact: true });
+    await expect(portalTypeLabel).toBeVisible();
+    const labelColor = await portalTypeLabel.evaluate((el) => getComputedStyle(el).color);
+    expect(labelColor).not.toMatch(/rgb\(51,\s*65,\s*85\)/);
+
+    const infoCallout = page.locator(".portal-banner-neutral").first();
+    await expect(infoCallout).toBeVisible();
+    const calloutStyle = await infoCallout.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { color: style.color, backgroundColor: style.backgroundColor };
+    });
+    expect(calloutStyle.backgroundColor).not.toMatch(/rgb\(248,\s*250,\s*252\)/);
+
+    await assertMainContentNotLightThemed(page, 0);
+  });
+
   test("partner page respects dark theme", async ({ page }) => {
     await page.goto("/partner");
     await assertMainContentNotLightThemed(page, 0);

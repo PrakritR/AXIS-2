@@ -64,7 +64,7 @@ function ScheduledMessageEditForm({
         body: JSON.stringify({ cancelled }),
       });
       if (!res.ok) throw new Error("Could not update.");
-      showToast(cancelled ? "Reminder cancelled." : "Reminder restored.");
+      showToast(cancelled ? "Send cancelled." : "Send restored.");
       onSaved();
       onClose();
     } catch (e) {
@@ -81,7 +81,7 @@ function ScheduledMessageEditForm({
         </p>
         {message.kind === "pre_due" ? (
           <div>
-            <label className="text-xs font-semibold text-muted">Days before due</label>
+            <label className="text-xs font-semibold text-muted">Days before send date</label>
             <Input className="mt-1" value={daysBeforeDue} onChange={(e) => setDaysBeforeDue(e.target.value)} disabled={busy} />
           </div>
         ) : null}
@@ -128,20 +128,60 @@ export function ScheduledMessageEditModal({
   if (!message) return null;
 
   return (
-    <Modal open={open} onClose={onClose} title="Edit scheduled reminder">
+    <Modal open={open} onClose={onClose} title="Edit scheduled message">
       <ScheduledMessageEditForm key={message.id} message={message} onClose={onClose} onSaved={onSaved} />
     </Modal>
   );
 }
 
+export type ScheduleSettingsVariant = "inbox" | "payments";
+
+const SCHEDULE_SETTINGS_COPY: Record<
+  ScheduleSettingsVariant,
+  {
+    savedToast: string;
+    title: string;
+    description: string;
+    daysBeforeLabel: string;
+    sameDayLabel: string;
+    followUpLabel: string;
+    templateLabel: string;
+    saveLabel: string;
+  }
+> = {
+  inbox: {
+    savedToast: "Schedule settings saved.",
+    title: "Schedule settings",
+    description: "Control which scheduled messages appear in this tab and when automated charge messages are shown.",
+    daysBeforeLabel: "Days before send date",
+    sameDayLabel: "Same-day message",
+    followUpLabel: "Daily follow-up messages",
+    templateLabel: "Default message template",
+    saveLabel: "Save schedule settings",
+  },
+  payments: {
+    savedToast: "Payment reminder settings saved.",
+    title: "Payment reminder settings",
+    description: "Configure when rent and overdue charge reminders are scheduled and sent.",
+    daysBeforeLabel: "Remind before due date",
+    sameDayLabel: "Same-day reminder",
+    followUpLabel: "Daily overdue reminders",
+    templateLabel: "Default pre-due template",
+    saveLabel: "Save settings",
+  },
+};
+
 function PaymentAutomationSettingsForm({
   initialSettings,
   onSaved,
+  variant = "payments",
 }: {
   initialSettings: ManagerAutomationSettings;
   onSaved: (next: ManagerAutomationSettings) => void;
+  variant?: ScheduleSettingsVariant;
 }) {
   const { showToast } = useAppUi();
+  const copy = SCHEDULE_SETTINGS_COPY[variant];
   const [draft, setDraft] = useState(initialSettings);
   const [customDay, setCustomDay] = useState("");
   const [busy, setBusy] = useState(false);
@@ -161,7 +201,7 @@ function PaymentAutomationSettingsForm({
       }
       const body = (await res.json()) as { settings: ManagerAutomationSettings };
       onSaved(body.settings);
-      showToast("Reminder settings saved.");
+      showToast(copy.savedToast);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not save settings.");
     } finally {
@@ -190,12 +230,20 @@ function PaymentAutomationSettingsForm({
   return (
     <div className="rounded-2xl border border-border bg-accent/20 p-4 space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-foreground">Automation settings</h3>
-        <p className="mt-1 text-xs text-muted">Configure when rent and overdue reminders are scheduled and shown in this tab.</p>
+        <h3 className="text-sm font-semibold text-foreground">{copy.title}</h3>
+        <p className="mt-1 text-xs text-muted">{copy.description}</p>
+        {variant === "inbox" ? (
+          <p className="mt-2 text-xs text-muted">
+            Charge-related messages are generated from pending payments. For late fees and charge timing, use{" "}
+            <span className="font-semibold text-foreground">Payments → Reminder settings</span>.
+          </p>
+        ) : null}
       </div>
 
+      {variant === "payments" ? (
+        <>
       <div>
-        <p className="text-xs font-semibold text-muted">Remind before due date</p>
+        <p className="text-xs font-semibold text-muted">{copy.daysBeforeLabel}</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {[7, 5, 3, 2, 1].map((day) => (
             <Button
@@ -221,17 +269,19 @@ function PaymentAutomationSettingsForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={draft.sameDayReminderEnabled} onChange={(e) => setDraft({ ...draft, sameDayReminderEnabled: e.target.checked })} disabled={busy} />
-          Same-day reminder
+          {copy.sameDayLabel}
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={draft.overdueDailyEnabled} onChange={(e) => setDraft({ ...draft, overdueDailyEnabled: e.target.checked })} disabled={busy} />
-          Daily overdue reminders
+          {copy.followUpLabel}
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={draft.lateFeeNoticeEnabled} onChange={(e) => setDraft({ ...draft, lateFeeNoticeEnabled: e.target.checked })} disabled={busy} />
           Late fee notices
         </label>
       </div>
+        </>
+      ) : null}
 
       <div>
         <p className="text-xs font-semibold text-muted">Schedule tab visibility</p>
@@ -266,8 +316,9 @@ function PaymentAutomationSettingsForm({
         </div>
       </div>
 
+      {variant === "payments" ? (
       <div>
-        <p className="text-xs font-semibold text-muted">Default pre-due template</p>
+        <p className="text-xs font-semibold text-muted">{copy.templateLabel}</p>
         <Input
           className="mt-1"
           value={draft.templates.preDue.subject}
@@ -294,9 +345,10 @@ function PaymentAutomationSettingsForm({
           Placeholders: {"{residentName}"}, {"{chargeTitle}"}, {"{balanceDue}"}, {"{dueDate}"}, {"{daysUntilDue}"}, {"{propertyLine}"}, {"{managerName}"}
         </p>
       </div>
+      ) : null}
 
       <Button type="button" variant="primary" className="rounded-full" onClick={() => void save()} disabled={busy}>
-        Save settings
+        {copy.saveLabel}
       </Button>
     </div>
   );
@@ -305,20 +357,78 @@ function PaymentAutomationSettingsForm({
 export function PaymentAutomationSettingsPanel({
   settings,
   onSaved,
+  variant = "payments",
 }: {
   settings: ManagerAutomationSettings;
   onSaved: (next: ManagerAutomationSettings) => void;
+  variant?: ScheduleSettingsVariant;
 }) {
   return (
     <PaymentAutomationSettingsForm
-      key={JSON.stringify(settings)}
+      key={`${variant}:${JSON.stringify(settings)}`}
       initialSettings={settings}
       onSaved={onSaved}
+      variant={variant}
     />
   );
 }
 
-export function useScheduledPaymentMessages() {
+export async function patchScheduledMessage(
+  messageId: string,
+  patch: {
+    cancelled?: boolean;
+    customSubject?: string;
+    customBody?: string;
+    customDaysBeforeDue?: number;
+  },
+): Promise<void> {
+  const res = await fetch(`/api/portal/scheduled-messages/${encodeURIComponent(messageId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const payload = (await res.json()) as { error?: string };
+    throw new Error(payload.error ?? "Could not update reminder.");
+  }
+}
+
+export function ReminderSettingsModal({
+  open,
+  onClose,
+  settings,
+  onSaved,
+  variant = "payments",
+}: {
+  open: boolean;
+  onClose: () => void;
+  settings: ManagerAutomationSettings | null;
+  onSaved: (next: ManagerAutomationSettings) => void;
+  variant?: ScheduleSettingsVariant;
+}) {
+  if (!settings) return null;
+
+  const copy = SCHEDULE_SETTINGS_COPY[variant];
+
+  return (
+    <Modal open={open} onClose={onClose} title={variant === "inbox" ? "Schedule settings" : "Payment reminder settings"}>
+      <p className="mb-4 text-sm text-muted">{copy.description}</p>
+      <PaymentAutomationSettingsPanel
+        settings={settings}
+        variant={variant}
+        onSaved={(next) => {
+          onSaved(next);
+          onClose();
+        }}
+      />
+    </Modal>
+  );
+}
+
+export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) {
+  const includeHidden = opts?.includeHidden ?? false;
+  const query = includeHidden ? "?includeHidden=1" : "";
   const [settings, setSettings] = useState<ManagerAutomationSettings | null>(null);
   const [messages, setMessages] = useState<ScheduledPaymentMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -326,7 +436,7 @@ export function useScheduledPaymentMessages() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/portal/scheduled-messages", { credentials: "include", cache: "no-store" });
+      const res = await fetch(`/api/portal/scheduled-messages${query}`, { credentials: "include", cache: "no-store" });
       if (!res.ok) return;
       const body = (await res.json()) as { settings: ManagerAutomationSettings; messages: ScheduledPaymentMessage[] };
       setSettings(body.settings);
@@ -334,14 +444,14 @@ export function useScheduledPaymentMessages() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [query]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       setLoading(true);
       try {
-        const res = await fetch("/api/portal/scheduled-messages", { credentials: "include", cache: "no-store" });
+        const res = await fetch(`/api/portal/scheduled-messages${query}`, { credentials: "include", cache: "no-store" });
         if (!res.ok || cancelled) return;
         const body = (await res.json()) as { settings: ManagerAutomationSettings; messages: ScheduledPaymentMessage[] };
         setSettings(body.settings);
@@ -353,7 +463,7 @@ export function useScheduledPaymentMessages() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [query]);
 
   return { settings, messages, loading, reload, setSettings };
 }
