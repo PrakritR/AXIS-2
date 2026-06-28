@@ -43,6 +43,7 @@ import {
   type ProRelationshipRecord,
 } from "@/lib/pro-relationships";
 import { maxAccountLinksForTier, normalizeManagerSkuTier } from "@/lib/manager-access";
+import { BADGE_SUCCESS_CLASS } from "@/lib/ui-styles";
 import Link from "next/link";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
@@ -640,13 +641,15 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
               }`}
             >
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className={`font-semibold tabular-nums ${atLinkCap ? "text-rose-900" : "text-foreground"}`}>
+                <span
+                  className={`font-semibold tabular-nums ${atLinkCap ? "text-[var(--status-overdue-fg)]" : "text-foreground"}`}
+                >
                   {linksUsed}/{linkCap}
                 </span>
                 <span className="text-muted">links in use</span>
                 {tierShort ? (
                   <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${atLinkCap ? "bg-card text-rose-800" : "bg-card text-muted"}`}
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${atLinkCap ? "bg-card/80 text-[var(--status-overdue-fg)]" : "bg-card text-muted"}`}
                   >
                     {tierShort}
                   </span>
@@ -659,7 +662,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           ) : null}
         </div>
 
-        <div className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm [html[data-theme=dark]_&]:portal-surface-muted">
           <p className="text-sm font-semibold text-foreground">New link</p>
           <div className="mt-4 flex gap-3 sm:items-end">
             <label className="block min-w-0 flex-1 text-xs font-semibold text-muted">
@@ -684,10 +687,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           </div>
 
           {atLinkCap ? (
-            <p className="mt-3 text-xs font-medium text-rose-700">At limit — remove a link or change plan.</p>
+            <p className="mt-3 text-xs font-medium text-[var(--status-overdue-fg)]">At limit — remove a link or change plan.</p>
           ) : null}
           {inviteeAtCap ? (
-            <p className="mt-3 text-xs font-medium text-rose-700">
+            <p className="mt-3 text-xs font-medium text-[var(--status-overdue-fg)]">
               That account is already at its link limit and cannot accept new links.
             </p>
           ) : null}
@@ -997,7 +1000,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                               <p className="font-medium text-foreground">{prop.label}</p>
                             </td>
                             <td className={PORTAL_TABLE_TD}>
-                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+                              <span className={`${BADGE_SUCCESS_CLASS} px-2.5 py-0.5`}>
                                 You
                               </span>
                             </td>
@@ -1077,7 +1080,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         ) : null}
 
         {transferPropertyId ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 [html[data-theme=dark]_&]:bg-black/65">
             <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-lg">
               <p className="text-lg font-semibold text-foreground">Transfer ownership</p>
               <p className="mt-2 text-sm text-muted">
