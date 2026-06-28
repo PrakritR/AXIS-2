@@ -53,3 +53,7 @@ coverage/
 # Cursor IDE (local editor settings)
 .cursor/settings.json
 playwright.config.ts
+
+# Claude Code local state (worktrees, jobs, plans, memory)
+.claude/
+.cursor/skills/

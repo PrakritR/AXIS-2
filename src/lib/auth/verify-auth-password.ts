@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { assertNonProdDatabase } from "@/lib/server-env";
 
 export const EXISTING_ACCOUNT_PASSWORD_MISMATCH =
   "This email already has an Axis account. Enter the same password you use for that account.";
@@ -11,6 +12,7 @@ export async function assertPasswordMatchesExistingAuthUser(
   email: string,
   password: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
+  assertNonProdDatabase();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {

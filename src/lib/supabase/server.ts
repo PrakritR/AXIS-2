@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { assertNonProdDatabase } from "@/lib/server-env";
 
 export async function createSupabaseServerClient() {
+  assertNonProdDatabase();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {

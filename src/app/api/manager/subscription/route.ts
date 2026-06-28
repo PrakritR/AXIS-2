@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import {
   formatManagerMonthlyLabel,
-  getManagerPurchaseSku,
   isBusinessSkuTier,
   isProSkuTier,
   maxAccountLinksForTier,
@@ -9,6 +8,7 @@ import {
   monthlyUsdForManagerTier,
   PRO_MAX_PROPERTIES,
 } from "@/lib/manager-access";
+import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { getStripe } from "@/lib/stripe";
 import { stripeSubscriptionPeriodEndSec } from "@/lib/stripe-subscription-helpers";
 import { META_SCHEDULED_BILLING, META_SCHEDULED_TIER } from "@/lib/stripe-subscription-metadata";

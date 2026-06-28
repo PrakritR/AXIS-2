@@ -518,7 +518,7 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
   }, [query]);
 
   useEffect(() => {
-    void reload();
+    queueMicrotask(() => void reload());
   }, [chargeRevision, settingsRevision, reload]);
 
   const messages = useMemo(() => {

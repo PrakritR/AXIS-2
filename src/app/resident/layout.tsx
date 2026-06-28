@@ -9,7 +9,7 @@ import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole } from "@/lib/auth/portal-access";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
-import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access";
+import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
 
 export default async function ResidentLayout({ children }: { children: React.ReactNode }) {

@@ -73,8 +73,10 @@ export function ManagerProperties() {
   }, [loadSku]);
 
   useEffect(() => {
-    void refreshPortfolio().then(() => {
-      void mirrorLocalPropertyPipelineToServer();
+    queueMicrotask(() => {
+      void refreshPortfolio().then(() => {
+        void mirrorLocalPropertyPipelineToServer();
+      });
     });
     const on = () => {
       void refreshPortfolio();
