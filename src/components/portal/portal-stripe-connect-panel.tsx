@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { openAppUrl, shouldUseInAppConnectFlow } from "@/lib/native/open-url";
 
 type ConnectStatus = {
   connected: boolean;
@@ -98,22 +99,27 @@ export function PortalStripeConnectPanel({
     setBusy(true);
     setActionError(null);
 
-    // Open synchronously on click so popup blockers allow a new tab (async window.open is often blocked).
-    const popup = window.open("about:blank", "_blank");
-    if (!popup) {
-      const message = "Could not open a new tab. Allow pop-ups for this site and try again.";
-      setActionError(message);
-      showToast(message);
-      setBusy(false);
-      return;
-    }
+    const useInAppFlow = shouldUseInAppConnectFlow();
+    let popup: Window | null = null;
 
-    try {
-      popup.document.title = "Opening Stripe…";
-      popup.document.body.innerHTML =
-        '<p style="font-family:system-ui,sans-serif;padding:2rem;color:#444">Opening secure bank setup…</p>';
-    } catch {
-      /* cross-origin once navigated; harmless on about:blank */
+    if (!useInAppFlow) {
+      // Open synchronously on click so popup blockers allow a new tab (async window.open is often blocked).
+      popup = window.open("about:blank", "_blank");
+      if (!popup) {
+        const message = "Could not open a new tab. Allow pop-ups for this site and try again.";
+        setActionError(message);
+        showToast(message);
+        setBusy(false);
+        return;
+      }
+
+      try {
+        popup.document.title = "Opening Stripe…";
+        popup.document.body.innerHTML =
+          '<p style="font-family:system-ui,sans-serif;padding:2rem;color:#444">Opening secure bank setup…</p>';
+      } catch {
+        /* cross-origin once navigated; harmless on about:blank */
+      }
     }
 
     try {
@@ -124,27 +130,31 @@ export function PortalStripeConnectPanel({
       const body = (await res.json()) as OnboardResponse;
       if (!res.ok) {
         const message = body.error ?? "Could not start bank linking.";
-        popup.close();
+        popup?.close();
         setActionError(message);
         showToast(message);
         return;
       }
       if (body.demo && body.message) {
-        popup.close();
+        popup?.close();
         setActionError(body.message);
         showToast(body.message);
         return;
       }
       if (body.url) {
-        popup.location.href = body.url;
+        if (useInAppFlow) {
+          openAppUrl(body.url);
+          return;
+        }
+        popup!.location.href = body.url;
         return;
       }
-      popup.close();
+      popup?.close();
       const message = "Stripe did not return an onboarding URL.";
       setActionError(message);
       showToast(message);
     } catch {
-      popup.close();
+      popup?.close();
       const message = "Could not start bank linking.";
       setActionError(message);
       showToast(message);

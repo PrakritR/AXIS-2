@@ -6,6 +6,13 @@ import { AxisLogoMark } from "@/components/brand/axis-logo";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ToolTraceEntry = { tool: string; ok: boolean };
+type PendingConfirm = {
+  type: "send_rent_reminder";
+  chargeId: string;
+  residentName: string;
+  chargeTitle: string;
+  balanceDue?: string;
+};
 
 type Suggestion = { label: string; prompt: string; icon: ReactNode; toneClass: string };
 
@@ -92,6 +99,7 @@ export function AxisAssistant({ managerName }: { managerName?: string | null }) 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [lastTools, setLastTools] = useState<ToolTraceEntry[]>([]);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -120,18 +128,25 @@ export function AxisAssistant({ managerName }: { managerName?: string | null }) 
     setInput("");
     setLoading(true);
     setLastTools([]);
+    setPendingConfirm(null);
     try {
       const res = await fetch("/api/agent/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next }),
       });
-      const data = (await res.json()) as { reply?: string; toolTrace?: ToolTraceEntry[]; error?: string };
+      const data = (await res.json()) as {
+        reply?: string;
+        toolTrace?: ToolTraceEntry[];
+        pendingConfirm?: PendingConfirm;
+        error?: string;
+      };
       if (!res.ok || data.error) {
         setError(data.error ?? "Something went wrong.");
       } else {
         setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
         setLastTools(data.toolTrace ?? []);
+        setPendingConfirm(data.pendingConfirm ?? null);
       }
     } catch {
       setError("Network error.");
@@ -143,9 +158,37 @@ export function AxisAssistant({ managerName }: { managerName?: string | null }) 
   function resetConversation() {
     setMessages([]);
     setLastTools([]);
+    setPendingConfirm(null);
     setError(null);
     setInput("");
     requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  async function confirmPendingAction() {
+    if (!pendingConfirm || loading) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/agent/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmAction: { type: pendingConfirm.type, chargeId: pendingConfirm.chargeId },
+        }),
+      });
+      const data = (await res.json()) as { reply?: string; toolTrace?: ToolTraceEntry[]; error?: string };
+      if (!res.ok || data.error) {
+        setError(data.error ?? "Could not complete that action.");
+      } else {
+        setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "Done." }]);
+        setLastTools(data.toolTrace ?? []);
+        setPendingConfirm(null);
+      }
+    } catch {
+      setError("Network error.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -154,7 +197,7 @@ export function AxisAssistant({ managerName }: { managerName?: string | null }) 
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Close Axis Assistant" : "Open Axis Assistant"}
-        className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_10px_24px_-10px_rgba(47,107,255,0.7)] outline-none ring-primary/0 transition-[transform,box-shadow,filter] duration-200 ease-out hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95"
+        className="axis-assistant-fab fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_10px_24px_-10px_rgba(47,107,255,0.7)] outline-none ring-primary/0 transition-[transform,box-shadow,filter] duration-200 ease-out hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95"
         style={{ background: "var(--btn-primary)" }}
       >
         {open ? (
@@ -172,7 +215,7 @@ export function AxisAssistant({ managerName }: { managerName?: string | null }) 
       </button>
 
       {open && (
-        <div className="glass-card fixed bottom-20 right-5 z-50 flex h-[34rem] max-h-[calc(100vh-7rem)] w-[23rem] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-[20px] shadow-[var(--shadow-card)] backdrop-blur-xl">
+        <div className="axis-assistant-panel glass-card fixed bottom-20 right-5 z-50 flex h-[34rem] max-h-[calc(100vh-7rem)] w-[23rem] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-[20px] shadow-[var(--shadow-card)] backdrop-blur-xl">
           <div className="flex shrink-0 items-center justify-between border-b border-border/70 px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_18%,transparent)]" />
@@ -283,6 +326,33 @@ export function AxisAssistant({ managerName }: { managerName?: string | null }) 
             }}
             className="shrink-0 px-3 pb-3"
           >
+            {pendingConfirm ? (
+              <div className="mb-3 rounded-2xl border border-primary/25 bg-primary/5 p-3">
+                <p className="text-xs font-semibold text-foreground">Confirm action</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
+                  Send a payment reminder to {pendingConfirm.residentName} for {pendingConfirm.chargeTitle}
+                  {pendingConfirm.balanceDue ? ` (${pendingConfirm.balanceDue})` : ""}?
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void confirmPendingAction()}
+                    className="flex-1 rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    Send reminder
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => setPendingConfirm(null)}
+                    className="rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div className="relative rounded-2xl border border-border bg-auth-input-bg shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
               <textarea
                 ref={inputRef}

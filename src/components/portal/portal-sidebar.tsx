@@ -9,6 +9,7 @@ import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
+import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
 import { PORTAL_MOBILE_CHROME_CLASS } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
@@ -50,11 +51,21 @@ function PortalBrandLogoTile() {
   );
 }
 
+function portalBrandHref(definition: PortalDefinition): string {
+  if (detectNativePlatformSync()) {
+    const dashboard = definition.sections.find((s) => s.section === "dashboard");
+    if (dashboard) return `${definition.basePath}/dashboard`;
+    return definition.basePath;
+  }
+  return "/";
+}
+
 function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
   const router = useRouter();
   const isAdmin = definition.kind === "admin";
   const isResident = definition.kind === "resident";
   const brandTitle = definition.title.trim().toLowerCase() === "axis" ? "Axis" : definition.title;
+  const brandHref = portalBrandHref(definition);
 
   return (
     <div className="relative overflow-hidden px-5 py-5">
@@ -67,11 +78,11 @@ function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
         aria-hidden
       />
       <Link
-        href="/"
+        href={brandHref}
         prefetch
         aria-label="Axis home"
         className={`relative flex gap-3 transition-opacity hover:opacity-90 ${isAdmin || isResident ? "items-start" : "items-center"}`}
-        onClick={portalNavClick(router, "/")}
+        onClick={portalNavClick(router, brandHref)}
       >
         <PortalBrandLogoTile />
         <div className={`min-w-0 ${isAdmin || isResident ? "pt-0.5" : ""}`}>

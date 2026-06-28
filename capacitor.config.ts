@@ -22,8 +22,11 @@ function allowNavigationHosts(): string[] {
     "localhost",
     "*.supabase.co",
     "*.supabase.in",
+    "accounts.google.com",
+    "*.google.com",
     "js.stripe.com",
     "checkout.stripe.com",
+    "connect.stripe.com",
     "*.stripe.com",
   ];
   try {

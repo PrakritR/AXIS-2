@@ -1115,6 +1115,18 @@ html[data-native] .axis-page-frame > footer {
   display: none;
 }
 
+html[data-native] .axis-assistant-fab {
+  bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+  right: max(1.25rem, env(safe-area-inset-right, 0px));
+}
+
+html[data-native] .axis-assistant-panel {
+  bottom: max(5rem, calc(env(safe-area-inset-bottom, 0px) + 3.5rem));
+  right: max(1.25rem, env(safe-area-inset-right, 0px));
+  max-height: min(34rem, calc(100dvh - env(safe-area-inset-top, 0px) - 7rem));
+  width: min(23rem, calc(100vw - 2.5rem));
+}
+
 html[data-native] #axis-public-navbar {
   display: none;
 }
